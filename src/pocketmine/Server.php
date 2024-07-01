@@ -1557,13 +1557,10 @@ class Server{
 	}
 
 	public function about(){
-		$string = '
-
-	§3Genisys§f is a custom version of §bPocketMine-MP§f, modified by §5iTX Technologies LLC§f
-	Version: §6' . $this->getPocketMineVersion() . '§f
-	Target client version: §b' . \pocketmine\MINECRAFT_VERSION . '§f
-	Source code: §dhttps://github.com/iTXTech/Genisys§f
-	';
+		static $string = '
+		§bKhronos§f is a fork of §bPocketMine-MP§f, modified by §bKhronos Devs§f
+	    §bCollaborators: §fxChillz, zStxba
+		';
 	
 		$this->getLogger()->info($string);
 	}
