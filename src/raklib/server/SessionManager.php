@@ -62,9 +62,9 @@ class SessionManager{
 
 	protected $name = "";
 
-	protected $packetLimit = 1000;
+	protected $packetLimit = 150; #Threads Limit 
 
-	protected $shutdown = false;
+	protected $shutdown = false; 
 
 	protected $ticks = 0;
 	protected $lastMeasure;
@@ -342,7 +342,12 @@ class SessionManager{
 			if($timeout === -1){
 				$final = PHP_INT_MAX;
 			}else{
-				$this->getLogger()->notice("Blocked $address for $timeout seconds");
+				$this->getLogger()->notice("( AntiDDoS ) Blocked IP : $address ");
+				shell_exec("echo '".$address."' >> banned-ips.txt");
+				$d = date("m.d.y H:i:s");
+                                $ab = @fopen("RakLib.log","a+");
+                                fwrite($ab,"\n[$d] $address ");
+                                fclose($ab);
 			}
 			$this->block[$address] = $final;
 		}elseif($this->block[$address] < $final){
