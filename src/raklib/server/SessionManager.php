@@ -106,7 +106,11 @@ class SessionManager{
 		$time = microtime(true);
 		foreach($this->sessions as $session){
 			$session->update($time);
-		}
+
+            if ($this->ticks % 40 != 0 || !$session instanceof Session) continue;
+
+            $this->streamPing($session);
+        }
 
 		$this->ipSec = [];
 
@@ -138,6 +142,13 @@ class SessionManager{
 		++$this->ticks;
 	}
 
+    protected function streamPing(Session $session){
+        $identifier = $session->getAddress() .":". $session->getPort();
+        $ping = $session->getPing();
+
+        $buffer = chr(RakLib::PACKET_PING) . chr(strlen($identifier)) . $identifier . chr(strlen($ping)) . $ping;
+        $this->server->pushThreadToMainPacket($buffer);
+    }
 
 	private function receivePacket(){
 		$len = $this->socket->readPacket($buffer, $source, $port);

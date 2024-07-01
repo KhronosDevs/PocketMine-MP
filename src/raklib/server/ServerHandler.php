@@ -111,7 +111,14 @@ class ServerHandler{
 				$offset += $len;
 				$value = substr($packet, $offset);
 				$this->instance->handleOption($name, $value);
-			}elseif($id === RakLib::PACKET_OPEN_SESSION){
+            }elseif($id === RakLib::PACKET_PING){
+                $len = ord($packet{$offset++});
+                $identifier = substr($packet, $offset, $len);
+                $offset += $len;
+                $len = ord($packet{$offset++});
+                $ping = substr($packet, $offset, $len);
+                $this->instance->handlePing($identifier, $ping);
+            }elseif($id === RakLib::PACKET_OPEN_SESSION){
 				$len = ord($packet{$offset++});
 				$identifier = substr($packet, $offset, $len);
 				$offset += $len;

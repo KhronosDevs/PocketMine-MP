@@ -91,6 +91,7 @@ class Session{
 	private $windowStart;
 	private $receivedWindow = [];
 	private $windowEnd;
+    private $pingAverage = [0.025];
 
 	private $reliableWindowStart;
 	private $reliableWindowEnd;
@@ -400,7 +401,7 @@ class Session{
 					$pk->address = $this->address;
 					$pk->port = $this->port;
 					$pk->sendPing = $dataPacket->sendPing;
-					$pk->sendPong = bcadd($pk->sendPing, "1000");
+					$pk->sendPong = bcadd($pk->sendPing, "100");
 					$pk->encode();
 
 					$sendPacket = new EncapsulatedPacket();
@@ -479,17 +480,23 @@ class Session{
 				}
 			}else{
 				if($packet instanceof ACK){
-					$packet->decode();
-					foreach($packet->packets as $seq){
-						if(isset($this->recoveryQueue[$seq])){
-							foreach($this->recoveryQueue[$seq]->packets as $pk){
-								if($pk instanceof EncapsulatedPacket and $pk->needACK and $pk->messageIndex !== null){
-									unset($this->needACK[$pk->identifierACK][$pk->messageIndex]);
-								}
-							}
-							unset($this->recoveryQueue[$seq]);
-						}
-					}
+                    $packet->decode();
+                    foreach($packet->packets as $seq){
+                        if(isset($this->recoveryQueue[$seq])){
+                            $this->pingAverage[] = microtime(true) - $this->recoveryQueue[$seq]->sendTime;
+
+                            if(count($this->pingAverage) > 20){
+                                array_shift($this->pingAverage);
+                            }
+
+                            foreach($this->recoveryQueue[$seq]->packets as $pk){
+                                if($pk instanceof EncapsulatedPacket and $pk->needACK and $pk->messageIndex !== null){
+                                    unset($this->needACK[$pk->identifierACK][$pk->messageIndex]);
+                                }
+                            }
+                            unset($this->recoveryQueue[$seq]);
+                        }
+                    }
 				}elseif($packet instanceof NACK){
 					$packet->decode();
 					foreach($packet->packets as $seq){
@@ -525,6 +532,10 @@ class Session{
 			}
 		}
 	}
+
+    public function getPing(): int {
+        return round((array_sum($this->pingAverage) / count($this->pingAverage)) * 1000);
+    }
 
 	public function close(){
 		$data = "\x60\x00\x08\x00\x00\x00\x00\x00\x00\x00\x15";

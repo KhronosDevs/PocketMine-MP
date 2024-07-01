@@ -181,6 +181,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	/** @var SourceInterface */
 	protected $interface;
 
+    /** @var int */
+    protected $ping = 0;
 	/** @var bool */
 	public $playedBefore = false;
 	public $spawned = false;
@@ -747,6 +749,14 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 		return isset($this->achievements[$achievementId]) and $this->achievements[$achievementId] != false;
 	}
+
+    public function setPing(int $ping) {
+        $this->ping = $ping;
+    }
+
+    public function getPing(): int {
+        return $this->ping;
+    }
 
 	/**
 	 * @return bool
