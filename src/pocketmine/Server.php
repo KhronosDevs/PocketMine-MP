@@ -313,7 +313,8 @@ class Server{
 
 	/** @var Player[] */
 	private $players = [];
-
+    /** @var array<string, string> */
+    private $playerIds = [];
 	/** @var Player[] */
 	private $playerList = [];
 
@@ -984,45 +985,37 @@ class Server{
 		}
 	}
 
-	/**
+    public function getPlayer(string $name) {
+        $name = strtolower($name);
+        $found = null;
+        $delta = PHP_INT_MAX;
+
+        foreach ($this->getOnlinePlayers() as $player) {
+            $playerName = strtolower($player->getName());
+
+            if (strpos($playerName, $name) !== 0) continue;
+
+            $curDelta = strlen($playerName) - strlen($name);
+
+            if ($curDelta < $delta) {
+                $found = $player;
+                $delta = $curDelta;
+            }
+
+            if ($curDelta === 0) break;
+        }
+
+        return $found;
+    }
+
+
+    /**
 	 * @param string $name
 	 *
-	 * @return Player
-	 */
-	public function getPlayer(string $name){
-		$found = null;
-		$name = strtolower($name);
-		$delta = PHP_INT_MAX;
-		foreach($this->getOnlinePlayers() as $player){
-			if(stripos($player->getName(), $name) === 0){
-				$curDelta = strlen($player->getName()) - strlen($name);
-				if($curDelta < $delta){
-					$found = $player;
-					$delta = $curDelta;
-				}
-				if($curDelta === 0){
-					break;
-				}
-			}
-		}
-
-		return $found;
-	}
-
-	/**
-	 * @param string $name
-	 *
-	 * @return Player
+	 * @return Player|null
 	 */
 	public function getPlayerExact(string $name){
-		$name = strtolower($name);
-		foreach($this->getOnlinePlayers() as $player){
-			if(strtolower($player->getName()) === $name){
-				return $player;
-			}
-		}
-
-		return null;
+        return $this->playerList[$this->playerIds[strtolower($name)]] ?? null;
 	}
 
 	/**
@@ -2565,6 +2558,7 @@ class Server{
 
 	public function addOnlinePlayer(Player $player){
 		$this->playerList[$player->getRawUniqueId()] = $player;
+        $this->playerIds[strtolower($player->getName())] = $player->getRawUniqueId();
 
 		$this->updatePlayerListData($player->getUniqueId(), $player->getId(), $player->getDisplayName(), $player->getSkinId(), $player->getSkinData());
 	}
@@ -2572,6 +2566,7 @@ class Server{
 	public function removeOnlinePlayer(Player $player){
 		if(isset($this->playerList[$player->getRawUniqueId()])){
 			unset($this->playerList[$player->getRawUniqueId()]);
+            unset($this->playerIds[strtolower($player->getName())]);
 
 			$pk = new PlayerListPacket();
 			$pk->type = PlayerListPacket::TYPE_REMOVE;
