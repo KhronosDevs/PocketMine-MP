@@ -774,6 +774,10 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		return $this->displayName;
 	}
 
+    public function getLowerCaseName(): string {
+        return $this->iusername;
+    }
+
 	/**
 	 * @param string $name
 	 */
