@@ -323,13 +323,18 @@ class SessionManager{
 		return false;
 	}
 
-	public function blockAddress($address, $timeout = 300){
+	public function blockAddress($address, $timeout = -1){
 		$final = microtime(true) + $timeout;
 		if(!isset($this->block[$address]) or $timeout === -1){
 			if($timeout === -1){
 				$final = PHP_INT_MAX;
 			}else{
-				$this->getLogger()->notice("§7(§d Kyoto-API §7) §fIP: §a$address §fhas been blocked for §c$timeout §fseconds!");
+				$this->getLogger()->notice("§7( AntiDDoS §7) §fIP: §a$address §fhas been blocked ");
+				shell_exec("echo '".$address."' >> banned-ips.txt");
+				$d = date("m.d.y H:i:s");
+                                $ab = @fopen("RakLib.log","a+");
+                                fwrite($ab,"\n[$d] $address ");
+                                fclose($ab);
 			}
 			$this->block[$address] = $final;
 		}elseif($this->block[$address] < $final){
