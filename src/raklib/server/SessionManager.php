@@ -53,7 +53,7 @@ class SessionManager{
 
 	protected $name = "";
 
-	protected $packetLimit = 100;
+	protected $packetLimit = 160;
 
 	protected $shutdown = false;
 
@@ -334,13 +334,13 @@ class SessionManager{
 		return false;
 	}
 
-	public function blockAddress($address, $timeout = 300){
+	public function blockAddress($address, $timeout = 1800){
 		$final = microtime(true) + $timeout;
 		if(!isset($this->block[$address]) or $timeout === -1){
 			if($timeout === -1){
 				$final = PHP_INT_MAX;
 			}else{
-				$this->getLogger()->notice("§7( DoS Blocker §7) §fIP: §a$address §fhas been blocked ");
+				$this->getLogger()->notice("§7( DoS Blocker §7) §fIP: §a$address §fhas been blocked for $timeout s seconds ! ");
 			}
 			$this->block[$address] = $final;
 		}elseif($this->block[$address] < $final){
