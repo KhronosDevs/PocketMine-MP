@@ -1,18 +1,5 @@
 <?php
 
-/*
- * RakLib network library
- *
- *
- * This project is not affiliated with Jenkins Software LLC nor RakNet.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- */
-
 namespace raklib\server;
 
 use raklib\Binary;
@@ -47,6 +34,10 @@ use raklib\protocol\UNCONNECTED_PONG;
 use raklib\RakLib;
 
 class SessionManager{
+	
+	const RAKLIB_TPS = 100;
+	const RAKLIB_TIME_PER_TICK = 1 / self::RAKLIB_TPS;
+	
 	protected $packetPool = [];
 
 	/** @var RakLibServer */
@@ -62,7 +53,7 @@ class SessionManager{
 
 	protected $name = "";
 
-	protected $packetLimit = 1000;
+	protected $packetLimit = 200;
 
 	protected $shutdown = false;
 
@@ -72,7 +63,7 @@ class SessionManager{
 	protected $block = [];
 	protected $ipSec = [];
 
-	public $portChecking = true;
+	public $portChecking = false;
 
 	public function __construct(RakLibServer $server, UDPServerSocket $socket){
 		$this->server = $server;
@@ -101,12 +92,11 @@ class SessionManager{
 
 		while(!$this->shutdown){
 			$start = microtime(true);
-			$max = 5000;
-			while(--$max and $this->receivePacket()) ;
-			while($this->receiveStream()) ;
+			while($this->receivePacket()){}
+			while($this->receiveStream()){}
 			$time = microtime(true) - $start;
-			if($time < 0.05){
-				@time_sleep_until(microtime(true) + 0.05 - $time);
+			if($time < self::RAKLIB_TIME_PER_TICK){
+				time_sleep_until(microtime(true) + self::RAKLIB_TIME_PER_TICK - $time);
 			}
 			$this->tick();
 		}
@@ -118,15 +108,11 @@ class SessionManager{
 			$session->update($time);
 		}
 
-		foreach($this->ipSec as $address => $count){
-			if($count >= $this->packetLimit){
-				$this->blockAddress($address);
-			}
-		}
 		$this->ipSec = [];
 
 
-		if(($this->ticks & 0b1111) === 0){
+
+		if(($this->ticks % self::RAKLIB_TPS) === 0){
 			$diff = max(0.005, $time - $this->lastMeasure);
 			$this->streamOption("bandwidth", serialize([
 				"up" => $this->sendBytes / $diff,
@@ -154,45 +140,46 @@ class SessionManager{
 
 
 	private function receivePacket(){
-		if(($len = $this->socket->readPacket($buffer, $source, $port)) > 0){
+		$len = $this->socket->readPacket($buffer, $source, $port);
+		if($buffer !== null){
 			$this->receiveBytes += $len;
 			if(isset($this->block[$source])){
 				return true;
 			}
 
 			if(isset($this->ipSec[$source])){
-				$this->ipSec[$source]++;
+				if(++$this->ipSec[$source] >= $this->packetLimit){
+					$this->blockAddress($source);
+					return true;
+				}
 			}else{
 				$this->ipSec[$source] = 1;
 			}
 
-			$pid = ord($buffer{0});
+			if($len > 0){
+				$pid = ord($buffer{0});
 
-			if($pid == UNCONNECTED_PONG::$ID){
-				return false;
+				if($pid === UNCONNECTED_PING::$ID){
+					//No need to create a session for just pings
+					$packet = new UNCONNECTED_PING;
+					$packet->buffer = $buffer;
+					$packet->decode();
+
+					$pk = new UNCONNECTED_PONG();
+					$pk->serverID = $this->getID();
+					$pk->pingID = $packet->pingID;
+					$pk->serverName = $this->getName();
+					$this->sendPacket($pk, $source, $port);
+				}elseif($pid === UNCONNECTED_PONG::$ID){
+					//ignored
+				}elseif(($packet = $this->getPacketFromPool($pid)) !== null){
+					$packet->buffer = $buffer;
+					$this->getSession($source, $port)->handlePacket($packet);
+				}else{
+					$this->streamRaw($source, $port, $buffer);
+				}
 			}
-
-			if(($packet = $this->getPacketFromPool($pid)) !== null){
-				$packet->buffer = $buffer;
-				$this->getSession($source, $port)->handlePacket($packet);
-				return true;
-			}elseif($pid === UNCONNECTED_PING::$ID){
-				//No need to create a session for just pings
-				$packet = new UNCONNECTED_PING;
-				$packet->buffer = $buffer;
-				$packet->decode();
-
-				$pk = new UNCONNECTED_PONG();
-				$pk->serverID = $this->getID();
-				$pk->pingID = $packet->pingID;
-				$pk->serverName = $this->getName();
-				$this->sendPacket($pk, $source, $port);
-			}elseif($buffer !== ""){
-				$this->streamRaw($source, $port, $buffer);
-				return true;
-			}else{
-				return false;
-			}
+			return true;
 		}
 
 		return false;
@@ -342,21 +329,21 @@ class SessionManager{
 			if($timeout === -1){
 				$final = PHP_INT_MAX;
 			}else{
-				$this->getLogger()->notice("Blocked $address for $timeout seconds");
+				$this->getLogger()->notice("§7(§d Kyoto-API §7) §fIP: §a$address §fhas been blocked for §c$timeout §fseconds!");
 			}
 			$this->block[$address] = $final;
 		}elseif($this->block[$address] < $final){
 			$this->block[$address] = $final;
 		}
 	}
-	
+
 	public function unblockAddress($address){
 		unset($this->block[$address]);
 	}
 
 	/**
 	 * @param string $ip
-	 * @param int    $port
+	 * @param int	$port
 	 *
 	 * @return Session
 	 */
@@ -387,7 +374,7 @@ class SessionManager{
 		$this->streamACK($session->getAddress() . ":" . $session->getPort(), $identifierACK);
 	}
 
-	public function getName() : string{
+	public function getName(){
 		return $this->name;
 	}
 
@@ -405,14 +392,17 @@ class SessionManager{
 	 * @return Packet
 	 */
 	public function getPacketFromPool($id){
-		if(isset($this->packetPool[$id])){
-			return clone $this->packetPool[$id];
+		$pk = $this->packetPool[$id];
+		if($pk !== null){
+			return clone $pk;
 		}
 
 		return null;
 	}
 
 	private function registerPackets(){
+		$this->packetPool = new \SplFixedArray(256);
+		
 		//$this->registerPacket(UNCONNECTED_PING::$ID, UNCONNECTED_PING::class);
 		$this->registerPacket(UNCONNECTED_PING_OPEN_CONNECTIONS::$ID, UNCONNECTED_PING_OPEN_CONNECTIONS::class);
 		$this->registerPacket(OPEN_CONNECTION_REQUEST_1::$ID, OPEN_CONNECTION_REQUEST_1::class);

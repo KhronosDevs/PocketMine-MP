@@ -145,7 +145,6 @@ abstract class RakLib{
 	 * byte (address length)
 	 * byte[] (address)
 	 */
-
 	const PACKET_UNBLOCK_ADDRESS = 0x0a;
 
 	/*

@@ -17,6 +17,7 @@ namespace raklib\protocol;
 
 #ifndef COMPILE
 use raklib\Binary;
+
 #endif
 
 #include <rules/RakLibPacket.h>
@@ -27,6 +28,7 @@ abstract class Packet{
 	protected $offset = 0;
 	public $buffer;
 	public $sendTime;
+	
 
 	protected function get($len){
 		if($len < 0){
@@ -37,16 +39,11 @@ abstract class Packet{
 			return substr($this->buffer, $this->offset);
 		}
 
-		$buffer = "";
-		for(; $len > 0; --$len, ++$this->offset){
-			$buffer .= $this->buffer{$this->offset};
-		}
-
-		return $buffer;
+		return $len === 1 ? $this->buffer{$this->offset++} : substr($this->buffer, ($this->offset += $len) - $len, $len);
 	}
 
 	protected function getLong($signed = true){
-		return Binary::readLong($this->get(8));
+		return Binary::readLong($this->get(8), $signed);
 	}
 
 	protected function getInt(){
