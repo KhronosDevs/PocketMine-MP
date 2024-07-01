@@ -1863,73 +1863,73 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 		$this->timings->startTiming();
 
-		if($this->spawned){
-			if($this->server->netherEnabled){
-				if(($this->isCreative() or $this->isSurvival() and $this->server->getTick() - $this->portalTime >= 80) and $this->portalTime > 0){
-					if($this->server->netherLevel instanceof Level){
-						if($this->getLevel() != $this->server->netherLevel){
-							$this->fromPos = $this->getPosition();
-							$this->fromPos->x = ((int) $this->fromPos->x) + 0.5;
-							$this->fromPos->z = ((int) $this->fromPos->z) + 0.5;
-							$this->teleport($this->shouldResPos = $this->server->netherLevel->getSafeSpawn());
-						}elseif($this->fromPos instanceof Position){
-							if(!($this->getLevel()->isChunkLoaded($this->fromPos->x, $this->fromPos->z))){
-								$this->getLevel()->loadChunk($this->fromPos->x, $this->fromPos->z);
-							}
-							$add = [1, 0, -1, 0, 0, 1, 0, -1];
-							$tempos = null;
-							for($j = 2; $j < 5; $j++){
-								for($i = 0; $i < 4; $i++){
-									if($this->fromPos->getLevel()->getBlock($this->temporalVector->fromObjectAdd($this->fromPos, $add[$i] * $j, 0, $add[$i + 4] * $j))->getId() === Block::AIR){
-										if($this->fromPos->getLevel()->getBlock($this->temporalVector->fromObjectAdd($this->fromPos, $add[$i] * $j, 1, $add[$i + 4] * $j))->getId() === Block::AIR){
-											$tempos = $this->fromPos->add($add[$i] * $j, 0, $add[$i + 4] * $j);
-											//$this->getLevel()->getServer()->getLogger()->debug($tempos);
-											break;
-										}
-									}
-								}
-								if($tempos != null){
-									break;
-								}
-							}
-							if($tempos == null){
-								$tempos = $this->fromPos->add(mt_rand(-2, 2), 0, mt_rand(-2, 2));
-							}
-							$this->teleport($this->shouldResPos = $tempos);
-							$add = null;
-							$tempos = null;
-							$this->fromPos = null;
-						}else{
-							$this->teleport($this->shouldResPos = $this->server->getDefaultLevel()->getSafeSpawn());
-						}
-						$this->portalTime = 0;
-					}
-				}
-			}
-			if(!$this->isSleeping()){
-				$this->processMovement($tickDiff);
-			}
+		if($this->spawned) {
+            if ($this->server->netherEnabled) {
+                if (($this->isCreative() or $this->isSurvival() and $this->server->getTick() - $this->portalTime >= 80) and $this->portalTime > 0) {
+                    if ($this->server->netherLevel instanceof Level) {
+                        if ($this->getLevel() != $this->server->netherLevel) {
+                            $this->fromPos = $this->getPosition();
+                            $this->fromPos->x = ((int)$this->fromPos->x) + 0.5;
+                            $this->fromPos->z = ((int)$this->fromPos->z) + 0.5;
+                            $this->teleport($this->shouldResPos = $this->server->netherLevel->getSafeSpawn());
+                        } elseif ($this->fromPos instanceof Position) {
+                            if (!($this->getLevel()->isChunkLoaded($this->fromPos->x, $this->fromPos->z))) {
+                                $this->getLevel()->loadChunk($this->fromPos->x, $this->fromPos->z);
+                            }
+                            $add = [1, 0, -1, 0, 0, 1, 0, -1];
+                            $tempos = null;
+                            for ($j = 2; $j < 5; $j++) {
+                                for ($i = 0; $i < 4; $i++) {
+                                    if ($this->fromPos->getLevel()->getBlock($this->temporalVector->fromObjectAdd($this->fromPos, $add[$i] * $j, 0, $add[$i + 4] * $j))->getId() === Block::AIR) {
+                                        if ($this->fromPos->getLevel()->getBlock($this->temporalVector->fromObjectAdd($this->fromPos, $add[$i] * $j, 1, $add[$i + 4] * $j))->getId() === Block::AIR) {
+                                            $tempos = $this->fromPos->add($add[$i] * $j, 0, $add[$i + 4] * $j);
+                                            //$this->getLevel()->getServer()->getLogger()->debug($tempos);
+                                            break;
+                                        }
+                                    }
+                                }
+                                if ($tempos != null) {
+                                    break;
+                                }
+                            }
+                            if ($tempos == null) {
+                                $tempos = $this->fromPos->add(mt_rand(-2, 2), 0, mt_rand(-2, 2));
+                            }
+                            $this->teleport($this->shouldResPos = $tempos);
+                            $add = null;
+                            $tempos = null;
+                            $this->fromPos = null;
+                        } else {
+                            $this->teleport($this->shouldResPos = $this->server->getDefaultLevel()->getSafeSpawn());
+                        }
+                        $this->portalTime = 0;
+                    }
+                }
+            }
+            if (!$this->isSleeping()) {
+                $this->processMovement($tickDiff);
+            }
 
-			if(!$this->isSpectator()) $this->entityBaseTick($tickDiff);
+            if (!$this->isSpectator()) $this->entityBaseTick($tickDiff);
 
-			if($this->isOnFire() or $this->lastUpdate % 10 == 0){
-				if($this->isCreative() and !$this->isInsideOfFire()){
-					$this->extinguish();
-				}elseif($this->getLevel()->getWeather()->isRainy()){
-					if($this->getLevel()->canBlockSeeSky($this)){
-						$this->extinguish();
-					}
-				}
-			}
+            if ($this->isOnFire() or $this->lastUpdate % 10 == 0) {
+                if ($this->isCreative() and !$this->isInsideOfFire()) {
+                    $this->extinguish();
+                } elseif ($this->getLevel()->getWeather()->isRainy()) {
+                    if ($this->getLevel()->canBlockSeeSky($this)) {
+                        $this->extinguish();
+                    }
+                }
+            }
 
-			if($this->server->antiFly){
-				if(!$this->isSpectator() and $this->speed !== null){
-					if($this->onGround){
-						if($this->inAirTicks !== 0){
-							$this->startAirTicks = 5;
-						}
-						$this->inAirTicks = 0;
-					}else{
+            if ($this->server->antiFly) {
+                if (!$this->isSpectator() and $this->speed !== null) {
+                    if ($this->onGround) {
+                        if ($this->inAirTicks !== 0) {
+                            $this->startAirTicks = 5;
+                        }
+                        $this->inAirTicks = 0;
+                    } else {
                         if (!$this->allowFlight && $this->inAirTicks > 10 && !$this->isSleeping() && $this->getDataProperty(self::DATA_NO_AI) !== 1) {
                             $expectedVelocityY = (-$this->gravity) / $this->drag - ((-$this->gravity) / $this->drag) * exp(-$this->drag * ($this->inAirTicks - $this->startAirTicks));
 
@@ -1941,15 +1941,14 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
                         }
 
                     }
-						++$this->inAirTicks;
-					}
-				}
-			}
+                    ++$this->inAirTicks;
+                }
+            }
 
-			if($this->getTransactionQueue() !== null){
-				$this->getTransactionQueue()->execute();
-			}
-		}
+            if ($this->getTransactionQueue() !== null) {
+                $this->getTransactionQueue()->execute();
+            }
+        }
 
 		$this->checkTeleportPosition();
 
