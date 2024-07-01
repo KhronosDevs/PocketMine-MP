@@ -34,7 +34,7 @@ class VersionCommand extends VanillaCommand{
 			$name,
 			"%pocketmine.command.version.description",
 			"%pocketmine.command.version.usage",
-			["ver", "about"]
+			["version", "about"]
 		);
 		$this->setPermission("pocketmine.command.version");
 	}
