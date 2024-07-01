@@ -74,6 +74,8 @@ abstract class Timings{
 	public static $permissibleCalculationTimer;
 	/** @var TimingsHandler */
 	public static $permissionDefaultTimer;
+    /** @var TimingsHandler */
+    public static $serverInterrupts;
 
 	/** @var TimingsHandler */
 	public static $entityMoveTimer;
@@ -121,6 +123,7 @@ abstract class Timings{
 			return;
 		}
 
+        self::$serverInterrupts = new TimingsHandler("Server Mid-Tick Procssing", self::$fullTickTimer);
 		self::$fullTickTimer = new TimingsHandler("Full Server Tick");
 		self::$serverTickTimer = new TimingsHandler("** Full Server Tick", self::$fullTickTimer);
 		self::$memoryManagerTimer = new TimingsHandler("Memory Manager");

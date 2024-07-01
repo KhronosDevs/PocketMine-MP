@@ -142,6 +142,7 @@ use pocketmine\scheduler\DServerTask;
 use pocketmine\scheduler\FileWriteTask;
 use pocketmine\scheduler\SendUsageTask;
 use pocketmine\scheduler\ServerScheduler;
+use pocketmine\snooze\TimeTrackingSleeperHandler;
 use pocketmine\tile\BrewingStand;
 use pocketmine\tile\Cauldron;
 use pocketmine\tile\Chest;
@@ -283,6 +284,9 @@ class Server{
 
 	/** @var BaseLang */
 	private $baseLang;
+
+    /** @var TimeTrackingSleeperHandler */
+    private $tickSleeper = null;
 
 	private $forceLanguage = false;
 
@@ -2023,6 +2027,10 @@ class Server{
 		return count($recipients);
 	}
 
+    public function getTickSleeper(): TimeTrackingSleeperHandler {
+        return $this->tickSleeper ?? ($this->tickSleeper = new TimeTrackingSleeperHandler(Timings::$serverInterrupts));
+    }
+
 	/**
 	 * @param string        $popup
 	 * @param Player[]|null $recipients
@@ -2493,6 +2501,9 @@ class Server{
 		$this->nextTick = microtime(true);
 		while($this->isRunning){
 			$this->tick();
+
+            $this->getTickSleeper()->sleepUntil($this->nextTick);
+
 			$next = $this->nextTick - 0.0001;
 			if($next > microtime(true)){
 				@time_sleep_until($next);
@@ -2862,6 +2873,7 @@ class Server{
 		$this->tickAverage[] = $tick;
 		array_shift($this->useAverage);
 		$this->useAverage[] = $use;
+        $this->getTickSleeper()->resetNotificationProcessingTime();
 
 		if(($this->nextTick - $tickTime) < -1){
 			$this->nextTick = $tickTime;
