@@ -185,7 +185,7 @@ class SessionManager{
 					//ignored
 				}elseif(($packet = $this->getPacketFromPool($pid)) !== null){
 					$packet->buffer = $buffer;
-					$this->getSession($source, $port)->handlePacket($packet)
+					$this->getSession($source, $port)->handlePacket($packet);
 				}else{
 					if (substr($buffer, 0, 2) !== '\xfe\xfd') {
 						return true; //block address?
