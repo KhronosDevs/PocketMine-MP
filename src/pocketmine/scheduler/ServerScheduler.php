@@ -53,7 +53,7 @@ class ServerScheduler{
 
 	public function __construct(){
 		$this->queue = new ReversePriorityQueue();
-		$this->asyncPool = new AsyncPool(Server::getInstance(), self::$WORKERS);
+		$this->asyncPool = new AsyncPool(Server::getInstance(), self::$WORKERS, Server::getInstance()->getTickSleeper());
 	}
 
 	/**
@@ -96,11 +96,7 @@ class ServerScheduler{
 		return $this->asyncPool->getSize();
 	}
 
-	public function increaseAsyncTaskPoolSize($newSize){
-		$this->asyncPool->increaseSize($newSize);
-	}
-
-	/**
+    /**
 	 * @param Task $task
 	 * @param int  $delay
 	 *

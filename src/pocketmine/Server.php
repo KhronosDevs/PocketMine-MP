@@ -1557,7 +1557,8 @@ class Server{
 	public function about(){
 		static $string = '
 		§bKhronos§f is a fork of §bPocketMine-MP§f, modified by §bKhronos Devs§f
-	    §bCollaborators: §fxChillz, zStxba
+		
+	    §bDiscord: §fhttps://discord.gg/gR24R3wR
 		';
 	
 		$this->getLogger()->info($string);
@@ -1798,6 +1799,8 @@ class Server{
 			$this->alwaysTickPlayers = (int) $this->getProperty("level-settings.always-tick-players", false);
 			$this->baseTickRate = (int) $this->getProperty("level-settings.base-tick-rate", 1);
 
+            Timings::init();
+
 			$this->scheduler = new ServerScheduler();
 
 			if($this->getConfigBoolean("enable-rcon", false) === true){
@@ -1849,8 +1852,6 @@ class Server{
 			$this->network->setName($this->getMotd());
 
 			$this->logger->info($this->getLanguage()->translateString("pocketmine.server.license", [$this->getName()]));
-
-			Timings::init();
 
 			$this->consoleSender = new ConsoleCommandSender();
 			$this->commandMap = new SimpleCommandMap($this);

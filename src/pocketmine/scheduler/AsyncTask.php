@@ -72,6 +72,8 @@ abstract class AsyncTask extends \Threaded implements \Collectable{
 
 		$this->isFinished = true;
 		//$this->setGarbage();
+
+        $this->worker->getNotifier()->wakeupSleeper();
 	}
 
 	public function isCrashed(){

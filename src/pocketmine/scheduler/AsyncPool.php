@@ -23,8 +23,10 @@ namespace pocketmine\scheduler;
 
 use pocketmine\event\Timings;
 use pocketmine\Server;
+use pocketmine\snooze\SleeperHandler;
+use pocketmine\snooze\SleeperNotifier;
 
-class AsyncPool{
+class AsyncPool { // TODO: Add better documentation for this class.
 
 	/** @var Server */
 	private $server;
@@ -35,21 +37,36 @@ class AsyncPool{
 	private $tasks = [];
 	/** @var int[] */
 	private $taskWorkers = [];
+    /** @var array<int, array<int, AsyncTask>> */
+    private $workerTasks = [];
 
 	/** @var AsyncWorker[] */
 	private $workers = [];
 	/** @var int[] */
 	private $workerUsage = [];
 
-	public function __construct(Server $server, $size){
+    /** @var SleeperHandler */
+    private $eventLoop;
+
+	public function __construct(Server $server, $size, SleeperHandler $eventLoop){
 		$this->server = $server;
 		$this->size = (int) $size;
+        $this->eventLoop = $eventLoop;
 
 		for($i = 0; $i < $this->size; ++$i){
-			$this->workerUsage[$i] = 0;
-			$this->workers[$i] = new AsyncWorker($this->server->getLogger(), $i + 1);
-			$this->workers[$i]->setClassLoader($this->server->getLoader());
-			$this->workers[$i]->start();
+            $workerId = $i + 1;
+            $notifier = new SleeperNotifier();
+
+            $this->workerUsage[$i] = 0;
+            $this->workerTasks[$workerId] = [];
+            $this->workers[$i] = new AsyncWorker($this->server->getLogger(), $workerId, $notifier);
+            $this->workers[$i]->setClassLoader($this->server->getLoader());
+            $this->workers[$i]->start();
+
+
+            $this->eventLoop->addNotifier($notifier, function () use ($workerId) {
+                $this->collectTasksFromWorker($workerId);
+            });
 		}
 	}
 
@@ -57,20 +74,7 @@ class AsyncPool{
 		return $this->size;
 	}
 
-	public function increaseSize($newSize){
-		$newSize = (int) $newSize;
-		if($newSize > $this->size){
-			for($i = $this->size; $i < $newSize; ++$i){
-				$this->workerUsage[$i] = 0;
-				$this->workers[$i] = new AsyncWorker($this->server->getLogger(), $i + 1);
-				$this->workers[$i]->setClassLoader($this->server->getLoader());
-				$this->workers[$i]->start();
-			}
-			$this->size = $newSize;
-		}
-	}
-
-	public function submitTaskToWorker(AsyncTask $task, $worker){
+    public function submitTaskToWorker(AsyncTask $task, $worker){
 		if(isset($this->tasks[$task->getTaskId()]) or $task->isGarbage()){
 			return;
 		}
@@ -85,6 +89,7 @@ class AsyncPool{
 		$this->workers[$worker]->stack($task);
 		$this->workerUsage[$worker]++;
 		$this->taskWorkers[$task->getTaskId()] = $worker;
+        $this->workerTasks[$worker][$task->getTaskId()] = $task;
 	}
 
 	public function submitTask(AsyncTask $task){
@@ -116,6 +121,7 @@ class AsyncPool{
 		}
 
 		unset($this->tasks[$task->getTaskId()]);
+        unset($this->workerTasks[$this->taskWorkers[$task->getTaskId()]][$task->getTaskId()]);
 		unset($this->taskWorkers[$task->getTaskId()]);
 
 		$task->cleanObject();
@@ -137,27 +143,42 @@ class AsyncPool{
 			$this->workerUsage[$i] = 0;
 		}
 
+        $this->workerTasks = [];
 		$this->taskWorkers = [];
 		$this->tasks = [];
 	}
+
+    public function collectTasksFromWorker(int $workerId) {
+        foreach ($this->workerTasks[$workerId] as $task) {
+            $this->processTask($task);
+        }
+    }
 
 	public function collectTasks(){
 		Timings::$schedulerAsyncTimer->startTiming();
 
 		foreach($this->tasks as $task){
-			if($task->isFinished() and !$task->isRunning() and !$task->isCrashed()){
-
-				if(!$task->hasCancelledRun()){
-					$task->onCompletion($this->server);
-				}
-
-				$this->removeTask($task);
-			}elseif($task->isTerminated() or $task->isCrashed()){
-				$this->server->getLogger()->critical("Could not execute asynchronous task " . (new \ReflectionClass($task))->getShortName() . ": Task crashed");
-				$this->removeTask($task, true);
-			}
+            $this->processTask($task);
 		}
 
 		Timings::$schedulerAsyncTimer->stopTiming();
 	}
+
+    /**
+     * @param AsyncTask $task
+     * @return void
+     */
+    private function processTask(AsyncTask $task) {
+        if ($task->isFinished() and !$task->isRunning() and !$task->isCrashed()) {
+
+            if (!$task->hasCancelledRun()) {
+                $task->onCompletion($this->server);
+            }
+
+            $this->removeTask($task);
+        } elseif ($task->isTerminated() or $task->isCrashed()) {
+            $this->server->getLogger()->critical("Could not execute asynchronous task " . (new \ReflectionClass($task))->getShortName() . ": Task crashed");
+            $this->removeTask($task, true);
+        }
+    }
 }

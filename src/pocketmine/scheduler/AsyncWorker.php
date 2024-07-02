@@ -21,16 +21,20 @@
 
 namespace pocketmine\scheduler;
 
+use pocketmine\snooze\SleeperNotifier;
 use pocketmine\Worker;
 
 class AsyncWorker extends Worker{
 
+    /** @var SleeperNotifier */
+    private $notifier = null;
 	private $logger;
 	private $id;
 
-	public function __construct(\ThreadedLogger $logger, $id){
+	public function __construct(\ThreadedLogger $logger, $id, SleeperNotifier $notifier){
 		$this->logger = $logger;
 		$this->id = $id;
+        $this->notifier = $notifier;
 	}
 
 	public function run(){
@@ -49,4 +53,13 @@ class AsyncWorker extends Worker{
 	public function getThreadName(){
 		return "Asynchronous Worker #" . $this->id;
 	}
+
+    public function getId() {
+        return $this->id;
+    }
+
+    public function getNotifier(): SleeperNotifier {
+        return $this->notifier;
+    }
+
 }
