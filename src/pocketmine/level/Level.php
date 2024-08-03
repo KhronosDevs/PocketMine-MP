@@ -230,7 +230,6 @@ class Level implements ChunkManager, Metadatable{
 	private $blockMetadata;
 
 	private $useSections;
-	private $blockOrder;
 
 	/** @var Position */
 	private $temporalPosition;
@@ -397,7 +396,6 @@ class Level implements ChunkManager, Metadatable{
 		$this->server->getLogger()->info($this->server->getLanguage()->translateString("pocketmine.level.preparing", [$this->provider->getName()]));
 		$this->generator = Generator::getGenerator($this->provider->getGenerator());
 
-		$this->blockOrder = $provider::getProviderOrder();
 		$this->useSections = $provider::usesChunkSection();
 
 		$this->folderName = $name;
