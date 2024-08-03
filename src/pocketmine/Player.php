@@ -1492,6 +1492,10 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		return ($this->gamemode & 0x02) > 0;
 	}
 
+	public function isFireProof(): bool {
+		return $this->isCreative() || $this->isSpectator();
+	}
+
 	public function getDrops() : array{
 		if(!$this->isCreative()){
 			return parent::getDrops();
