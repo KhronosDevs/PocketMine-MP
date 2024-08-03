@@ -116,8 +116,8 @@ class Hopper extends Spawnable implements InventoryHolder, Container, Nameable{
 			}
 
 			if($this->inventory->canAddItem($item)){
+				$entity->close();
 				$this->inventory->addItem($item);
-				$entity->kill();
 			}
 		}
 
