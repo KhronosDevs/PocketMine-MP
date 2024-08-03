@@ -61,6 +61,13 @@ class McRegion extends BaseLevelProvider{
 
 		if($isValid){
 			$files = glob($path . "/region/*.mc*");
+
+			if(empty($files)){ //possible glob() issue on some systems
+				$files = array_filter(scandir($path . "/region/"), function($file){
+					return substr($file, strrpos($file, ".") + 1, 2) === "mc"; //region file
+				});
+			}
+
 			foreach($files as $f){
 				if(strpos($f, ".mca") !== false){ //Anvil
 					$isValid = false;
