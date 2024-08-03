@@ -386,8 +386,13 @@ class Item implements ItemIds{
 		}
 	}
 
-	public function __construct(int $id, int $meta = 0, int $count = 1, string $name = "Unknown"){
+	public function __construct(int $id, $meta = 0, int $count = 1, string $name = "Unknown"){
 		$this->id = $id & 0xffff;
+
+		if ($meta === null) {
+			$meta = -1;
+		}
+
 		$this->meta = $meta !== -1 ? $meta & 0xffff : -1;
 		$this->count = $count;
 		$this->name = $name;
