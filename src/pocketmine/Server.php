@@ -376,7 +376,7 @@ class Server{
 	 * @return string
 	 */
 	public function getName() : string{
-		return "Genisys";
+		return "Khronos";
 	}
 
 	/**
@@ -416,6 +416,10 @@ class Server{
 					: "") . "$minutes " . $this->getLanguage()->translateString("%pocketmine.command.status.minutes") . " "
 				: "") . "$seconds " . $this->getLanguage()->translateString("%pocketmine.command.status.seconds");
 		return $uptime;
+	}
+
+	public function getKhronosVersion(): string {
+		return \pocketmine\KHRONOS_VERSION;
 	}
 
 	/**
@@ -1499,13 +1503,19 @@ class Server{
 	}
 
 	public function about(){
-		static $string = '
-		§bKhronos§f is a fork of §bPocketMine-MP§f, modified by §bKhronos Devs§f
+		$this->getLogger()->info('
+
+  	§bKhronosAPI§f is a fork of §bPocketMine-MP§f, mantained by §bKhronos Devs§f
 		
 	    §bDiscord: §fhttps://discord.gg/gR24R3wR
-		';
-	
-		$this->getLogger()->info($string);
+	§bGithub: §fhttps://github.com/KhronosDevs/PocketMine-MP
+
+		§bMain maintainer\'s discord: §fxchillz.
+
+		§bDevice information:
+		§7  - §bOS: §f' . ucfirst(Utils::getOS()) . '
+		§7  - §bKhronos version: §f' . $this->getKhronosVersion() . '
+		');
 	}
 
 	public function loadAdvancedConfig(){
@@ -1704,13 +1714,13 @@ class Server{
 
 			$onlineMode = $this->getConfigBoolean("online-mode", false);
 			if(!extension_loaded("openssl")){
-				$this->logger->warning("The OpenSSL extension is not loaded, and this is required for XBOX authentication to work. If you want to use Xbox Live auth, please update your PHP binaries at itxtech.org/download, or recompile PHP with the OpenSSL extension.");
+				$this->logger->debug("The OpenSSL extension is not loaded, and this is required for XBOX authentication to work. If you want to use Xbox Live auth, please update your PHP binaries at itxtech.org/download, or recompile PHP with the OpenSSL extension.");
 				$this->setConfigBool("online-mode", false);
 			}elseif(!$onlineMode){
-				$this->logger->warning("SERVER IS RUNNING IN OFFLINE/INSECURE MODE!");
-				$this->logger->warning("The server will make no attempt to authenticate usernames. Beware.");
-				$this->logger->warning("While this makes the game possible to play without internet access, it also opens up the ability for hackers to connect with any username they choose.");
-				$this->logger->warning("To change this, set \"online-mode\" to \"true\" in the server.properties file.");
+				$this->logger->debug("SERVER IS RUNNING IN OFFLINE/INSECURE MODE!");
+				$this->logger->debug("The server will make no attempt to authenticate usernames. Beware.");
+				$this->logger->debug("While this makes the game possible to play without internet access, it also opens up the ability for hackers to connect with any username they choose.");
+				$this->logger->debug("To change this, set \"online-mode\" to \"true\" in the server.properties file.");
 			}
 
 			$this->forceLanguage = $this->getProperty("settings.force-language", false);
