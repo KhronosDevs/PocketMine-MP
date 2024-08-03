@@ -56,7 +56,7 @@ class Hopper extends Spawnable implements InventoryHolder, Container, Nameable{
 		for($i = 0; $i < $this->getSize(); ++$i){
 			$this->inventory->setItem($i, $this->getItem($i));
 		}
-		$this->namedtag->TransferCooldown = new IntTag("TransferCooldown", 0);
+		$nbt->TransferCooldown = new IntTag("TransferCooldown", 0);
 
 		$this->scheduleUpdate();
 	}
