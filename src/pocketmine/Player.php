@@ -380,6 +380,14 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		return self::getLevelXpRequirement($this->getXpLevel() + 1);
 	}
 
+	public function addEffect(Effect $effect) {
+		if($effect->isBad() && $this->isCreative()){
+			return;
+		}
+
+		parent::addEffect($effect);
+	}
+
 	/**
 	 * @deprecated
 	 */
