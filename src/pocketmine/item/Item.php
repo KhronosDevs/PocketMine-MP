@@ -723,7 +723,7 @@ class Item implements ItemIds{
 			$this->clearCustomName();
 		}
 
-		if(!($hadCompoundTag = $this->hasCompoundTag())){
+		if($this->hasCompoundTag()){
 			$tag = new CompoundTag("", []);
 		}else{
 			$tag = $this->getNamedTag();
@@ -737,9 +737,7 @@ class Item implements ItemIds{
 			]);
 		}
 
-		if(!$hadCompoundTag){
-			$this->setCompoundTag($tag);
-		}
+		$this->setCompoundTag($tag);
 
 		return $this;
 	}
