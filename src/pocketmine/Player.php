@@ -3234,17 +3234,6 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 					break;
 				}
 
-				/** @var Item $item */
-				foreach($packet->input as $i => $item){
-					if($item->getDamage() === -1 or $item->getDamage() === 0xffff){
-						$item->setDamage(null);
-					}
-
-					if($i < 9 and $item->getId() > 0){ //TODO: Get rid of this hack.
-						$item->setCount(1);
-					}
-				}
-
 				$canCraft = true;
 
 				if(count($packet->input) === 0){
@@ -3262,7 +3251,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 					 * In fact, TODO: Rewrite crafting entirely.
 					 */
 					$possibleRecipes = $this->server->getCraftingManager()->getRecipesByResult($packet->output[0]);
-					if(!$packet->output[0]->deepEquals($recipe->getResult())){
+					if(!$packet->output[0]->equals($recipe->getResult())){
 						$this->server->getLogger()->debug("Mismatched desktop recipe received from player ".$this->getName().", expected ".$recipe->getResult().", got ".$packet->output[0]);
 					}
 					$recipe = null;
@@ -3317,8 +3306,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 										$canCraft = false;
 										break;
 									}
-									if($ingredient->getId() != 0 and !$ingredient->deepEquals($item, $ingredient->getDamage() !== null, $ingredient->getCompoundTag() !== null)){
-										$canCraft = false;
+									if($ingredient->getId() != 0 and !$ingredient->equals($item, !$ingredient->hasAnyDamageValue(), $ingredient->hasCompoundTag())){										$canCraft = false;
 										break;
 									}
 
@@ -3336,8 +3324,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 								$item = clone $packet->input[$y * 3 + $x];
 
 								foreach($needed as $k => $n){
-									if($n->deepEquals($item, $n->getDamage() !== null, $n->getCompoundTag() !== null)){
-										$remove = min($n->getCount(), $item->getCount());
+									if($n->deepEquals($item, !$n->hasAnyDamageValue(), $n->hasCompoundTag())){										$remove = min($n->getCount(), $item->getCount());
 										$n->setCount($n->getCount() - $remove);
 										$item->setCount($item->getCount() - $remove);
 
@@ -3360,9 +3347,6 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 						$canCraft = false;
 					}
 
-					//Nasty hack. TODO: Get rid
-					$canCraft = true;//0.13.1大量物品本地配方出现问题,无法解决,使用极端(唯一)方法修复.
-
 					/** @var Item[] $ingredients */
 					$ingredients = $packet->input;
 					$result = $packet->output[0];
@@ -3377,8 +3361,8 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 					foreach($ingredients as $ingredient){
 						$slot = -1;
-						foreach($this->inventory->getContents() as $index => $i){
-							if($ingredient->getId() !== 0 and $ingredient->deepEquals($i, $ingredient->getDamage() !== null) and ($i->getCount() - $used[$index]) >= 1){
+						foreach($this->inventory->getContents() as $index => $item){
+							if($ingredient->getId() !== 0 and $ingredient->deepEquals($item, !$ingredient->hasAnyDamageValue()) and ($item->getCount() - $used[$index]) >= 1){
 								$slot = $index;
 								$used[$index]++;
 								break;
