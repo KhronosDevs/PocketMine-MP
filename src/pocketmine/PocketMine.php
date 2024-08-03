@@ -477,9 +477,17 @@ namespace pocketmine {
 
 	$logger->info("Stopping other threads");
 
+	$erroredThreads = 0;
+
 	foreach(ThreadManager::getInstance()->getAll() as $id => $thread){
-		$logger->debug("Stopping " . (new \ReflectionClass($thread))->getShortName() . " thread");
-		$thread->quit();
+		$logger->debug("Stopping " . $thread->getThreadName() . " thread");
+		try{
+			$thread->quit();
+			$logger->debug($thread->getThreadName() . " thread stopped successfully.");
+		}catch(\Exception $e){
+			++$erroredThreads;
+			$logger->debug("Could not stop " . $thread->getThreadName() . " thread: " . $e->getMessage());
+		}
 	}
 
 	$killer = new ServerKiller(8);
@@ -490,6 +498,13 @@ namespace pocketmine {
 
 	echo "Server has stopped" . Terminal::$FORMAT_RESET . "\n";
 
-	exit(0);
+	if($erroredThreads > 0){
+		if(\pocketmine\DEBUG > 1){
+			echo "Some threads could not be stopped, performing a force-kill" . PHP_EOL . PHP_EOL;
+		}
+		kill(getmypid());
+	}else{
+		exit(0);
+	}
 
 }
