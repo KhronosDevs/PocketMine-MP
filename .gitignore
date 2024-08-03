@@ -11,6 +11,5 @@ pocketmine.yml
 server.log
 server.properties
 white-list.txt
-start.sh
 start.cmd
 todo
