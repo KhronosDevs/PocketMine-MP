@@ -92,6 +92,10 @@ class ServerScheduler{
 		$this->asyncPool->submitTaskToWorker($task, $worker);
 	}
 
+	public function getAsyncPool(): AsyncPool {
+		return $this->asyncPool;
+	}
+
 	public function getAsyncTaskPoolSize(){
 		return $this->asyncPool->getSize();
 	}

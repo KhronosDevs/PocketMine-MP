@@ -32,5 +32,5 @@ if [ -f "bin/mintty" ]; then
     bin/mintty -o Columns=130 -o Rows=32 -o AllowBlinking=0 -o FontQuality=3 -o Font="DejaVu Sans Mono" -o FontHeight=10 -o CursorType=0 -o CursorBlinks=1 -h error -t "PocketMine-MP" -i bin/pocketmine.ico "$PHP_BINARY" "$POCKETMINE_FILE" --enable-ansi "$@"
 else
     # Run the PHP script directly
-    "$PHP_BINARY" -c bin/php "$POCKETMINE_FILE" "$@"
+    "$PHP_BINARY" -c bin/php7 "$POCKETMINE_FILE" "$@"
 fi
