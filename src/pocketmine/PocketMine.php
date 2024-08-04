@@ -83,7 +83,7 @@ namespace pocketmine {
 
 	const GENISYS_API_VERSION = '1.9.3';
 
-	const KHRONOS_VERSION = '2.0';
+	const KHRONOS_VERSION = '2.0-dev';
 
 	/*
 	 * Startup code. Do not look at it, it may harm you.
