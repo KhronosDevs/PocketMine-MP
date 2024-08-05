@@ -88,8 +88,6 @@ use pocketmine\event\TranslationContainer;
 use pocketmine\inventory\CraftingManager;
 use pocketmine\inventory\InventoryType;
 use pocketmine\inventory\Recipe;
-use pocketmine\inventory\ShapedRecipe;
-use pocketmine\inventory\ShapelessRecipe;
 use pocketmine\item\enchantment\Enchantment;
 use pocketmine\item\enchantment\EnchantmentLevelTable;
 use pocketmine\item\Item;
@@ -122,7 +120,6 @@ use pocketmine\nbt\tag\StringTag;
 use pocketmine\network\CompressBatchedTask;
 use pocketmine\network\Network;
 use pocketmine\network\protocol\BatchPacket;
-use pocketmine\network\protocol\CraftingDataPacket;
 use pocketmine\network\protocol\DataPacket;
 use pocketmine\network\protocol\PlayerListPacket;
 use pocketmine\network\query\QueryHandler;
@@ -375,14 +372,11 @@ class Server{
 	public $countBookshelf = false;
 	public $allowInventoryCheats = false;
 
-	/** @var CraftingDataPacket */
-	private $recipeList = null;
-
 	/**
 	 * @return string
 	 */
 	public function getName() : string{
-		return "Genisys";
+		return "Khronos";
 	}
 
 	/**
@@ -422,6 +416,10 @@ class Server{
 					: "") . "$minutes " . $this->getLanguage()->translateString("%pocketmine.command.status.minutes") . " "
 				: "") . "$seconds " . $this->getLanguage()->translateString("%pocketmine.command.status.seconds");
 		return $uptime;
+	}
+
+	public function getKhronosVersion(): string {
+		return \pocketmine\KHRONOS_VERSION;
 	}
 
 	/**
@@ -818,7 +816,6 @@ class Server{
 
 	public function addRecipe(Recipe $recipe){
 		$this->craftingManager->registerRecipe($recipe);
-		$this->generateRecipeList();
 	}
 
 	public function shouldSavePlayerData() : bool{
@@ -905,56 +902,6 @@ class Server{
 		$nbt->Motion->setTagType(NBT::TAG_Double);
 		$nbt->Rotation->setTagType(NBT::TAG_Float);
 
-		/*if(file_exists($path . "$name.yml")){ //Importing old PocketMine-MP files
-			$data = new Config($path . "$name.yml", Config::YAML, []);
-			$nbt["playerGameType"] = (int) $data->get("gamemode");
-			$nbt["Level"] = $data->get("position")["level"];
-			$nbt["Pos"][0] = $data->get("position")["x"];
-			$nbt["Pos"][1] = $data->get("position")["y"];
-			$nbt["Pos"][2] = $data->get("position")["z"];
-			$nbt["SpawnLevel"] = $data->get("spawn")["level"];
-			$nbt["SpawnX"] = (int) $data->get("spawn")["x"];
-			$nbt["SpawnY"] = (int) $data->get("spawn")["y"];
-			$nbt["SpawnZ"] = (int) $data->get("spawn")["z"];
-			$this->logger->notice($this->getLanguage()->translateString("pocketmine.data.playerOld", [$name]));
-			foreach($data->get("inventory") as $slot => $item){
-				if(count($item) === 3){
-					$nbt->Inventory[$slot + 9] = new CompoundTag("", [
-						new ShortTag("id", $item[0]),
-						new ShortTag("Damage", $item[1]),
-						new ByteTag("Count", $item[2]),
-						new ByteTag("Slot", $slot + 9),
-						new ByteTag("TrueSlot", $slot + 9)
-					]);
-				}
-			}
-			foreach($data->get("hotbar") as $slot => $itemSlot){
-				if(isset($nbt->Inventory[$itemSlot + 9])){
-					$item = $nbt->Inventory[$itemSlot + 9];
-					$nbt->Inventory[$slot] = new CompoundTag("", [
-						new ShortTag("id", $item["id"]),
-						new ShortTag("Damage", $item["Damage"]),
-						new ByteTag("Count", $item["Count"]),
-						new ByteTag("Slot", $slot),
-						new ByteTag("TrueSlot", $item["TrueSlot"])
-					]);
-				}
-			}
-			foreach($data->get("armor") as $slot => $item){
-				if(count($item) === 2){
-					$nbt->Inventory[$slot + 100] = new CompoundTag("", [
-						new ShortTag("id", $item[0]),
-						new ShortTag("Damage", $item[1]),
-						new ByteTag("Count", 1),
-						new ByteTag("Slot", $slot + 100)
-					]);
-				}
-			}
-			foreach($data->get("achievements") as $achievement => $status){
-				$nbt->Achievements[$achievement] = new ByteTag($achievement, $status == true ? 1 : 0);
-			}
-			unlink($path . "$name.yml");
-		}*/
 		$this->saveOfflinePlayerData($name, $nbt);
 
 		return $nbt;
@@ -1556,13 +1503,19 @@ class Server{
 	}
 
 	public function about(){
-		static $string = '
-		§bKhronos§f is a fork of §bPocketMine-MP§f, modified by §bKhronos Devs§f
+		$this->getLogger()->info('
+
+  	§bKhronosAPI§f is a fork of §bPocketMine-MP§f, mantained by §bKhronos Devs§f
 		
 	    §bDiscord: §fhttps://discord.gg/gR24R3wR
-		';
-	
-		$this->getLogger()->info($string);
+	§bGithub: §fhttps://github.com/KhronosDevs/PocketMine-MP
+
+		§bMain maintainer\'s discord: §fxchillz.
+
+		§bDevice information:
+		§7  - §bOS: §f' . ucfirst(Utils::getOS()) . '
+		§7  - §bKhronos version: §f' . $this->getKhronosVersion() . '
+		');
 	}
 
 	public function loadAdvancedConfig(){
@@ -1761,13 +1714,13 @@ class Server{
 
 			$onlineMode = $this->getConfigBoolean("online-mode", false);
 			if(!extension_loaded("openssl")){
-				$this->logger->warning("The OpenSSL extension is not loaded, and this is required for XBOX authentication to work. If you want to use Xbox Live auth, please update your PHP binaries at itxtech.org/download, or recompile PHP with the OpenSSL extension.");
+				$this->logger->debug("The OpenSSL extension is not loaded, and this is required for XBOX authentication to work. If you want to use Xbox Live auth, please update your PHP binaries at itxtech.org/download, or recompile PHP with the OpenSSL extension.");
 				$this->setConfigBool("online-mode", false);
 			}elseif(!$onlineMode){
-				$this->logger->warning("SERVER IS RUNNING IN OFFLINE/INSECURE MODE!");
-				$this->logger->warning("The server will make no attempt to authenticate usernames. Beware.");
-				$this->logger->warning("While this makes the game possible to play without internet access, it also opens up the ability for hackers to connect with any username they choose.");
-				$this->logger->warning("To change this, set \"online-mode\" to \"true\" in the server.properties file.");
+				$this->logger->debug("SERVER IS RUNNING IN OFFLINE/INSECURE MODE!");
+				$this->logger->debug("The server will make no attempt to authenticate usernames. Beware.");
+				$this->logger->debug("While this makes the game possible to play without internet access, it also opens up the ability for hackers to connect with any username they choose.");
+				$this->logger->debug("To change this, set \"online-mode\" to \"true\" in the server.properties file.");
 			}
 
 			$this->forceLanguage = $this->getProperty("settings.force-language", false);
@@ -1953,14 +1906,6 @@ class Server{
 				return;
 			}
 
-			if($this->netherEnabled){
-				if(!$this->loadLevel($this->netherName)){
-					//$this->logger->info("正在生成地狱 ".$this->netherName);
-					$this->generateLevel($this->netherName, time(), Generator::getGenerator("nether"));
-				}
-				$this->netherLevel = $this->getLevelByName($this->netherName);
-			}
-
 			if($this->getProperty("ticks-per.autosave", 6000) > 0){
 				$this->autoSaveTicks = (int) $this->getProperty("ticks-per.autosave", 6000);
 			}
@@ -1976,8 +1921,6 @@ class Server{
 				$this->logger->notice("Your genisys.yml needs update");
 				$this->logger->notice("Current Version: $advVer   Latest Version: $cfgVer");
 			}
-
-			$this->generateRecipeList();
 
 			$this->start();
 		}catch(\Throwable $e){
@@ -2521,7 +2464,7 @@ class Server{
 		}
 
 		$this->sendFullPlayerListData($player);
-		$this->sendRecipeList($player);
+		$player->dataPacket($this->craftingManager->getCraftingDataPacket());
 	}
 
 	public function addPlayer($identifier, Player $player){
@@ -2566,37 +2509,12 @@ class Server{
 		$pk = new PlayerListPacket();
 		$pk->type = PlayerListPacket::TYPE_ADD;
 		foreach($this->playerList as $player){
+			if ($p === $player) continue;
+			
 			$pk->entries[] = [$player->getUniqueId(), $player->getId(), $player->getDisplayName(), $player->getSkinId(), $player->getSkinData()];
 		}
 
 		$p->dataPacket($pk);
-	}
-
-	public function generateRecipeList(){
-
-		$pk = new CraftingDataPacket();
-		$pk->cleanRecipes = true;
-
-		foreach($this->getCraftingManager()->getRecipes() as $recipe){
-			if($recipe instanceof ShapedRecipe){
-				$pk->addShapedRecipe($recipe);
-			}elseif($recipe instanceof ShapelessRecipe){
-				$pk->addShapelessRecipe($recipe);
-			}
-		}
-
-		foreach($this->getCraftingManager()->getFurnaceRecipes() as $recipe){
-			$pk->addFurnaceRecipe($recipe);
-		}
-
-		$pk->encode();
-		$pk->isEncoded = true;
-
-		$this->recipeList = $pk;
-	}
-
-	public function sendRecipeList(Player $p){
-		$p->dataPacket($this->recipeList);
 	}
 
 	private function checkTickUpdates($currentTick, $tickTime){

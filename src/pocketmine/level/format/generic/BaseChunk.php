@@ -81,7 +81,7 @@ abstract class BaseChunk extends BaseFullChunk implements Chunk{
 		return isset($this->sections[$y >> 4]) ? $this->sections[$y >> 4]->getFullBlock($x, $y & 0x0f, $z) : 0;
 	}
 
-	public function setBlock($x, $y, $z, $blockId = null, $meta = null){
+	public function setBlock($x, $y, $z, $blockId = null, $meta = null): bool{
 		try{
 			$this->hasChanged = true;
 			return $this->sections[$y >> 4]->setBlock($x, $y & 0x0f, $z, $blockId & 0xff, $meta & 0x0f);

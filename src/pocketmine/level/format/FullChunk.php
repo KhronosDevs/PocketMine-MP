@@ -69,7 +69,7 @@ interface FullChunk{
 	 * @param int $meta    0-15, if null, do not change
 	 *
 	 */
-	public function setBlock($x, $y, $z, $blockId = null, $meta = null);
+	public function setBlock($x, $y, $z, $blockId = null, $meta = null): bool;
 
 	/**
 	 * @param int $x 0-15

@@ -1,2 +1,15 @@
 .idea/
+bin/
+players/
+plugins/
+crashdumps/
+worlds/
+banned-*.txt
+genisys.yml
+ops.txt
+pocketmine.yml
+server.log
+server.properties
+white-list.txt
+start.cmd
 todo

@@ -72,12 +72,18 @@ namespace pocketmine {
 	use pocketmine\utils\Utils;
 	use pocketmine\wizard\Installer;
 
-	const VERSION = "80faae0"; //will be set by CI to a git hash
+	const VERSION = "228385a";
+
 	const API_VERSION = "2.0.0";
-	const CODENAME = "Kyrios";
+	
+	const CODENAME = "Khronos";
+
 	const MINECRAFT_VERSION = "v0.15.10 alpha";
 	const MINECRAFT_VERSION_NETWORK = "0.15.10";
+
 	const GENISYS_API_VERSION = '1.9.3';
+
+	const KHRONOS_VERSION = '2.0-dev';
 
 	/*
 	 * Startup code. Do not look at it, it may harm you.
@@ -477,9 +483,17 @@ namespace pocketmine {
 
 	$logger->info("Stopping other threads");
 
+	$erroredThreads = 0;
+
 	foreach(ThreadManager::getInstance()->getAll() as $id => $thread){
-		$logger->debug("Stopping " . (new \ReflectionClass($thread))->getShortName() . " thread");
-		$thread->quit();
+		$logger->debug("Stopping " . $thread->getThreadName() . " thread");
+		try{
+			$thread->quit();
+			$logger->debug($thread->getThreadName() . " thread stopped successfully.");
+		}catch(\Exception $e){
+			++$erroredThreads;
+			$logger->debug("Could not stop " . $thread->getThreadName() . " thread: " . $e->getMessage());
+		}
 	}
 
 	$killer = new ServerKiller(8);
@@ -490,6 +504,13 @@ namespace pocketmine {
 
 	echo "Server has stopped" . Terminal::$FORMAT_RESET . "\n";
 
-	exit(0);
+	if($erroredThreads > 0){
+		if(\pocketmine\DEBUG > 1){
+			echo "Some threads could not be stopped, performing a force-kill" . PHP_EOL . PHP_EOL;
+		}
+		kill(getmypid());
+	}else{
+		exit(0);
+	}
 
 }

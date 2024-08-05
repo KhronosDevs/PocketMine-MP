@@ -230,7 +230,6 @@ class Level implements ChunkManager, Metadatable{
 	private $blockMetadata;
 
 	private $useSections;
-	private $blockOrder;
 
 	/** @var Position */
 	private $temporalPosition;
@@ -397,7 +396,6 @@ class Level implements ChunkManager, Metadatable{
 		$this->server->getLogger()->info($this->server->getLanguage()->translateString("pocketmine.level.preparing", [$this->provider->getName()]));
 		$this->generator = Generator::getGenerator($this->provider->getGenerator());
 
-		$this->blockOrder = $provider::getProviderOrder();
 		$this->useSections = $provider::usesChunkSection();
 
 		$this->folderName = $name;
@@ -1446,6 +1444,8 @@ class Level implements ChunkManager, Metadatable{
 	}
 
 	private function computeRemoveBlockLight(int $x, int $y, int $z, int $currentLight, \SplQueue $queue, \SplQueue $spreadQueue, array &$visited, array &$spreadVisited){
+		if ($y < 0) return;
+		
 		$current = $this->getBlockLightAt($x, $y, $z);
 
 		if($current !== 0 and $current < $currentLight){
@@ -1466,6 +1466,8 @@ class Level implements ChunkManager, Metadatable{
 	}
 
 	private function computeSpreadBlockLight(int $x, int $y, int $z, int $currentLight, \SplQueue $queue, array &$visited){
+		if ($y < 0) return;
+		
 		$current = $this->getBlockLightAt($x, $y, $z);
 
 		if($current < $currentLight){
@@ -1715,12 +1717,7 @@ class Level implements ChunkManager, Metadatable{
 		}
 
 		if($createParticles){
-			$players = $this->getChunkPlayers($target->x >> 4, $target->z >> 4);
-			/*if($player !== null){
-				unset($players[$player->getLoaderId()]);
-			}*/
-
-			$this->addParticle(new DestroyBlockParticle($target->add(0.5), $target), $players);
+			$this->addParticle(new DestroyBlockParticle($target->add(0.5, 0.5, 0.5), $target));
 		}
 
 		$target->onBreak($item);

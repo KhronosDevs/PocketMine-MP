@@ -205,7 +205,6 @@ abstract class Entity extends Location implements Metadatable{
 
 	public $noDamageTicks;
 	protected $justCreated;
-	protected $fireProof;
 	private $invulnerable;
 
 	/** @var AttributeMap */
@@ -911,10 +910,11 @@ abstract class Entity extends Location implements Metadatable{
 		}
 
 		if($this->fireTicks > 0){
-			if($this->fireProof){
-				$this->fireTicks -= 4 * $tickDiff;
-				if($this->fireTicks < 0){
-					$this->fireTicks = 0;
+			if($this->isFireProof()){
+				if($this->fireTicks > 1){
+					$this->fireTicks = 1;
+				}else{
+					$this->fireTicks -= 1;
 				}
 			}else{
 				if(!$this->hasEffect(Effect::FIRE_RESISTANCE) and (($this->fireTicks % 20) === 0 or $tickDiff > 20)){
@@ -945,6 +945,10 @@ abstract class Entity extends Location implements Metadatable{
 		Timings::$timerEntityBaseTick->stopTiming();
 
 		return $hasUpdate;
+	}
+
+	public function isFireProof(): bool {
+		return false;
 	}
 
 	protected function updateMovement(){
