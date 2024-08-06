@@ -156,7 +156,7 @@ class Chunk extends BaseFullChunk{
 		}
 	}
 
-	public function setBlock($x, $y, $z, $blockId = null, $meta = null){
+	public function setBlock($x, $y, $z, $blockId = null, $meta = null): bool{
 		$i = ($x << 11) | ($z << 7) | $y;
 
 		$changed = false;
