@@ -77,6 +77,32 @@ abstract class TextFormat{
 		return str_replace("\x1b", "", preg_replace("/\x1b[\\(\\][[0-9;\\[\\(]+[Bm]/", "", $string));
 	}
 
+	private static function makePcreError() : \InvalidArgumentException{
+        $errorCode = preg_last_error();
+        $message = [
+            PREG_INTERNAL_ERROR => "Internal error",
+            PREG_BACKTRACK_LIMIT_ERROR => "Backtrack limit reached",
+            PREG_RECURSION_LIMIT_ERROR => "Recursion limit reached",
+            PREG_BAD_UTF8_ERROR => "Malformed UTF-8",
+            PREG_BAD_UTF8_OFFSET_ERROR => "Bad UTF-8 offset",
+            PREG_JIT_STACKLIMIT_ERROR => "PCRE JIT stack limit reached"
+        ][$errorCode] ?? "Unknown (code $errorCode)";
+        throw new \InvalidArgumentException("PCRE error: $message");
+    }
+ 
+    private static function preg_replace(string $pattern, string $replacement, string $string) : string{
+        $result = preg_replace($pattern, $replacement, $string);
+		
+        if($result === null){
+            throw self::makePcreError();
+        }
+        return $result;
+    }
+
+	public static function colorize(string $string, string $placeholder = "&") : string{
+        return self::preg_replace('/' . preg_quote($placeholder, "/") . '([0-9a-gk-or])/u', TextFormat::ESCAPE . '$1', $string);
+    }
+
 	/**
 	 * Returns an JSON-formatted string with colors/markup
 	 *
