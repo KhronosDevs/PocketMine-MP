@@ -457,7 +457,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	}
 
 	public function isBanned(){
-		return $this->server->getNameBans()->isBanned(strtolower($this->getName()));
+		return $this->server->getNameBans()->isBanned($this->getLowerCaseName());
 	}
 
 	public function setBanned($value){
@@ -470,14 +470,14 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	}
 
 	public function isWhitelisted() : bool{
-		return $this->server->isWhitelisted(strtolower($this->getName()));
+		return $this->server->isWhitelisted($this->getLowerCaseName()));
 	}
 
 	public function setWhitelisted($value){
 		if($value === true){
-			$this->server->addWhitelist(strtolower($this->getName()));
+			$this->server->addWhitelist($this->getLowerCaseName()));
 		}else{
-			$this->server->removeWhitelist(strtolower($this->getName()));
+			$this->server->removeWhitelist($this->getLowerCaseName()));
 		}
 	}
 
@@ -2038,11 +2038,11 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	}
 
 	protected function processLogin(){
-		if(!$this->server->isWhitelisted(strtolower($this->getName()))){
+		if(!$this->server->isWhitelisted($this->getLowerCaseName()))){
 			$this->close($this->getLeaveMessage(), "Server is white-listed");
 
 			return;
-		}elseif($this->server->getNameBans()->isBanned(strtolower($this->getName())) or $this->server->getIPBans()->isBanned($this->getAddress()) or $this->server->getCIDBans()->isBanned($this->randomClientId)){
+		}elseif($this->server->getNameBans()->isBanned($this->getLowerCaseName())) or $this->server->getIPBans()->isBanned($this->getAddress()) or $this->server->getCIDBans()->isBanned($this->randomClientId)){
 			$this->close($this->getLeaveMessage(), TextFormat::RED . "You are banned");
 
 			return;
@@ -2056,7 +2056,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		}
 
 		foreach($this->server->getOnlinePlayers() as $p){
-			if($p !== $this and strtolower($p->getName()) === strtolower($this->getName())){
+			if($p !== $this and strtolower($p->getName()) === $this->getLowerCaseName())){
 				if($p->kick("logged in from another location") === false){
 					$this->close($this->getLeaveMessage(), "Logged in from another location");
 					return;
