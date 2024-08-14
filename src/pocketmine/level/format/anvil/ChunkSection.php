@@ -85,7 +85,7 @@ class ChunkSection implements \pocketmine\level\format\ChunkSection{
 		}
 	}
 
-	public function setBlock($x, $y, $z, $blockId = null, $meta = null){
+	public function setBlock($x, $y, $z, $blockId = null, $meta = null): bool{
 		$i = ($y << 8) + ($z << 4) + $x;
 
 		$changed = false;

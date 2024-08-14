@@ -82,7 +82,7 @@ interface ChunkSection{
 	 *
 	 * @return bool
 	 */
-	public function setBlock($x, $y, $z, $blockId = null, $meta = null);
+	public function setBlock($x, $y, $z, $blockId = null, $meta = null): bool;
 
 	/**
 	 * @param int $x 0-15

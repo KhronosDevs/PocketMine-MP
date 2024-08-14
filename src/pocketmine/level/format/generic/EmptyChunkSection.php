@@ -68,7 +68,7 @@ class EmptyChunkSection implements ChunkSection{
 		$meta = 0;
 	}
 
-	final public function setBlock($x, $y, $z, $id = null, $meta = null){
+	final public function setBlock($x, $y, $z, $id = null, $meta = null): bool{
 		throw new ChunkException("Tried to modify an empty Chunk");
 	}
 
