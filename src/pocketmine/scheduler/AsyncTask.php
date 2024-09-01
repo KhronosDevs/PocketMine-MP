@@ -104,11 +104,23 @@ abstract class AsyncTask extends \Threaded implements \Collectable{
 
 	/**
 	 * @param mixed $result
-	 * @param bool  $serialize
+	 * @param bool $serialize
 	 */
-	public function setResult($result, $serialize = true){
-		$this->result = $serialize ? serialize($result) : $result;
-		$this->serialized = $serialize;
+	public function setResult($result, bool $serialize = true) {
+        if (!$serialize) {
+            $this->result = $result;
+            $this->serialized = false;
+            return;
+        }
+
+        if (is_scalar($result) || $result === null) {
+            $this->result = $result;
+            $this->serialized = false;
+            return;
+        }
+
+		$this->result = serialize($result);
+		$this->serialized = true;
 	}
 
 	public function setTaskId($taskId){
