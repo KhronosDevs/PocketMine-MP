@@ -43,7 +43,7 @@ class PingCommand extends VanillaCommand {
 
         if ($sender instanceof Player) {
             $ping = $sender->getPing();
-            $sender->sendMessage(TextFormat::GREEN . "Ping:" . TextFormat::WHITE . $ping . " §ems");
+            $sender->sendMessage(TextFormat::GREEN . "Ping:" . TextFormat::WHITE . $ping . " " . TextFormat::GREEN . "ms");
         } else {
             $sender->sendMessage(TextFormat::RED . "This command can only be used by players.");
         }
