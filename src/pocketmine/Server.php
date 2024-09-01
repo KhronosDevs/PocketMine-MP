@@ -386,6 +386,10 @@ class Server{
 		return $this->isRunning === true;
 	}
 
+    public function getQueryHandler(): QueryHandler {
+        return $this->queryHandler;
+    }
+
 	/**
 	 * @return string
 	 * Returns a formatted string of how long the server has been running for
@@ -2631,30 +2635,6 @@ class Server{
 			" | Load " . $this->getTickUsageAverage() . "%\x07";
 
 		$this->network->resetStatistics();
-	}
-
-	/**
-	 * @param string $address
-	 * @param int    $port
-	 * @param string $payload
-	 *
-	 * TODO: move this to Network
-	 */
-	public function handlePacket($address, $port, $payload){
-		try{
-			if(strlen($payload) > 2 and substr($payload, 0, 2) === "\xfe\xfd" and $this->queryHandler instanceof QueryHandler){
-				$this->queryHandler->handle($address, $port, $payload);
-			}
-		}catch(\Throwable $e){
-			if(\pocketmine\DEBUG > 1){
-				if($this->logger instanceof MainLogger){
-					$this->logger->logException($e);
-				}
-			}
-
-			$this->getNetwork()->blockAddress($address, 600);
-		}
-		//TODO: add raw packet events
 	}
 
 	/**

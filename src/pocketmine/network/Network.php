@@ -81,6 +81,7 @@ use pocketmine\network\protocol\UpdateBlockPacket;
 use pocketmine\network\protocol\UseItemPacket;
 use pocketmine\network\protocol\PlayerListPacket;
 use pocketmine\network\protocol\PlayerInputPacket;
+use pocketmine\network\query\QueryHandler;
 use pocketmine\Player;
 use pocketmine\Server;
 use pocketmine\utils\Binary;
@@ -253,6 +254,28 @@ class Network {
 			}
 		}
 	}
+
+    /**
+     * @param string $address
+     * @param int    $port
+     * @param string $payload
+     */
+    public function handlePacket($address, $port, $payload){
+        try{
+            if(strlen($payload) > 2 and substr($payload, 0, 2) === "\xfe\xfd" and $this->queryHandler instanceof QueryHandler){
+                $this->server->getQueryHandler()->handle($address, $port, $payload);
+            }
+        }catch(\Throwable $e){
+            if(\pocketmine\DEBUG > 1){
+                if($this->server->getLogger() instanceof MainLogger){
+                    $this->server->getLogger()->logException($e);
+                }
+            }
+
+            $this->blockAddress($address, 600);
+        }
+        //TODO: add raw packet events
+    }
 
 	/**
 	 * @param $id
