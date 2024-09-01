@@ -2125,11 +2125,7 @@ class Server{
 		$this->pluginManager->enablePlugin($plugin);
 	}
 
-	public function disablePlugins(){
-		$this->pluginManager->disablePlugins();
-	}
-
-	public function checkConsole(){
+    public function checkConsole(){
 		Timings::$serverCommandTimer->startTiming();
 		if(($line = $this->console->getLine()) !== null){
 			$this->pluginManager->callEvent($ev = new ServerCommandEvent($this->consoleSender, $line));
