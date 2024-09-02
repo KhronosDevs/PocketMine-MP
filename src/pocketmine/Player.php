@@ -190,6 +190,9 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 	public $gamemode;
 	public $lastBreak;
 
+    /** @var bool */
+    private $immobile = false;
+
 	protected $windowCnt = 2;
 	/** @var \SplObjectStorage<Inventory> */
 	protected $windows;
@@ -322,6 +325,14 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		}
 		$this->fishingHook = $entity;
 	}
+
+    public function setImmobile(bool $immobile) {
+        $this->immobile = $immobile;
+    }
+
+    public function isImmobile(): bool {
+        return $this->immobile;
+    }
 
 	public function getItemInHand(){
 		return $this->inventory->getItemInHand();
@@ -1726,6 +1737,10 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 				$ev = new PlayerMoveEvent($this, $from, $to);
 				$this->setMoving(true);
 
+                if ($this->immobile) {
+                    $ev->setCancelled();
+                }
+
 				$this->server->getPluginManager()->callEvent($ev);
 
 				if(!($revert = $ev->isCancelled())){ //Yes, this is intended
@@ -2382,7 +2397,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 
 				$newPos = new Vector3($packet->x, $packet->y - $this->getEyeHeight(), $packet->z);
 
-				if($newPos->distanceSquared($this) == 0 and ($packet->yaw % 360) === $this->yaw and ($packet->pitch % 360) === $this->pitch) {
+				if($newPos->distanceSquared($this) == 0 and ($packet->yaw % 360) == $this->yaw and ($packet->pitch % 360) == $this->pitch) {
 					break;
 				}
 
