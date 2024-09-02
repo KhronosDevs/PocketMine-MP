@@ -4,6 +4,7 @@ players/
 plugins/
 crashdumps/
 worlds/
+timings/
 banned-*.txt
 genisys.yml
 ops.txt
@@ -12,5 +13,4 @@ server.log
 server.properties
 white-list.txt
 start.cmd
-todo
 PocketMine-MP.phar
