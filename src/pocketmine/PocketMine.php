@@ -75,8 +75,6 @@ namespace pocketmine {
 	use pocketmine\wizard\Installer;
     use Throwable;
 
-	const VERSION = "228385a";
-
 	const API_VERSION = "2.0.0";
 	
 	const CODENAME = "Khronos";
@@ -86,7 +84,7 @@ namespace pocketmine {
 
 	const GENISYS_API_VERSION = '1.9.3';
 
-	const KHRONOS_VERSION = '2.0-dev';
+	const KHRONOS_VERSION = '3.0.0';
 
 	/*
 	 * Startup code. Do not look at it, it may harm you.

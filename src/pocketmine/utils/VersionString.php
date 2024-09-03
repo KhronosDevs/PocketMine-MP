@@ -23,6 +23,8 @@ declare(strict_types=1);
 
 namespace pocketmine\utils;
 
+use pocketmine\Server;
+
 use function is_int;
 
 /**
@@ -34,7 +36,11 @@ class VersionString{
 	private $minor;
 	private $development = false;
 
-	public function __construct($version = \pocketmine\VERSION){
+	public function __construct($version = null){
+		if ($version === null) {
+			$version = Git::getRepositoryStatePretty(Server::getInstance()->getDataPath());
+		}
+
 		if(is_int($version)){
 			$this->minor = $version & 0x1F;
 			$this->major = ($version >> 5) & 0x0F;

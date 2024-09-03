@@ -99,6 +99,7 @@ use pocketmine\tile\Tile;
 use pocketmine\utils\Binary;
 use pocketmine\utils\Color;
 use pocketmine\utils\Config;
+use pocketmine\utils\Git;
 use pocketmine\utils\LevelException;
 use pocketmine\utils\MainLogger;
 use pocketmine\utils\Terminal;
@@ -760,11 +761,13 @@ class Server{
 	 * @return string
 	 */
 	public function getPocketMineVersion(){
-		return \pocketmine\VERSION;
+		return Git::getRepositoryStatePretty($this->dataPath);
 	}
 
 	public function getFormattedVersion($prefix = ""){
-		return (\pocketmine\VERSION !== ""? $prefix . \pocketmine\VERSION : "");
+		$version = Git::getRepositoryStatePretty($this->dataPath);
+
+		return ($version !== str_repeat("00", 20) ? $prefix . $version : $version);
 	}
 
 	/**
