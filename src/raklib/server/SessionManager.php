@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace raklib\server;
 
+use InvalidArgumentException;
+use pocketmine\utils\Config;
 use raklib\Binary;
 use raklib\protocol\ACK;
 use raklib\protocol\ADVERTISE_SYSTEM;
@@ -50,8 +52,8 @@ use const PHP_INT_MAX;
 
 class SessionManager{
 
-	const RAKLIB_TPS = 100;
-	const RAKLIB_TIME_PER_TICK = 1 / self::RAKLIB_TPS;
+	private $rakLibTps;
+	private $rakLibTimePerTick;
 
 	protected $packetPool = [];
 
@@ -80,16 +82,35 @@ class SessionManager{
 
 	public $serverId;
 
-	public $portChecking = false;
+	public $portChecking;
 
 	public function __construct(RakLibServer $server, UDPServerSocket $socket){
 		$this->server = $server;
 		$this->socket = $socket;
-		$this->registerPackets();
-
 		$this->serverId = mt_rand(0, PHP_INT_MAX);
+	}
 
-		$this->run();
+	public function initialize(string $mainPath) {
+		$config = new Config($mainPath . 'khronos.yml', Config::YAML);
+
+		if (!$config->exists('pvp-mode')) {
+			throw new InvalidArgumentException('\'pvp-mode\' is not set in khronos.yml');
+		}
+
+		$pvpMode = $config->get('pvp-mode');
+
+		if ($pvpMode === 'false' || $pvpMode === false) {
+			$this->rakLibTps = 100;
+			$this->rakLibTimePerTick = 1 / 100;
+			$this->packetLimit = 250;
+			$this->portChecking = false;
+			return;
+		}
+
+		$this->rakLibTps = 20;
+		$this->rakLibTimePerTick = 1 / 20;
+		$this->packetLimit = 1250;
+		$this->portChecking = true;
 	}
 
 	public function getPort(){
@@ -112,8 +133,8 @@ class SessionManager{
 			while($this->receivePacket()){}
 			while($this->receiveStream()){}
 			$time = microtime(true) - $start;
-			if($time < self::RAKLIB_TIME_PER_TICK){
-				time_sleep_until(microtime(true) + self::RAKLIB_TIME_PER_TICK - $time);
+			if($time < $this->rakLibTimePerTick){
+				time_sleep_until(microtime(true) + $this->rakLibTimePerTick - $time);
 			}
 			$this->tick();
 		}
@@ -131,7 +152,9 @@ class SessionManager{
 
 		$this->ipSec = [];
 
-		if(($this->ticks % self::RAKLIB_TPS) === 0){
+		$check = $this->rakLibTps === 20 ? ($this->ticks & 0b1111) === 0 : ($this->ticks % $this->rakLibTps) === 0;
+
+		if($check){
 			$diff = max(0.005, $time - $this->lastMeasure);
 			$this->streamOption("bandwidth", serialize([
 				"up" => $this->sendBytes / $diff,
@@ -431,7 +454,7 @@ class SessionManager{
 		return null;
 	}
 
-	private function registerPackets(){
+	public function registerPackets(){
 		$this->packetPool = new \SplFixedArray(256);
 
 		//$this->registerPacket(UNCONNECTED_PING::$ID, UNCONNECTED_PING::class);

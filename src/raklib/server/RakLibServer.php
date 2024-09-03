@@ -267,8 +267,11 @@ class RakLibServer extends \Thread{
 			set_error_handler([$this, "errorHandler"], E_ALL);
 			register_shutdown_function([$this, "shutdownHandler"]);
 
-			$socket = new UDPServerSocket($this->getLogger(), $this->port, $this->interface);
-			new SessionManager($this, $socket);
+			$sessionManager = new SessionManager($this, new UDPServerSocket($this->getLogger(), $this->port, $this->interface));
+
+			$sessionManager->registerPackets();
+			$sessionManager->initialize($this->mainPath);
+			$sessionManager->run();
 		}catch(\Throwable $e){
 			$this->logger->logException($e);
 		}
