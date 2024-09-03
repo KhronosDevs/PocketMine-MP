@@ -24,6 +24,8 @@ declare(strict_types=1);
 namespace pocketmine\nbt\tag;
 
 use pocketmine\nbt\NBT;
+use RuntimeException;
+
 use function get_class;
 
 #include <rules/NBT.h>
@@ -50,6 +52,168 @@ class CompoundTag extends NamedTag implements \ArrayAccess{
 		}
 
 		return $count;
+	}
+
+	/**
+	 * @return Tag|null
+	 */
+	public function getTag(string $name){
+		return $this->{$name} ?? null;
+	}
+
+	public function getListTag(string $name){
+		$tag = $this->getTag($name);
+
+		if($tag !== null && !($tag instanceof ListTag)){
+			throw new RuntimeException("Expected a tag of type " . ListTag::class . ", got " . get_class($tag));
+		}
+
+		return $tag;
+	}
+
+	public function getCompoundTag(string $name){
+		$tag = $this->getTag($name);
+
+		if($tag !== null && !($tag instanceof CompoundTag)){
+			throw new RuntimeException("Expected a tag of type " . CompoundTag::class . ", got " . get_class($tag));
+		}
+
+		return $tag;
+	}
+
+	public function setTag(string $name, Tag $tag): self {
+		$this->{$name} = $tag;
+		return $this;
+	}
+
+	public function removeTag(string ...$names){
+		foreach ($names as $name) {
+			unset($this->{$name});
+		}
+	}
+
+	private function getTagValue(string $name, string $expectedClass, $default = null){
+		$tag = $this->getTag($name);
+
+		if($tag instanceof $expectedClass){
+			return $tag->getValue();
+		}
+
+		if($tag !== null){
+			throw new RuntimeException("Expected a tag of type $expectedClass, got " . get_class($tag));
+		}
+
+		if($default === null){
+			throw new RuntimeException("Tag \"$name\" does not exist");
+		}
+
+		return $default;
+	}
+
+	public function getByte(string $name, int $default = null) : int{
+		return $this->getTagValue($name, ByteTag::class, $default);
+	}
+
+	public function getShort(string $name, int $default = null) : int{
+		return $this->getTagValue($name, ShortTag::class, $default);
+	}
+
+	public function getInt(string $name, int $default = null) : int{
+		return $this->getTagValue($name, IntTag::class, $default);
+	}
+
+	public function getLong(string $name, int $default = null) : int{
+		return $this->getTagValue($name, LongTag::class, $default);
+	}
+
+	public function getFloat(string $name, float $default = null) : float{
+		return $this->getTagValue($name, FloatTag::class, $default);
+	}
+
+	public function getDouble(string $name, float $default = null) : float{
+		return $this->getTagValue($name, DoubleTag::class, $default);
+	}
+
+	public function getByteArray(string $name, string $default = null) : string{
+		return $this->getTagValue($name, ByteArrayTag::class, $default);
+	}
+
+	public function getString(string $name, string $default = null) : string{
+		return $this->getTagValue($name, StringTag::class, $default);
+	}
+
+	/**
+	 * @param int[]|null $default
+	 *
+	 * @return int[]
+	 */
+	public function getIntArray(string $name, array $default = null) : array{
+		return $this->getTagValue($name, IntArrayTag::class, $default);
+	}
+
+	/**
+	 * @return $this
+	 */
+	public function setByte(string $name, int $value) : self{
+		return $this->setTag($name, new ByteTag($value));
+	}
+
+	/**
+	 * @return $this
+	 */
+	public function setShort(string $name, int $value) : self{
+		return $this->setTag($name, new ShortTag($value));
+	}
+
+	/**
+	 * @return $this
+	 */
+	public function setInt(string $name, int $value) : self{
+		return $this->setTag($name, new IntTag($value));
+	}
+
+	/**
+	 * @return $this
+	 */
+	public function setLong(string $name, int $value) : self{
+		return $this->setTag($name, new LongTag($value));
+	}
+
+	/**
+	 * @return $this
+	 */
+	public function setFloat(string $name, float $value) : self{
+		return $this->setTag($name, new FloatTag($value));
+	}
+
+	/**
+	 * @return $this
+	 */
+	public function setDouble(string $name, float $value) : self{
+		return $this->setTag($name, new DoubleTag($value));
+	}
+
+	/**
+	 * @return $this
+	 */
+	public function setByteArray(string $name, string $value) : self{
+		return $this->setTag($name, new ByteArrayTag($value));
+	}
+
+	/**
+	 * @return $this
+	 */
+	public function setString(string $name, string $value) : self{
+		return $this->setTag($name, new StringTag($value));
+	}
+
+	/**
+	 * @param int[]  $value
+	 *
+	 * @return $this
+	 */
+	public function setIntArray(string $name, array $value) : self{
+		return $this->setTag($name, new IntArrayTag($value));
 	}
 
 	public function offsetExists($offset){
