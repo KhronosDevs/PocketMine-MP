@@ -701,18 +701,10 @@ class Item implements ItemIds{
 
 	public function getCustomName() : string{
 		if(!$this->hasCompoundTag()){
-			return "";
+			return '';
 		}
 
-		$tag = $this->getNamedTag();
-		if(isset($tag->display)){
-			$tag = $tag->display;
-			if($tag instanceof CompoundTag && isset($tag->Name) && $tag->Name instanceof StringTag){
-				return $tag->Name->getValue();
-			}
-		}
-
-		return "";
+		return $this->getNamedTag()->getCompoundTag('display')->getString('Name', '');
 	}
 
 	public function setCustomName(string $name){
@@ -721,17 +713,21 @@ class Item implements ItemIds{
 		}
 
 		if(!$this->hasCompoundTag()){
+			/** @var CompoundTag $tag */
 			$tag = new CompoundTag("", []);
 		}else{
+			/** @var CompoundTag $tag */
 			$tag = $this->getNamedTag();
 		}
 
-		if(isset($tag->display) && $tag->display instanceof CompoundTag){
-			$tag->display->Name = new StringTag("Name", $name);
+		$display = $tag->getTag('display');
+
+		if($display !== null && $display instanceof CompoundTag){
+			$display->setString('Name', $name);
 		}else{
-			$tag->display = new CompoundTag("display", [
-				"Name" => new StringTag("Name", $name)
-			]);
+			$display = new CompoundTag('display');
+
+			$display->setString('Name', $name);
 		}
 
 		$this->setCompoundTag($tag);
@@ -766,6 +762,9 @@ class Item implements ItemIds{
 		return null;
 	}
 
+	/**
+	 * @return CompoundTag|null
+	 */
 	public function getNamedTag(){
 		if(!$this->hasCompoundTag()){
 			return null;
