@@ -65,12 +65,15 @@ namespace {
 }
 
 namespace pocketmine {
-	use pocketmine\utils\Binary;
+
+    use pocketmine\event\Timings;
+    use pocketmine\utils\Binary;
 	use pocketmine\utils\MainLogger;
 	use pocketmine\utils\ServerKiller;
 	use pocketmine\utils\Terminal;
 	use pocketmine\utils\Utils;
 	use pocketmine\wizard\Installer;
+    use Throwable;
 
 	const VERSION = "228385a";
 
@@ -310,14 +313,7 @@ namespace pocketmine {
 		return false;
 	}
 
-	if(isset($opts["enable-profiler"])){
-		if(function_exists("profiler_enable")){
-			\profiler_enable();
-			$logger->notice("Execution is being profiled");
-		}else{
-			$logger->notice("No profiler found. Please install https://github.com/krakjoe/profiler");
-		}
-	}
+	// TODO: Add a good profiler tool.
 
 	function kill($pid){
 		switch(Utils::getOS()){
@@ -474,12 +470,45 @@ namespace pocketmine {
 		$lang = $inst->getDefaultLang();
 	}
 
-	/*if(\Phar::running(true) === ""){
+	if(\Phar::running(true) === ""){
 		$logger->warning("Non-packaged PocketMine-MP installation detected, do not use on production.");
-	}*/
+	}
 
 	ThreadManager::init();
+
 	$server = new Server($autoloader, $logger, \pocketmine\PATH, \pocketmine\DATA, \pocketmine\PLUGIN_PATH, $lang);
+	
+	$server->createDefaultFolders($server->getDataPath(), $server->getPluginPath());
+
+	$server->about();
+
+	Timings::init();
+
+	$server->createDefaultFolders(\pocketmine\DATA, \pocketmine\PLUGIN_PATH);
+	$server->createDefaultConfigs();
+
+	$server->setupGenisysConfig($lang);
+	$server->loadAdvancedConfig();
+
+	$server->setConfigBool('online-mode', false);
+
+	$server->setupLanguage();
+	$server->setupAsyncWorkers();
+	$server->setupPocketmineProperties();
+	$server->setupBanLists();
+	$server->setupDebugMode();
+	$server->setupMinecraftRelatedStuff();
+	$server->setupPlugins();
+	$server->setupNetwork();
+	$server->setupShutdownHandler();
+	$server->setupWorlds();
+	$server->setupDServer();
+
+	try {
+		$server->start();
+	} catch (Throwable $throwable) {
+		$server->exceptionHandler($throwable, $throwable->getTrace());
+	}
 
 	$logger->info("Stopping other threads");
 
