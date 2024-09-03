@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace raklib\server;
 
 use InvalidArgumentException;
+use Phar;
 use pocketmine\utils\Config;
 use raklib\Binary;
 use raklib\protocol\ACK;
@@ -91,6 +92,10 @@ class SessionManager{
 	}
 
 	public function initialize(string $mainPath) {
+		if (Phar::running(true) !== '') {
+			$mainPath .= DIRECTORY_SEPARATOR;
+		}
+
 		$config = new Config($mainPath . 'khronos.yml', Config::YAML);
 
 		if (!$config->exists('pvp-mode')) {
