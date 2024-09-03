@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,8 +25,11 @@ namespace pocketmine\utils;
 
 use pocketmine\block\Block;
 use pocketmine\level\ChunkManager;
-use pocketmine\level\Level;
 use pocketmine\math\Vector3;
+use function abs;
+use function floor;
+use function round;
+use function sqrt;
 
 /**
  * This class performs ray tracing and iterates along blocks on a line
@@ -180,7 +185,7 @@ class VectorIterator implements \Iterator{
 	}
 
 	private function posEquals(Vector3 $a, Vector3 $b){
-		return $a->x === $b->x and $a->y === $b->y and $a->z === $b->z;
+		return $a->x === $b->x && $a->y === $b->y && $a->z === $b->z;
 	}
 
 	private function getXFace(Vector3 $direction){
@@ -263,7 +268,7 @@ class VectorIterator implements \Iterator{
 			return;
 		}
 
-		if($this->maxDistance !== 0 and $this->currentDistance > $this->maxDistanceInt){
+		if($this->maxDistance !== 0 && $this->currentDistance > $this->maxDistanceInt){
 			$this->end = true;
 			return;
 		}
@@ -277,7 +282,7 @@ class VectorIterator implements \Iterator{
 		$this->secondError += $this->secondStep;
 		$this->thirdError += $this->thirdStep;
 
-		if($this->secondError > 0 and $this->thirdError > 0){
+		if($this->secondError > 0 && $this->thirdError > 0){
 			$this->positionQueue[2] = $this->positionQueue[0]->getSide($this->mainFace);
 
 			if(($this->secondStep * $this->thirdError) < ($this->thirdStep * $this->secondError)){

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -32,9 +34,6 @@ interface AdvancedSourceInterface extends SourceInterface{
 	 */
 	public function blockAddress($address, $timeout = 300);
 
-	/**
-	 * @param Network $network
-	 */
 	public function setNetwork(Network $network);
 
 	/**

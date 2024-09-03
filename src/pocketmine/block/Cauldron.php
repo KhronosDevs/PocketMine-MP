@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -26,20 +28,20 @@ use pocketmine\event\player\PlayerBucketFillEvent;
 use pocketmine\event\player\PlayerGlassBottleEvent;
 use pocketmine\item\Armor;
 use pocketmine\item\Item;
-use pocketmine\item\Tool;
 use pocketmine\item\Potion;
+use pocketmine\item\Tool;
 use pocketmine\level\sound\ExplodeSound;
 use pocketmine\level\sound\GraySplashSound;
 use pocketmine\level\sound\SpellSound;
 use pocketmine\level\sound\SplashSound;
+use pocketmine\nbt\tag\ByteTag;
+use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ListTag;
+use pocketmine\nbt\tag\ShortTag;
+use pocketmine\nbt\tag\StringTag;
 use pocketmine\Player;
 use pocketmine\Server;
-use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\nbt\tag\ByteTag;
-use pocketmine\nbt\tag\ListTag;
-use pocketmine\nbt\tag\StringTag;
-use pocketmine\nbt\tag\ShortTag;
-use pocketmine\nbt\tag\IntTag;
 use pocketmine\tile\Cauldron as TileCauldron;
 use pocketmine\tile\Tile;
 use pocketmine\utils\Color;
@@ -78,13 +80,13 @@ class Cauldron extends Solid{
 			new ByteTag("SplashPotion", 0),
 			new ListTag("Items", [])
 		]);
-		
+
 		if($item->hasCustomBlockData()){
 			foreach($item->getCustomBlockData() as $key => $v){
 				$nbt->{$key} = $v;
 			}
 		}
-		
+
 		$chunk = $this->getLevel()->getChunk($this->x >> 4, $this->z >> 4);
 		$tile = Tile::createTile("Cauldron", $chunk, $nbt);//
 		$this->getLevel()->setBlock($block, $this, true, true);
@@ -126,7 +128,7 @@ class Cauldron extends Solid{
 		switch($item->getId()){
 			case Item::BUCKET:
 				if($item->getDamage() === 0){//empty bucket
-					if(!$this->isFull() or $tile->isCustomColor() or $tile->hasPotion()){
+					if(!$this->isFull() || $tile->isCustomColor() || $tile->hasPotion()){
 						break;
 					}
 					$bucket = clone $item;
@@ -142,7 +144,7 @@ class Cauldron extends Solid{
 						$this->getLevel()->addSound(new SplashSound($this->add(0.5, 1, 0.5)));
 					}
 				}elseif($item->getDamage() === 8){//water bucket
-					if($this->isFull() and !$tile->isCustomColor() and !$tile->hasPotion()){
+					if($this->isFull() && !$tile->isCustomColor() && !$tile->hasPotion()){
 						break;
 					}
 					$bucket = clone $item;
@@ -213,10 +215,10 @@ class Cauldron extends Solid{
 				break;
 			case Item::POTION:
 			case Item::SPLASH_POTION:
-				if(!$this->isEmpty() and (($tile->getPotionId() !== $item->getDamage() and $item->getDamage() !== Potion::WATER_BOTTLE) or
-						($item->getId() === Item::POTION and $tile->getSplashPotion()) or
-						($item->getId() === Item::SPLASH_POTION and !$tile->getSplashPotion()) and $item->getDamage() !== 0 or
-						($item->getDamage() === Potion::WATER_BOTTLE and $tile->hasPotion()))
+				if(!$this->isEmpty() && (($tile->getPotionId() !== $item->getDamage() && $item->getDamage() !== Potion::WATER_BOTTLE) ||
+						($item->getId() === Item::POTION && $tile->getSplashPotion()) ||
+						($item->getId() === Item::SPLASH_POTION && !$tile->getSplashPotion()) && $item->getDamage() !== 0 ||
+						($item->getDamage() === Potion::WATER_BOTTLE && $tile->hasPotion()))
 				){//long...
 					$this->meta = 0x00;
 					$this->getLevel()->setBlock($this, $this, true);

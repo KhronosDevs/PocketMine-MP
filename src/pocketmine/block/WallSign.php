@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,13 +26,13 @@ namespace pocketmine\block;
 use pocketmine\level\Level;
 
 class WallSign extends SignPost{
-	
+
 	protected $id = self::WALL_SIGN;
-	
+
 	public function getName() : string{
 		return "Wall Sign";
 	}
-	
+
 	public function onUpdate($type){
 		$faces = [
 			2 => 3,

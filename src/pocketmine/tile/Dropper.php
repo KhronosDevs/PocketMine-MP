@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -22,6 +24,7 @@
 namespace pocketmine\tile;
 
 use pocketmine\block\Block;
+use pocketmine\entity\Item as ItemEntity;
 use pocketmine\inventory\DropperInventory;
 use pocketmine\inventory\InventoryHolder;
 use pocketmine\item\Item;
@@ -29,16 +32,19 @@ use pocketmine\level\format\FullChunk;
 use pocketmine\level\particle\SmokeParticle;
 use pocketmine\math\Vector3;
 use pocketmine\nbt\NBT;
+use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\DoubleTag;
 use pocketmine\nbt\tag\FloatTag;
-use pocketmine\nbt\tag\ShortTag;
-use pocketmine\entity\Item as ItemEntity;
 
-use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ListTag;
+use pocketmine\nbt\tag\ShortTag;
 
 use pocketmine\nbt\tag\StringTag;
+use function count;
+use function is_array;
+use function lcg_value;
+use function mt_rand;
 
 class Dropper extends Spawnable implements InventoryHolder, Container, Nameable{
 
@@ -51,7 +57,7 @@ class Dropper extends Spawnable implements InventoryHolder, Container, Nameable{
 		parent::__construct($chunk, $nbt);
 		$this->inventory = new DropperInventory($this);
 
-		if(!isset($this->namedtag->Items) or !($this->namedtag->Items instanceof ListTag)){
+		if(!isset($this->namedtag->Items) || !($this->namedtag->Items instanceof ListTag)){
 			$this->namedtag->Items = new ListTag("Items", []);
 			$this->namedtag->Items->setTagType(NBT::TAG_Compound);
 		}
@@ -125,8 +131,7 @@ class Dropper extends Spawnable implements InventoryHolder, Container, Nameable{
 	/**
 	 * This method should not be used by plugins, use the Inventory
 	 *
-	 * @param int  $index
-	 * @param Item $item
+	 * @param int $index
 	 *
 	 * @return bool
 	 */
@@ -135,7 +140,7 @@ class Dropper extends Spawnable implements InventoryHolder, Container, Nameable{
 
 		$d = NBT::putItemHelper($item, $index);
 
-		if($item->getId() === Item::AIR or $item->getCount() <= 0){
+		if($item->getId() === Item::AIR || $item->getCount() <= 0){
 			if($i >= 0){
 				unset($this->namedtag->Items[$i]);
 			}
@@ -237,7 +242,6 @@ class Dropper extends Spawnable implements InventoryHolder, Container, Nameable{
 
 			$itemTag = NBT::putItemHelper($needItem);
 			$itemTag->setName("Item");
-
 
 			$nbt = new CompoundTag("", [
 				"Pos" => new ListTag("Pos", [

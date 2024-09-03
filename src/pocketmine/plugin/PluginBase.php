@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -26,6 +28,20 @@ use pocketmine\command\CommandSender;
 use pocketmine\command\PluginIdentifiableCommand;
 use pocketmine\Server;
 use pocketmine\utils\Config;
+use function dirname;
+use function fclose;
+use function file_exists;
+use function fopen;
+use function is_dir;
+use function mkdir;
+use function rtrim;
+use function str_replace;
+use function stream_copy_to_stream;
+use function stream_get_contents;
+use function strtolower;
+use function substr;
+use function trim;
+use function yaml_parse;
 
 abstract class PluginBase implements Plugin{
 
@@ -139,11 +155,11 @@ abstract class PluginBase implements Plugin{
 	 */
 	public function getCommand($name){
 		$command = $this->getServer()->getPluginCommand($name);
-		if($command === null or $command->getPlugin() !== $this){
+		if($command === null || $command->getPlugin() !== $this){
 			$command = $this->getServer()->getPluginCommand(strtolower($this->description->getName()) . ":" . $name);
 		}
 
-		if($command instanceof PluginIdentifiableCommand and $command->getPlugin() === $this){
+		if($command instanceof PluginIdentifiableCommand && $command->getPlugin() === $this){
 			return $command;
 		}else{
 			return null;
@@ -151,10 +167,7 @@ abstract class PluginBase implements Plugin{
 	}
 
 	/**
-	 * @param CommandSender $sender
-	 * @param Command       $command
-	 * @param string        $label
-	 * @param array         $args
+	 * @param string $label
 	 *
 	 * @return bool
 	 */
@@ -206,7 +219,7 @@ abstract class PluginBase implements Plugin{
 			mkdir(dirname($out), 0755, true);
 		}
 
-		if(file_exists($out) and $replace !== true){
+		if(file_exists($out) && $replace !== true){
 			return false;
 		}
 

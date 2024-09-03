@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -25,6 +27,12 @@ use pocketmine\command\defaults\TimingsCommand;
 use pocketmine\entity\Living;
 use pocketmine\plugin\PluginManager;
 use pocketmine\Server;
+use function count;
+use function fwrite;
+use function microtime;
+use function round;
+use function spl_object_hash;
+use const PHP_EOL;
 
 class TimingsHandler{
 
@@ -123,9 +131,9 @@ class TimingsHandler{
 	}
 
 	public function startTiming(){
-		if(PluginManager::$useTimings and ++$this->timingDepth === 1){
+		if(PluginManager::$useTimings && ++$this->timingDepth === 1){
 			$this->start = microtime(true);
-			if($this->parent !== null and ++$this->parent->timingDepth === 1){
+			if($this->parent !== null && ++$this->parent->timingDepth === 1){
 				$this->parent->start = $this->start;
 			}
 		}
@@ -133,7 +141,7 @@ class TimingsHandler{
 
 	public function stopTiming(){
 		if(PluginManager::$useTimings){
-			if(--$this->timingDepth !== 0 or $this->start === 0){
+			if(--$this->timingDepth !== 0 || $this->start === 0){
 				return;
 			}
 

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,6 +25,16 @@ namespace pocketmine\permission;
 
 use pocketmine\Server;
 use pocketmine\utils\MainLogger;
+use function fclose;
+use function fgets;
+use function fopen;
+use function fwrite;
+use function is_resource;
+use function is_string;
+use function strftime;
+use function strtolower;
+use function strval;
+use function time;
 
 class BanList{
 
@@ -71,7 +83,12 @@ class BanList{
 	 * @return bool
 	 */
 	public function isBanned($name){
+		if (!is_string($name)) {
+			$name = strval($name);
+		}
+
 		$name = strtolower($name);
+
 		if(!$this->isEnabled()){
 			return false;
 		}else{
@@ -81,9 +98,6 @@ class BanList{
 		}
 	}
 
-	/**
-	 * @param BanEntry $entry
-	 */
 	public function add(BanEntry $entry){
 		$this->list[$entry->getName()] = $entry;
 		$this->save();
@@ -113,7 +127,12 @@ class BanList{
 	 * @param string $name
 	 */
 	public function remove($name){
+		if (!is_string($name)) {
+			$name = strval($name);
+		}
+
 		$name = strtolower($name);
+
 		if(isset($this->list[$name])){
 			unset($this->list[$name]);
 			$this->save();

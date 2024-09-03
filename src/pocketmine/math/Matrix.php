@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,12 +17,15 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
 namespace pocketmine\math;
 
+use function implode;
+use function max;
+use function substr;
 
 class Matrix implements \ArrayAccess{
 	private $matrix = [];
@@ -67,7 +72,7 @@ class Matrix implements \ArrayAccess{
 	}
 
 	public function setElement($row, $column, $value){
-		if($row > $this->rows or $row < 0 or $column > $this->columns or $column < 0){
+		if($row > $this->rows || $row < 0 || $column > $this->columns || $column < 0){
 			return false;
 		}
 		$this->matrix[(int) $row][(int) $column] = $value;
@@ -76,7 +81,7 @@ class Matrix implements \ArrayAccess{
 	}
 
 	public function getElement($row, $column){
-		if($row > $this->rows or $row < 0 or $column > $this->columns or $column < 0){
+		if($row > $this->rows || $row < 0 || $column > $this->columns || $column < 0){
 			return false;
 		}
 
@@ -88,7 +93,7 @@ class Matrix implements \ArrayAccess{
 	}
 
 	public function add(Matrix $matrix){
-		if($this->rows !== $matrix->getRows() or $this->columns !== $matrix->getColumns()){
+		if($this->rows !== $matrix->getRows() || $this->columns !== $matrix->getColumns()){
 			return false;
 		}
 		$result = new Matrix($this->rows, $this->columns);
@@ -102,7 +107,7 @@ class Matrix implements \ArrayAccess{
 	}
 
 	public function substract(Matrix $matrix){
-		if($this->rows !== $matrix->getRows() or $this->columns !== $matrix->getColumns()){
+		if($this->rows !== $matrix->getRows() || $this->columns !== $matrix->getColumns()){
 			return false;
 		}
 		$result = clone $this;
@@ -125,7 +130,6 @@ class Matrix implements \ArrayAccess{
 
 		return $result;
 	}
-
 
 	public function divideScalar($number){
 		$result = clone $this;
@@ -169,7 +173,6 @@ class Matrix implements \ArrayAccess{
 		return $result;
 	}
 
-
 	//Computation of the determinant of 2x2 and 3x3 matrices
 	public function determinant(){
 		if($this->isSquare() !== true){
@@ -186,7 +189,6 @@ class Matrix implements \ArrayAccess{
 
 		return false;
 	}
-
 
 	public function __toString(){
 		$s = "";

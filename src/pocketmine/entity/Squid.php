@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,22 +17,26 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
 namespace pocketmine\entity;
 
-use pocketmine\item\enchantment\Enchantment;
 use pocketmine\event\entity\EntityDamageByEntityEvent;
 use pocketmine\event\entity\EntityDamageEvent;
+use pocketmine\item\enchantment\Enchantment;
 use pocketmine\item\Item as ItemItem;
 use pocketmine\math\Vector3;
-use pocketmine\network\Network;
 use pocketmine\network\protocol\AddEntityPacket;
 use pocketmine\network\protocol\EntityEventPacket;
 use pocketmine\Player;
 use pocketmine\Server;
+use function abs;
+use function atan2;
+use function mt_rand;
+use function sqrt;
+use const M_PI;
 
 class Squid extends WaterAnimal implements Ageable{
 	const NETWORK_ID = 17;
@@ -78,7 +84,6 @@ class Squid extends WaterAnimal implements Ageable{
 		return new Vector3(mt_rand(-1000, 1000) / 1000, mt_rand(-500, 500) / 1000, mt_rand(-1000, 1000) / 1000);
 	}
 
-
 	public function onUpdate($currentTick){
 		if($this->closed !== false){
 			return false;
@@ -99,7 +104,7 @@ class Squid extends WaterAnimal implements Ageable{
 
 		if($this->isAlive()){
 
-			if($this->y > 62 and $this->swimDirection !== null){
+			if($this->y > 62 && $this->swimDirection !== null){
 				$this->swimDirection->y = -0.5;
 			}
 
@@ -145,9 +150,8 @@ class Squid extends WaterAnimal implements Ageable{
 
 		$this->timings->stopTiming();
 
-		return $hasUpdate or !$this->onGround or abs($this->motionX) > 0.00001 or abs($this->motionY) > 0.00001 or abs($this->motionZ) > 0.00001;
+		return $hasUpdate || !$this->onGround || abs($this->motionX) > 0.00001 || abs($this->motionY) > 0.00001 || abs($this->motionZ) > 0.00001;
 	}
-
 
 	public function spawnTo(Player $player){
 		$pk = new AddEntityPacket();
@@ -170,7 +174,7 @@ class Squid extends WaterAnimal implements Ageable{
 	public function getDrops(){
 		$lootingL = 0;
 		$cause = $this->lastDamageCause;
-		if($cause instanceof EntityDamageByEntityEvent and $cause->getDamager() instanceof Player){
+		if($cause instanceof EntityDamageByEntityEvent && $cause->getDamager() instanceof Player){
 			$lootingL = $cause->getDamager()->getItemInHand()->getEnchantmentLevel(Enchantment::TYPE_WEAPON_LOOTING);
 		}
 		return [

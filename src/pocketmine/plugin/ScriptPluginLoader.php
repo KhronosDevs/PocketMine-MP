@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -25,6 +27,17 @@ use pocketmine\event\plugin\PluginDisableEvent;
 use pocketmine\event\plugin\PluginEnableEvent;
 use pocketmine\Server;
 use pocketmine\utils\PluginException;
+use function class_exists;
+use function dirname;
+use function file;
+use function file_exists;
+use function is_dir;
+use function preg_match;
+use function strpos;
+use function trim;
+use const DIRECTORY_SEPARATOR;
+use const FILE_IGNORE_NEW_LINES;
+use const FILE_SKIP_EMPTY_LINES;
 
 /**
  * Simple script loader, not for plugin development
@@ -35,9 +48,6 @@ class ScriptPluginLoader implements PluginLoader{
 	/** @var Server */
 	private $server;
 
-	/**
-	 * @param Server $server
-	 */
 	public function __construct(Server $server){
 		$this->server = $server;
 	}
@@ -55,7 +65,7 @@ class ScriptPluginLoader implements PluginLoader{
 		if(($description = $this->getPluginDescription($file)) instanceof PluginDescription){
 			$this->server->getLogger()->info($this->server->getLanguage()->translateString("pocketmine.plugin.load", [$description->getFullName()]));
 			$dataFolder = dirname($file) . DIRECTORY_SEPARATOR . $description->getName();
-			if(file_exists($dataFolder) and !is_dir($dataFolder)){
+			if(file_exists($dataFolder) && !is_dir($dataFolder)){
 				throw new \InvalidStateException("Projected dataFolder '" . $dataFolder . "' for " . $description->getName() . " exists and is not a directory");
 			}
 
@@ -90,7 +100,7 @@ class ScriptPluginLoader implements PluginLoader{
 
 		$insideHeader = false;
 		foreach($content as $line){
-			if(!$insideHeader and strpos($line, "/**") !== false){
+			if(!$insideHeader && strpos($line, "/**") !== false){
 				$insideHeader = true;
 			}
 
@@ -100,12 +110,12 @@ class ScriptPluginLoader implements PluginLoader{
 
 				if($key === "notscript"){
 					return null;
- 				}
+				}
 
 				$data[$key] = $content;
 			}
 
-			if($insideHeader and strpos($line, "**/") !== false){
+			if($insideHeader && strpos($line, "**/") !== false){
 				break;
 			}
 		}
@@ -126,21 +136,16 @@ class ScriptPluginLoader implements PluginLoader{
 	}
 
 	/**
-	 * @param PluginBase        $plugin
-	 * @param PluginDescription $description
-	 * @param string            $dataFolder
-	 * @param string            $file
+	 * @param string $dataFolder
+	 * @param string $file
 	 */
 	private function initPlugin(PluginBase $plugin, PluginDescription $description, $dataFolder, $file){
 		$plugin->init($this, $this->server, $description, $dataFolder, $file);
 		$plugin->onLoad();
 	}
 
-	/**
-	 * @param Plugin $plugin
-	 */
 	public function enablePlugin(Plugin $plugin){
-		if($plugin instanceof PluginBase and !$plugin->isEnabled()){
+		if($plugin instanceof PluginBase && !$plugin->isEnabled()){
 			$this->server->getLogger()->info($this->server->getLanguage()->translateString("pocketmine.plugin.enable", [$plugin->getDescription()->getFullName()]));
 
 			$plugin->setEnabled(true);
@@ -149,11 +154,8 @@ class ScriptPluginLoader implements PluginLoader{
 		}
 	}
 
-	/**
-	 * @param Plugin $plugin
-	 */
 	public function disablePlugin(Plugin $plugin){
-		if($plugin instanceof PluginBase and $plugin->isEnabled()){
+		if($plugin instanceof PluginBase && $plugin->isEnabled()){
 			$this->server->getLogger()->info($this->server->getLanguage()->translateString("pocketmine.plugin.disable", [$plugin->getDescription()->getFullName()]));
 
 			$this->server->getPluginManager()->callEvent(new PluginDisableEvent($plugin));

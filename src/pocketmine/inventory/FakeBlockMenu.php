@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -21,9 +23,7 @@
 
 namespace pocketmine\inventory;
 
-
 use pocketmine\level\Position;
-
 
 class FakeBlockMenu extends Position implements InventoryHolder{
 

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -39,6 +41,5 @@ interface CommandSender extends Permissible{
 	 * @return string
 	 */
 	public function getName();
-
 
 }

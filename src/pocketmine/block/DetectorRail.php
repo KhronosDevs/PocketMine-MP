@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,13 +25,13 @@ namespace pocketmine\block;
 
 class DetectorRail extends PoweredRail{
 
-    protected $id = self::DETECTOR_RAIL;
+	protected $id = self::DETECTOR_RAIL;
 
-    public function __construct($meta = 0){
-        $this->meta = $meta;
-    }
+	public function __construct($meta = 0){
+		$this->meta = $meta;
+	}
 
-    public function getName() : string {
-        return "Detector Rail";
-    }
+	public function getName() : string {
+		return "Detector Rail";
+	}
 }

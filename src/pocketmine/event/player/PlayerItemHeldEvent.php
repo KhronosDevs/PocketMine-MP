@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,13 +16,10 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\player;
 
-use pocketmine\Event;
 use pocketmine\event\Cancellable;
 use pocketmine\item\Item;
 use pocketmine\Player;

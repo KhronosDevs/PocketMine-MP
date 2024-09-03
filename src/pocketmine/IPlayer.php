@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -25,30 +27,21 @@ use pocketmine\permission\ServerOperator;
 
 interface IPlayer extends ServerOperator{
 
-	/**
-	 * @return bool
-	 */
-	public function isOnline();
+	public function isOnline() : bool;
 
 	/**
 	 * @return string
 	 */
 	public function getName();
 
-	/**
-	 * @return bool
-	 */
-	public function isBanned();
+	public function isBanned() : bool;
 
 	/**
 	 * @param bool $banned
 	 */
 	public function setBanned($banned);
 
-	/**
-	 * @return bool
-	 */
-	public function isWhitelisted();
+	public function isWhitelisted() : bool;
 
 	/**
 	 * @param bool $value

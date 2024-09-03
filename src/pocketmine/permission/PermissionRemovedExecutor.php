@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -21,12 +23,9 @@
 
 namespace pocketmine\permission;
 
-
 interface PermissionRemovedExecutor{
 
 	/**
-	 * @param PermissionAttachment $attachment
-	 *
 	 * @return void
 	 */
 	public function attachmentRemoved(PermissionAttachment $attachment);

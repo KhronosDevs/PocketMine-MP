@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -36,6 +38,7 @@ use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\IntTag;
 use pocketmine\network\protocol\AddEntityPacket;
 use pocketmine\Player;
+use function abs;
 
 class FallingSand extends Entity{
 	const NETWORK_ID = 66;
@@ -93,7 +96,7 @@ class FallingSand extends Entity{
 		$this->timings->startTiming();
 
 		$tickDiff = $currentTick - $this->lastUpdate;
-		if($tickDiff <= 0 and !$this->justCreated){
+		if($tickDiff <= 0 && !$this->justCreated){
 			return true;
 		}
 
@@ -129,7 +132,7 @@ class FallingSand extends Entity{
 			if($this->onGround){
 				$this->kill();
 				$block = $this->level->getBlock($pos);
-				if($block->getId() > 0 and !$block->isSolid() and !($block instanceof Liquid)){
+				if($block->getId() > 0 && !$block->isSolid() && !($block instanceof Liquid)){
 					$this->getLevel()->dropItem($this, ItemItem::get($this->getBlock(), $this->getDamage(), 1));
 				}else{
 					if($block instanceof SnowLayer){
@@ -166,7 +169,7 @@ class FallingSand extends Entity{
 			$this->updateMovement();
 		}
 
-		return $hasUpdate or !$this->onGround or abs($this->motionX) > 0.00001 or abs($this->motionY) > 0.00001 or abs($this->motionZ) > 0.00001;
+		return $hasUpdate || !$this->onGround || abs($this->motionX) > 0.00001 || abs($this->motionY) > 0.00001 || abs($this->motionZ) > 0.00001;
 	}
 
 	public function getBlock(){

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -19,13 +21,12 @@
  *
 */
 
-
 namespace pocketmine\item;
 
 use pocketmine\block\Block;
 use pocketmine\entity\Entity;
-use pocketmine\nbt\tag\ByteTag;
 use pocketmine\item\enchantment\enchantment;
+use function mt_rand;
 
 abstract class Tool extends Item{
 	const TIER_WOODEN = 1;
@@ -52,7 +53,7 @@ abstract class Tool extends Item{
 	/**
 	 * TODO: Move this to each item
 	 *
-	 * @param Entity|Block $object
+	 * @param Entity|Block            $object
 	 * @param 1 for break|2 for Touch $type
 	 *
 	 * @return bool
@@ -70,11 +71,11 @@ abstract class Tool extends Item{
 
 		if ($type === 1) {
 			if ($object instanceof Entity) {
-				if ($this->isHoe() !== false or $this->isSword() !== false) {
+				if ($this->isHoe() !== false || $this->isSword() !== false) {
 					//Hoe and Sword
 					$this->meta++;
 					return true;
-				} elseif ($this->isPickaxe() !== false or $this->isAxe() !== false or $this->isShovel() !== false) {
+				} elseif ($this->isPickaxe() !== false || $this->isAxe() !== false || $this->isShovel() !== false) {
 					//Pickaxe Axe and Shovel
 					$this->meta += 2;
 					return true;
@@ -90,14 +91,14 @@ abstract class Tool extends Item{
 					if ($this->isSword() !== false) {
 						$this->meta += 2;
 						return true;
-					} elseif ($this->isPickaxe() !== false or $this->isAxe() !== false or $this->isShovel() !== false) {
+					} elseif ($this->isPickaxe() !== false || $this->isAxe() !== false || $this->isShovel() !== false) {
 						$this->meta += 1;
 						return true;
 					}
 				}
 			}
 		} elseif ($type === 2) {//For Touch. only trigger when OnActivate return true
-			if ($this->isHoe() !== false or $this->id === self::FLINT_STEEL or $this->isShovel() !== false) {
+			if ($this->isHoe() !== false || $this->id === self::FLINT_STEEL || $this->isShovel() !== false) {
 				$this->meta++;
 				return true;
 			}
@@ -140,7 +141,7 @@ abstract class Tool extends Item{
 
 	public function isUnbreakable(){
 		$tag = $this->getNamedTagEntry("Unbreakable");
-		return $tag !== null and $tag->getValue() > 0;
+		return $tag !== null && $tag->getValue() > 0;
 	}
 
 	public function isPickaxe(){
@@ -168,6 +169,6 @@ abstract class Tool extends Item{
 	}
 
 	public function isTool(){
-		return ($this->id === self::FLINT_STEEL or $this->id === self::SHEARS or $this->id === self::BOW or $this->isPickaxe() !== false or $this->isAxe() !== false or $this->isShovel() !== false or $this->isSword() !== false or $this->isHoe() !== false);
+		return ($this->id === self::FLINT_STEEL || $this->id === self::SHEARS || $this->id === self::BOW || $this->isPickaxe() !== false || $this->isAxe() !== false || $this->isShovel() !== false || $this->isSword() !== false || $this->isHoe() !== false);
 	}
 }

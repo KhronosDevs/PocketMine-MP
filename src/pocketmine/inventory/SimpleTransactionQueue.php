@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  _____   _____   __   _   _   _____  __    __  _____
  * /  ___| | ____| |  \ | | | | /  ___/ \ \  / / /  ___/
  * | |     | |__   |   \| | | | | |___   \ \/ /  | |___
@@ -16,14 +17,14 @@
  *
  * @author iTX Technologies
  * @link https://itxtech.org
- *
  */
 
 namespace pocketmine\inventory;
 
 use pocketmine\event\inventory\InventoryTransactionEvent;
-use pocketmine\item\Item;
 use pocketmine\Player;
+use function microtime;
+use function spl_object_hash;
 
 class SimpleTransactionQueue implements TransactionQueue{
 
@@ -34,7 +35,7 @@ class SimpleTransactionQueue implements TransactionQueue{
 	protected $transactionQueue;
 	/** @var \SplQueue */
 	protected $transactionsToRetry;
-	
+
 	/** @var Inventory[] */
 	protected $inventories;
 

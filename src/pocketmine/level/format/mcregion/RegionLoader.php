@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,10 +26,36 @@ namespace pocketmine\level\format\mcregion;
 use pocketmine\level\format\FullChunk;
 use pocketmine\level\format\LevelProvider;
 
-
 use pocketmine\utils\Binary;
 use pocketmine\utils\ChunkException;
 use pocketmine\utils\MainLogger;
+use function ceil;
+use function chr;
+use function count;
+use function fclose;
+use function fgetc;
+use function file_exists;
+use function fopen;
+use function fread;
+use function fseek;
+use function ftruncate;
+use function fwrite;
+use function is_resource;
+use function ksort;
+use function ord;
+use function pack;
+use function str_pad;
+use function stream_set_read_buffer;
+use function stream_set_write_buffer;
+use function strlen;
+use function substr;
+use function time;
+use function touch;
+use function unpack;
+use function zlib_decode;
+use function zlib_encode;
+use const STR_PAD_RIGHT;
+use const ZLIB_ENCODING_DEFLATE;
 
 class RegionLoader{
 	const VERSION = 1;
@@ -76,12 +104,12 @@ class RegionLoader{
 	}
 
 	protected function isChunkGenerated($index){
-		return !($this->locationTable[$index][0] === 0 or $this->locationTable[$index][1] === 0);
+		return !($this->locationTable[$index][0] === 0 || $this->locationTable[$index][1] === 0);
 	}
 
 	public function readChunk($x, $z){
 		$index = self::getChunkOffset($x, $z);
-		if($index < 0 or $index >= 4096){
+		if($index < 0 || $index >= 4096){
 			return null;
 		}
 
@@ -95,7 +123,7 @@ class RegionLoader{
 		$length = Binary::readInt(fread($this->filePointer, 4));
 		$compression = ord(fgetc($this->filePointer));
 
-		if($length <= 0 or $length > self::MAX_SECTOR_LENGTH){ //Not yet generated / corrupted
+		if($length <= 0 || $length > self::MAX_SECTOR_LENGTH){ //Not yet generated / corrupted
 			if($length >= self::MAX_SECTOR_LENGTH){
 				$this->locationTable[$index][0] = ++$this->lastSector;
 				$this->locationTable[$index][1] = 1;
@@ -108,7 +136,7 @@ class RegionLoader{
 			MainLogger::getLogger()->error("Corrupted bigger chunk detected");
 			$this->locationTable[$index][1] = $length >> 12;
 			$this->writeLocationIndex($index);
-		}elseif($compression !== self::COMPRESSION_ZLIB and $compression !== self::COMPRESSION_GZIP){
+		}elseif($compression !== self::COMPRESSION_ZLIB && $compression !== self::COMPRESSION_GZIP){
 			MainLogger::getLogger()->error("Invalid compression type");
 			return null;
 		}
@@ -133,7 +161,7 @@ class RegionLoader{
 	protected function saveChunk($x, $z, $chunkData){
 		$length = strlen($chunkData) + 1;
 		if($length + 4 > self::MAX_SECTOR_LENGTH){
-			throw new ChunkException("Chunk is too big! ".($length + 4)." > ".self::MAX_SECTOR_LENGTH);
+			throw new ChunkException("Chunk is too big! " . ($length + 4) . " > " . self::MAX_SECTOR_LENGTH);
 		}
 		$sectors = (int) ceil(($length + 4) / 4096);
 		$index = self::getChunkOffset($x, $z);
@@ -183,7 +211,7 @@ class RegionLoader{
 
 	public function doSlowCleanUp(){
 		for($i = 0; $i < 1024; ++$i){
-			if($this->locationTable[$i][0] === 0 or $this->locationTable[$i][1] === 0){
+			if($this->locationTable[$i][0] === 0 || $this->locationTable[$i][1] === 0){
 				continue;
 			}
 			fseek($this->filePointer, $this->locationTable[$i][0] << 12);
@@ -220,7 +248,7 @@ class RegionLoader{
 	private function cleanGarbage(){
 		$sectors = [];
 		foreach($this->locationTable as $index => $data){ //Calculate file usage
-			if($data[0] === 0 or $data[1] === 0){
+			if($data[0] === 0 || $data[1] === 0){
 				$this->locationTable[$index] = [0, 0, 0];
 				continue;
 			}

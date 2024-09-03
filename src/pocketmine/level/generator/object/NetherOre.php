@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -24,6 +26,8 @@ namespace pocketmine\level\generator\object;
 use pocketmine\level\ChunkManager;
 use pocketmine\math\VectorMath;
 use pocketmine\utils\Random;
+use function sin;
+use const M_PI;
 
 class NetherOre{
 	private $random;
@@ -75,12 +79,12 @@ class NetherOre{
 						$sizeY = ($y + 0.5 - $seedY) / $size;
 						$sizeY *= $sizeY;
 
-						if($y > 0 and ($sizeX + $sizeY) < 1){
+						if($y > 0 && ($sizeX + $sizeY) < 1){
 							for($z = $startZ; $z <= $endZ; ++$z){
 								$sizeZ = ($z + 0.5 - $seedZ) / $size;
 								$sizeZ *= $sizeZ;
 
-								if(($sizeX + $sizeY + $sizeZ) < 1 and $level->getBlockIdAt($x, $y, $z) === 87){
+								if(($sizeX + $sizeY + $sizeZ) < 1 && $level->getBlockIdAt($x, $y, $z) === 87){
 									$level->setBlockIdAt($x, $y, $z, $this->type->material->getId());
 									if($this->type->material->getDamage() !== 0){
 										$level->setBlockDataAt($x, $y, $z, $this->type->material->getDamage());

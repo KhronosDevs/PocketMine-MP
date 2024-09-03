@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -22,8 +24,8 @@
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
-use pocketmine\Player;
 use pocketmine\level\sound\ButtonClickSound;
+use pocketmine\Player;
 
 class StoneButton extends WoodenButton{
 	protected $id = self::STONE_BUTTON;

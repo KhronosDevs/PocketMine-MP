@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -22,7 +24,7 @@
 namespace pocketmine\item;
 
 class GlisteringMelon extends Item {
-    public function __construct($meta = 0, $count =1){
-        parent::__construct(self::GLISTERING_MELON, $meta, $count, "Glistering Melon");
-    }
+	public function __construct($meta = 0, $count = 1){
+		parent::__construct(self::GLISTERING_MELON, $meta, $count, "Glistering Melon");
+	}
 }

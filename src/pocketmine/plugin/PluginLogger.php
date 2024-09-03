@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,6 +25,7 @@ namespace pocketmine\plugin;
 
 use LogLevel;
 use pocketmine\Server;
+use function spl_object_hash;
 
 class PluginLogger implements \AttachableLogger{
 
@@ -47,9 +50,6 @@ class PluginLogger implements \AttachableLogger{
 		return $this->attachments;
 	}
 
-	/**
-	 * @param Plugin $context
-	 */
 	public function __construct(Plugin $context){
 		$prefix = $context->getDescription()->getPrefix();
 		$this->pluginName = $prefix != null ? "[$prefix] " : "[" . $context->getDescription()->getName() . "] ";

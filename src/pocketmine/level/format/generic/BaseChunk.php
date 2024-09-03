@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -27,6 +29,9 @@ use pocketmine\level\format\LevelProvider;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\utils\Binary;
 use pocketmine\utils\ChunkException;
+use function array_fill;
+use function count;
+use function substr_count;
 
 abstract class BaseChunk extends BaseFullChunk implements Chunk{
 
@@ -40,8 +45,8 @@ abstract class BaseChunk extends BaseFullChunk implements Chunk{
 	 * @param ChunkSection[] $sections
 	 * @param int[]          $biomeColors
 	 * @param int[]          $heightMap
-	 * @param CompoundTag[]     $entities
-	 * @param CompoundTag[]     $tiles
+	 * @param CompoundTag[]  $entities
+	 * @param CompoundTag[]  $tiles
 	 *
 	 * @throws ChunkException
 	 */
@@ -81,7 +86,7 @@ abstract class BaseChunk extends BaseFullChunk implements Chunk{
 		return isset($this->sections[$y >> 4]) ? $this->sections[$y >> 4]->getFullBlock($x, $y & 0x0f, $z) : 0;
 	}
 
-	public function setBlock($x, $y, $z, $blockId = null, $meta = null): bool{
+	public function setBlock($x, $y, $z, $blockId = null, $meta = null) : bool{
 		try{
 			$this->hasChanged = true;
 			return $this->sections[$y >> 4]->setBlock($x, $y & 0x0f, $z, $blockId & 0xff, $meta & 0x0f);
@@ -198,7 +203,7 @@ abstract class BaseChunk extends BaseFullChunk implements Chunk{
 	}
 
 	public function setSection($fY, ChunkSection $section){
-		if(substr_count($section->getIdArray(), "\x00") === 4096 and substr_count($section->getDataArray(), "\x00") === 2048){
+		if(substr_count($section->getIdArray(), "\x00") === 4096 && substr_count($section->getDataArray(), "\x00") === 2048){
 			$this->sections[(int) $fY] = new EmptyChunkSection($fY);
 		}else{
 			$this->sections[(int) $fY] = $section;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -32,11 +34,11 @@ class Enderman extends Monster{
 	public $height = 1.8;
 
 	public $dropExp = [5, 5];
-	
+
 	public function getName() : string{
 		return "Enderman";
 	}
-	
+
 	public function spawnTo(Player $player){
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();

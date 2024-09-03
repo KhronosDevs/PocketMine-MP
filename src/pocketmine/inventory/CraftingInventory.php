@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -33,10 +35,6 @@ class CraftingInventory extends BaseInventory{
 	private $resultInventory;
 
 	/**
-	 * @param InventoryHolder $holder
-	 * @param Inventory       $resultInventory
-	 * @param InventoryType   $inventoryType
-	 *
 	 * @throws \Throwable
 	 */
 	public function __construct(InventoryHolder $holder, Inventory $resultInventory, InventoryType $inventoryType){

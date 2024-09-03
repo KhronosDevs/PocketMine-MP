@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -29,6 +31,9 @@ use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\Player;
 use pocketmine\utils\TextFormat;
+use function array_slice;
+use function count;
+use function implode;
 
 class GiveCommand extends VanillaCommand{
 
@@ -70,7 +75,7 @@ class GiveCommand extends VanillaCommand{
 				$exception = $ex;
 			}
 
-			if(!($tags instanceof CompoundTag) or $exception !== null){
+			if(!($tags instanceof CompoundTag) || $exception !== null){
 				$sender->sendMessage(new TranslationContainer("commands.give.tagError", [$exception !== null ? $exception->getMessage() : "Invalid tag conversion"]));
 				return true;
 			}

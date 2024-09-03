@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -25,8 +27,10 @@ use pocketmine\block\Block;
 use pocketmine\level\ChunkManager;
 use pocketmine\math\Vector2;
 use pocketmine\math\Vector3;
-use pocketmine\utils\VectorIterator;
 use pocketmine\utils\Random;
+use pocketmine\utils\VectorIterator;
+use function abs;
+use function sqrt;
 
 class BigTree extends Tree{
 	public $overridable = [
@@ -48,13 +52,13 @@ class BigTree extends Tree{
 	private $baseHeight = 5;
 
 	public function canPlaceObject(ChunkManager $level, $x, $y, $z, Random $random){
-		if(!parent::canPlaceObject($level, $x, $y, $z, $random) or $level->getBlockIdAt($x, $y, $z) == Block::WATER or $level->getBlockIdAt($x, $y, $z) == Block::STILL_WATER){
+		if(!parent::canPlaceObject($level, $x, $y, $z, $random) || $level->getBlockIdAt($x, $y, $z) == Block::WATER || $level->getBlockIdAt($x, $y, $z) == Block::STILL_WATER){
 			return false;
 		}
 		$base = new Vector3($x, $y, $z);
 		$this->totalHeight = $this->baseHeight + $random->nextBoundedInt(12);
 		$availableSpace = $this->getAvailableBlockSpace($level, $base, $base->add(0, $this->totalHeight - 1, 0));
-		if($availableSpace > $this->baseHeight or $availableSpace == -1){
+		if($availableSpace > $this->baseHeight || $availableSpace == -1){
 			if($availableSpace != -1){
 				$this->totalHeight = $availableSpace;
 			}
@@ -77,7 +81,7 @@ class BigTree extends Tree{
 				$this->generateGroupLayer($level, $groupX, $yy, $groupZ, $this->getLeafGroupLayerSize($yy - $groupY));
 			}
 		}
-		$trunk = new VectorIterator($level, new Vector3($x, $y -1, $z), new Vector3($x, $y + $this->trunkHeight, $z));
+		$trunk = new VectorIterator($level, new Vector3($x, $y - 1, $z), new Vector3($x, $y + $this->trunkHeight, $z));
 		while($trunk->valid()){
 			$trunk->next();
 			$pos = $trunk->current();
@@ -136,7 +140,7 @@ class BigTree extends Tree{
 	}
 
 	private function getLeafGroupLayerSize(int $y){
-		if($y >= 0 and $y < $this->leafDistanceLimit){
+		if($y >= 0 && $y < $this->leafDistanceLimit){
 			return (int) (($y != ($this->leafDistanceLimit - 1)) ? 3 : 2);
 		}
 		return -1;
@@ -162,7 +166,7 @@ class BigTree extends Tree{
 			return -1;
 		}elseif($layer == $halfHeight){
 			return $halfHeight / 4;
-		}elseif($layer >= $this->totalHeight or $layer <= 0){
+		}elseif($layer >= $this->totalHeight || $layer <= 0){
 			return 0;
 		}else{
 			return sqrt($halfHeight * $halfHeight - ($layer - $halfHeight) * ($layer - $halfHeight)) / 2;

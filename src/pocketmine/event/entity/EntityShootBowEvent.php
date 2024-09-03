@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,8 +16,6 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\entity;
@@ -26,6 +25,7 @@ use pocketmine\entity\Living;
 use pocketmine\entity\Projectile;
 use pocketmine\event\Cancellable;
 use pocketmine\item\Item;
+use function count;
 
 class EntityShootBowEvent extends EntityEvent implements Cancellable{
 	public static $handlerList = null;
@@ -38,10 +38,7 @@ class EntityShootBowEvent extends EntityEvent implements Cancellable{
 	private $force;
 
 	/**
-	 * @param Living     $shooter
-	 * @param Item       $bow
-	 * @param Projectile $projectile
-	 * @param float      $force
+	 * @param float $force
 	 */
 	public function __construct(Living $shooter, Item $bow, Projectile $projectile, $force){
 		$this->entity = $shooter;
@@ -71,9 +68,6 @@ class EntityShootBowEvent extends EntityEvent implements Cancellable{
 		return $this->projectile;
 	}
 
-	/**
-	 * @param Entity $projectile
-	 */
 	public function setProjectile(Entity $projectile){
 		if($projectile !== $this->projectile){
 			if(count($this->projectile->getViewers()) === 0){
@@ -97,6 +91,5 @@ class EntityShootBowEvent extends EntityEvent implements Cancellable{
 	public function setForce($force){
 		$this->force = $force;
 	}
-
 
 }

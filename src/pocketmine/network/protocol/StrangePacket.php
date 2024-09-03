@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * FastTransfer plugin for PocketMine-MP
  * Copyright (C) 2015 Shoghi Cervantes <https://github.com/shoghicp/FastTransfer>
@@ -16,6 +18,8 @@
  */
 
 namespace pocketmine\network\protocol;
+
+use function explode;
 
 class StrangePacket extends DataPacket{
 	const NETWORK_ID = 0x1b;

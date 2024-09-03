@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -23,13 +25,15 @@ namespace pocketmine\entity;
 
 use pocketmine\block\Block;
 use pocketmine\block\Rail;
-use pocketmine\item\Item as ItemItem;
-use pocketmine\network\protocol\AddEntityPacket;
-use pocketmine\Player;
 use pocketmine\event\entity\EntityDamageEvent;
-use pocketmine\network\protocol\EntityEventPacket;
 use pocketmine\math\Math;
 use pocketmine\math\Vector3;
+use pocketmine\network\protocol\AddEntityPacket;
+use pocketmine\network\protocol\EntityEventPacket;
+use pocketmine\Player;
+use function abs;
+use function in_array;
+use const PHP_INT_MAX;
 
 class Minecart extends Vehicle{
 	const NETWORK_ID = 84;
@@ -105,15 +109,14 @@ class Minecart extends Vehicle{
 		}
 		$this->timings->stopTiming ();
 
-		return $hasUpdate or ! $this->onGround or abs ( $this->motionX ) > 0.00001 or abs ( $this->motionY ) > 0.00001 or abs ( $this->motionZ ) > 0.00001;
+		return $hasUpdate || !$this->onGround || abs ( $this->motionX ) > 0.00001 || abs ( $this->motionY ) > 0.00001 || abs ( $this->motionZ ) > 0.00001;
 	}
-
 
 	/**
 	 * Check if minecart is currently on a rail and if so center the cart.
 	 */
 	private function checkIfOnRail() {
-		for ($y = -1; $y !== 2 and $this->state === Minecart::STATE_INITIAL; $y++) {
+		for ($y = -1; $y !== 2 && $this->state === Minecart::STATE_INITIAL; $y++) {
 			$positionToCheck = $this->temporalVector->setComponents($this->x, $this->y + $y, $this->z);
 			$block = $this->level->getBlock($positionToCheck);
 			if($this->isRail($block)){
@@ -128,7 +131,7 @@ class Minecart extends Vehicle{
 	}
 
 	private function isRail($rail) {
-		return ($rail !== null and in_array($rail->getId(), [Block::RAIL, Block::ACTIVATOR_RAIL, Block::DETECTOR_RAIL, Block::POWERED_RAIL]));
+		return ($rail !== null && in_array($rail->getId(), [Block::RAIL, Block::ACTIVATOR_RAIL, Block::DETECTOR_RAIL, Block::POWERED_RAIL], true));
 	}
 
 	private function getCurrentRail() {
@@ -183,7 +186,7 @@ class Minecart extends Vehicle{
 	 * Determine the direction the minecart should move based on the candidate direction (current direction
 	 * minecart is moving, or the direction the player is looking) and the type of rail that the minecart is
 	 * on.
-	 * @param RailType $railType Type of rail the minecart is on.
+	 * @param RailType  $railType           Type of rail the minecart is on.
 	 * @param Direction $candidateDirection Direction minecart already moving, or direction player looking.
 	 * @return Direction The direction the minecart should move.
 	 */
@@ -260,7 +263,7 @@ class Minecart extends Vehicle{
 	 * Need to alter direction on curves halfway through the turn and reset the minecart to be in the middle of
 	 * the rail again so as not to collide with nearby blocks.
 	 * @param Direction $currentDirection Direction minecart currently moving
-	 * @param Direction $newDirection Direction minecart should turn once has hit the halfway point.
+	 * @param Direction $newDirection     Direction minecart should turn once has hit the halfway point.
 	 * @return Direction Either the current direction or the new direction depending on haw far across the rail the
 	 * minecart is.
 	 */
@@ -268,7 +271,7 @@ class Minecart extends Vehicle{
 		switch($currentDirection) {
 			case Entity::NORTH:
 				$diff = $this->x - $this->getFloorX();
-				if ($diff !== 0 and $diff <= .5) {
+				if ($diff !== 0 && $diff <= .5) {
 					$dx = ($this->getFloorX() + .5) - $this->x;
 					$this->move($dx, 0, 0);
 					return $newDirection;
@@ -276,7 +279,7 @@ class Minecart extends Vehicle{
 				break;
 			case Entity::SOUTH:
 				$diff = $this->x - $this->getFloorX();
-				if ($diff !== 0 and $diff >= .5) {
+				if ($diff !== 0 && $diff >= .5) {
 					$dx = ($this->getFloorX() + .5) - $this->x;
 					$this->move($dx, 0, 0);
 					return $newDirection;
@@ -284,7 +287,7 @@ class Minecart extends Vehicle{
 				break;
 			case Entity::EAST:
 				$diff = $this->z - $this->getFloorZ();
-				if ($diff !== 0 and $diff <= .5) {
+				if ($diff !== 0 && $diff <= .5) {
 					$dz = ($this->getFloorZ() + .5) - $this->z;
 					$this->move(0, 0, $dz);
 					return $newDirection;
@@ -292,7 +295,7 @@ class Minecart extends Vehicle{
 				break;
 			case Entity::WEST:
 				$diff = $this->z - $this->getFloorZ();
-				if ($diff !== 0 and $diff >= .5) {
+				if ($diff !== 0 && $diff >= .5) {
 					$dz = $dz = ($this->getFloorZ() + .5) - $this->z;
 					$this->move(0, 0, $dz);
 					return $newDirection;
@@ -309,7 +312,7 @@ class Minecart extends Vehicle{
 					case Entity::NORTH:
 						// Headed north up
 						$diff = $this->x - $this->getFloorX();
-						if ($diff !== 0 and $diff <= .5) {
+						if ($diff !== 0 && $diff <= .5) {
 							$dx = ($this->getFloorX() - .1) - $this->x;
 							$this->move($dx, 1, 0);
 							return true;
@@ -318,7 +321,7 @@ class Minecart extends Vehicle{
 					case ENTITY::SOUTH:
 						// Headed south down
 						$diff = $this->x - $this->getFloorX();
-						if ($diff !== 0 and $diff >= .5) {
+						if ($diff !== 0 && $diff >= .5) {
 							$dx = ($this->getFloorX() + 1 ) - $this->x;
 							$this->move($dx, -1, 0);
 							return true;
@@ -331,7 +334,7 @@ class Minecart extends Vehicle{
 					case Entity::SOUTH:
 						// Headed south up
 						$diff = $this->x - $this->getFloorX();
-						if ($diff !== 0 and $diff >= .5) {
+						if ($diff !== 0 && $diff >= .5) {
 							$dx = ($this->getFloorX() + 1 ) - $this->x;
 							$this->move($dx, 1, 0);
 							return true;
@@ -340,7 +343,7 @@ class Minecart extends Vehicle{
 					case Entity::NORTH:
 						// Headed north down
 						$diff = $this->x - $this->getFloorX();
-						if ($diff !== 0 and $diff <= .5) {
+						if ($diff !== 0 && $diff <= .5) {
 							$dx = ($this->getFloorX() - .1) - $this->x;
 							$this->move($dx, -1, 0);
 							return true;
@@ -353,7 +356,7 @@ class Minecart extends Vehicle{
 					case Entity::EAST:
 						// Headed east up
 						$diff = $this->z - $this->getFloorZ();
-						if ($diff !== 0 and $diff <= .5) {
+						if ($diff !== 0 && $diff <= .5) {
 							$dz = ($this->getFloorZ() - .1) - $this->z;
 							$this->move(0, 1, $dz);
 							return true;
@@ -362,7 +365,7 @@ class Minecart extends Vehicle{
 					case Entity::WEST:
 						// Headed west down
 						$diff = $this->z - $this->getFloorZ();
-						if ($diff !== 0 and $diff >= .5) {
+						if ($diff !== 0 && $diff >= .5) {
 							$dz = ($this->getFloorZ() + 1) - $this->z;
 							$this->move(0, -1, $dz);
 							return true;
@@ -375,7 +378,7 @@ class Minecart extends Vehicle{
 					case Entity::WEST:
 						// Headed west up
 						$diff = $this->z - $this->getFloorZ();
-						if ($diff !== 0 and $diff >= .5) {
+						if ($diff !== 0 && $diff >= .5) {
 							$dz = ($this->getFloorZ() + 1) - $this->z;
 							$this->move(0, 1, $dz);
 							return true;
@@ -384,7 +387,7 @@ class Minecart extends Vehicle{
 					case Entity::EAST:
 						// Headed east down
 						$diff = $this->z - $this->getFloorZ();
-						if ($diff !== 0 and $diff <= .5) {
+						if ($diff !== 0 && $diff <= .5) {
 							$dz = ($this->getFloorZ() - .1) - $this->z;
 							$this->move(0, -1, $dz);
 							return true;
@@ -405,7 +408,7 @@ class Minecart extends Vehicle{
 		$nextMoveVector = $nextMoveVector->multiply($this->moveSpeed);
 		$newVector = $this->add($nextMoveVector->x, $nextMoveVector->y, $nextMoveVector->z);
 		$possibleRail = $this->getCurrentRail();
-		if(in_array($possibleRail->getId(), [Block::RAIL, Block::ACTIVATOR_RAIL, Block::DETECTOR_RAIL, Block::POWERED_RAIL])) {
+		if(in_array($possibleRail->getId(), [Block::RAIL, Block::ACTIVATOR_RAIL, Block::DETECTOR_RAIL, Block::POWERED_RAIL], true)) {
 			$this->moveUsingVector($newVector);
 			return true;
 		}
@@ -414,7 +417,6 @@ class Minecart extends Vehicle{
 	/**
 	 * Invoke the normal move code, but first need to convert the desired position vector into the
 	 * delta values from the current position.
-	 * @param Vector3 $desiredPosition
 	 */
 	private function moveUsingVector(Vector3 $desiredPosition){
 		$dx = $desiredPosition->x - $this->x;
@@ -422,7 +424,6 @@ class Minecart extends Vehicle{
 		$dz = $desiredPosition->z - $this->z;
 		$this->move($dx, $dy, $dz);
 	}
-
 
 	/**
 	 * @return Rail
@@ -441,7 +442,7 @@ class Minecart extends Vehicle{
 			for($x = $minX; $x <= $maxX; ++$x){
 				for($y = $minY; $y <= $maxY; ++$y){
 					$block = $this->level->getBlock($this->temporalVector->setComponents($x, $y, $z));
-					if(in_array($block->getId(), [Block::RAIL, Block::ACTIVATOR_RAIL, Block::DETECTOR_RAIL, Block::POWERED_RAIL])) $rails[] = $block;
+					if(in_array($block->getId(), [Block::RAIL, Block::ACTIVATOR_RAIL, Block::DETECTOR_RAIL, Block::POWERED_RAIL], true)) $rails[] = $block;
 				}
 			}
 		}

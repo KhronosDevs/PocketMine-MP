@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -20,7 +22,6 @@
  */
 
 namespace pocketmine\network\protocol;
-
 
 class ChunkRadiusUpdatedPacket extends DataPacket{
 	const NETWORK_ID = Info::CHUNK_RADIUS_UPDATED_PACKET;

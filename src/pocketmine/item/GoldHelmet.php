@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -20,7 +22,6 @@
  */
 
 namespace pocketmine\item;
-
 
 class GoldHelmet extends Armor{
 	public function __construct($meta = 0, $count = 1){

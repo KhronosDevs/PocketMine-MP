@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -21,9 +23,9 @@
 
 namespace pocketmine\block;
 
+use pocketmine\item\enchantment\enchantment;
 use pocketmine\item\Item;
 use pocketmine\item\Tool;
-use pocketmine\item\enchantment\enchantment;
 
 class PackedIce extends Solid {
 
@@ -54,4 +56,4 @@ class PackedIce extends Solid {
 			return [];
 		}
 	}
-} 
+}

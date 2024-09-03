@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,8 +16,6 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\inventory;
@@ -26,19 +25,16 @@ use pocketmine\event\Event;
 use pocketmine\inventory\TransactionQueue;
 
 /**
- * Called when an inventory transaction queue starts execution. 
+ * Called when an inventory transaction queue starts execution.
  */
 
 class InventoryTransactionEvent extends Event implements Cancellable{
 
 	public static $handlerList = null;
-	
+
 	/** @var TransactionQueue */
 	private $transactionQueue;
-	
-	/**
-	 * @param TransactionQueue $ts
-	 */
+
 	public function __construct(TransactionQueue $transactionQueue){
 		$this->transactionQueue = $transactionQueue;
 	}

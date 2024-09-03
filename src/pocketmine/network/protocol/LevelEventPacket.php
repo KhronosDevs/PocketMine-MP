@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,14 +17,13 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
 namespace pocketmine\network\protocol;
 
 #include <rules/DataPacket.h>
-
 
 class LevelEventPacket extends DataPacket{
 	const NETWORK_ID = Info::LEVEL_EVENT_PACKET;
@@ -45,20 +46,20 @@ class LevelEventPacket extends DataPacket{
 	const EVENT_SOUND_ZOMBIE_INFECT = 1016;
 	const EVENT_SOUND_ZOMBIE_HEAL = 1017;
 	const EVENT_SOUND_ENDERMAN_TELEPORT = 1018;
-	
+
 	const EVENT_SOUND_ANVIL_BREAK = 1020; //This sound is played on the anvil's final use, NOT when the block is broken.
 	const EVENT_SOUND_ANVIL_USE = 1021;
 	const EVENT_SOUND_ANVIL_FALL = 1022;
-	
+
 	const EVENT_SOUND_DROP_ITEM = 1030;
 	const EVENT_SOUND_THROW_PROJECTILE = 1031;
-	
+
 	const EVENT_SOUND_ITEMFRAME_ADD_ITEM = 1040;
 	const EVENT_SOUND_ITEMFRAME_PLACE = 1041;
 	//1042 is item frame, but cannot tell exactly what.
 	const EVENT_SOUND_ITEMFRAME_DROP_ITEM = 1043;
 	const EVENT_SOUND_ITEMFRAME_ROTATE_ITEM = 1044;
-	
+
 	//1050 sounds a lot like skeleton walking but different. TODO: find out exactly what it is.
 	const EVENT_SOUND_EXP_PICKUP = 1051;
 	const EVENT_SOUND_BLOCK_PLACE = 1052;

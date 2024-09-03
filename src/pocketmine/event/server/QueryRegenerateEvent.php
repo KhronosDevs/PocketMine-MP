@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,15 +16,16 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\server;
 
-use pocketmine\event;
 use pocketmine\Server;
 use pocketmine\utils\Binary;
+use function chr;
+use function count;
+use function str_replace;
+use function substr;
 
 class QueryRegenerateEvent extends ServerEvent{
 	public static $handlerList = null;
@@ -50,7 +52,6 @@ class QueryRegenerateEvent extends ServerEvent{
 
 	private $extraData = [];
 
-
 	public function __construct(Server $server, $timeout = 5){
 		$this->timeout = $timeout;
 		$this->serverName = $server->getMotd();
@@ -63,11 +64,11 @@ class QueryRegenerateEvent extends ServerEvent{
 			}
 		}
 
-		if($server->isDServerEnabled() and $server->dserverConfig["queryMaxPlayers"]) $pc = $server->dserverConfig["queryMaxPlayers"];
-		elseif($server->isDServerEnabled() and $server->dserverConfig["queryAllPlayers"]) $pc = $server->getDServerMaxPlayers();
+		if($server->isDServerEnabled() && $server->dserverConfig["queryMaxPlayers"]) $pc = $server->dserverConfig["queryMaxPlayers"];
+		elseif($server->isDServerEnabled() && $server->dserverConfig["queryAllPlayers"]) $pc = $server->getDServerMaxPlayers();
 		else $pc = $server->getMaxPlayers();
 
-		if($server->isDServerEnabled() and $server->dserverConfig["queryPlayers"]) $poc = $server->getDServerOnlinePlayers();
+		if($server->isDServerEnabled() && $server->dserverConfig["queryPlayers"]) $poc = $server->getDServerOnlinePlayers();
 		else $poc = count($this->players);
 
 		$this->gametype = ($server->getGamemode() & 0x01) === 0 ? "SMP" : "CMP";
@@ -180,7 +181,7 @@ class QueryRegenerateEvent extends ServerEvent{
 		$query = "";
 
 		$plist = $this->server_engine;
-		if(count($this->plugins) > 0 and $this->listPlugins){
+		if(count($this->plugins) > 0 && $this->listPlugins){
 			$plist .= ":";
 			foreach($this->plugins as $p){
 				$d = $p->getDescription();

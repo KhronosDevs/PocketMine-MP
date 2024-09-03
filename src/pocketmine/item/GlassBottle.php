@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -22,9 +24,9 @@
 namespace pocketmine\item;
 
 use pocketmine\block\Block;
+use pocketmine\event\player\PlayerGlassBottleEvent;
 use pocketmine\level\Level;
 use pocketmine\Player;
-use pocketmine\event\player\PlayerGlassBottleEvent;
 
 class GlassBottle extends Item{
 	public function __construct($meta = 0, $count = 1){
@@ -36,10 +38,10 @@ class GlassBottle extends Item{
 	}
 
 	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz){
-		if($player === null or $player->isSurvival() !== true){
+		if($player === null || $player->isSurvival() !== true){
 			return false;
 		}
-		if($target->getId() === Block::STILL_WATER or $target->getId() === Block::WATER){
+		if($target->getId() === Block::STILL_WATER || $target->getId() === Block::WATER){
 			$player->getServer()->getPluginManager()->callEvent($ev = new PlayerGlassBottleEvent($player, $target, $this));
 			if($ev->isCancelled()){
 				return false;

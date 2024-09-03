@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -22,14 +24,15 @@
 namespace pocketmine\block;
 
 use pocketmine\event\block\BlockGrowEvent;
+use pocketmine\item\enchantment\enchantment;
 use pocketmine\item\Item;
 use pocketmine\level\Level;
-use pocketmine\item\enchantment\enchantment;
 use pocketmine\Player;
 use pocketmine\Server;
+use function mt_rand;
 
 class NetherWart extends Flowable{
-	
+
 	protected $id = self::NETHER_WART_BLOCK;
 
 	public function __construct($meta = 0){
@@ -74,7 +77,7 @@ class NetherWart extends Flowable{
 		}
 		return false;
 	}
-	
+
 	public function getDrops(Item $item) : array {
 		$drops = [];
 		if($this->meta >= 0x03){

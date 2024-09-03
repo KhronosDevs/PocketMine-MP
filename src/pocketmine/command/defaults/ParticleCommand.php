@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -42,7 +44,6 @@ use pocketmine\level\particle\ItemBreakParticle;
 use pocketmine\level\particle\LargeExplodeParticle;
 use pocketmine\level\particle\LavaDripParticle;
 use pocketmine\level\particle\LavaParticle;
-use pocketmine\level\particle\Particle;
 use pocketmine\level\particle\PortalParticle;
 use pocketmine\level\particle\RainSplashParticle;
 use pocketmine\level\particle\RedstoneParticle;
@@ -56,6 +57,13 @@ use pocketmine\math\Vector3;
 use pocketmine\Player;
 use pocketmine\utils\Random;
 use pocketmine\utils\TextFormat;
+use function count;
+use function explode;
+use function max;
+use function microtime;
+use function mt_rand;
+use function strtolower;
+use function substr;
 
 class ParticleCommand extends VanillaCommand{
 
@@ -104,7 +112,6 @@ class ParticleCommand extends VanillaCommand{
 			return true;
 		}
 
-
 		$sender->sendMessage(new TranslationContainer("commands.particle.success", [$name, $count]));
 
 		$random = new Random((int) (microtime(true) * 1000) + mt_rand());
@@ -121,14 +128,12 @@ class ParticleCommand extends VanillaCommand{
 		return true;
 	}
 
-
 	/**
-	 * @param         $name
-	 * @param Vector3 $pos
-	 * @param         $xd
-	 * @param         $yd
-	 * @param         $zd
-	 * @param         $data
+	 * @param $name
+	 * @param $xd
+	 * @param $yd
+	 * @param $zd
+	 * @param $data
 	 * @return null|DustParticle|ItemBreakParticle|TerrainParticle
 	 */
 	private function getParticle($name, Vector3 $pos, $xd, $yd, $zd, $data){
@@ -174,12 +179,12 @@ class ParticleCommand extends VanillaCommand{
 			case "slime":
 				return new ItemBreakParticle($pos, Item::get(Item::SLIMEBALL));
 			case "itembreak":
-				if($data !== null and $data !== 0){
+				if($data !== null && $data !== 0){
 					return new ItemBreakParticle($pos, $data);
 				}
 				break;
 			case "terrain":
-				if($data !== null and $data !== 0){
+				if($data !== null && $data !== 0){
 					return new TerrainParticle($pos, $data);
 				}
 				break;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -26,11 +28,11 @@
 namespace pocketmine\tile;
 
 use pocketmine\level\format\FullChunk;
+use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\ShortTag;
-use pocketmine\nbt\tag\IntTag;
-use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\utils\Color;
 
@@ -43,7 +45,7 @@ class Cauldron extends Spawnable{
 		if(!isset($nbt->SplashPotion)){
 			$nbt->SplashPotion = new ByteTag("SplashPotion", 0);
 		}
-		if(!isset($nbt->Items) or !($nbt->Items instanceof ListTag)){
+		if(!isset($nbt->Items) || !($nbt->Items instanceof ListTag)){
 			$nbt->Items = new ListTag("Items", []);
 		}
 		parent::__construct($chunk, $nbt);
@@ -146,7 +148,7 @@ class Cauldron extends Spawnable{
 			new ListTag("Items", $this->namedtag["Items"])//unused?
 		]);
 
-		if($this->getPotionId() === 0xffff and $this->isCustomColor()){
+		if($this->getPotionId() === 0xffff && $this->isCustomColor()){
 			$nbt->CustomColor = $this->namedtag->CustomColor;
 		}
 		return $nbt;

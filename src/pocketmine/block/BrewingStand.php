@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -23,15 +25,15 @@ namespace pocketmine\block;
 
 use pocketmine\item\Item;
 use pocketmine\item\Tool;
+use pocketmine\math\Vector3;
+use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\IntTag;
-use pocketmine\nbt\tag\StringTag;
-use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\ListTag;
+use pocketmine\nbt\tag\StringTag;
 use pocketmine\Player;
-use pocketmine\tile\Tile;
 use pocketmine\tile\BrewingStand as TileBrewingStand;
-use pocketmine\math\Vector3;
+use pocketmine\tile\Tile;
 
 class BrewingStand extends Transparent{
 
@@ -92,7 +94,7 @@ class BrewingStand extends Transparent{
 	public function onActivate(Item $item, Player $player = null){
 		if($player instanceof Player){
 			//TODO lock
-			if($player->isCreative() and $player->getServer()->limitedCreative){
+			if($player->isCreative() && $player->getServer()->limitedCreative){
 				return true;
 			}
 			$t = $this->getLevel()->getTile($this);

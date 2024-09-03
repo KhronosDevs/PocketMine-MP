@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -27,6 +29,7 @@ use pocketmine\event\TranslationContainer;
 use pocketmine\level\Level;
 use pocketmine\Player;
 use pocketmine\utils\TextFormat;
+use function count;
 
 class TimeCommand extends VanillaCommand{
 
@@ -86,7 +89,6 @@ class TimeCommand extends VanillaCommand{
 			$sender->sendMessage(new TranslationContainer("commands.time.query", [$level->getTime()]));
 			return true;
 		}
-
 
 		if(count($args) < 2){
 			$sender->sendMessage(new TranslationContainer("commands.generic.usage", [$this->usageMessage]));

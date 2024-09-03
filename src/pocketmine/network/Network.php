@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -31,6 +33,9 @@ use pocketmine\network\protocol\AddPlayerPacket;
 use pocketmine\network\protocol\AdventureSettingsPacket;
 use pocketmine\network\protocol\AnimatePacket;
 use pocketmine\network\protocol\BatchPacket;
+use pocketmine\network\protocol\BlockEntityDataPacket;
+use pocketmine\network\protocol\BlockEventPacket;
+use pocketmine\network\protocol\ChangeDimensionPacket;
 use pocketmine\network\protocol\ChunkRadiusUpdatedPacket;
 use pocketmine\network\protocol\ContainerClosePacket;
 use pocketmine\network\protocol\ContainerOpenPacket;
@@ -39,36 +44,34 @@ use pocketmine\network\protocol\ContainerSetDataPacket;
 use pocketmine\network\protocol\ContainerSetSlotPacket;
 use pocketmine\network\protocol\CraftingDataPacket;
 use pocketmine\network\protocol\CraftingEventPacket;
-use pocketmine\network\protocol\ChangeDimensionPacket;
 use pocketmine\network\protocol\DataPacket;
+use pocketmine\network\protocol\DisconnectPacket;
 use pocketmine\network\protocol\DropItemPacket;
-use pocketmine\network\protocol\FullChunkDataPacket;
-use pocketmine\network\protocol\Info;
-use pocketmine\network\protocol\ItemFrameDropItemPacket;
-use pocketmine\network\protocol\RequestChunkRadiusPacket;
-use pocketmine\network\protocol\SetEntityLinkPacket;
-use pocketmine\network\protocol\BlockEntityDataPacket;
 use pocketmine\network\protocol\EntityEventPacket;
 use pocketmine\network\protocol\ExplodePacket;
+use pocketmine\network\protocol\FullChunkDataPacket;
 use pocketmine\network\protocol\HurtArmorPacket;
+use pocketmine\network\protocol\Info;
 use pocketmine\network\protocol\Info as ProtocolInfo;
 use pocketmine\network\protocol\InteractPacket;
+use pocketmine\network\protocol\ItemFrameDropItemPacket;
 use pocketmine\network\protocol\LevelEventPacket;
-use pocketmine\network\protocol\DisconnectPacket;
 use pocketmine\network\protocol\LoginPacket;
-use pocketmine\network\protocol\PlayStatusPacket;
-use pocketmine\network\protocol\TextPacket;
+use pocketmine\network\protocol\MobArmorEquipmentPacket;
+use pocketmine\network\protocol\MobEquipmentPacket;
 use pocketmine\network\protocol\MoveEntityPacket;
 use pocketmine\network\protocol\MovePlayerPacket;
 use pocketmine\network\protocol\PlayerActionPacket;
-use pocketmine\network\protocol\MobArmorEquipmentPacket;
-use pocketmine\network\protocol\MobEquipmentPacket;
+use pocketmine\network\protocol\PlayerInputPacket;
+use pocketmine\network\protocol\PlayerListPacket;
+use pocketmine\network\protocol\PlayStatusPacket;
 use pocketmine\network\protocol\RemoveBlockPacket;
 use pocketmine\network\protocol\RemoveEntityPacket;
-use pocketmine\network\protocol\RemovePlayerPacket;
+use pocketmine\network\protocol\RequestChunkRadiusPacket;
 use pocketmine\network\protocol\RespawnPacket;
 use pocketmine\network\protocol\SetDifficultyPacket;
 use pocketmine\network\protocol\SetEntityDataPacket;
+use pocketmine\network\protocol\SetEntityLinkPacket;
 use pocketmine\network\protocol\SetEntityMotionPacket;
 use pocketmine\network\protocol\SetHealthPacket;
 use pocketmine\network\protocol\SetPlayerGameTypePacket;
@@ -76,16 +79,21 @@ use pocketmine\network\protocol\SetSpawnPositionPacket;
 use pocketmine\network\protocol\SetTimePacket;
 use pocketmine\network\protocol\StartGamePacket;
 use pocketmine\network\protocol\TakeItemEntityPacket;
-use pocketmine\network\protocol\BlockEventPacket;
+use pocketmine\network\protocol\TextPacket;
 use pocketmine\network\protocol\UpdateBlockPacket;
 use pocketmine\network\protocol\UseItemPacket;
-use pocketmine\network\protocol\PlayerListPacket;
-use pocketmine\network\protocol\PlayerInputPacket;
 use pocketmine\network\query\QueryHandler;
 use pocketmine\Player;
 use pocketmine\Server;
 use pocketmine\utils\Binary;
 use pocketmine\utils\MainLogger;
+use function bin2hex;
+use function get_class;
+use function ord;
+use function spl_object_hash;
+use function strlen;
+use function substr;
+use function zlib_decode;
 
 class Network {
 
@@ -159,9 +167,6 @@ class Network {
 		}
 	}
 
-	/**
-	 * @param SourceInterface $interface
-	 */
 	public function registerInterface(SourceInterface $interface) {
 		$this->interfaces[$hash = spl_object_hash($interface)] = $interface;
 		if ($interface instanceof AdvancedSourceInterface) {
@@ -171,9 +176,6 @@ class Network {
 		$interface->setName($this->name);
 	}
 
-	/**
-	 * @param SourceInterface $interface
-	 */
 	public function unregisterInterface(SourceInterface $interface) {
 		unset($this->interfaces[$hash = spl_object_hash($interface)],
 			$this->advancedInterfaces[$hash]);
@@ -185,7 +187,7 @@ class Network {
 	 * @param string $name
 	 */
 	public function setName($name) {
-		$this->name = (string)$name;
+		$this->name = (string) $name;
 		foreach ($this->interfaces as $interface) {
 			$interface->setName($this->name);
 		}
@@ -202,7 +204,7 @@ class Network {
 	}
 
 	/**
-	 * @param int        $id 0-255
+	 * @param int        $id    0-255
 	 * @param DataPacket $class
 	 */
 	public function registerPacket($id, $class) {
@@ -228,7 +230,7 @@ class Network {
 				if(strlen($buf) === 0){
 					throw new \InvalidStateException("Empty or invalid BatchPacket received");
 				}
-				
+
 				if (($pk = $this->getPacket(ord($buf{0}))) !== null) {
 					if ($pk::NETWORK_ID === Info::BATCH_PACKET) {
 						throw new \InvalidStateException("Invalid BatchPacket inside BatchPacket");
@@ -255,22 +257,22 @@ class Network {
 		}
 	}
 
-    public function handlePacket(string $address, int $port, string $payload){
-        try{
-            if(strlen($payload) > 2 and substr($payload, 0, 2) === "\xfe\xfd" and $this->queryHandler instanceof QueryHandler){
-                $this->server->getQueryHandler()->handle($address, $port, $payload);
-            }
-        }catch(\Throwable $e){
-            if(\pocketmine\DEBUG > 1){
-                if($this->server->getLogger() instanceof MainLogger){
-                    $this->server->getLogger()->logException($e);
-                }
-            }
+	public function handlePacket(string $address, int $port, string $payload){
+		try{
+			if(strlen($payload) > 2 && substr($payload, 0, 2) === "\xfe\xfd" && $this->queryHandler instanceof QueryHandler){
+				$this->server->getQueryHandler()->handle($address, $port, $payload);
+			}
+		}catch(\Throwable $e){
+			if(\pocketmine\DEBUG > 1){
+				if($this->server->getLogger() instanceof MainLogger){
+					$this->server->getLogger()->logException($e);
+				}
+			}
 
-            $this->blockAddress($address, 600);
-        }
-        //TODO: add raw packet events
-    }
+			$this->blockAddress($address, 600);
+		}
+		//TODO: add raw packet events
+	}
 
 	/**
 	 * @param $id
@@ -285,7 +287,6 @@ class Network {
 		}
 		return null;
 	}
-
 
 	/**
 	 * @param string $address

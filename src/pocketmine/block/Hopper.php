@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -24,8 +26,8 @@ namespace pocketmine\block;
 use pocketmine\item\Item;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\Player;
 use pocketmine\tile\Hopper as TileHopper;
@@ -39,7 +41,7 @@ class Hopper extends Transparent{
 		$this->meta = $meta;
 	}
 
-	public function canBeActivated(): bool{
+	public function canBeActivated() : bool{
 		return true;
 	}
 
@@ -59,7 +61,7 @@ class Hopper extends Transparent{
 		if($player instanceof Player){
 			$t = $this->getLevel()->getTile($this);
 			if($t instanceof TileHopper){
-				if($t->hasLock() and !$t->checkLock($item->getCustomName())){
+				if($t->hasLock() && !$t->checkLock($item->getCustomName())){
 					$player->getServer()->getLogger()->debug($player->getName() . " attempted to open a locked hopper");
 					return true;
 				}
@@ -68,11 +70,11 @@ class Hopper extends Transparent{
 		}
 		return true;
 	}
-	
+
 	public function activate(){
 		//TODO: Hopper content freezing (requires basic redstone system upgrade)
 	}
-	
+
 	public function getTarget(){
 		return $this->target;
 	}

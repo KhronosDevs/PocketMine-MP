@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * PocketMine Standard PHP Library
  * Copyright (C) 2014 PocketMine Team <https://github.com/PocketMine/PocketMine-SPL>
@@ -17,20 +19,14 @@
 
 interface AttachableLogger extends \Logger{
 
-    /**
-     * @param LoggerAttachment $attachment
-     */
-    public function addAttachment(\LoggerAttachment $attachment);
+	public function addAttachment(LoggerAttachment $attachment);
 
-    /**
-     * @param LoggerAttachment $attachment
-     */
-    public function removeAttachment(\LoggerAttachment $attachment);
+	public function removeAttachment(LoggerAttachment $attachment);
 
-    public function removeAttachments();
+	public function removeAttachments();
 
-    /**
-     * @return \LoggerAttachment[]
-     */
-    public function getAttachments();
+	/**
+	 * @return \LoggerAttachment[]
+	 */
+	public function getAttachments();
 }

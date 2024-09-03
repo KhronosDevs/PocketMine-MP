@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,8 +16,6 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\entity;
@@ -36,11 +35,9 @@ class EntityRegainHealthEvent extends EntityEvent implements Cancellable{
 	private $amount;
 	private $reason;
 
-
 	/**
-	 * @param Entity $entity
-	 * @param float  $amount
-	 * @param int    $regainReason
+	 * @param float $amount
+	 * @param int   $regainReason
 	 */
 	public function __construct(Entity $entity, $amount, $regainReason){
 		$this->entity = $entity;

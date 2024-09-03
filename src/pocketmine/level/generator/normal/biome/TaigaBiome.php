@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -21,8 +23,8 @@
 
 namespace pocketmine\level\generator\normal\biome;
 
-use pocketmine\block\Sapling;
 use pocketmine\block\Block;
+use pocketmine\block\Sapling;
 use pocketmine\level\generator\populator\MossStone;
 use pocketmine\level\generator\populator\Tree;
 

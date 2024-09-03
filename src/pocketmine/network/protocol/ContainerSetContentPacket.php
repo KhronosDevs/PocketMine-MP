@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,14 +17,15 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+use function count;
 
+#include <rules/DataPacket.h>
 
 class ContainerSetContentPacket extends DataPacket{
 	const NETWORK_ID = Info::CONTAINER_SET_CONTENT_PACKET;
@@ -45,12 +48,12 @@ class ContainerSetContentPacket extends DataPacket{
 	public function decode(){
 		$this->windowid = $this->getByte();
 		$count = $this->getShort();
-		for($s = 0; $s < $count and !$this->feof(); ++$s){
+		for($s = 0; $s < $count && !$this->feof(); ++$s){
 			$this->slots[$s] = $this->getSlot();
 		}
 		if($this->windowid === self::SPECIAL_INVENTORY){
 			$count = $this->getShort();
-			for($s = 0; $s < $count and !$this->feof(); ++$s){
+			for($s = 0; $s < $count && !$this->feof(); ++$s){
 				$this->hotbar[$s] = $this->getInt();
 			}
 		}
@@ -63,7 +66,7 @@ class ContainerSetContentPacket extends DataPacket{
 		foreach($this->slots as $slot){
 			$this->putSlot($slot);
 		}
-		if($this->windowid === self::SPECIAL_INVENTORY and count($this->hotbar) > 0){
+		if($this->windowid === self::SPECIAL_INVENTORY && count($this->hotbar) > 0){
 			$this->putShort(count($this->hotbar));
 			foreach($this->hotbar as $slot){
 				$this->putInt($slot);

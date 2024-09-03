@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -21,9 +23,12 @@
 
 namespace pocketmine\block;
 
-use pocketmine\Player;
 use pocketmine\item\Item;
 use pocketmine\math\Vector3;
+use pocketmine\Player;
+use function abs;
+use function count;
+use function is_array;
 
 class PoweredRail extends Rail{
 
@@ -45,7 +50,6 @@ class PoweredRail extends Rail{
 	}
 
 	/**
-	 * @param Rail $block
 	 * @return bool
 	 */
 	public function canConnect(Rail $block){
@@ -59,7 +63,7 @@ class PoweredRail extends Rail{
 		if(isset($blocks[0])){
 			$v3 = $blocks[0]->subtract($this);
 			$v33 = $block->subtract($this);
-			if(abs($v3->x) == abs($v33->z) and abs($v3->z) == abs($v33->x)){
+			if(abs($v3->x) == abs($v33->z) && abs($v3->z) == abs($v33->x)){
 				return false;
 			}
 		}
@@ -92,10 +96,10 @@ class PoweredRail extends Rail{
 					foreach($connected as $key => $value){
 						$subtract[$key] = $value->subtract($this);
 					}
-					if(abs($subtract[0]->x) == abs($subtract[1]->z) and abs($subtract[1]->x) == abs($subtract[0]->z)){
+					if(abs($subtract[0]->x) == abs($subtract[1]->z) && abs($subtract[1]->x) == abs($subtract[0]->z)){
 						$v3 = $connected[0]->subtract($this)->add($connected[1]->subtract($this));
 						$this->meta = $v3->x == 1 ? ($v3->z == 1 ? 6 : 9) : ($v3->z == 1 ? 7 : 8);
-					}elseif($subtract[0]->y == 1 or $subtract[1]->y == 1){
+					}elseif($subtract[0]->y == 1 || $subtract[1]->y == 1){
 						$v3 = $subtract[0]->y == 1 ? $subtract[0] : $subtract[1];
 						$this->meta = $v3->x == 0 ? ($v3->x == -1 ? 4 : 5) : ($v3->x == 1 ? 2 : 3);
 					}else{
@@ -113,7 +117,7 @@ class PoweredRail extends Rail{
 	public function place(Item $item, Block $block, Block $target, $face, $fx, $fy, $fz, Player $player = null){
 		$downBlock = $this->getSide(Vector3::SIDE_DOWN);
 
-		if($downBlock instanceof Rail or !$this->isBlock($downBlock)){//判断是否可以放置
+		if($downBlock instanceof Rail || !$this->isBlock($downBlock)){//判断是否可以放置
 			return false;
 		}
 
@@ -160,10 +164,10 @@ class PoweredRail extends Rail{
 				foreach($connected as $key => $value){
 					$subtract[$key] = $value->subtract($this);
 				}
-				if(abs($subtract[0]->x) == abs($subtract[1]->z) and abs($subtract[1]->x) == abs($subtract[0]->z)){
+				if(abs($subtract[0]->x) == abs($subtract[1]->z) && abs($subtract[1]->x) == abs($subtract[0]->z)){
 					$v3 = $connected[0]->subtract($this)->add($connected[1]->subtract($this));
 					$this->meta = $v3->x == 1 ? ($v3->z == 1 ? 6 : 9) : ($v3->z == 1 ? 7 : 8);
-				}elseif($subtract[0]->y == 1 or $subtract[1]->y == 1){
+				}elseif($subtract[0]->y == 1 || $subtract[1]->y == 1){
 					$v3 = $subtract[0]->y == 1 ? $subtract[0] : $subtract[1];
 					$this->meta = $v3->x == 0 ? ($v3->x == -1 ? 4 : 5) : ($v3->x == 1 ? 2 : 3);
 				}else{

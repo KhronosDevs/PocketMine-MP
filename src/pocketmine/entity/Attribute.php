@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -22,6 +24,8 @@
 namespace pocketmine\entity;
 
 use pocketmine\Server;
+use function max;
+use function min;
 
 class Attribute{
 
@@ -76,7 +80,7 @@ class Attribute{
 	 * @return Attribute
 	 */
 	public static function addAttribute($id, $name, $minValue, $maxValue, $defaultValue, $shouldSend = true){
-		if($minValue > $maxValue or $defaultValue > $maxValue or $defaultValue < $minValue){
+		if($minValue > $maxValue || $defaultValue > $maxValue || $defaultValue < $minValue){
 			throw new \InvalidArgumentException("Invalid ranges: min value: $minValue, max value: $maxValue, $defaultValue: $defaultValue");
 		}
 
@@ -155,7 +159,7 @@ class Attribute{
 	}
 
 	public function setDefaultValue($defaultValue){
-		if($defaultValue > $this->getMaxValue() or $defaultValue < $this->getMinValue()){
+		if($defaultValue > $this->getMaxValue() || $defaultValue < $this->getMinValue()){
 			throw new \InvalidArgumentException("Value $defaultValue exceeds the range!");
 		}
 
@@ -171,7 +175,7 @@ class Attribute{
 	}
 
 	public function setValue($value, bool $fit = true, bool $shouldSend = false){
-		if($value > $this->getMaxValue() or $value < $this->getMinValue()){
+		if($value > $this->getMaxValue() || $value < $this->getMinValue()){
 			if(!$fit){
 				Server::getInstance()->getLogger()->error("[Attribute / {$this->getName()}] Value $value exceeds the range!");
 			}
@@ -202,7 +206,7 @@ class Attribute{
 	}
 
 	public function isDesynchronized() : bool{
-		return $this->shouldSend and $this->desynchronized;
+		return $this->shouldSend && $this->desynchronized;
 	}
 
 	public function markSynchronized(bool $synced = true){

@@ -23,13 +23,13 @@ declare(strict_types=1);
 
 namespace pocketmine\snooze;
 
+use function assert;
+
 /**
  * Notifiable Threaded class which tracks counts of notifications it receives.
  */
 class ThreadedSleeper extends \Threaded{
-	/**
-	 * @var int
-	 */
+	/** @var int */
 	private $notifCount = 0;
 
 	/**
@@ -41,7 +41,7 @@ class ThreadedSleeper extends \Threaded{
 		$this->synchronized(function(int $timeout) {
 			assert($this->notifCount >= 0, "notification count should be >= 0, got $this->notifCount");
 
-            if($this->notifCount === 0) {
+			if($this->notifCount === 0) {
 				$this->wait($timeout);
 			}
 		}, $timeout);
@@ -70,7 +70,7 @@ class ThreadedSleeper extends \Threaded{
 			*/
 			$this->notifCount -= $notifCount;
 
-            assert($this->notifCount >= 0, "notification count should be >= 0, got $this->notifCount");
+			assert($this->notifCount >= 0, "notification count should be >= 0, got $this->notifCount");
 		});
 	}
 

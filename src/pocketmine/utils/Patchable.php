@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -20,7 +22,6 @@
 */
 
 namespace pocketmine\utils;
-
 
 /**
  * All classes or interfaces (including plugins) that want to be able to be patched in runtime

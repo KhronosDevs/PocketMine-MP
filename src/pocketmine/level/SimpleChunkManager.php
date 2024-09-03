@@ -47,10 +47,6 @@ class SimpleChunkManager implements ChunkManager{
 	/**
 	 * Gets the raw block id.
 	 *
-	 * @param int $x
-	 * @param int $y
-	 * @param int $z
-	 *
 	 * @return int 0-255
 	 */
 	public function getBlockIdAt(int $x, int $y, int $z) : int{
@@ -63,9 +59,6 @@ class SimpleChunkManager implements ChunkManager{
 	/**
 	 * Sets the raw block id.
 	 *
-	 * @param int $x
-	 * @param int $y
-	 * @param int $z
 	 * @param int $id 0-255
 	 */
 	public function setBlockIdAt(int $x, int $y, int $z, int $id){
@@ -76,10 +69,6 @@ class SimpleChunkManager implements ChunkManager{
 
 	/**
 	 * Gets the raw block metadata
-	 *
-	 * @param int $x
-	 * @param int $y
-	 * @param int $z
 	 *
 	 * @return int 0-15
 	 */
@@ -93,9 +82,6 @@ class SimpleChunkManager implements ChunkManager{
 	/**
 	 * Sets the raw block metadata.
 	 *
-	 * @param int $x
-	 * @param int $y
-	 * @param int $z
 	 * @param int $data 0-15
 	 */
 	public function setBlockDataAt(int $x, int $y, int $z, int $data){
@@ -106,10 +92,6 @@ class SimpleChunkManager implements ChunkManager{
 
 	/**
 	 * Gets the raw block light level
-	 *
-	 * @param int $x
-	 * @param int $y
-	 * @param int $z
 	 *
 	 * @return int 0-15
 	 */
@@ -123,9 +105,6 @@ class SimpleChunkManager implements ChunkManager{
 	/**
 	 * Sets the raw block light level.
 	 *
-	 * @param int $x
-	 * @param int $y
-	 * @param int $z
 	 * @param int $level 0-15
 	 */
 	public function setBlockLightAt(int $x, int $y, int $z, int $level){
@@ -136,7 +115,7 @@ class SimpleChunkManager implements ChunkManager{
 
 	/**
 	 * Updates the light around the block
-	 * 
+	 *
 	 * @param $x
 	 * @param $y
 	 * @param $z
@@ -196,7 +175,7 @@ class SimpleChunkManager implements ChunkManager{
 	private function computeRemoveBlockLight($x, $y, $z, $currentLight, \SplQueue $queue, \SplQueue $spreadQueue, array &$visited, array &$spreadVisited){
 		$current = $this->getBlockLightAt($x, $y, $z);
 
-		if($current !== 0 and $current < $currentLight){
+		if($current !== 0 && $current < $currentLight){
 			$this->setBlockLightAt($x, $y, $z, 0);
 
 			if(!isset($visited[$index = Level::blockHash($x, $y, $z)])){
@@ -229,9 +208,6 @@ class SimpleChunkManager implements ChunkManager{
 	}
 
 	/**
-	 * @param int $chunkX
-	 * @param int $chunkZ
-	 *
 	 * @return FullChunk|null
 	 */
 	public function getChunk(int $chunkX, int $chunkZ){
@@ -239,8 +215,6 @@ class SimpleChunkManager implements ChunkManager{
 	}
 
 	/**
-	 * @param int $chunkX
-	 * @param int $chunkZ
 	 * @param FullChunk $chunk
 	 */
 	public function setChunk(int $chunkX, int $chunkZ, FullChunk $chunk = null){

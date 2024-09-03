@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  _____   _____   __   _   _   _____  __    __  _____
  * /  ___| | ____| |  \ | | | | /  ___/ \ \  / / /  ___/
  * | |     | |__   |   \| | | | | |___   \ \/ /  | |___
@@ -16,7 +17,6 @@
  *
  * @author iTX Technologies
  * @link https://itxtech.org
- *
  */
 
 namespace pocketmine\inventory;
@@ -27,7 +27,6 @@ abstract class TemporaryInventory extends ContainerInventory{
 	//TODO
 
 	abstract public function getResultSlotIndex();
-
 
 	public function onClose(Player $who){
 		foreach($this->getContents() as $slot => $item){

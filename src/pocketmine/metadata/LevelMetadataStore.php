@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -22,6 +24,7 @@
 namespace pocketmine\metadata;
 
 use pocketmine\level\Level;
+use function strtolower;
 
 class LevelMetadataStore extends MetadataStore{
 

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * RakLib network library
  *
@@ -18,6 +20,11 @@ namespace raklib\server;
 use raklib\Binary;
 use raklib\protocol\EncapsulatedPacket;
 use raklib\RakLib;
+use function chr;
+use function intval;
+use function ord;
+use function strlen;
+use function substr;
 
 class ServerHandler{
 
@@ -66,10 +73,12 @@ class ServerHandler{
 		$this->server->pushMainToThreadPacket($buffer);
 		$this->server->shutdown();
 		$this->server->synchronized(function(){
-            if($this->server === null) return;
+			if($this->server === null) {
+				return;
+			}
 
-            $this->server->wait(20000);
-        });
+			$this->server->wait(20000);
+		});
 		$this->server->join();
 	}
 
@@ -87,7 +96,9 @@ class ServerHandler{
 	 * @return bool
 	 */
 	public function handlePacket(){
-		if(strlen($packet = $this->server->readThreadToMainPacket()) > 0){
+		$packet = $this->server->readThreadToMainPacket();
+
+		if($packet !== null && strlen($packet) > 0){
 			$id = ord($packet{0});
 			$offset = 1;
 			if($id === RakLib::PACKET_ENCAPSULATED){
@@ -111,14 +122,14 @@ class ServerHandler{
 				$offset += $len;
 				$value = substr($packet, $offset);
 				$this->instance->handleOption($name, $value);
-            }elseif($id === RakLib::PACKET_PING){
-                $len = ord($packet{$offset++});
-                $identifier = substr($packet, $offset, $len);
-                $offset += $len;
-                $len = ord($packet{$offset++});
-                $ping = substr($packet, $offset, $len);
-                $this->instance->handlePing($identifier, $ping);
-            }elseif($id === RakLib::PACKET_OPEN_SESSION){
+			}elseif($id === RakLib::PACKET_PING){
+				$len = ord($packet{$offset++});
+				$identifier = substr($packet, $offset, $len);
+				$offset += $len;
+				$len = ord($packet{$offset++});
+				$ping = intval(substr($packet, $offset, $len));
+				$this->instance->handlePing($identifier, $ping);
+			}elseif($id === RakLib::PACKET_OPEN_SESSION){
 				$len = ord($packet{$offset++});
 				$identifier = substr($packet, $offset, $len);
 				$offset += $len;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -27,6 +29,11 @@ use pocketmine\event\TranslationContainer;
 use pocketmine\level\sound\ExpPickupSound;
 use pocketmine\Player;
 use pocketmine\utils\TextFormat;
+use function count;
+use function mt_rand;
+use function rtrim;
+use function strcasecmp;
+use function substr;
 
 class XpCommand extends VanillaCommand{
 

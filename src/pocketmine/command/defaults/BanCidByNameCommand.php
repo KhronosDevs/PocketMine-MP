@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -25,7 +27,9 @@ use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
 use pocketmine\event\TranslationContainer;
 use pocketmine\Player;
-use pocketmine\utils\TextFormat;
+use function array_shift;
+use function count;
+use function implode;
 
 class BanCidByNameCommand extends VanillaCommand{
 
@@ -51,7 +55,7 @@ class BanCidByNameCommand extends VanillaCommand{
 
 		$name = array_shift($args);
 		$reason = implode(" ", $args);
-		
+
 		if ($sender->getServer()->getPlayer($name) instanceof Player) $target = $sender->getServer()->getPlayer($name);
 		else return false;
 

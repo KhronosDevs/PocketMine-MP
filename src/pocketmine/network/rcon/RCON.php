@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -30,8 +32,23 @@ namespace pocketmine\network\rcon;
 
 use pocketmine\command\RemoteConsoleCommandSender;
 use pocketmine\event\server\RemoteServerCommandEvent;
-use pocketmine\utils\Utils;
 use pocketmine\Server;
+use pocketmine\utils\Utils;
+use function count;
+use function max;
+use function round;
+use function serialize;
+use function socket_bind;
+use function socket_close;
+use function socket_create;
+use function socket_getsockname;
+use function socket_last_error;
+use function socket_listen;
+use function socket_set_block;
+use function socket_strerror;
+use const AF_INET;
+use const SOCK_STREAM;
+use const SOL_TCP;
 
 class RCON{
 	const PROTOCOL_VERSION = 3;
@@ -57,7 +74,7 @@ class RCON{
 		$this->threads = (int) max(1, $threads);
 		$this->clientsPerThread = (int) max(1, $clientsPerThread);
 		$this->socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
-		if($this->socket === false or !socket_bind($this->socket, $interface, (int) $port) or !socket_listen($this->socket)){
+		if($this->socket === false || !socket_bind($this->socket, $interface, (int) $port) || !socket_listen($this->socket)){
 			$this->server->getLogger()->critical("RCON can't be started: " . socket_strerror(socket_last_error()));
 			$this->threads = 0;
 			return;

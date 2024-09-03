@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -98,11 +100,11 @@ use pocketmine\level\format\LevelProviderManager;
 use pocketmine\level\format\mcregion\McRegion;
 use pocketmine\level\generator\biome\Biome;
 use pocketmine\level\generator\Flat;
-use pocketmine\level\generator\Void;
 use pocketmine\level\generator\Generator;
 use pocketmine\level\generator\hell\Nether;
 use pocketmine\level\generator\normal\Normal;
 use pocketmine\level\generator\normal\Normal2;
+use pocketmine\level\generator\Void;
 use pocketmine\level\Level;
 use pocketmine\metadata\EntityMetadataStore;
 use pocketmine\metadata\LevelMetadataStore;
@@ -111,9 +113,9 @@ use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\DoubleTag;
-use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\FloatTag;
 use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\LongTag;
 use pocketmine\nbt\tag\ShortTag;
 use pocketmine\nbt\tag\StringTag;
@@ -125,12 +127,11 @@ use pocketmine\network\protocol\PlayerListPacket;
 use pocketmine\network\query\QueryHandler;
 use pocketmine\network\RakLibInterface;
 use pocketmine\network\rcon\RCON;
-use pocketmine\network\SourceInterface;
 use pocketmine\network\upnp\UPnP;
 use pocketmine\permission\BanList;
 use pocketmine\permission\DefaultPermissions;
-use pocketmine\plugin\PharPluginLoader;
 use pocketmine\plugin\FolderPluginLoader;
+use pocketmine\plugin\PharPluginLoader;
 use pocketmine\plugin\Plugin;
 use pocketmine\plugin\PluginLoadOrder;
 use pocketmine\plugin\PluginManager;
@@ -167,6 +168,72 @@ use pocketmine\utils\TextFormat;
 use pocketmine\utils\Utils;
 use pocketmine\utils\UUID;
 use pocketmine\utils\VersionString;
+use function array_key_exists;
+use function array_shift;
+use function array_sum;
+use function asort;
+use function base64_encode;
+use function bccomp;
+use function class_exists;
+use function cli_set_process_title;
+use function count;
+use function define;
+use function explode;
+use function extension_loaded;
+use function file_exists;
+use function file_get_contents;
+use function file_put_contents;
+use function floor;
+use function function_exists;
+use function gc_collect_cycles;
+use function getenv;
+use function getmypid;
+use function getopt;
+use function getTrace;
+use function implode;
+use function ini_set;
+use function is_array;
+use function is_bool;
+use function is_numeric;
+use function is_string;
+use function is_subclass_of;
+use function json_decode;
+use function kill;
+use function max;
+use function microtime;
+use function min;
+use function mkdir;
+use function pcntl_signal;
+use function pcntl_signal_dispatch;
+use function random_bytes;
+use function realpath;
+use function register_shutdown_function;
+use function rename;
+use function round;
+use function spl_object_hash;
+use function str_replace;
+use function stripos;
+use function strlen;
+use function strpos;
+use function strtolower;
+use function substr;
+use function time;
+use function time_sleep_until;
+use function touch;
+use function trim;
+use function ucfirst;
+use function zlib_encode;
+use const DIRECTORY_SEPARATOR;
+use const E_ERROR;
+use const E_USER_ERROR;
+use const E_USER_WARNING;
+use const E_WARNING;
+use const PHP_INT_MAX;
+use const PHP_INT_SIZE;
+use const SIGHUP;
+use const SIGINT;
+use const SIGTERM;
+use const ZLIB_ENCODING_DEFLATE;
 
 /**
  * The class that manages everything
@@ -283,8 +350,8 @@ class Server{
 	/** @var BaseLang */
 	private $baseLang;
 
-    /** @var TimeTrackingSleeperHandler */
-    private $tickSleeper = null;
+	/** @var TimeTrackingSleeperHandler */
+	private $tickSleeper = null;
 
 	private $forceLanguage = false;
 
@@ -313,8 +380,8 @@ class Server{
 
 	/** @var Player[] */
 	private $players = [];
-    /** @var array<string, string> */
-    private $playerIds = [];
+	/** @var array<string, string> */
+	private $playerIds = [];
 	/** @var Player[] */
 	private $playerList = [];
 
@@ -372,9 +439,6 @@ class Server{
 	public $countBookshelf = false;
 	public $allowInventoryCheats = false;
 
-	/**
-	 * @return string
-	 */
 	public function getName() : string{
 		return "Khronos";
 	}
@@ -386,9 +450,9 @@ class Server{
 		return $this->isRunning === true;
 	}
 
-    public function getQueryHandler(): QueryHandler {
-        return $this->queryHandler;
-    }
+	public function getQueryHandler() : QueryHandler {
+		return $this->queryHandler;
+	}
 
 	/**
 	 * @return string
@@ -422,7 +486,7 @@ class Server{
 		return $uptime;
 	}
 
-	public function getKhronosVersion(): string {
+	public function getKhronosVersion() : string {
 		return \pocketmine\KHRONOS_VERSION;
 	}
 
@@ -457,7 +521,6 @@ class Server{
 	public function getApiVersion(){
 		return \pocketmine\API_VERSION;
 	}
-
 
 	/**
 	 * @return string
@@ -913,9 +976,8 @@ class Server{
 	}
 
 	/**
-	 * @param string   $name
-	 * @param CompoundTag $nbtTag
-	 * @param bool     $async
+	 * @param string $name
+	 * @param bool   $async
 	 */
 	public function saveOfflinePlayerData($name, CompoundTag $nbtTag, $async = false){
 		if($this->shouldSavePlayerData()){
@@ -935,37 +997,34 @@ class Server{
 		}
 	}
 
-    public function getPlayer(string $name) {
-        $name = strtolower($name);
-        $found = null;
-        $delta = PHP_INT_MAX;
+	public function getPlayer(string $name) {
+		$name = strtolower($name);
+		$found = null;
+		$delta = PHP_INT_MAX;
 
-        foreach ($this->getOnlinePlayers() as $player) {
-            $playerName = strtolower($player->getName());
+		foreach ($this->getOnlinePlayers() as $player) {
+			$playerName = strtolower($player->getName());
 
-            if (strpos($playerName, $name) !== 0) continue;
+			if (strpos($playerName, $name) !== 0) continue;
 
-            $curDelta = strlen($playerName) - strlen($name);
+			$curDelta = strlen($playerName) - strlen($name);
 
-            if ($curDelta < $delta) {
-                $found = $player;
-                $delta = $curDelta;
-            }
+			if ($curDelta < $delta) {
+				$found = $player;
+				$delta = $curDelta;
+			}
 
-            if ($curDelta === 0) break;
-        }
+			if ($curDelta === 0) break;
+		}
 
-        return $found;
-    }
+		return $found;
+	}
 
-
-    /**
-	 * @param string $name
-	 *
+	/**
 	 * @return Player|null
 	 */
 	public function getPlayerExact(string $name){
-        return $this->playerList[$this->playerIds[strtolower($name)]] ?? null;
+		return $this->playerList[$this->playerIds[strtolower($name)]] ?? null;
 	}
 
 	/**
@@ -988,9 +1047,6 @@ class Server{
 		return $matchedPlayers;
 	}
 
-	/**
-	 * @param Player $player
-	 */
 	public function removePlayer(Player $player){
 		if(isset($this->identifiers[$hash = spl_object_hash($player)])){
 			$identifier = $this->identifiers[$hash];
@@ -1030,7 +1086,7 @@ class Server{
 	 * @param Level $level
 	 */
 	public function setDefaultLevel($level){
-		if($level === null or ($this->isLevelLoaded($level->getFolderName()) and $level !== $this->levelDefault)){
+		if($level === null || ($this->isLevelLoaded($level->getFolderName()) && $level !== $this->levelDefault)){
 			$this->levelDefault = $level;
 		}
 	}
@@ -1073,13 +1129,12 @@ class Server{
 	}
 
 	/**
-	 * @param Level $level
-	 * @param bool  $forceUnload
+	 * @param bool $forceUnload
 	 *
 	 * @return bool
 	 */
 	public function unloadLevel(Level $level, $forceUnload = false){
-		if($level === $this->getDefaultLevel() and !$forceUnload){
+		if($level === $this->getDefaultLevel() && !$forceUnload){
 			throw new \InvalidStateException("The default level cannot be unloaded while running, please switch levels.");
 		}
 		if($level->unload($forceUnload) === true){
@@ -1159,7 +1214,7 @@ class Server{
 	 * @return bool
 	 */
 	public function generateLevel($name, $seed = null, $generator = null, $options = []){
-		if(trim($name) === "" or $this->isLevelGenerated($name)){
+		if(trim($name) === "" || $this->isLevelGenerated($name)){
 			return false;
 		}
 
@@ -1169,7 +1224,7 @@ class Server{
 			$options["preset"] = $this->getConfigString("generator-settings", "");
 		}
 
-		if(!($generator !== null and class_exists($generator, true) and is_subclass_of($generator, Generator::class))){
+		if(!($generator !== null && class_exists($generator, true) && is_subclass_of($generator, Generator::class))){
 			$generator = Generator::getGenerator($this->getLevelType());
 		}
 
@@ -1437,7 +1492,7 @@ class Server{
 	 * @return bool
 	 */
 	public function isWhitelisted($name){
-		return !$this->hasWhitelist() or $this->whitelist->exists($name, true);
+		return !$this->hasWhitelist() || $this->whitelist->exists($name, true);
 	}
 
 	/**
@@ -1493,9 +1548,6 @@ class Server{
 		return $this->dataPath . "crashdumps/";
 	}
 
-	/**
-	 * @return Server
-	 */
 	public static function getInstance() : Server{
 		return self::$instance;
 	}
@@ -1611,12 +1663,10 @@ class Server{
 	}
 
 	/**
-	 * @param \ClassLoader    $autoloader
-	 * @param \ThreadedLogger $logger
-	 * @param string          $filePath
-	 * @param string          $dataPath
-	 * @param string          $pluginPath
-	 * @param string          $defaultLang
+	 * @param string $filePath
+	 * @param string $dataPath
+	 * @param string $pluginPath
+	 * @param string $defaultLang
 	 */
 	public function __construct(\ClassLoader $autoloader, \ThreadedLogger $logger, $filePath, $dataPath, $pluginPath, $defaultLang = "unknown"){
 		self::$instance = $this;
@@ -1660,14 +1710,14 @@ class Server{
 			$nowLang = $this->getProperty("settings.language", "eng");
 
 			//Crashes unsupported builds without the correct configuration
-			if(strpos(\pocketmine\VERSION, "unsupported") !== false and getenv("GITLAB_CI") === false){
+			if(strpos(\pocketmine\VERSION, "unsupported") !== false && getenv("GITLAB_CI") === false){
 				if($this->getProperty("settings.enable-testing", false) !== true){
 					throw new ServerException("This build is not intended for production use. You may set 'settings.enable-testing: true' under pocketmine.yml to allow use of non-production builds. Do so at your own risk and ONLY if you know what you are doing.");
 				}else{
 					$this->logger->warning("You are using an unsupported build. Do not use this build in a production environment.");
 				}
 			}
-			if($defaultLang != "unknown" and $nowLang != $defaultLang){
+			if($defaultLang != "unknown" && $nowLang != $defaultLang){
 				@file_put_contents($configPath, str_replace('language: "' . $nowLang . '"', 'language: "' . $defaultLang . '"', file_get_contents($configPath)));
 				$this->config->reload();
 				unset($this->propertyCache["settings.language"]);
@@ -1757,7 +1807,7 @@ class Server{
 			$this->alwaysTickPlayers = (int) $this->getProperty("level-settings.always-tick-players", false);
 			$this->baseTickRate = (int) $this->getProperty("level-settings.base-tick-rate", 1);
 
-            Timings::init();
+			Timings::init();
 
 			$this->scheduler = new ServerScheduler();
 
@@ -1771,7 +1821,7 @@ class Server{
 
 			$this->operators = new Config($this->dataPath . "ops.txt", Config::ENUM);
 			$this->whitelist = new Config($this->dataPath . "white-list.txt", Config::ENUM);
-			if(file_exists($this->dataPath . "banned.txt") and !file_exists($this->dataPath . "banned-players.txt")){
+			if(file_exists($this->dataPath . "banned.txt") && !file_exists($this->dataPath . "banned-players.txt")){
 				@rename($this->dataPath . "banned.txt", $this->dataPath . "banned-players.txt");
 			}
 			@touch($this->dataPath . "banned-players.txt");
@@ -1787,7 +1837,7 @@ class Server{
 			$this->maxPlayers = $this->getConfigInt("max-players", 20);
 			$this->setAutoSave($this->getConfigBoolean("auto-save", true));
 
-			if($this->getConfigBoolean("hardcore", false) === true and $this->getDifficulty() < 3){
+			if($this->getConfigBoolean("hardcore", false) === true && $this->getDifficulty() < 3){
 				$this->setConfigInt("difficulty", 3);
 			}
 
@@ -1841,7 +1891,7 @@ class Server{
 
 			$this->queryRegenerateTask = new QueryRegenerateEvent($this, 5);
 
-            $this->network->registerInterface(new RakLibInterface($this));
+			$this->network->registerInterface(new RakLibInterface($this));
 
 			$this->pluginManager->loadPlugins($this->pluginPath);
 
@@ -1853,7 +1903,6 @@ class Server{
 				$this->logger->debug($this->getLanguage()->translateString("pocketmine.debug.enable"));
 				LevelProviderManager::addProvider($this, LevelDB::class);
 			}
-
 
 			Generator::addGenerator(Flat::class, "flat");
 			Generator::addGenerator(Normal::class, "normal");
@@ -1889,7 +1938,7 @@ class Server{
 				}
 				if($this->loadLevel($default) === false){
 					$seed = getopt("", ["level-seed::"])["level-seed"] ?? $this->properties->get("level-seed", time());
-					if(!is_numeric($seed) or bccomp($seed, "9223372036854775807") > 0){
+					if(!is_numeric($seed) || bccomp($seed, "9223372036854775807") > 0){
 						$seed = Utils::javaStringHash($seed);
 					}elseif(PHP_INT_SIZE === 8){
 						$seed = (int) $seed;
@@ -1899,7 +1948,6 @@ class Server{
 
 				$this->setDefaultLevel($this->getLevelByName($default));
 			}
-
 
 			$this->properties->save(true);
 
@@ -1916,7 +1964,7 @@ class Server{
 
 			$this->enablePlugins(PluginLoadOrder::POSTWORLD);
 
-			if($this->dserverConfig["enable"] and ($this->getAdvancedProperty("dserver.server-list", "") != "")) $this->scheduler->scheduleRepeatingTask(new CallbackTask([
+			if($this->dserverConfig["enable"] && ($this->getAdvancedProperty("dserver.server-list", "") != "")) $this->scheduler->scheduleRepeatingTask(new CallbackTask([
 				$this,
 				"updateDServerInfo"
 			]), $this->dserverConfig["timer"]);
@@ -1935,8 +1983,6 @@ class Server{
 	/**
 	 * @param string        $message
 	 * @param Player[]|null $recipients
-	 *
-	 * @return int
 	 */
 	public function broadcastMessage($message, $recipients = null) : int{
 		if(!is_array($recipients)){
@@ -1952,10 +1998,7 @@ class Server{
 	}
 
 	/**
-	 * @param string        $tip
 	 * @param Player[]|null $recipients
-	 *
-	 * @return int
 	 */
 	public function broadcastTip(string $tip, $recipients = null) : int{
 		if(!is_array($recipients)){
@@ -1963,7 +2006,7 @@ class Server{
 			$recipients = [];
 
 			foreach($this->pluginManager->getPermissionSubscriptions(self::BROADCAST_CHANNEL_USERS) as $permissible){
-				if($permissible instanceof Player and $permissible->hasPermission(self::BROADCAST_CHANNEL_USERS)){
+				if($permissible instanceof Player && $permissible->hasPermission(self::BROADCAST_CHANNEL_USERS)){
 					$recipients[spl_object_hash($permissible)] = $permissible; // do not send messages directly, or some might be repeated
 				}
 			}
@@ -1977,15 +2020,12 @@ class Server{
 		return count($recipients);
 	}
 
-    public function getTickSleeper(): TimeTrackingSleeperHandler {
-        return $this->tickSleeper ?? ($this->tickSleeper = new TimeTrackingSleeperHandler(Timings::$serverInterrupts));
-    }
+	public function getTickSleeper() : TimeTrackingSleeperHandler {
+		return $this->tickSleeper ?? ($this->tickSleeper = new TimeTrackingSleeperHandler(Timings::$serverInterrupts));
+	}
 
 	/**
-	 * @param string        $popup
 	 * @param Player[]|null $recipients
-	 *
-	 * @return int
 	 */
 	public function broadcastPopup(string $popup, $recipients = null) : int{
 		if(!is_array($recipients)){
@@ -1993,7 +2033,7 @@ class Server{
 			$recipients = [];
 
 			foreach($this->pluginManager->getPermissionSubscriptions(self::BROADCAST_CHANNEL_USERS) as $permissible){
-				if($permissible instanceof Player and $permissible->hasPermission(self::BROADCAST_CHANNEL_USERS)){
+				if($permissible instanceof Player && $permissible->hasPermission(self::BROADCAST_CHANNEL_USERS)){
 					$recipients[spl_object_hash($permissible)] = $permissible; // do not send messages directly, or some might be repeated
 				}
 			}
@@ -2009,16 +2049,13 @@ class Server{
 
 	/**
 	 * @param string $message
-	 * @param string $permissions
-	 *
-	 * @return int
 	 */
 	public function broadcast($message, string $permissions) : int{
 		/** @var CommandSender[] $recipients */
 		$recipients = [];
 		foreach(explode(";", $permissions) as $permission){
 			foreach($this->pluginManager->getPermissionSubscriptions($permission) as $permissible){
-				if($permissible instanceof CommandSender and $permissible->hasPermission($permission)){
+				if($permissible instanceof CommandSender && $permissible->hasPermission($permission)){
 					$recipients[spl_object_hash($permissible)] = $permissible; // do not send messages directly, or some might be repeated
 				}
 			}
@@ -2034,13 +2071,12 @@ class Server{
 	/**
 	 * Broadcasts a Minecraft packet to a list of players
 	 *
-	 * @param Player[]   $players
-	 * @param DataPacket $packet
+	 * @param Player[] $players
 	 */
 	public static function broadcastPacket(array $players, DataPacket $packet){
 		$packet->encode();
 		$packet->isEncoded = true;
-		if(Network::$BATCH_THRESHOLD >= 0 and strlen($packet->buffer) >= Network::$BATCH_THRESHOLD){
+		if(Network::$BATCH_THRESHOLD >= 0 && strlen($packet->buffer) >= Network::$BATCH_THRESHOLD){
 			Server::getInstance()->batchPackets($players, [$packet->buffer], false);
 			return;
 		}
@@ -2082,7 +2118,7 @@ class Server{
 			}
 		}
 
-		if(!$forceSync and $this->networkCompressionAsync){
+		if(!$forceSync && $this->networkCompressionAsync){
 			$task = new CompressBatchedTask($str, $targets, $this->networkCompressionLevel);
 			$this->getScheduler()->scheduleAsyncTask($task);
 		}else{
@@ -2105,13 +2141,9 @@ class Server{
 		}
 	}
 
-
-	/**
-	 * @param int $type
-	 */
 	public function enablePlugins(int $type){
 		foreach($this->pluginManager->getPlugins() as $plugin){
-			if(!$plugin->isEnabled() and $plugin->getDescription()->getOrder() === $type){
+			if(!$plugin->isEnabled() && $plugin->getDescription()->getOrder() === $type){
 				$this->enablePlugin($plugin);
 			}
 		}
@@ -2122,14 +2154,11 @@ class Server{
 		}
 	}
 
-	/**
-	 * @param Plugin $plugin
-	 */
 	public function enablePlugin(Plugin $plugin){
 		$this->pluginManager->enablePlugin($plugin);
 	}
 
-    public function checkConsole(){
+	public function checkConsole(){
 		Timings::$serverCommandTimer->startTiming();
 		if(($line = $this->console->getLine()) !== null){
 			$this->pluginManager->callEvent($ev = new ServerCommandEvent($this->consoleSender, $line));
@@ -2143,8 +2172,7 @@ class Server{
 	/**
 	 * Executes a command from a CommandSender
 	 *
-	 * @param CommandSender $sender
-	 * @param string        $commandLine
+	 * @param string $commandLine
 	 *
 	 * @return bool
 	 *
@@ -2154,7 +2182,6 @@ class Server{
 		if($this->commandMap->dispatch($sender, $commandLine)){
 			return true;
 		}
-
 
 		$sender->sendMessage(new TranslationContainer(TextFormat::RED . "%commands.generic.notFound"));
 
@@ -2178,7 +2205,7 @@ class Server{
 		$this->loadAdvancedConfig();
 		$this->maxPlayers = $this->getConfigInt("max-players", 20);
 
-		if($this->getConfigBoolean("hardcore", false) === true and $this->getDifficulty() < 3){
+		if($this->getConfigBoolean("hardcore", false) === true && $this->getDifficulty() < 3){
 			$this->setConfigInt("difficulty", 3);
 		}
 
@@ -2205,8 +2232,6 @@ class Server{
 
 	/**
 	 * Shutdowns the server correctly
-	 * @param bool   $restart
-	 * @param string $msg
 	 */
 	public function shutdown(bool $restart = false, string $msg = ""){
 		/*if($this->isRunning){
@@ -2306,7 +2331,6 @@ class Server{
 			$this->sendUsage(SendUsageTask::TYPE_OPEN);
 		}
 
-
 		if($this->getProperty("network.upnp-forwarding", false) == true){
 			$this->logger->info("[UPnP] Trying to port forward...");
 			UPnP::PortForward($this->getPort());
@@ -2332,7 +2356,7 @@ class Server{
 	}
 
 	public function handleSignal($signo){
-		if($signo === SIGTERM or $signo === SIGINT or $signo === SIGHUP){
+		if($signo === SIGTERM || $signo === SIGINT || $signo === SIGHUP){
 			$this->shutdown();
 		}
 	}
@@ -2353,7 +2377,7 @@ class Server{
 		$errno = $e->getCode();
 		$errline = $e->getLine();
 
-		$type = ($errno === E_ERROR or $errno === E_USER_ERROR) ? \LogLevel::ERROR : (($errno === E_USER_WARNING or $errno === E_WARNING) ? \LogLevel::WARNING : \LogLevel::NOTICE);
+		$type = ($errno === E_ERROR || $errno === E_USER_ERROR) ? \LogLevel::ERROR : (($errno === E_USER_WARNING || $errno === E_WARNING) ? \LogLevel::WARNING : \LogLevel::NOTICE);
 		if(($pos = strpos($errstr, "\n")) !== false){
 			$errstr = substr($errstr, 0, $pos);
 		}
@@ -2387,8 +2411,8 @@ class Server{
 		}
 		$this->hasStopped = false;
 
-		ini_set("error_reporting", 0);
-		ini_set("memory_limit", -1); //Fix error dump not dumped on memory problems
+		ini_set("error_reporting", '0');
+		ini_set("memory_limit", '-1'); //Fix error dump not dumped on memory problems
 		$this->logger->emergency($this->getLanguage()->translateString("pocketmine.crash.create"));
 		try{
 			$dump = new CrashDump($this);
@@ -2399,19 +2423,18 @@ class Server{
 
 		$this->logger->emergency($this->getLanguage()->translateString("pocketmine.crash.submit", [$dump->getPath()]));
 
-
 		if($this->getProperty("auto-report.enabled", true) !== false){
 			$report = true;
 			$plugin = $dump->getData()["plugin"];
 			if(is_string($plugin)){
 				$p = $this->pluginManager->getPlugin($plugin);
-				if($p instanceof Plugin and !($p->getPluginLoader() instanceof PharPluginLoader)){
+				if($p instanceof Plugin && !($p->getPluginLoader() instanceof PharPluginLoader)){
 					$report = false;
 				}
 			}elseif(\Phar::running(true) == ""){
 				$report = false;
 			}
-			if($dump->getData()["error"]["type"] === "E_PARSE" or $dump->getData()["error"]["type"] === "E_COMPILE_ERROR"){
+			if($dump->getData()["error"]["type"] === "E_PARSE" || $dump->getData()["error"]["type"] === "E_COMPILE_ERROR"){
 				$report = false;
 			}
 
@@ -2423,7 +2446,7 @@ class Server{
 					"reportPaste" => base64_encode($dump->getEncodedData())
 				]);
 
-				if(($data = json_decode($reply)) !== false and isset($data->crashId)){
+				if(($data = json_decode($reply)) !== false && isset($data->crashId)){
 					$reportId = $data->crashId;
 					$reportUrl = $data->crashUrl;
 					$this->logger->emergency($this->getLanguage()->translateString("pocketmine.crash.archive", [$reportUrl, $reportId]));
@@ -2449,7 +2472,7 @@ class Server{
 		while($this->isRunning){
 			$this->tick();
 
-            $this->getTickSleeper()->sleepUntil($this->nextTick);
+			$this->getTickSleeper()->sleepUntil($this->nextTick);
 
 			$next = $this->nextTick - 0.0001;
 			if($next > microtime(true)){
@@ -2474,7 +2497,7 @@ class Server{
 
 	public function addOnlinePlayer(Player $player){
 		$this->playerList[$player->getRawUniqueId()] = $player;
-        $this->playerIds[strtolower($player->getName())] = $player->getRawUniqueId();
+		$this->playerIds[strtolower($player->getName())] = $player->getRawUniqueId();
 
 		$this->updatePlayerListData($player->getUniqueId(), $player->getId(), $player->getDisplayName(), $player->getSkinId(), $player->getSkinData());
 	}
@@ -2482,7 +2505,7 @@ class Server{
 	public function removeOnlinePlayer(Player $player){
 		if(isset($this->playerList[$player->getRawUniqueId()])){
 			unset($this->playerList[$player->getRawUniqueId()]);
-            unset($this->playerIds[strtolower($player->getName())]);
+			unset($this->playerIds[strtolower($player->getName())]);
 
 			$pk = new PlayerListPacket();
 			$pk->type = PlayerListPacket::TYPE_REMOVE;
@@ -2510,7 +2533,7 @@ class Server{
 		$pk->type = PlayerListPacket::TYPE_ADD;
 		foreach($this->playerList as $player){
 			if ($p === $player) continue;
-			
+
 			$pk->entries[] = [$player->getUniqueId(), $player->getId(), $player->getDisplayName(), $player->getSkinId(), $player->getSkinData()];
 		}
 
@@ -2519,7 +2542,7 @@ class Server{
 
 	private function checkTickUpdates($currentTick, $tickTime){
 		foreach($this->players as $p){
-			if(!$p->loggedIn and ($tickTime - $p->creationTime) >= 10){
+			if(!$p->loggedIn && ($tickTime - $p->creationTime) >= 10){
 				$p->close("", "Login timeout");
 			}elseif($this->alwaysTickPlayers){
 				$p->onUpdate($currentTick);
@@ -2528,7 +2551,7 @@ class Server{
 
 		//Do level ticks
 		foreach($this->getLevels() as $level){
-			if($level->getTickRate() > $this->baseTickRate and --$level->tickRateCounter > 0){
+			if($level->getTickRate() > $this->baseTickRate && --$level->tickRateCounter > 0){
 				continue;
 			}
 			try{
@@ -2538,7 +2561,7 @@ class Server{
 				$level->tickRateTime = $tickMs;
 
 				if($this->autoTickRate){
-					if($tickMs < 50 and $level->getTickRate() > $this->baseTickRate){
+					if($tickMs < 50 && $level->getTickRate() > $this->baseTickRate){
 						$level->setTickRate($r = $level->getTickRate() - 1);
 						if($r > $this->baseTickRate){
 							$level->tickRateCounter = $level->getTickRate();
@@ -2548,7 +2571,7 @@ class Server{
 						if($level->getTickRate() === $this->baseTickRate){
 							$level->setTickRate(max($this->baseTickRate + 1, min($this->autoTickRateLimit, floor($tickMs / 50))));
 							$this->getLogger()->debug("Level \"" . $level->getName() . "\" took " . round($tickMs, 2) . "ms, setting tick rate to " . $level->getTickRate() . " ticks");
-						}elseif(($tickMs / $level->getTickRate()) >= 50 and $level->getTickRate() < $this->autoTickRateLimit){
+						}elseif(($tickMs / $level->getTickRate()) >= 50 && $level->getTickRate() < $this->autoTickRateLimit){
 							$level->setTickRate($level->getTickRate() + 1);
 							$this->getLogger()->debug("Level \"" . $level->getName() . "\" took " . round($tickMs, 2) . "ms, setting tick rate to " . $level->getTickRate() . " ticks");
 						}
@@ -2557,7 +2580,7 @@ class Server{
 				}
 			}catch(\Throwable $e){
 				$this->logger->critical($this->getLanguage()->translateString("pocketmine.level.tickError", [$level->getName(), $e->getMessage()]));
-				if(\pocketmine\DEBUG > 1 and $this->logger instanceof MainLogger){
+				if(\pocketmine\DEBUG > 1 && $this->logger instanceof MainLogger){
 					$this->logger->logException($e);
 				}
 			}
@@ -2586,7 +2609,6 @@ class Server{
 		$this->scheduler->scheduleAsyncTask(new SendUsageTask($this, $type, $this->uniquePlayers));
 		$this->uniquePlayers = [];
 	}
-
 
 	/**
 	 * @return BaseLang
@@ -2638,9 +2660,8 @@ class Server{
 	}
 
 	/**
-	 * @param             $variable
-	 * @param null        $defaultValue
-	 * @param Config|null $cfg
+	 * @param      $variable
+	 * @param null $defaultValue
 	 * @return bool|mixed|null
 	 */
 	public function getAdvancedProperty($variable, $defaultValue = null, Config $cfg = null){
@@ -2655,7 +2676,7 @@ class Server{
 
 		while(count($vars) > 0){
 			$baseKey = array_shift($vars);
-			if(is_array($base) and isset($base[$baseKey])){
+			if(is_array($base) && isset($base[$baseKey])){
 				$base = $base[$baseKey];
 			}else{
 				return $defaultValue;
@@ -2675,7 +2696,6 @@ class Server{
 			$this->logger->logException($e);
 		}
 	}
-
 
 	/**
 	 * Tries to execute a server tick
@@ -2717,7 +2737,7 @@ class Server{
 			$this->maxUse = 0;
 
 			if(($this->tickCounter & 0b111111111) === 0){
-				if(($this->dserverConfig["enable"] and $this->dserverConfig["queryTickUpdate"]) or !$this->dserverConfig["enable"]){
+				if(($this->dserverConfig["enable"] && $this->dserverConfig["queryTickUpdate"]) || !$this->dserverConfig["enable"]){
 					$this->updateQuery();
 				}
 			}
@@ -2725,7 +2745,7 @@ class Server{
 			$this->getNetwork()->updateName();
 		}
 
-		if($this->autoSave and ++$this->autoSaveTicker >= $this->autoSaveTicks){
+		if($this->autoSave && ++$this->autoSaveTicker >= $this->autoSaveTicks){
 			$this->autoSaveTicker = 0;
 			$this->doAutoSave();
 		}
@@ -2745,7 +2765,7 @@ class Server{
 			}
 		}
 
-		if($this->dispatchSignals and $this->tickCounter % 5 === 0){
+		if($this->dispatchSignals && $this->tickCounter % 5 === 0){
 			pcntl_signal_dispatch();
 		}
 
@@ -2771,7 +2791,7 @@ class Server{
 		$this->tickAverage[] = $tick;
 		array_shift($this->useAverage);
 		$this->useAverage[] = $use;
-        $this->getTickSleeper()->resetNotificationProcessingTime();
+		$this->getTickSleeper()->resetNotificationProcessingTime();
 
 		if(($this->nextTick - $tickTime) < -1){
 			$this->nextTick = $tickTime;

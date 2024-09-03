@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -28,9 +30,7 @@ class PermissionAttachment{
 	/** @var PermissionRemovedExecutor */
 	private $removed = null;
 
-	/**
-	 * @var bool[]
-	 */
+	/** @var bool[] */
 	private $permissions = [];
 
 	/** @var Permissible */
@@ -40,9 +40,6 @@ class PermissionAttachment{
 	private $plugin;
 
 	/**
-	 * @param Plugin      $plugin
-	 * @param Permissible $permissible
-	 *
 	 * @throws PluginException
 	 */
 	public function __construct(Plugin $plugin, Permissible $permissible){
@@ -61,9 +58,6 @@ class PermissionAttachment{
 		return $this->plugin;
 	}
 
-	/**
-	 * @param PermissionRemovedExecutor $ex
-	 */
 	public function setRemovalCallback(PermissionRemovedExecutor $ex){
 		$this->removed = $ex;
 	}

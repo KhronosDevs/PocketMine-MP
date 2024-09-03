@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,6 +25,11 @@ namespace raklib\protocol;
 
 #ifndef COMPILE
 use raklib\Binary;
+use function ceil;
+use function chr;
+use function ord;
+use function strlen;
+use function substr;
 
 #endif
 
@@ -33,7 +40,6 @@ class EncapsulatedPacket{
 	const RELIABILITY_FLAGS = 0b111 << self::RELIABILITY_SHIFT;
 
 	const SPLIT_FLAG = 0b00010000;
-	
 
 	public $reliability;
 	public $hasSplit = false;
@@ -73,12 +79,12 @@ class EncapsulatedPacket{
 		}
 
 		if($reliability > PacketReliability::UNRELIABLE){
-			if($reliability >= PacketReliability::RELIABLE and $reliability !== PacketReliability::UNRELIABLE_WITH_ACK_RECEIPT){
+			if($reliability >= PacketReliability::RELIABLE && $reliability !== PacketReliability::UNRELIABLE_WITH_ACK_RECEIPT){
 				$packet->messageIndex = Binary::readLTriad(substr($binary, $offset, 3));
 				$offset += 3;
 			}
 
-			if($reliability <= PacketReliability::RELIABLE_SEQUENCED and $reliability !== PacketReliability::RELIABLE){
+			if($reliability <= PacketReliability::RELIABLE_SEQUENCED && $reliability !== PacketReliability::RELIABLE){
 				$packet->orderIndex = Binary::readLTriad(substr($binary, $offset, 3));
 				$offset += 3;
 				$packet->orderChannel = ord($binary{$offset++});
@@ -114,8 +120,8 @@ class EncapsulatedPacket{
 			chr(($this->reliability << self::RELIABILITY_SHIFT) | ($this->hasSplit ? self::SPLIT_FLAG : 0)) .
 			($internal ? Binary::writeInt(strlen($this->buffer)) . Binary::writeInt($this->identifierACK) : Binary::writeShort(strlen($this->buffer) << 3)) .
 			($this->reliability > PacketReliability::UNRELIABLE ?
-				(($this->reliability >= PacketReliability::RELIABLE and $this->reliability !== PacketReliability::UNRELIABLE_WITH_ACK_RECEIPT) ? Binary::writeLTriad($this->messageIndex) : "") .
-				(($this->reliability <= PacketReliability::RELIABLE_SEQUENCED and $this->reliability !== PacketReliability::RELIABLE) ? Binary::writeLTriad($this->orderIndex) . chr($this->orderChannel) : "")
+				(($this->reliability >= PacketReliability::RELIABLE && $this->reliability !== PacketReliability::UNRELIABLE_WITH_ACK_RECEIPT) ? Binary::writeLTriad($this->messageIndex) : "") .
+				(($this->reliability <= PacketReliability::RELIABLE_SEQUENCED && $this->reliability !== PacketReliability::RELIABLE) ? Binary::writeLTriad($this->orderIndex) . chr($this->orderChannel) : "")
 				: ""
 			) .
 			($this->hasSplit ? Binary::writeInt($this->splitCount) . Binary::writeShort($this->splitID) . Binary::writeInt($this->splitIndex) : "")

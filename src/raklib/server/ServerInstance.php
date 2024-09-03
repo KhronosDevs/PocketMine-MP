@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * RakLib network library
  *
@@ -34,9 +36,8 @@ interface ServerInstance{
 	public function closeSession($identifier, $reason);
 
 	/**
-	 * @param string             $identifier
-	 * @param EncapsulatedPacket $packet
-	 * @param int                $flags
+	 * @param string $identifier
+	 * @param int    $flags
 	 */
 	public function handleEncapsulated($identifier, EncapsulatedPacket $packet, $flags);
 

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * RakLib network library
  *
@@ -15,6 +17,22 @@
 
 namespace raklib;
 
+use function bcadd;
+use function bccomp;
+use function bcdiv;
+use function bcmod;
+use function bcmul;
+use function chr;
+use function define;
+use function defined;
+use function ord;
+use function pack;
+use function strrev;
+use function strval;
+use function substr;
+use function unpack;
+use const PHP_INT_SIZE;
+
 if(!defined("ENDIANNESS")){
 	define("ENDIANNESS", (pack("d", 1) === "\77\360\0\0\0\0\0\0" ? Binary::BIG_ENDIAN : Binary::LITTLE_ENDIAN));
 }
@@ -22,7 +40,6 @@ if(!defined("ENDIANNESS")){
 class Binary{
 	const BIG_ENDIAN = 0x00;
 	const LITTLE_ENDIAN = 0x01;
-
 
 	/**
 	 * Reads a 3-byte big-endian number
@@ -258,7 +275,7 @@ class Binary{
 			$value = "0";
 			for($i = 0; $i < 8; $i += 2){
 				$value = bcmul($value, "65536", 0);
-				$value = bcadd($value, self::readShort(substr($x, $i, 2)), 0);
+				$value = bcadd($value, strval(self::readShort(substr($x, $i, 2))), 0);
 			}
 
 			if(bccomp($value, "9223372036854775807") == 1){

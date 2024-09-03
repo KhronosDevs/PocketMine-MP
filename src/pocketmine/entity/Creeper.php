@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -19,7 +21,6 @@
  *
  */
 
-
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\CreeperPowerEvent;
@@ -36,7 +37,7 @@ class Creeper extends Monster{
 	const DATA_POWERED = 19;
 
 	public $dropExp = [5, 5];
-	
+
 	public function getName() : string{
 		return "Creeper";
 	}

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -21,17 +23,15 @@
 
 namespace pocketmine\level\generator;
 
-
 use pocketmine\level\format\FullChunk;
 
 use pocketmine\level\Level;
 use pocketmine\level\SimpleChunkManager;
 use pocketmine\scheduler\AsyncTask;
 use pocketmine\Server;
-
+use function get_class;
 
 class PopulationTask extends AsyncTask{
-
 
 	public $state;
 	public $levelId;
@@ -70,7 +70,7 @@ class PopulationTask extends AsyncTask{
 		$manager = $this->getFromThreadStore("generation.level{$this->levelId}.manager");
 		/** @var Generator $generator */
 		$generator = $this->getFromThreadStore("generation.level{$this->levelId}.generator");
-		if($manager === null or $generator === null){
+		if($manager === null || $generator === null){
 			$this->state = false;
 			return;
 		}

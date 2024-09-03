@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -25,16 +27,19 @@ use pocketmine\level\format\generic\BaseChunk;
 use pocketmine\level\format\generic\EmptyChunkSection;
 use pocketmine\level\format\LevelProvider;
 use pocketmine\nbt\NBT;
-use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\ByteArrayTag;
+use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\nbt\tag\ListTag;
-use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\IntArrayTag;
+use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\LongTag;
 use pocketmine\Player;
 use pocketmine\utils\Binary;
 use pocketmine\utils\BinaryStream;
+use function array_fill;
+use function count;
+use const ZLIB_ENCODING_DEFLATE;
 
 class Chunk extends BaseChunk{
 
@@ -50,31 +55,31 @@ class Chunk extends BaseChunk{
 
 		$this->nbt = $nbt;
 
-		if(!isset($this->nbt->Entities) or !($this->nbt->Entities instanceof ListTag)){
+		if(!isset($this->nbt->Entities) || !($this->nbt->Entities instanceof ListTag)){
 			$this->nbt->Entities = new ListTag("Entities", []);
 			$this->nbt->Entities->setTagType(NBT::TAG_Compound);
 		}
 
-		if(!isset($this->nbt->TileEntities) or !($this->nbt->TileEntities instanceof ListTag)){
+		if(!isset($this->nbt->TileEntities) || !($this->nbt->TileEntities instanceof ListTag)){
 			$this->nbt->TileEntities = new ListTag("TileEntities", []);
 			$this->nbt->TileEntities->setTagType(NBT::TAG_Compound);
 		}
 
-		if(!isset($this->nbt->TileTicks) or !($this->nbt->TileTicks instanceof ListTag)){
+		if(!isset($this->nbt->TileTicks) || !($this->nbt->TileTicks instanceof ListTag)){
 			$this->nbt->TileTicks = new ListTag("TileTicks", []);
 			$this->nbt->TileTicks->setTagType(NBT::TAG_Compound);
 		}
 
-		if(!isset($this->nbt->Sections) or !($this->nbt->Sections instanceof ListTag)){
+		if(!isset($this->nbt->Sections) || !($this->nbt->Sections instanceof ListTag)){
 			$this->nbt->Sections = new ListTag("Sections", []);
 			$this->nbt->Sections->setTagType(NBT::TAG_Compound);
 		}
 
-		if(!isset($this->nbt->BiomeColors) or !($this->nbt->BiomeColors instanceof IntArrayTag)){
+		if(!isset($this->nbt->BiomeColors) || !($this->nbt->BiomeColors instanceof IntArrayTag)){
 			$this->nbt->BiomeColors = new IntArrayTag("BiomeColors", array_fill(0, 256, 0));
 		}
 
-		if(!isset($this->nbt->HeightMap) or !($this->nbt->HeightMap instanceof IntArrayTag)){
+		if(!isset($this->nbt->HeightMap) || !($this->nbt->HeightMap instanceof IntArrayTag)){
 			$this->nbt->HeightMap = new IntArrayTag("HeightMap", array_fill(0, 256, 0));
 		}
 
@@ -95,7 +100,7 @@ class Chunk extends BaseChunk{
 
 		$extraData = [];
 
-		if(!isset($this->nbt->ExtraData) or !($this->nbt->ExtraData instanceof ByteArrayTag)){
+		if(!isset($this->nbt->ExtraData) || !($this->nbt->ExtraData instanceof ByteArrayTag)){
 			$this->nbt->ExtraData = new ByteArrayTag("ExtraData", Binary::writeInt(0));
 		}else{
 			$stream = new BinaryStream($this->nbt->ExtraData->getValue());
@@ -144,7 +149,7 @@ class Chunk extends BaseChunk{
 	 * @return bool
 	 */
 	public function isGenerated(){
-		return $this->nbt["TerrainPopulated"] > 0 or (isset($this->nbt->TerrainGenerated) and $this->nbt["TerrainGenerated"] > 0);
+		return $this->nbt["TerrainPopulated"] > 0 || (isset($this->nbt->TerrainGenerated) && $this->nbt["TerrainGenerated"] > 0);
 	}
 
 	/**
@@ -175,7 +180,7 @@ class Chunk extends BaseChunk{
 			$nbt->readCompressed($data, ZLIB_ENCODING_DEFLATE);
 			$chunk = $nbt->getData();
 
-			if(!isset($chunk->Level) or !($chunk->Level instanceof CompoundTag)){
+			if(!isset($chunk->Level) || !($chunk->Level instanceof CompoundTag)){
 				return null;
 			}
 
@@ -198,7 +203,7 @@ class Chunk extends BaseChunk{
 			$nbt->read($data);
 			$chunk = $nbt->getData();
 
-			if(!isset($chunk->Level) or !($chunk->Level instanceof CompoundTag)){
+			if(!isset($chunk->Level) || !($chunk->Level instanceof CompoundTag)){
 				return null;
 			}
 
@@ -236,7 +241,7 @@ class Chunk extends BaseChunk{
 		$entities = [];
 
 		foreach($this->getEntities() as $entity){
-			if(!($entity instanceof Player) and !$entity->closed){
+			if(!($entity instanceof Player) && !$entity->closed){
 				$entity->saveNBT();
 				$entities[] = $entity->namedtag;
 			}
@@ -244,7 +249,6 @@ class Chunk extends BaseChunk{
 
 		$nbt->Entities = new ListTag("Entities", $entities);
 		$nbt->Entities->setTagType(NBT::TAG_Compound);
-
 
 		$tiles = [];
 		foreach($this->getTiles() as $tile){
@@ -299,7 +303,7 @@ class Chunk extends BaseChunk{
 		$entities = [];
 
 		foreach($this->getEntities() as $entity){
-			if(!($entity instanceof Player) and !$entity->closed){
+			if(!($entity instanceof Player) && !$entity->closed){
 				$entity->saveNBT();
 				$entities[] = $entity->namedtag;
 			}
@@ -307,7 +311,6 @@ class Chunk extends BaseChunk{
 
 		$nbt->Entities = new ListTag("Entities", $entities);
 		$nbt->Entities->setTagType(NBT::TAG_Compound);
-
 
 		$tiles = [];
 		foreach($this->getTiles() as $tile){

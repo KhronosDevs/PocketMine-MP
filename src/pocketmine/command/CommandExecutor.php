@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -21,14 +23,11 @@
 
 namespace pocketmine\command;
 
-
 interface CommandExecutor{
 
 	/**
-	 * @param CommandSender $sender
-	 * @param Command       $command
-	 * @param string        $label
-	 * @param string[]      $args
+	 * @param string   $label
+	 * @param string[] $args
 	 *
 	 * @return boolean
 	 */

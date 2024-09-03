@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -21,12 +23,11 @@
 
 namespace pocketmine\item;
 
-
 class ChainChestplate extends Armor{
 	public function __construct($meta = 0, $count = 1){
 		parent::__construct(self::CHAIN_CHESTPLATE, $meta, $count, "Chain Chestplate");
 	}
-	
+
 	public function getArmorTier(){
 		return Armor::TIER_CHAIN;
 	}

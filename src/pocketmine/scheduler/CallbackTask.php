@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -36,10 +38,6 @@ final class CallbackTask extends Task{
 	/** @var array */
 	protected $args;
 
-	/**
-	 * @param callable $callable
-	 * @param array    $args
-	 */
 	public function __construct(callable $callable, array $args = []){
 		$this->callable = $callable;
 		$this->args = $args;
@@ -54,7 +52,7 @@ final class CallbackTask extends Task{
 	}
 
 	public function onRun($currentTick){
-        ($this->callable)(...$this->args);
+		($this->callable)(...$this->args);
 	}
 
 }

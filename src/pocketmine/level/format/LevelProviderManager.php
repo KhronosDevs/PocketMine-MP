@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,12 +25,14 @@ namespace pocketmine\level\format;
 
 use pocketmine\Server;
 use pocketmine\utils\LevelException;
+use function is_subclass_of;
+use function strtolower;
+use function trim;
 
 abstract class LevelProviderManager{
 	protected static $providers = [];
 
 	/**
-	 * @param Server $server
 	 * @param string $class
 	 *
 	 * @throws LevelException

@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*
  * This file is translated from the Nukkit Project
  * which is written by MagicDroidX
@@ -8,15 +10,17 @@
 namespace pocketmine\item;
 
 use pocketmine\block\Block;
+use pocketmine\entity\Painting as PaintingEntity;
 use pocketmine\level\Level;
 use pocketmine\math\Vector3;
-use pocketmine\Player;
-use pocketmine\entity\Painting as PaintingEntity;
 use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\nbt\tag\ListTag;
-use pocketmine\nbt\tag\StringTag;
 use pocketmine\nbt\tag\DoubleTag;
 use pocketmine\nbt\tag\FloatTag;
+use pocketmine\nbt\tag\ListTag;
+use pocketmine\nbt\tag\StringTag;
+use pocketmine\Player;
+use function count;
+use function mt_rand;
 
 class Painting extends Item{
 	public function __construct($meta = 0, $count = 1){
@@ -28,7 +32,7 @@ class Painting extends Item{
 	}
 
 	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz){
-		if($target->isTransparent() === false and $face > 1 and $block->isSolid() === false){
+		if($target->isTransparent() === false && $face > 1 && $block->isSolid() === false){
 			$faces = [
 				2 => 1,
 				3 => 3,

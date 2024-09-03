@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,13 +17,14 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
 namespace pocketmine\nbt\tag;
 
 use pocketmine\nbt\NBT;
+use function get_class;
 
 #include <rules/NBT.h>
 
@@ -50,11 +53,11 @@ class CompoundTag extends NamedTag implements \ArrayAccess{
 	}
 
 	public function offsetExists($offset){
-		return isset($this->{$offset}) and $this->{$offset} instanceof Tag;
+		return isset($this->{$offset}) && $this->{$offset} instanceof Tag;
 	}
 
 	public function offsetGet($offset){
-		if(isset($this->{$offset}) and $this->{$offset} instanceof Tag){
+		if(isset($this->{$offset}) && $this->{$offset} instanceof Tag){
 			if($this->{$offset} instanceof \ArrayAccess){
 				return $this->{$offset};
 			}else{
@@ -68,7 +71,7 @@ class CompoundTag extends NamedTag implements \ArrayAccess{
 	public function offsetSet($offset, $value){
 		if($value instanceof Tag){
 			$this->{$offset} = $value;
-		}elseif(isset($this->{$offset}) and $this->{$offset} instanceof Tag){
+		}elseif(isset($this->{$offset}) && $this->{$offset} instanceof Tag){
 			$this->{$offset}->setValue($value);
 		}
 	}
@@ -85,15 +88,15 @@ class CompoundTag extends NamedTag implements \ArrayAccess{
 		$this->value = [];
 		do{
 			$tag = $nbt->readTag();
-			if($tag instanceof NamedTag and $tag->getName() !== ""){
+			if($tag instanceof NamedTag && $tag->getName() !== ""){
 				$this->{$tag->getName()} = $tag;
 			}
-		}while(!($tag instanceof EndTag) and !$nbt->feof());
+		}while(!($tag instanceof EndTag) && !$nbt->feof());
 	}
 
 	public function write(NBT $nbt){
 		foreach($this as $tag){
-			if($tag instanceof Tag and !($tag instanceof EndTag)){
+			if($tag instanceof Tag && !($tag instanceof EndTag)){
 				$nbt->writeTag($tag);
 			}
 		}

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -21,15 +23,16 @@
 
 namespace pocketmine\entity;
 
-use pocketmine\nbt\tag\IntTag;
-use pocketmine\network\protocol\AddEntityPacket;
-use pocketmine\Player;
-use pocketmine\math\Vector3;
 use pocketmine\event\entity\EntityDamageEvent;
-use pocketmine\network\protocol\EntityEventPacket;
 use pocketmine\item\Item as ItemItem;
 use pocketmine\level\format\FullChunk;
+use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\IntTag;
+use pocketmine\network\protocol\AddEntityPacket;
+use pocketmine\network\protocol\EntityEventPacket;
+use pocketmine\Player;
+use function abs;
 
 class Boat extends Vehicle{
 	const NETWORK_ID = 90;
@@ -90,7 +93,7 @@ class Boat extends Vehicle{
 			return false;
 		}
 		$tickDiff = $currentTick - $this->lastUpdate;
-		if($tickDiff <= 0 and !$this->justCreated){
+		if($tickDiff <= 0 && !$this->justCreated){
 			return true;
 		}
 
@@ -100,7 +103,7 @@ class Boat extends Vehicle{
 
 		$hasUpdate = $this->entityBaseTick($tickDiff);
 
-		if(!$this->level->getBlock(new Vector3($this->x,$this->y,$this->z))->getBoundingBox()==null or $this->isInsideOfWater()){
+		if(!$this->level->getBlock(new Vector3($this->x,$this->y,$this->z))->getBoundingBox() == null || $this->isInsideOfWater()){
 			$this->motionY = 0.1;
 		}else{
 			$this->motionY = -0.08;
@@ -109,7 +112,7 @@ class Boat extends Vehicle{
 		$this->move($this->motionX, $this->motionY, $this->motionZ);
 		$this->updateMovement();
 
-		if($this->linkedEntity == null or $this->linkedType = 0){
+		if($this->linkedEntity == null || $this->linkedType = 0){
 			if($this->age > 1500){
 				$this->close();
 				$hasUpdate = true;
@@ -122,10 +125,8 @@ class Boat extends Vehicle{
 
 		$this->timings->stopTiming();
 
-
-		return $hasUpdate or !$this->onGround or abs($this->motionX) > 0.00001 or abs($this->motionY) > 0.00001 or abs($this->motionZ) > 0.00001;
+		return $hasUpdate || !$this->onGround || abs($this->motionX) > 0.00001 || abs($this->motionY) > 0.00001 || abs($this->motionZ) > 0.00001;
 	}
-
 
 	public function getDrops(){
 		return [

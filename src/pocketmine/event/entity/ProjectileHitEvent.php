@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,8 +16,6 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\entity;
@@ -26,9 +25,6 @@ use pocketmine\entity\Projectile;
 class ProjectileHitEvent extends EntityEvent{
 	public static $handlerList = null;
 
-	/**
-	 * @param Projectile $entity
-	 */
 	public function __construct(Projectile $entity){
 		$this->entity = $entity;
 

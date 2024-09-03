@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -27,6 +29,9 @@ use pocketmine\math\Math;
 use pocketmine\math\Vector3;
 use pocketmine\math\VectorMath;
 use pocketmine\utils\Random;
+use function floor;
+use function pi;
+use function sin;
 
 class Cave extends Populator{
 	public function populate(ChunkManager $level, $chunkX, $chunkZ, Random $random){
@@ -51,7 +56,7 @@ class Cave extends Populator{
 	private function pop(ChunkManager $level, $x, $z, $chunkX, $chunkZ, Random $random){
 		$c = $level->getChunk($x, $z);
 		$oC = $level->getChunk($chunkX, $chunkZ);
-		if($c == null or $oC == null or ($c != null and !$c->isGenerated()) or ($oC != null and !$oC->isGenerated())){
+		if($c == null || $oC == null || ($c != null && !$c->isGenerated()) || ($oC != null && !$oC->isGenerated())){
 			return;
 		}
 		$chunk = new Vector3($x << 4, 0, $z << 4);
@@ -123,7 +128,7 @@ class Cave extends Populator{
 			$horizontalOffset += ($random->nextFloat() - $random->nextFloat()) * $random->nextFloat() * 4;
 
 			if(!$lastNode){
-				if($startingNode == $intersectionMode and $horizontalScale > 1 and $nodeAmount > 0){
+				if($startingNode == $intersectionMode && $horizontalScale > 1 && $nodeAmount > 0){
 					$this->generateCaveBranch($level, $chunk, $target, $random->nextFloat() * 0.5 + 0.5, 1, $horizontalAngle - pi() / 2, $verticalAngle / 3, $startingNode, $nodeAmount, new Random($random->nextInt()));
 					$this->generateCaveBranch($level, $chunk, $target, $random->nextFloat() * 0.5 + 0.5, 1, $horizontalAngle - pi() / 2, $verticalAngle / 3, $startingNode, $nodeAmount, new Random($random->nextInt()));
 					return;
@@ -144,9 +149,9 @@ class Cave extends Populator{
 			}
 
 			if($target->getX() < ($middle->getX() - 16 - $horizontalSize * 2)
-				or $target->getZ() < ($middle->getZ() - 16 - $horizontalSize * 2)
-				or $target->getX() > ($middle->getX() + 16 + $horizontalSize * 2)
-				or $target->getZ() > ($middle->getZ() + 16 + $horizontalSize * 2)
+				|| $target->getZ() < ($middle->getZ() - 16 - $horizontalSize * 2)
+				|| $target->getX() > ($middle->getX() + 16 + $horizontalSize * 2)
+				|| $target->getZ() > ($middle->getZ() + 16 + $horizontalSize * 2)
 			){
 				continue;
 			}
@@ -207,10 +212,10 @@ class CaveNode{
 			for($z = $this->start->getFloorZ(); $z < $this->end->getFloorZ(); $z++){
 				for($y = $this->end->getFloorY() + 1; $y >= $this->start->getFloorY() - 1; $y--){
 					$blockId = $this->level->getBlockIdAt($this->chunk->getX() + $x, $y, $this->chunk->getZ() + $z);
-					if($blockId == Block::WATER or $blockId == Block::STILL_WATER){
+					if($blockId == Block::WATER || $blockId == Block::STILL_WATER){
 						return false;
 					}
-					if($y != ($this->start->getFloorY() - 1) and $x != ($this->start->getFloorX()) and $x != ($this->end->getFloorX() - 1) and $z != ($this->start->getFloorZ()) and $z != ($this->end->getFloorZ() - 1)){
+					if($y != ($this->start->getFloorY() - 1) && $x != ($this->start->getFloorX()) && $x != ($this->end->getFloorX() - 1) && $z != ($this->start->getFloorZ()) && $z != ($this->end->getFloorZ() - 1)){
 						$y = $this->start->getFloorY();
 					}
 				}
@@ -229,15 +234,15 @@ class CaveNode{
 				}
 				for($y = $this->end->getFloorY() - 1; $y >= $this->start->getFloorY(); $y--){
 					$yOffset = ($y + 0.5 - $this->target->getY()) / $this->verticalSize;
-					if($yOffset > -0.7 and ($xOffset * $xOffset + $yOffset * $yOffset + $zOffset * $zOffset) < 1){
+					if($yOffset > -0.7 && ($xOffset * $xOffset + $yOffset * $yOffset + $zOffset * $zOffset) < 1){
 						$xx = $this->chunk->getX() + $x;
 						$zz = $this->chunk->getZ() + $z;
 						$blockId = $this->level->getBlockIdAt($xx, $y, $zz);
-						if($blockId == Block::STONE or $blockId == Block::DIRT or $blockId == Block::GRASS){
+						if($blockId == Block::STONE || $blockId == Block::DIRT || $blockId == Block::GRASS){
 							if($y < 10){
 								$this->level->setBlockIdAt($xx, $y, $zz, Block::STILL_LAVA);
 							}else{
-								if($blockId == Block::GRASS and $this->level->getBlockIdAt($xx, $y - 1, $zz) == Block::DIRT){
+								if($blockId == Block::GRASS && $this->level->getBlockIdAt($xx, $y - 1, $zz) == Block::DIRT){
 									$this->level->setBlockIdAt($xx, $y - 1, $zz, Block::GRASS);
 								}
 								$this->level->setBlockIdAt($xx, $y, $zz, Block::AIR);

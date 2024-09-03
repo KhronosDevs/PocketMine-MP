@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -31,6 +33,10 @@ use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\LongTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\utils\LevelException;
+use function file_exists;
+use function file_get_contents;
+use function file_put_contents;
+use function mkdir;
 
 abstract class BaseLevelProvider implements LevelProvider{
 	/** @var Level */
@@ -125,6 +131,5 @@ abstract class BaseLevelProvider implements LevelProvider{
 		$buffer = $nbt->writeCompressed();
 		file_put_contents($this->getPath() . "level.dat", $buffer);
 	}
-
 
 }

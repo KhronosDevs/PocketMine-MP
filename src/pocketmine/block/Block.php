@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -26,8 +28,6 @@ namespace pocketmine\block;
 
 use pocketmine\entity\Entity;
 
-
-use pocketmine\event\block\BlockBurnEvent;
 use pocketmine\item\Item;
 use pocketmine\item\Tool;
 use pocketmine\level\Level;
@@ -39,9 +39,10 @@ use pocketmine\metadata\Metadatable;
 use pocketmine\metadata\MetadataValue;
 use pocketmine\Player;
 use pocketmine\plugin\Plugin;
+use function trigger_error;
+use const E_USER_NOTICE;
 
-
-class Block extends Position implements BlockIds, Metadatable{	
+class Block extends Position implements BlockIds, Metadatable{
 
 	/** @var \SplFixedArray */
 	public static $list = null;
@@ -169,7 +170,7 @@ class Block extends Position implements BlockIds, Metadatable{
 			self::$list[self::IRON_TRAPDOOR] = IronTrapdoor::class;
 
 			self::$list[self::STONE_BRICKS] = StoneBricks::class;
-			
+
 			self::$list[self::BROWN_MUSHROOM_BLOCK] = BrownMushroomBlock::class;
 			self::$list[self::RED_MUSHROOM_BLOCK] = RedMushroomBlock::class;
 
@@ -297,7 +298,7 @@ class Block extends Position implements BlockIds, Metadatable{
 
 					if($block->isSolid()){
 						if($block->isTransparent()){
-							if($block instanceof Liquid or $block instanceof Ice){
+							if($block instanceof Liquid || $block instanceof Ice){
 								self::$lightFilter[$id] = 2;
 							}else{
 								self::$lightFilter[$id] = 1;
@@ -365,9 +366,6 @@ class Block extends Position implements BlockIds, Metadatable{
 	/**
 	 * Places the Block, using block space and block target, and side. Returns if the block has been placed.
 	 *
-	 * @param Item   $item
-	 * @param Block  $block
-	 * @param Block  $target
 	 * @param int    $face
 	 * @param float  $fx
 	 * @param float  $fy
@@ -383,8 +381,6 @@ class Block extends Position implements BlockIds, Metadatable{
 	/**
 	 * Returns if the item can be broken with an specific Item
 	 *
-	 * @param Item $item
-	 *
 	 * @return bool
 	 */
 	public function isBreakable(Item $item){
@@ -397,8 +393,6 @@ class Block extends Position implements BlockIds, Metadatable{
 
 	/**
 	 * Do the actions needed so the block is broken with the Item
-	 *
-	 * @param Item $item
 	 *
 	 * @return mixed
 	 */
@@ -420,7 +414,6 @@ class Block extends Position implements BlockIds, Metadatable{
 	/**
 	 * Do actions when activated by Item. Returns if it has done anything
 	 *
-	 * @param Item   $item
 	 * @param Player $player
 	 *
 	 * @return bool
@@ -443,16 +436,10 @@ class Block extends Position implements BlockIds, Metadatable{
 		return $this->getHardness() * 5;
 	}
 
-	/**
-	 * @return int
-	 */
 	public function getBurnChance() : int{
 		return 0;
 	}
 
-	/**
-	 * @return int
-	 */
 	public function getBurnAbility() : int{
 		return 0;
 	}
@@ -461,11 +448,11 @@ class Block extends Position implements BlockIds, Metadatable{
 		if($this->isSolid()){
 			return true;
 		}else{
-			if($this instanceof Stair and ($this->getDamage() &4) == 4){
+			if($this instanceof Stair && ($this->getDamage() & 4) == 4){
 				return true;
-			}elseif($this instanceof Slab and ($this->getDamage() & 8) == 8){
+			}elseif($this instanceof Slab && ($this->getDamage() & 8) == 8){
 				return true;
-			}elseif($this instanceof SnowLayer and ($this->getDamage() & 7) == 7){
+			}elseif($this instanceof SnowLayer && ($this->getDamage() & 7) == 7){
 				return true;
 			}
 		}
@@ -546,8 +533,6 @@ class Block extends Position implements BlockIds, Metadatable{
 
 	/**
 	 * AKA: Block->isActivable
-	 *
-	 * @return bool
 	 */
 	public function canBeActivated() : bool{
 		return false;
@@ -573,9 +558,6 @@ class Block extends Position implements BlockIds, Metadatable{
 		return false;
 	}
 
-	/**
-	 * @return string
-	 */
 	public function getName() : string{
 		return "Unknown";
 	}
@@ -607,8 +589,6 @@ class Block extends Position implements BlockIds, Metadatable{
 
 	/**
 	 * Sets the block position to a new Position object
-	 *
-	 * @param Position $v
 	 */
 	final public function position(Position $v){
 		$this->x = (int) $v->x;
@@ -620,10 +600,6 @@ class Block extends Position implements BlockIds, Metadatable{
 
 	/**
 	 * Returns an array of Item objects to be dropped
-	 *
-	 * @param Item $item
-	 *
-	 * @return array
 	 */
 	public function getDrops(Item $item) : array{
 		if(!isset(self::$list[$this->getId()])){ //Unknown blocks
@@ -638,19 +614,17 @@ class Block extends Position implements BlockIds, Metadatable{
 	/**
 	 * Returns the seconds that this block takes to be broken using an specific Item
 	 *
-	 * @param Item $item
-	 *
 	 * @return float
 	 */
 	public function getBreakTime(Item $item){
 		$base = $this->getHardness() * 1.5;
 		if($this->canBeBrokenWith($item)){
-			if($this->getToolType() === Tool::TYPE_SHEARS and $item->isShears()){
+			if($this->getToolType() === Tool::TYPE_SHEARS && $item->isShears()){
 				$base /= 15;
 			}elseif(
-				($this->getToolType() === Tool::TYPE_PICKAXE and ($tier = $item->isPickaxe()) !== false) or
-				($this->getToolType() === Tool::TYPE_AXE and ($tier = $item->isAxe()) !== false) or
-				($this->getToolType() === Tool::TYPE_SHOVEL and ($tier = $item->isShovel()) !== false)
+				($this->getToolType() === Tool::TYPE_PICKAXE && ($tier = $item->isPickaxe()) !== false) ||
+				($this->getToolType() === Tool::TYPE_AXE && ($tier = $item->isAxe()) !== false) ||
+				($this->getToolType() === Tool::TYPE_SHOVEL && ($tier = $item->isShovel()) !== false)
 			){
 				switch($tier){
 					case Tool::TIER_WOODEN:
@@ -711,19 +685,14 @@ class Block extends Position implements BlockIds, Metadatable{
 	/**
 	 * Checks for collision against an AxisAlignedBB
 	 *
-	 * @param AxisAlignedBB $bb
-	 *
 	 * @return bool
 	 */
 	public function collidesWithBB(AxisAlignedBB $bb){
 		$bb2 = $this->getBoundingBox();
 
-		return $bb2 !== null and $bb->intersectsWith($bb2);
+		return $bb2 !== null && $bb->intersectsWith($bb2);
 	}
 
-	/**
-	 * @param Entity $entity
-	 */
 	public function onEntityCollide(Entity $entity){
 
 	}
@@ -753,9 +722,6 @@ class Block extends Position implements BlockIds, Metadatable{
 	}
 
 	/**
-	 * @param Vector3 $pos1
-	 * @param Vector3 $pos2
-	 *
 	 * @return MovingObjectPosition
 	 */
 	public function calculateIntercept(Vector3 $pos1, Vector3 $pos2){
@@ -771,49 +737,49 @@ class Block extends Position implements BlockIds, Metadatable{
 		$v5 = $pos1->getIntermediateWithZValue($pos2, $bb->minZ);
 		$v6 = $pos1->getIntermediateWithZValue($pos2, $bb->maxZ);
 
-		if($v1 !== null and !$bb->isVectorInYZ($v1)){
+		if($v1 !== null && !$bb->isVectorInYZ($v1)){
 			$v1 = null;
 		}
 
-		if($v2 !== null and !$bb->isVectorInYZ($v2)){
+		if($v2 !== null && !$bb->isVectorInYZ($v2)){
 			$v2 = null;
 		}
 
-		if($v3 !== null and !$bb->isVectorInXZ($v3)){
+		if($v3 !== null && !$bb->isVectorInXZ($v3)){
 			$v3 = null;
 		}
 
-		if($v4 !== null and !$bb->isVectorInXZ($v4)){
+		if($v4 !== null && !$bb->isVectorInXZ($v4)){
 			$v4 = null;
 		}
 
-		if($v5 !== null and !$bb->isVectorInXY($v5)){
+		if($v5 !== null && !$bb->isVectorInXY($v5)){
 			$v5 = null;
 		}
 
-		if($v6 !== null and !$bb->isVectorInXY($v6)){
+		if($v6 !== null && !$bb->isVectorInXY($v6)){
 			$v6 = null;
 		}
 
 		$vector = $v1;
 
-		if($v2 !== null and ($vector === null or $pos1->distanceSquared($v2) < $pos1->distanceSquared($vector))){
+		if($v2 !== null && ($vector === null || $pos1->distanceSquared($v2) < $pos1->distanceSquared($vector))){
 			$vector = $v2;
 		}
 
-		if($v3 !== null and ($vector === null or $pos1->distanceSquared($v3) < $pos1->distanceSquared($vector))){
+		if($v3 !== null && ($vector === null || $pos1->distanceSquared($v3) < $pos1->distanceSquared($vector))){
 			$vector = $v3;
 		}
 
-		if($v4 !== null and ($vector === null or $pos1->distanceSquared($v4) < $pos1->distanceSquared($vector))){
+		if($v4 !== null && ($vector === null || $pos1->distanceSquared($v4) < $pos1->distanceSquared($vector))){
 			$vector = $v4;
 		}
 
-		if($v5 !== null and ($vector === null or $pos1->distanceSquared($v5) < $pos1->distanceSquared($vector))){
+		if($v5 !== null && ($vector === null || $pos1->distanceSquared($v5) < $pos1->distanceSquared($vector))){
 			$vector = $v5;
 		}
 
-		if($v6 !== null and ($vector === null or $pos1->distanceSquared($v6) < $pos1->distanceSquared($vector))){
+		if($v6 !== null && ($vector === null || $pos1->distanceSquared($v6) < $pos1->distanceSquared($vector))){
 			$vector = $v6;
 		}
 

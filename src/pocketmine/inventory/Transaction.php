@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -21,8 +23,8 @@
 
 namespace pocketmine\inventory;
 
-use pocketmine\Player;
 use pocketmine\item\Item;
+use pocketmine\Player;
 
 interface Transaction{
 
@@ -50,9 +52,5 @@ interface Transaction{
 	 */
 	public function getCreationTime();
 
-	/**
-	 * @param Player $source
-	 * @return bool
-	 */
-	public function execute(Player $source): bool;
+	public function execute(Player $source) : bool;
 }

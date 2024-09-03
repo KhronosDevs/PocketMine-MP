@@ -23,6 +23,8 @@ declare(strict_types=1);
 
 namespace pocketmine\snooze;
 
+use function assert;
+
 /**
  * Notifiers are Threaded objects which can be attached to threaded sleepers in order to wake them up. They also record
  * state so that the main thread handler can determine which notifier woke up the sleeper.
@@ -42,7 +44,7 @@ class SleeperNotifier extends \Threaded{
 		$this->sleeperId = $id;
 	}
 
-	public final function getSleeperId(): int {
+	public final function getSleeperId() : int {
 		return $this->sleeperId;
 	}
 
@@ -53,14 +55,14 @@ class SleeperNotifier extends \Threaded{
 		assert($this->threadedSleeper !== null);
 
 		$this->synchronized(function() {
-            if($this->notification) return;
+			if($this->notification) return;
 
-            $this->notification = true;
-            $this->threadedSleeper->wakeup();
-        });
+			$this->notification = true;
+			$this->threadedSleeper->wakeup();
+		});
 	}
 
-	public final function hasNotification(): bool{
+	public final function hasNotification() : bool{
 		return $this->notification;
 	}
 

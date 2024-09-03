@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -25,7 +27,12 @@ use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
 use pocketmine\event\TranslationContainer;
 use pocketmine\Player;
-use pocketmine\utils\TextFormat;
+use function array_shift;
+use function count;
+use function implode;
+use const false;
+use const null;
+use const true;
 
 class BanIpByNameCommand extends VanillaCommand{
 
@@ -40,29 +47,29 @@ class BanIpByNameCommand extends VanillaCommand{
 
 	public function execute(CommandSender $sender, $currentAlias, array $args){
 		if(!$this->testPermission($sender)){
-			return \true;
+			return true;
 		}
 
-		if(\count($args) === 0){
+		if(count($args) === 0){
 			$sender->sendMessage(new TranslationContainer("commands.generic.usage", [$this->usageMessage]));
 
-			return \false;
+			return false;
 		}
 
-		$name = \array_shift($args);
-		$reason = \implode(" ", $args);
-		
-		if ($sender->getServer()->getPlayer($name) instanceof Player) $target = $sender->getServer()->getPlayer($name);
-		else return \false;
+		$name = array_shift($args);
+		$reason = implode(" ", $args);
 
-		$sender->getServer()->getIPBans()->addBan($target->getAddress(), $reason, \null, $sender->getName());
+		if ($sender->getServer()->getPlayer($name) instanceof Player) $target = $sender->getServer()->getPlayer($name);
+		else return false;
+
+		$sender->getServer()->getIPBans()->addBan($target->getAddress(), $reason, null, $sender->getName());
 
 		if(($player = $sender->getServer()->getPlayerExact($name)) instanceof Player){
 			$player->kick($reason !== "" ? "Banned by admin. Reason:" . $reason : "Banned by admin.");
 		}
 
-		Command::broadcastCommandMessage($sender, new TranslationContainer("%commands.banipbyname.success", [$player !== \null ? $player->getName() : $name]));
+		Command::broadcastCommandMessage($sender, new TranslationContainer("%commands.banipbyname.success", [$player !== null ? $player->getName() : $name]));
 
-		return \true;
+		return true;
 	}
 }

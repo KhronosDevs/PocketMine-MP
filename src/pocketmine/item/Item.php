@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,11 +26,7 @@
  */
 namespace pocketmine\item;
 
-use pocketmine\Player;
-use pocketmine\Server;
 use pocketmine\block\Block;
-use pocketmine\block\Fence;
-use pocketmine\block\Flower;
 use pocketmine\entity\CaveSpider;
 use pocketmine\entity\Entity;
 use pocketmine\entity\PigZombie;
@@ -47,7 +45,18 @@ use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\ShortTag;
 use pocketmine\nbt\tag\StringTag;
+use pocketmine\Player;
+use pocketmine\Server;
 use pocketmine\utils\Config;
+use function bin2hex;
+use function constant;
+use function defined;
+use function explode;
+use function is_numeric;
+use function is_string;
+use function str_replace;
+use function strtoupper;
+use function trim;
 
 class Item implements ItemIds{
 	/** @var NBT */
@@ -71,7 +80,6 @@ class Item implements ItemIds{
 		return self::$cachedParser->write();
 	}
 
-
 	/** @var \SplFixedArray */
 	public static $list = null;
 	protected $block;
@@ -83,7 +91,7 @@ class Item implements ItemIds{
 	protected $durability = 0;
 	protected $name;
 
-	public function canBeActivated() :bool{
+	public function canBeActivated() : bool{
 		return false;
 	}
 
@@ -280,7 +288,7 @@ class Item implements ItemIds{
 				self::addCreativeItem(Item::get($item["ID"], $item["Damage"]));
 			}
 		}
-		
+
 	}
 
 	public static function clearCreativeItems(){
@@ -290,7 +298,7 @@ class Item implements ItemIds{
 	public static function getCreativeItems() : array{
 		return Item::$creative;
 	}
-	
+
 	public static function addCreativeItem(Item $item){
 		//Doing it this way allows adding enchanted items to inventory, like enchanted books
 		Item::$creative[] = $item;
@@ -353,8 +361,6 @@ class Item implements ItemIds{
 	}
 
 	/**
-	 * @param string $str
-	 * @param bool   $multiple
 	 * @return Item[]|Item
 	 */
 	public static function fromString(string $str, bool $multiple = false){
@@ -375,7 +381,7 @@ class Item implements ItemIds{
 
 			if(defined(Item::class . "::" . strtoupper($b[0]))){
 				$item = self::get(constant(Item::class . "::" . strtoupper($b[0])), $meta);
-				if($item->getId() === self::AIR and strtoupper($b[0]) !== "AIR"){
+				if($item->getId() === self::AIR && strtoupper($b[0]) !== "AIR"){
 					$item = self::get($b[0] & 0xFFFF, $meta);
 				}
 			}else{
@@ -396,7 +402,7 @@ class Item implements ItemIds{
 		$this->meta = $meta !== -1 ? $meta & 0xffff : -1;
 		$this->count = $count;
 		$this->name = $name;
-		if(!isset($this->block) and $this->id <= 0xff and isset(Block::$list[$this->id])){
+		if(!isset($this->block) && $this->id <= 0xff && isset(Block::$list[$this->id])){
 			$this->block = Block::get($this->id, $this->meta);
 			$this->name = $this->block->getName();
 		}
@@ -413,10 +419,7 @@ class Item implements ItemIds{
 		return $this;
 	}
 
-	/**
-	 * @return string
-	 */
-	public function getCompoundTag(): string {
+	public function getCompoundTag() : string {
 		return $this->tags;
 	}
 
@@ -430,7 +433,7 @@ class Item implements ItemIds{
 		}
 
 		$tag = $this->getNamedTag();
-		if(isset($tag->BlockEntityTag) and $tag->BlockEntityTag instanceof CompoundTag){
+		if(isset($tag->BlockEntityTag) && $tag->BlockEntityTag instanceof CompoundTag){
 			return true;
 		}
 
@@ -443,7 +446,7 @@ class Item implements ItemIds{
 		}
 		$tag = $this->getNamedTag();
 
-		if(isset($tag->BlockEntityTag) and $tag->BlockEntityTag instanceof CompoundTag){
+		if(isset($tag->BlockEntityTag) && $tag->BlockEntityTag instanceof CompoundTag){
 			unset($tag->display->BlockEntityTag);
 			$this->setNamedTag($tag);
 		}
@@ -473,7 +476,7 @@ class Item implements ItemIds{
 		}
 
 		$tag = $this->getNamedTag();
-		if(isset($tag->BlockEntityTag) and $tag->BlockEntityTag instanceof CompoundTag){
+		if(isset($tag->BlockEntityTag) && $tag->BlockEntityTag instanceof CompoundTag){
 			return $tag->BlockEntityTag;
 		}
 
@@ -516,12 +519,6 @@ class Item implements ItemIds{
 		return null;
 	}
 
-	/**
-	 * @param int  $id
-	 * @param int  $level
-	 * @param bool $compareLevel
-	 * @return bool
-	 */
 	public function hasEnchantment(int $id, int $level = 1, bool $compareLevel = false) : bool{
 		if($this->hasEnchantments()){
 			foreach($this->getEnchantments() as $enchantment){
@@ -538,7 +535,7 @@ class Item implements ItemIds{
 		}
 		return false;
 	}
-	
+
 	/**
 	 * @param $id
 	 * @return Int level|0(for null)
@@ -560,9 +557,6 @@ class Item implements ItemIds{
 		return 0;
 	}
 
-	/**
-	 * @param Enchantment $ench
-	 */
 	public function addEnchantment(Enchantment $ench){
 		if(!$this->hasCompoundTag()){
 			$tag = new CompoundTag("", []);
@@ -655,7 +649,6 @@ class Item implements ItemIds{
 		return 1;
 	}
 
-
 	public function setRepairCost(int $cost){
 		if($cost === 1){
 			$this->clearRepairCost();
@@ -682,14 +675,13 @@ class Item implements ItemIds{
 		}
 		$tag = $this->getNamedTag();
 
-		if(isset($tag->RepairCost) and $tag->RepairCost instanceof IntTag){
+		if(isset($tag->RepairCost) && $tag->RepairCost instanceof IntTag){
 			unset($tag->RepairCost);
 			$this->setNamedTag($tag);
 		}
 
 		return $this;
 	}
-
 
 	public function hasCustomName() : bool{
 		if(!$this->hasCompoundTag()){
@@ -699,7 +691,7 @@ class Item implements ItemIds{
 		$tag = $this->getNamedTag();
 		if(isset($tag->display)){
 			$tag = $tag->display;
-			if($tag instanceof CompoundTag and isset($tag->Name) and $tag->Name instanceof StringTag){
+			if($tag instanceof CompoundTag && isset($tag->Name) && $tag->Name instanceof StringTag){
 				return true;
 			}
 		}
@@ -715,7 +707,7 @@ class Item implements ItemIds{
 		$tag = $this->getNamedTag();
 		if(isset($tag->display)){
 			$tag = $tag->display;
-			if($tag instanceof CompoundTag and isset($tag->Name) and $tag->Name instanceof StringTag){
+			if($tag instanceof CompoundTag && isset($tag->Name) && $tag->Name instanceof StringTag){
 				return $tag->Name->getValue();
 			}
 		}
@@ -734,7 +726,7 @@ class Item implements ItemIds{
 			$tag = $this->getNamedTag();
 		}
 
-		if(isset($tag->display) and $tag->display instanceof CompoundTag){
+		if(isset($tag->display) && $tag->display instanceof CompoundTag){
 			$tag->display->Name = new StringTag("Name", $name);
 		}else{
 			$tag->display = new CompoundTag("display", [
@@ -753,7 +745,7 @@ class Item implements ItemIds{
 		}
 		$tag = $this->getNamedTag();
 
-		if(isset($tag->display) and $tag->display instanceof CompoundTag){
+		if(isset($tag->display) && $tag->display instanceof CompoundTag){
 			unset($tag->display->Name);
 			if($tag->display->getCount() === 0){
 				unset($tag->display);
@@ -811,7 +803,7 @@ class Item implements ItemIds{
 	}
 
 	final public function canBePlaced() : bool{
-		return $this->block !== null and $this->block->canBePlaced();
+		return $this->block !== null && $this->block->canBePlaced();
 	}
 
 	final public function isPlaceable() : bool{
@@ -841,7 +833,7 @@ class Item implements ItemIds{
 		return $this->id;
 	}
 
-	final public function getDamage(): int{
+	final public function getDamage() : int{
 		return $this->meta;
 	}
 
@@ -861,7 +853,7 @@ class Item implements ItemIds{
 		if(!isset(Fuel::$duration[$this->id])){
 			return null;
 		}
-		if($this->id !== self::BUCKET or $this->meta === 10){
+		if($this->id !== self::BUCKET || $this->meta === 10){
 			return Fuel::$duration[$this->id];
 		}
 
@@ -950,12 +942,12 @@ class Item implements ItemIds{
 			$rec += 0.5 * ($sharpL + 1);
 		}
 
-		if($target instanceof Skeleton or $target instanceof Zombie or
-			$target instanceof Witch or $target instanceof PigZombie){
+		if($target instanceof Skeleton || $target instanceof Zombie ||
+			$target instanceof Witch || $target instanceof PigZombie){
 			//SMITE    wither skeletons
 			$rec += 2.5 * $this->getEnchantmentLevel(Enchantment::TYPE_WEAPON_SMITE);
 
-		}elseif($target instanceof Spider or $target instanceof CaveSpider or
+		}elseif($target instanceof Spider || $target instanceof CaveSpider ||
 			$target instanceof Silverfish){
 			//Bane of Arthropods    wither skeletons
 			$rec += 2.5 * $this->getEnchantmentLevel(Enchantment::TYPE_WEAPON_ARTHROPODS);
@@ -977,13 +969,13 @@ class Item implements ItemIds{
 	}
 
 	public final function equals(Item $item, bool $checkDamage = true, bool $checkCompound = true, bool $checkCount = false) : bool{
-		return $this->id === $item->getId() and ($checkCount === false or $this->getCount() === $item->getCount()) and($checkDamage === false or $this->getDamage() === $item->getDamage()) and ($checkCompound === false or $this->getCompoundTag() === $item->getCompoundTag());
+		return $this->id === $item->getId() && ($checkCount === false || $this->getCount() === $item->getCount()) && ($checkDamage === false || $this->getDamage() === $item->getDamage()) && ($checkCompound === false || $this->getCompoundTag() === $item->getCompoundTag());
 	}
 
 	public final function deepEquals(Item $item, bool $checkDamage = true, bool $checkCompound = true, bool $checkCount = false) : bool{
 		if($this->equals($item, $checkDamage, $checkCompound, $checkCount)){
 			return true;
-		}elseif($item->hasCompoundTag() and $this->hasCompoundTag()){
+		}elseif($item->hasCompoundTag() && $this->hasCompoundTag()){
 			return NBT::matchTree($this->getNamedTag(), $item->getNamedTag());
 		}
 

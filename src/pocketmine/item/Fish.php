@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,9 +26,9 @@ namespace pocketmine\item;
 use pocketmine\entity\Effect;
 
 class Fish extends Food{
-	
+
 	//Wrong! All wrong! TODO: Fix
-	
+
 	const FISH_FISH = 0;
 	const FISH_SALMON = 1;
 	const FISH_CLOWNFISH = 2;

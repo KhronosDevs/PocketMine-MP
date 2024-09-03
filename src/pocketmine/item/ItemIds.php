@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -18,13 +20,13 @@
  * @link https://itxtech.org
  *
  */
- 
+
  namespace pocketmine\item;
- 
+
  use pocketmine\block\BlockIds;
- 
+
  interface ItemIds extends BlockIds{
-	
+
 	//All BlockIds are also accessible through this interface.
 	const IRON_SHOVEL = 256;
 	const IRON_PICKAXE = 257;
@@ -105,7 +107,7 @@
 	const SNOWBALL = 332;
 	const BOAT = 333;
 	const LEATHER = 334;
-	
+
 	const BRICK = 336;
 	const CLAY = 337;
 	const SUGARCANE = 338; const SUGAR_CANE = 338; const SUGAR_CANES = 338;
@@ -113,7 +115,7 @@
 	const BOOK = 340;
 	const SLIMEBALL = 341;
 	const MINECART_WITH_CHEST = 342;
-	
+
 	const EGG = 344;
 	const COMPASS = 345;
 	const FISHING_ROD = 346;
@@ -156,7 +158,7 @@
 	const SPAWN_EGG = 383;
 	const BOTTLE_O_ENCHANTING = 384; const ENCHANTING_BOTTLE = 384;
 	const FIRE_CHARGE = 385;
-	
+
 	const EMERALD = 388;
 	const ITEM_FRAME = 389;
 	const FLOWER_POT = 390;
@@ -168,7 +170,7 @@
 	const GOLDEN_CARROT = 396;
 	const MOB_HEAD = 397; const SKULL = 397;
 	const CARROT_ON_A_STICK = 398;
-	
+
 	const PUMPKIN_PIE = 400;
 
 	const ENCHANTED_BOOK = 403;
@@ -178,7 +180,7 @@
 	const NETHER_QUARTZ = 406;
 	const MINECART_WITH_TNT = 407;
 	const MINECART_WITH_HOPPER = 408;
-	
+
 	const HOPPER = 410;
 	const RAW_RABBIT = 411;
 	const COOKED_RABBIT = 412;
@@ -191,18 +193,18 @@
 	const DIAMOND_HORSE_ARMOR = 419;
 	const LEAD = 420; const LEASH = 420;
 	const NAMETAG = 421;
-	
+
 	const RAW_MUTTON = 423;
 	const COOKED_MUTTON = 424;
-	
+
 	const SPRUCE_DOOR = 427;
 	const BIRCH_DOOR = 428;
 	const JUNGLE_DOOR = 429;
 	const ACACIA_DOOR = 430;
 	const DARK_OAK_DOOR = 431;
-	
+
 	const SPLASH_POTION = 438;
-	
+
 	const BEETROOT = 457;
 	const BEETROOT_SEEDS = 458; const BEETROOT_SEED = 458;
 	const BEETROOT_SOUP = 459;

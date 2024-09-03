@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -22,13 +24,14 @@
 namespace pocketmine\level\particle;
 
 use pocketmine\entity\Entity;
-use pocketmine\entity\Item as ItemEntity;
 use pocketmine\item\Item;
 use pocketmine\math\Vector3;
-use pocketmine\network\protocol\AddEntityPacket;
 use pocketmine\network\protocol\AddPlayerPacket;
 use pocketmine\network\protocol\RemoveEntityPacket;
 use pocketmine\utils\UUID;
+use function bcadd;
+use function mt_rand;
+use function strval;
 
 class FloatingTextParticle extends Particle{
 	//TODO: HACK!
@@ -39,8 +42,7 @@ class FloatingTextParticle extends Particle{
 	protected $invisible = false;
 
 	/**
-	 * @param Vector3 $pos
-	 * @param int $text
+	 * @param int    $text
 	 * @param string $title
 	 */
 	public function __construct(Vector3 $pos, $text, $title = ""){
@@ -56,11 +58,11 @@ class FloatingTextParticle extends Particle{
 	public function setTitle($title){
 		$this->title = $title;
 	}
-	
+
 	public function isInvisible(){
 		return $this->invisible;
 	}
-	
+
 	public function setInvisible($value = true){
 		$this->invisible = (bool) $value;
 	}
@@ -69,7 +71,7 @@ class FloatingTextParticle extends Particle{
 		$p = [];
 
 		if($this->entityId === null){
-			$this->entityId = bcadd("1095216660480", mt_rand(0, 0x7fffffff)); //No conflict with other things
+			$this->entityId = bcadd("1095216660480", strval(mt_rand(0, 0x7fffffff))); //No conflict with other things
 		}else{
 			$pk0 = new RemoveEntityPacket();
 			$pk0->eid = $this->entityId;
@@ -78,7 +80,7 @@ class FloatingTextParticle extends Particle{
 		}
 
 		if(!$this->invisible){
-			
+
 			$pk = new AddPlayerPacket();
 			$pk->eid = $this->entityId;
 			$pk->uuid = UUID::fromRandom();
@@ -98,11 +100,11 @@ class FloatingTextParticle extends Particle{
 				Entity::DATA_NO_AI => [Entity::DATA_TYPE_BYTE, 1],
 				Entity::DATA_LEAD_HOLDER => [Entity::DATA_TYPE_LONG, -1],
 				Entity::DATA_LEAD => [Entity::DATA_TYPE_BYTE, 0]
-            ];
+			];
 
 			$p[] = $pk;
 		}
-		
+
 		return $p;
 	}
 }

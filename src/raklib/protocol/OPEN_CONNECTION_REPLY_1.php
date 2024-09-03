@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * RakLib network library
  *
@@ -16,7 +18,6 @@
 namespace raklib\protocol;
 
 #include <rules/RakLibPacket.h>
-
 
 use raklib\RakLib;
 

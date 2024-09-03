@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -23,11 +25,12 @@ namespace pocketmine\entity;
 
 use pocketmine\block\Liquid;
 use pocketmine\event\entity\EntityDamageByEntityEvent;
+use pocketmine\item\Item as ItemItem;
 use pocketmine\math\Vector3;
 use pocketmine\network\protocol\AddEntityPacket;
 use pocketmine\network\protocol\ExplodePacket;
-use pocketmine\item\Item as ItemItem;
 use pocketmine\Player;
+use function mt_rand;
 
 class Lightning extends Animal{
 	const NETWORK_ID = 93;

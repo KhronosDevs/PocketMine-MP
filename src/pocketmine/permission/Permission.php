@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -25,6 +27,9 @@
 namespace pocketmine\permission;
 
 use pocketmine\Server;
+use function is_array;
+use function is_bool;
+use function strtolower;
 
 /**
  * Represents a permission
@@ -81,9 +86,7 @@ class Permission{
 	/** @var string */
 	private $description;
 
-	/**
-	 * @var string[]
-	 */
+	/** @var string[] */
 	private $children = [];
 
 	/** @var string */
@@ -106,9 +109,6 @@ class Permission{
 		$this->recalculatePermissibles();
 	}
 
-	/**
-	 * @return string
-	 */
 	public function getName() : string{
 		return $this->name;
 	}
@@ -168,7 +168,6 @@ class Permission{
 		}
 	}
 
-
 	/**
 	 * @param string|Permission $name
 	 * @param                   $value
@@ -194,8 +193,7 @@ class Permission{
 	}
 
 	/**
-	 * @param array $data
-	 * @param       $default
+	 * @param $default
 	 *
 	 * @return Permission[]
 	 */
@@ -210,7 +208,6 @@ class Permission{
 
 	/**
 	 * @param string $name
-	 * @param array  $data
 	 * @param string $default
 	 * @param array  $output
 	 *
@@ -252,6 +249,5 @@ class Permission{
 		return new Permission($name, $desc, $default, $children);
 
 	}
-
 
 }

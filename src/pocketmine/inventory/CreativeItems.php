@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -21,42 +23,39 @@
 
 namespace pocketmine\inventory;
 
-use pocketmine\item\Item;
-use pocketmine\item\enchantment\Enchantment;
+use pocketmine\block\Anvil;
+use pocketmine\block\DoublePlant;
 
-use pocketmine\block\StoneBricks;
+use pocketmine\block\Flower;
+use pocketmine\block\Leaves;
 use pocketmine\block\Planks;
-use pocketmine\block\Stone;
-use pocketmine\block\Sandstone;
+use pocketmine\block\Quartz;
 use pocketmine\block\Sand;
+use pocketmine\block\Sandstone;
+use pocketmine\block\Sapling;
+use pocketmine\block\SkullBlock as Skull;
+use pocketmine\block\Slab as StoneSlab;
+
+use pocketmine\block\Stone;
+use pocketmine\block\StoneBricks;
+use pocketmine\block\StoneWall;
+use pocketmine\block\TallGrass;
 use pocketmine\block\Wood;
 use pocketmine\block\Wood2;
-use pocketmine\block\Slab as StoneSlab;
-use pocketmine\block\WoodSlab as WoodenSlab;
-use pocketmine\block\Quartz;
-
-use pocketmine\block\StoneWall;
-use pocketmine\block\Anvil;
-use pocketmine\block\Flower;
-use pocketmine\block\DoublePlant;
-use pocketmine\block\TallGrass;
-use pocketmine\block\Sapling;
-use pocketmine\block\Leaves;
-use pocketmine\block\Leaves2;
-use pocketmine\block\SkullBlock as Skull;
-
 use pocketmine\item\Coal;
 use pocketmine\item\Dye;
+
+use pocketmine\item\enchantment\Enchantment;
+use pocketmine\item\Item;
 use pocketmine\item\Potion;
 
 class CreativeItems{
-	
+
 	const CATEGORY_BUILDING = 0;
 	const CATEGORY_DECORATION = 1;
 	const CATEGORY_TOOLS = 2;
 	const CATEGORY_MISCELLANEOUS = 3;
-	
-	
+
 	const ITEMS = [
 		self::CATEGORY_BUILDING => [
 			["id" => Item::COBBLESTONE],
@@ -665,7 +664,7 @@ class CreativeItems{
 			["id" => Item::POTION, "meta" => Potion::SLOWNESS],
 			["id" => Item::POTION, "meta" => Potion::SLOWNESS_T],
 			["id" => Item::POTION, "meta" => Potion::WATER_BREATHING],
-			["id" => Item::POTION, "meta" => Potion::WATER_BREATHING_T],	
+			["id" => Item::POTION, "meta" => Potion::WATER_BREATHING_T],
 			["id" => Item::POTION, "meta" => Potion::HEALING],
 			["id" => Item::POTION, "meta" => Potion::HEALING_TWO],
 			["id" => Item::POTION, "meta" => Potion::HARMING],
@@ -701,7 +700,7 @@ class CreativeItems{
 			["id" => Item::SPLASH_POTION, "meta" => Potion::SLOWNESS],
 			["id" => Item::SPLASH_POTION, "meta" => Potion::SLOWNESS_T],
 			["id" => Item::SPLASH_POTION, "meta" => Potion::WATER_BREATHING],
-			["id" => Item::SPLASH_POTION, "meta" => Potion::WATER_BREATHING_T],	
+			["id" => Item::SPLASH_POTION, "meta" => Potion::WATER_BREATHING_T],
 			["id" => Item::SPLASH_POTION, "meta" => Potion::HEALING],
 			["id" => Item::SPLASH_POTION, "meta" => Potion::HEALING_TWO],
 			["id" => Item::SPLASH_POTION, "meta" => Potion::HARMING],

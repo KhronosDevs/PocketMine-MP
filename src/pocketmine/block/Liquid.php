@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,12 +17,11 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
 namespace pocketmine\block;
-
 
 use pocketmine\entity\Entity;
 use pocketmine\item\Item;
@@ -28,6 +29,7 @@ use pocketmine\level\Level;
 use pocketmine\level\particle\SmokeParticle;
 use pocketmine\level\sound\FizzSound;
 use pocketmine\math\Vector3;
+use function mt_rand;
 
 abstract class Liquid extends Transparent{
 
@@ -213,7 +215,7 @@ abstract class Liquid extends Transparent{
 
 				$k = $smallestFlowDecay + $multiplier;
 
-				if($k >= 8 or $smallestFlowDecay < 0){
+				if($k >= 8 || $smallestFlowDecay < 0){
 					$k = -1;
 				}
 
@@ -225,16 +227,16 @@ abstract class Liquid extends Transparent{
 					}
 				}
 
-				if($this->adjacentSources >= 2 and $this instanceof Water){
+				if($this->adjacentSources >= 2 && $this instanceof Water){
 					$bottomBlock = $this->level->getBlock($this->level->getBlock($this->temporalVector->setComponents($this->x, $this->y - 1, $this->z)));
 					if($bottomBlock->isSolid()){
 						$k = 0;
-					}elseif($bottomBlock instanceof Water and $bottomBlock->getDamage() === 0){
+					}elseif($bottomBlock instanceof Water && $bottomBlock->getDamage() === 0){
 						$k = 0;
 					}
 				}
 
-				if($this instanceof Lava and $decay < 8 and $k < 8 and $k > 1 and mt_rand(0, 4) !== 0){
+				if($this instanceof Lava && $decay < 8 && $k < 8 && $k > 1 && mt_rand(0, 4) !== 0){
 					$k = $decay;
 					$flag = false;
 				}
@@ -257,8 +259,8 @@ abstract class Liquid extends Transparent{
 
 			$bottomBlock = $this->level->getBlock($this->temporalVector->setComponents($this->x, $this->y - 1, $this->z));
 
-			if($bottomBlock->canBeFlowedInto() or $bottomBlock instanceof Liquid){
-				if($this instanceof Lava and $bottomBlock instanceof Water){
+			if($bottomBlock->canBeFlowedInto() || $bottomBlock instanceof Liquid){
+				if($this instanceof Lava && $bottomBlock instanceof Water){
 					$this->getLevel()->setBlock($bottomBlock, Block::get(Item::STONE), true);
 					$this->triggerLavaMixEffects($bottomBlock);
 					return;
@@ -273,7 +275,7 @@ abstract class Liquid extends Transparent{
 					//$this->getLevel()->scheduleUpdate($bottomBlock, $this->tickRate());
 					$this->flowIntoBlock($bottomBlock, $decay | 0x08);
 				}
-			}elseif($decay >= 0 and ($decay === 0 or !$bottomBlock->canBeFlowedInto())){
+			}elseif($decay >= 0 && ($decay === 0 || !$bottomBlock->canBeFlowedInto())){
 				$flags = $this->getOptimalFlowDirections();
 
 				$l = $decay + $multiplier;
@@ -327,10 +329,10 @@ abstract class Liquid extends Transparent{
 
 		for($j = 0; $j < 4; ++$j){
 			if(
-				($j === 0 and $previousDirection === 1) or
-				($j === 1 and $previousDirection === 0) or
-				($j === 2 and $previousDirection === 3) or
-				($j === 3 and $previousDirection === 2)
+				($j === 0 && $previousDirection === 1) ||
+				($j === 1 && $previousDirection === 0) ||
+				($j === 2 && $previousDirection === 3) ||
+				($j === 3 && $previousDirection === 2)
 			){
 				$x = $block->x;
 				$y = $block->y;
@@ -347,9 +349,9 @@ abstract class Liquid extends Transparent{
 				}
 				$blockSide = $this->getLevel()->getBlock($this->temporalVector->setComponents($x, $y, $z));
 
-				if(!$blockSide->canBeFlowedInto() and !($blockSide instanceof Liquid)){
+				if(!$blockSide->canBeFlowedInto() && !($blockSide instanceof Liquid)){
 					continue;
-				}elseif($blockSide instanceof Liquid and $blockSide->getDamage() === 0){
+				}elseif($blockSide instanceof Liquid && $blockSide->getDamage() === 0){
 					continue;
 				}elseif($this->getLevel()->getBlock($this->temporalVector->setComponents($x, $y - 1, $z))->canBeFlowedInto()){
 					return $accumulatedCost;
@@ -397,9 +399,9 @@ abstract class Liquid extends Transparent{
 			}
 			$block = $this->getLevel()->getBlock($this->temporalVector->setComponents($x, $y, $z));
 
-			if(!$block->canBeFlowedInto() and !($block instanceof Liquid)){
+			if(!$block->canBeFlowedInto() && !($block instanceof Liquid)){
 				continue;
-			}elseif($block instanceof Liquid and $block->getDamage() === 0){
+			}elseif($block instanceof Liquid && $block->getDamage() === 0){
 				continue;
 			}elseif($this->getLevel()->getBlock($this->temporalVector->setComponents($x, $y - 1, $z))->canBeFlowedInto()){
 				$this->flowCost[$j] = 0;
@@ -440,7 +442,7 @@ abstract class Liquid extends Transparent{
 	private function checkForHarden(){
 		if($this instanceof Lava){
 			$colliding = false;
-			for($side = 0; $side <= 5 and !$colliding; ++$side){
+			for($side = 0; $side <= 5 && !$colliding; ++$side){
 				$colliding = $this->getSide($side) instanceof Water;
 			}
 
@@ -465,8 +467,6 @@ abstract class Liquid extends Transparent{
 
 	/**
 	 * Creates fizzing sound and smoke. Used when lava flows over block or mixes with water.
-	 *
-	 * @param Vector3 $pos
 	 */
 	protected function triggerLavaMixEffects(Vector3 $pos){
 		$this->getLevel()->addSound(new FizzSound($pos->add(0.5, 0.5, 0.5), 2.5 + mt_rand(0, 1000) / 1000 * 0.8));

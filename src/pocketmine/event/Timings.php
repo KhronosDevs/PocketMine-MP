@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -21,7 +23,6 @@
 
 namespace pocketmine\event;
 
-
 use pocketmine\entity\Entity;
 use pocketmine\network\protocol\DataPacket;
 use pocketmine\Player;
@@ -29,6 +30,7 @@ use pocketmine\plugin\PluginManager;
 use pocketmine\scheduler\PluginTask;
 use pocketmine\scheduler\TaskHandler;
 use pocketmine\tile\Tile;
+use function dechex;
 
 abstract class Timings{
 
@@ -74,8 +76,8 @@ abstract class Timings{
 	public static $permissibleCalculationTimer;
 	/** @var TimingsHandler */
 	public static $permissionDefaultTimer;
-    /** @var TimingsHandler */
-    public static $serverInterrupts;
+	/** @var TimingsHandler */
+	public static $serverInterrupts;
 
 	/** @var TimingsHandler */
 	public static $entityMoveTimer;
@@ -126,7 +128,7 @@ abstract class Timings{
 			return;
 		}
 
-        self::$serverInterrupts = new TimingsHandler("Server Mid-Tick Procssing", self::$fullTickTimer);
+		self::$serverInterrupts = new TimingsHandler("Server Mid-Tick Procssing", self::$fullTickTimer);
 		self::$fullTickTimer = new TimingsHandler("Full Server Tick");
 		self::$serverTickTimer = new TimingsHandler("** Full Server Tick", self::$fullTickTimer);
 		self::$memoryManagerTimer = new TimingsHandler("Memory Manager");
@@ -169,14 +171,13 @@ abstract class Timings{
 	}
 
 	/**
-	 * @param TaskHandler $task
-	 * @param             $period
+	 * @param $period
 	 *
 	 * @return TimingsHandler
 	 */
 	public static function getPluginTaskTimings(TaskHandler $task, $period){
 		$ftask = $task->getTask();
-		if($ftask instanceof PluginTask and $ftask->getOwner() !== null){
+		if($ftask instanceof PluginTask && $ftask->getOwner() !== null){
 			$plugin = $ftask->getOwner()->getDescription()->getFullName();
 		}elseif($task->timingName !== null){
 			$plugin = "Scheduler";
@@ -202,8 +203,6 @@ abstract class Timings{
 	}
 
 	/**
-	 * @param Entity $entity
-	 *
 	 * @return TimingsHandler
 	 */
 	public static function getEntityTimings(Entity $entity){
@@ -220,8 +219,6 @@ abstract class Timings{
 	}
 
 	/**
-	 * @param Tile $tile
-	 *
 	 * @return TimingsHandler
 	 */
 	public static function getTileEntityTimings(Tile $tile){
@@ -234,8 +231,6 @@ abstract class Timings{
 	}
 
 	/**
-	 * @param DataPacket $pk
-	 *
 	 * @return TimingsHandler
 	 */
 	public static function getReceiveDataPacketTimings(DataPacket $pk){
@@ -247,10 +242,7 @@ abstract class Timings{
 		return self::$packetReceiveTimingMap[$pk::NETWORK_ID];
 	}
 
-
 	/**
-	 * @param DataPacket $pk
-	 *
 	 * @return TimingsHandler
 	 */
 	public static function getSendDataPacketTimings(DataPacket $pk){

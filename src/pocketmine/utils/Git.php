@@ -1,5 +1,5 @@
 <?php
- 
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -18,37 +18,37 @@
  *
  *
  */
- 
+
 declare(strict_types=1);
- 
+
 namespace pocketmine\utils;
- 
+
 use function str_repeat;
 use function strlen;
 use function trim;
- 
+
 final class Git{
- 
-    private function __construct(){
-        //NOOP
-    }
- 
-    public static function getRepositoryState(string $dir, bool &$dirty) {
-        if(Process::execute("git -C \"$dir\" rev-parse HEAD", $out) === 0 && $out !== false && strlen($out = trim($out)) === 40){
-            if(Process::execute("git -C \"$dir\" diff --quiet") === 1 || Process::execute("git -C \"$dir\" diff --cached --quiet") === 1){ //Locally-modified
-                $dirty = true;
-            }
-            return $out;
-        }
-        return null;
-    }
- 
-    public static function getRepositoryStatePretty(string $dir) : string{
-        $dirty = false;
-        $detectedHash = self::getRepositoryState($dir, $dirty);
-        if($detectedHash !== null){
-            return $detectedHash . ($dirty ? "-dirty" : "");
-        }
-        return str_repeat("00", 20);
-    }
+
+	private function __construct(){
+		//NOOP
+	}
+
+	public static function getRepositoryState(string $dir, bool &$dirty) {
+		if(Process::execute("git -C \"$dir\" rev-parse HEAD", $out) === 0 && $out !== false && strlen($out = trim($out)) === 40){
+			if(Process::execute("git -C \"$dir\" diff --quiet") === 1 || Process::execute("git -C \"$dir\" diff --cached --quiet") === 1){ //Locally-modified
+				$dirty = true;
+			}
+			return $out;
+		}
+		return null;
+	}
+
+	public static function getRepositoryStatePretty(string $dir) : string{
+		$dirty = false;
+		$detectedHash = self::getRepositoryState($dir, $dirty);
+		if($detectedHash !== null){
+			return $detectedHash . ($dirty ? "-dirty" : "");
+		}
+		return str_repeat("00", 20);
+	}
 }

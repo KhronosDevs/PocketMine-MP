@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -18,7 +20,7 @@
  * @link https://itxtech.org
  *
  */
- 
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -34,7 +36,7 @@ class RedSandstoneSlab extends Slab{
 
 	public function place(Item $item, Block $block, Block $target, $face, $fx, $fy, $fz, Player $player = null){
 		if($face === 0){
-			if($target->getId() === self::RED_SANDSTONE_SLAB and ($target->getDamage() & 0x08) === 0x08){
+			if($target->getId() === self::RED_SANDSTONE_SLAB && ($target->getDamage() & 0x08) === 0x08){
 				$this->getLevel()->setBlock($target, Block::get(Item::DOUBLE_RED_SANDSTONE_SLAB, $this->meta), true);
 
 				return true;
@@ -46,7 +48,7 @@ class RedSandstoneSlab extends Slab{
 				$this->meta |= 0x08;
 			}
 		}elseif($face === 1){
-			if($target->getId() === self::RED_SANDSTONE_SLAB and ($target->getDamage() & 0x08) === 0){
+			if($target->getId() === self::RED_SANDSTONE_SLAB && ($target->getDamage() & 0x08) === 0){
 				$this->getLevel()->setBlock($target, Block::get(Item::DOUBLE_RED_SANDSTONE_SLAB, $this->meta), true);
 
 				return true;
@@ -65,8 +67,8 @@ class RedSandstoneSlab extends Slab{
 				}
 			}
 		}
-		
-		if($block->getId() === self::RED_SANDSTONE_SLAB and ($target->getDamage() & 0x07) !== ($this->meta & 0x07)){
+
+		if($block->getId() === self::RED_SANDSTONE_SLAB && ($target->getDamage() & 0x07) !== ($this->meta & 0x07)){
 			return false;
 		}
 		$this->getLevel()->setBlock($block, $this, true, true);

@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,8 +16,6 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\entity;
@@ -35,19 +34,15 @@ class EntityExplodeEvent extends EntityEvent implements Cancellable{
 	/** @var Position */
 	protected $position;
 
-	/**
-	 * @var Block[]
-	 */
+	/** @var Block[] */
 	protected $blocks;
 
 	/** @var float */
 	protected $yield;
 
 	/**
-	 * @param Entity   $entity
-	 * @param Position $position
-	 * @param Block[]  $blocks
-	 * @param float    $yield
+	 * @param Block[] $blocks
+	 * @param float   $yield
 	 */
 	public function __construct(Entity $entity, Position $position, array $blocks, $yield){
 		$this->entity = $entity;

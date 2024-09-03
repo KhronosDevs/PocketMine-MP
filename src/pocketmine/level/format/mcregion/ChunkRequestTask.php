@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -27,7 +29,8 @@ use pocketmine\scheduler\AsyncTask;
 use pocketmine\Server;
 use pocketmine\tile\Spawnable;
 use pocketmine\utils\BinaryStream;
-
+use function count;
+use function pack;
 
 class ChunkRequestTask extends AsyncTask{
 
@@ -82,7 +85,7 @@ class ChunkRequestTask extends AsyncTask{
 
 	public function onCompletion(Server $server){
 		$level = $server->getLevel($this->levelId);
-		if($level instanceof Level and $this->hasResult()){
+		if($level instanceof Level && $this->hasResult()){
 			$level->chunkRequestCallback($this->chunkX, $this->chunkZ, $this->getResult());
 		}
 	}

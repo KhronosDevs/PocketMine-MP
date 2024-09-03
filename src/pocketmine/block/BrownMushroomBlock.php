@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -21,11 +23,12 @@
 
 namespace pocketmine\block;
 
-use pocketmine\item\Item;
 use pocketmine\item\enchantment\enchantment;
+use pocketmine\item\Item;
+use function mt_rand;
 
 class BrownMushroomBlock extends Solid{
-	
+
 	const BROWN = 14;
 
 	protected $id = self::BROWN_MUSHROOM_BLOCK;
@@ -49,7 +52,7 @@ class BrownMushroomBlock extends Solid{
 	public function getResistance(){
 		return 1;
 	}
-	
+
 	public function getDrops(Item $item) : array {
 		if($item->getEnchantmentLevel(Enchantment::TYPE_MINING_SILK_TOUCH) > 0){
 			return [

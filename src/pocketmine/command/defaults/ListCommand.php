@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,7 +26,7 @@ namespace pocketmine\command\defaults;
 use pocketmine\command\CommandSender;
 use pocketmine\event\TranslationContainer;
 use pocketmine\Player;
-
+use function substr;
 
 class ListCommand extends VanillaCommand{
 
@@ -46,7 +48,7 @@ class ListCommand extends VanillaCommand{
 		$onlineCount = 0;
 
 		foreach($sender->getServer()->getOnlinePlayers() as $player){
-			if($player->isOnline() and (!($sender instanceof Player) or $sender->canSee($player))){
+			if($player->isOnline() && (!($sender instanceof Player) || $sender->canSee($player))){
 				$online .= $player->getDisplayName() . ", ";
 				++$onlineCount;
 			}

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -23,12 +25,12 @@ namespace pocketmine\tile;
 
 use pocketmine\item\Item;
 use pocketmine\level\format\FullChunk;
+use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\FloatTag;
 use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\StringTag;
-use pocketmine\nbt\NBT;
 
 class ItemFrame extends Spawnable{
 

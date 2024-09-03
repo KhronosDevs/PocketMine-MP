@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -21,14 +23,13 @@
 
 namespace pocketmine\level\generator;
 
-
 use pocketmine\level\format\FullChunk;
 
 use pocketmine\level\Level;
 
 use pocketmine\scheduler\AsyncTask;
 use pocketmine\Server;
-
+use function get_class;
 
 class LightPopulationTask extends AsyncTask{
 

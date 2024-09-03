@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -24,6 +26,11 @@ namespace pocketmine\entity;
 use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\level\Level;
 use pocketmine\math\Vector3;
+use function abs;
+use function asin;
+use function atan;
+use function floor;
+use function rad2deg;
 
 abstract class Creature extends Living{
 	public $attackingTick = 0;
@@ -33,7 +40,7 @@ abstract class Creature extends Living{
 			if($this->attackingTick > 0){
 				$this->attackingTick--;
 			}
-			if(!$this->isAlive() and $this->hasSpawned){
+			if(!$this->isAlive() && $this->hasSpawned){
 				++$this->deadTicks;
 				if($this->deadTicks >= 20){
 					$this->despawnFromAll();
@@ -48,7 +55,7 @@ abstract class Creature extends Living{
 
 				$friction = 1 - $this->drag;
 
-				if($this->onGround and (abs($this->motionX) > 0.00001 or abs($this->motionZ) > 0.00001)){
+				if($this->onGround && (abs($this->motionX) > 0.00001 || abs($this->motionZ) > 0.00001)){
 					$friction = $this->getLevel()->getBlock($this->temporalVector->setComponents((int) floor($this->x), (int) floor($this->y - 1), (int) floor($this->z) - 1))->getFrictionFactor() * $friction;
 				}
 
@@ -76,16 +83,14 @@ abstract class Creature extends Living{
 
 	public function attack($damage, EntityDamageEvent $source){
 		parent::attack($damage, $source);
-		if(!$source->isCancelled() and $source->getCause() == EntityDamageEvent::CAUSE_ENTITY_ATTACK){
+		if(!$source->isCancelled() && $source->getCause() == EntityDamageEvent::CAUSE_ENTITY_ATTACK){
 			$this->attackingTick = 20;
 		}
 	}
 
 	/**
-	 * @param Level   $level
-	 * @param Vector3 $v3
-	 * @param bool    $hate
-	 * @param bool    $reason
+	 * @param bool $hate
+	 * @param bool $reason
 	 * @return bool|float|string
 	 * 判断某坐标是否可以行走
 	 * 并给出原因
@@ -98,9 +103,9 @@ abstract class Creature extends Living{
 		//echo ($y." ");
 		if($this->whatBlock($level, new Vector3($x, $y, $z)) == "air"){
 			//echo "前方空气 ";
-			if($this->whatBlock($level, new Vector3($x, $y - 1, $z)) == "block" or new Vector3($x, $y - 1, $z) == "climb"){  //方块
+			if($this->whatBlock($level, new Vector3($x, $y - 1, $z)) == "block" || new Vector3($x, $y - 1, $z) == "climb"){  //方块
 				//echo "考虑向前 ";
-				if($this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "block" or $this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "half" or $this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "high"){  //上方一格被堵住了
+				if($this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "block" || $this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "half" || $this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "high"){  //上方一格被堵住了
 					//echo "上方卡住 \n";
 					if($reason) return 'up!';
 					return false;  //上方卡住
@@ -143,8 +148,8 @@ abstract class Creature extends Living{
 				//echo "向上游 \n";
 				if($reason) return 'inwater';
 				return $y + 1;  //向上游，防溺水
-			}elseif($this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "block" or $this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "half"){  //上方一格被堵住了
-				if($this->whatBlock($level, new Vector3($x, $y - 1, $z)) == "block" or $this->whatBlock($level, new Vector3($x, $y - 1, $z)) == "half"){  //下方一格被也堵住了
+			}elseif($this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "block" || $this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "half"){  //上方一格被堵住了
+				if($this->whatBlock($level, new Vector3($x, $y - 1, $z)) == "block" || $this->whatBlock($level, new Vector3($x, $y - 1, $z)) == "half"){  //下方一格被也堵住了
 					//echo "上下都被卡住 \n";
 					if($reason) return 'up!_down!';
 					return false;  //上下都被卡住
@@ -160,7 +165,7 @@ abstract class Creature extends Living{
 			}
 		}elseif($this->whatBlock($level, new Vector3($x, $y, $z)) == "half"){  //半砖
 			//echo "前方半砖 \n";
-			if($this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "block" or $this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "half" or $this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "high"){  //上方一格被堵住了
+			if($this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "block" || $this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "half" || $this->whatBlock($level, new Vector3($x, $y + 1, $z)) == "high"){  //上方一格被堵住了
 				//return false;  //上方卡住
 			}else{
 				if($reason) return 'halfGO';
@@ -191,7 +196,7 @@ abstract class Creature extends Living{
 				if($reason) return 'wall';
 				return false;
 			}else{
-				if($this->whatBlock($level, new Vector3($x, $y + 2, $z)) == "block" or $this->whatBlock($level, new Vector3($x, $y + 2, $z)) == "half" or $this->whatBlock($level, new Vector3($x, $y + 2, $z)) == "high"){  //上方两格被堵住了
+				if($this->whatBlock($level, new Vector3($x, $y + 2, $z)) == "block" || $this->whatBlock($level, new Vector3($x, $y + 2, $z)) == "half" || $this->whatBlock($level, new Vector3($x, $y + 2, $z)) == "high"){  //上方两格被堵住了
 					//echo "2格处被堵 \n";
 					if($reason) return 'up2!';
 					return false;
@@ -296,16 +301,16 @@ abstract class Creature extends Living{
 				$yaw = 90;
 			}
 		}else{  //存在斜率
-			if($mx >= 0 and $mz > 0){  //第一象限
+			if($mx >= 0 && $mz > 0){  //第一象限
 				$atan = atan($mx / $mz);
 				$yaw = rad2deg($atan);
-			}elseif($mx >= 0 and $mz < 0){  //第二象限
+			}elseif($mx >= 0 && $mz < 0){  //第二象限
 				$atan = atan($mx / abs($mz));
 				$yaw = 180 - rad2deg($atan);
-			}elseif($mx < 0 and $mz < 0){  //第三象限
+			}elseif($mx < 0 && $mz < 0){  //第三象限
 				$atan = atan($mx / $mz);
 				$yaw = -(180 - rad2deg($atan));
-			}elseif($mx < 0 and $mz > 0){  //第四象限
+			}elseif($mx < 0 && $mz > 0){  //第四象限
 				$atan = atan(abs($mx) / $mz);
 				$yaw = -(rad2deg($atan));
 			}else{
@@ -318,8 +323,6 @@ abstract class Creature extends Living{
 	}
 
 	/**
-	 * @param Vector3 $from
-	 * @param Vector3 $to
 	 * @return float|int
 	 * 获取pitch角度
 	 */

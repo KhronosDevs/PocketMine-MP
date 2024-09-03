@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -40,9 +42,6 @@ class BrewingRecipe implements Recipe{
 
 	/**
 	 * BrewingRecipe constructor.
-	 * @param Item $result
-	 * @param Item $ingredient
-	 * @param Item $potion
 	 */
 	public function __construct(Item $result, Item $ingredient, Item $potion){
 		$this->output = clone $result;
@@ -66,9 +65,6 @@ class BrewingRecipe implements Recipe{
 		$this->id = $id;
 	}
 
-	/**
-	 * @param Item $item
-	 */
 	public function setInput(Item $item){
 		$this->ingredient = clone $item;
 	}

@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,8 +16,6 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\entity;
@@ -28,11 +27,7 @@ class EntityDamageByChildEntityEvent extends EntityDamageByEntityEvent{
 	/** @var Entity */
 	private $childEntity;
 
-
 	/**
-	 * @param Entity    $damager
-	 * @param Entity    $childEntity
-	 * @param Entity    $entity
 	 * @param int       $cause
 	 * @param int|int[] $damage
 	 */
@@ -47,6 +42,5 @@ class EntityDamageByChildEntityEvent extends EntityDamageByEntityEvent{
 	public function getChild(){
 		return $this->childEntity;
 	}
-
 
 }

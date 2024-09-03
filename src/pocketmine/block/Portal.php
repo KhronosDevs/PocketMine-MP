@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -23,8 +25,8 @@ namespace pocketmine\block;
 
 use pocketmine\item\Item;
 use pocketmine\item\Tool;
-use pocketmine\Player;
 use pocketmine\math\Vector3;
+use pocketmine\Player;
 
 class Portal extends Transparent{
 
@@ -32,7 +34,7 @@ class Portal extends Transparent{
 
 	/** @var  Vector3 */
 	private $temporalVector = null;
-	
+
 	public function __construct(){
 		if($this->temporalVector === null){
 			$this->temporalVector = new Vector3(0, 0, 0);
@@ -42,7 +44,7 @@ class Portal extends Transparent{
 	public function getName() : string{
 		return "Portal";
 	}
-	
+
 	public function getHardness() {
 		return -1;
 	}
@@ -65,7 +67,7 @@ class Portal extends Transparent{
 
 	public function onBreak(Item $item){
 		$block = $this;
-		if($this->getLevel()->getBlock($this->temporalVector->setComponents($block->x - 1, $block->y, $block->z))->getId() == Block::PORTAL or
+		if($this->getLevel()->getBlock($this->temporalVector->setComponents($block->x - 1, $block->y, $block->z))->getId() == Block::PORTAL ||
 			$this->getLevel()->getBlock($this->temporalVector->setComponents($block->x + 1, $block->y, $block->z))->getId() == Block::PORTAL){//x方向
 			for($x = $block->x;$this->getLevel()->getBlock($this->temporalVector->setComponents($x, $block->y, $block->z))->getId() == Block::PORTAL;$x++){
 				for($y = $block->y;$this->getLevel()->getBlock($this->temporalVector->setComponents($x, $y, $block->z))->getId() == Block::PORTAL;$y++){
@@ -103,7 +105,7 @@ class Portal extends Transparent{
 		}
 		parent::onBreak($item);
 	}
-	
+
 	public function place(Item $item, Block $block, Block $target, $face, $fx, $fy, $fz, Player $player = null){
 		if($player instanceof Player){
 			$this->meta = $player->getDirection() & 0x01;
@@ -112,7 +114,7 @@ class Portal extends Transparent{
 
 		return true;
 	}
-	
+
 	public function getDrops(Item $item) : array {
 		return [];
 	}

@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,14 +17,45 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
 namespace pocketmine\utils;
+
 use pocketmine\scheduler\FileWriteTask;
 use pocketmine\Server;
-
+use function array_change_key_case;
+use function array_keys;
+use function array_pop;
+use function array_shift;
+use function basename;
+use function count;
+use function date;
+use function explode;
+use function file_exists;
+use function file_get_contents;
+use function file_put_contents;
+use function implode;
+use function is_array;
+use function is_bool;
+use function json_decode;
+use function json_encode;
+use function preg_match_all;
+use function preg_replace;
+use function serialize;
+use function str_replace;
+use function strlen;
+use function strtolower;
+use function substr;
+use function trim;
+use function unserialize;
+use function yaml_emit;
+use function yaml_parse;
+use const CASE_LOWER;
+use const JSON_BIGINT_AS_STRING;
+use const JSON_PRETTY_PRINT;
+use const YAML_UTF8_ENCODING;
 
 /**
  * Class Config
@@ -209,7 +242,7 @@ class Config{
 			}catch(\Throwable $e){
 				$logger = Server::getInstance()->getLogger();
 				$logger->critical("Could not save Config " . $this->file . ": " . $e->getMessage());
-				if(\pocketmine\DEBUG > 1 and $logger instanceof MainLogger){
+				if(\pocketmine\DEBUG > 1 && $logger instanceof MainLogger){
 					$logger->logException($e);
 				}
 			}
@@ -265,14 +298,14 @@ class Config{
 			$this->config[$base] = [];
 		}
 
-		$base =& $this->config[$base];
+		$base = &$this->config[$base];
 
 		while(count($vars) > 0){
 			$baseKey = array_shift($vars);
 			if(!isset($base[$baseKey])){
 				$base[$baseKey] = [];
 			}
-			$base =& $base[$baseKey];
+			$base = &$base[$baseKey];
 		}
 
 		$base = $value;
@@ -300,7 +333,7 @@ class Config{
 
 		while(count($vars) > 0){
 			$baseKey = array_shift($vars);
-			if(is_array($base) and isset($base[$baseKey])){
+			if(is_array($base) && isset($base[$baseKey])){
 				$base = $base[$baseKey];
 			}else{
 				return $default;
@@ -317,7 +350,7 @@ class Config{
 	 * @return boolean|mixed
 	 */
 	public function get($k, $default = false){
-		return ($this->correct and isset($this->config[$k])) ? $this->config[$k] : $default;
+		return ($this->correct && isset($this->config[$k])) ? $this->config[$k] : $default;
 	}
 
 	/**
@@ -329,7 +362,7 @@ class Config{
 		foreach($this->nestedCache as $nestedKey => $nvalue){
 			if(substr($nestedKey, 0, strlen($k) + 1) === ($k . ".")){
 				unset($this->nestedCache[$nestedKey]);
-  			}
+			}
 		}
 	}
 
@@ -372,9 +405,6 @@ class Config{
 		return ($keys === true ? array_keys($this->config) : $this->config);
 	}
 
-	/**
-	 * @param array $defaults
-	 */
 	public function setDefaults(array $defaults){
 		$this->fillDefaults($defaults, $this->config);
 	}
@@ -389,7 +419,7 @@ class Config{
 		$changed = 0;
 		foreach($default as $k => $v){
 			if(is_array($v)){
-				if(!isset($data[$k]) or !is_array($data[$k])){
+				if(!isset($data[$k]) || !is_array($data[$k])){
 					$data[$k] = [];
 				}
 				$changed += $this->fillDefaults($v, $data[$k]);

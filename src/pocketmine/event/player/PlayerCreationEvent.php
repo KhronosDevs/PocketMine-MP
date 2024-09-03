@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,6 +26,7 @@ namespace pocketmine\event\player;
 use pocketmine\event\Event;
 use pocketmine\network\SourceInterface;
 use pocketmine\Player;
+use function is_a;
 
 /**
  * Allows the creation of players overriding the base Player class
@@ -46,12 +49,11 @@ class PlayerCreationEvent extends Event{
 	private $playerClass;
 
 	/**
-	 * @param SourceInterface $interface
-	 * @param Player::class   $baseClass
-	 * @param Player::class   $playerClass
-	 * @param mixed           $clientId
-	 * @param string          $address
-	 * @param int             $port
+	 * @param Player::class $baseClass
+	 * @param Player::class $playerClass
+	 * @param mixed         $clientId
+	 * @param string        $address
+	 * @param int           $port
 	 */
 	public function __construct(SourceInterface $interface, $baseClass, $playerClass, $clientId, $address, $port){
 		$this->interface = $interface;

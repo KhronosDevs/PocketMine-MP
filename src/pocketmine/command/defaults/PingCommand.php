@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -20,34 +22,33 @@
 
 namespace pocketmine\command\defaults;
 
-use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
 use pocketmine\Player;
 use pocketmine\utils\TextFormat;
 
 class PingCommand extends VanillaCommand {
 
-    public function __construct($name) {
-        parent::__construct(
-            $name,
-            "Displays your current ping (latency) in milliseconds.",
-            "/ping"
-        );
-        $this->setPermission("pocketmine.command.ping");
-    }
+	public function __construct($name) {
+		parent::__construct(
+			$name,
+			"Displays your current ping (latency) in milliseconds.",
+			"/ping"
+		);
+		$this->setPermission("pocketmine.command.ping");
+	}
 
-    public function execute(CommandSender $sender, $currentAlias, array $args) {
-        if (!$this->testPermission($sender)) {
-            return true;
-        }
+	public function execute(CommandSender $sender, $currentAlias, array $args) {
+		if (!$this->testPermission($sender)) {
+			return true;
+		}
 
-        if ($sender instanceof Player) {
-            $ping = $sender->getPing();
-            $sender->sendMessage(TextFormat::GREEN . "Ping:" . TextFormat::WHITE . $ping . " " . TextFormat::GREEN . "ms");
-        } else {
-            $sender->sendMessage(TextFormat::RED . "This command can only be used by players.");
-        }
+		if ($sender instanceof Player) {
+			$ping = $sender->getPing();
+			$sender->sendMessage(TextFormat::GREEN . "Ping:" . TextFormat::WHITE . $ping . " " . TextFormat::GREEN . "ms");
+		} else {
+			$sender->sendMessage(TextFormat::RED . "This command can only be used by players.");
+		}
 
-        return true;
-    }
+		return true;
+	}
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -28,9 +30,7 @@ use pocketmine\utils\TextFormat;
  * Handles the achievement list and a bit more
  */
 abstract class Achievement{
-	/**
-	 * @var array[]
-	 */
+	/** @var array[] */
 	public static $list = [
 		/*"openInventory" => array(
 			"name" => "Taking Inventory",
@@ -104,7 +104,6 @@ abstract class Achievement{
 
 	];
 
-
 	public static function broadcast(Player $player, $achievementId){
 		if(isset(Achievement::$list[$achievementId])){
 			$translation = new TranslationContainer("chat.type.achievement", [$player->getDisplayName(), TextFormat::GREEN . Achievement::$list[$achievementId]["name"]]);
@@ -132,6 +131,5 @@ abstract class Achievement{
 
 		return false;
 	}
-
 
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -29,17 +31,17 @@ use pocketmine\Server;
 use pocketmine\utils\MainLogger;
 use pocketmine\utils\PluginException;
 use pocketmine\utils\ReversePriorityQueue;
+use function count;
+use function get_class;
+use function is_array;
+use function is_object;
 
 class ServerScheduler{
 	public static $WORKERS = 2;
-	/**
-	 * @var ReversePriorityQueue<Task>
-	 */
+	/** @var ReversePriorityQueue<Task> */
 	protected $queue;
 
-	/**
-	 * @var TaskHandler[]
-	 */
+	/** @var TaskHandler[] */
 	protected $tasks = [];
 
 	/** @var AsyncPool */
@@ -57,8 +59,6 @@ class ServerScheduler{
 	}
 
 	/**
-	 * @param Task $task
-	 *
 	 * @return null|TaskHandler
 	 */
 	public function scheduleTask(Task $task){
@@ -67,8 +67,6 @@ class ServerScheduler{
 
 	/**
 	 * Submits an asynchronous task to the Worker Pool
-	 *
-	 * @param AsyncTask $task
 	 *
 	 * @return void
 	 */
@@ -81,8 +79,7 @@ class ServerScheduler{
 	/**
 	 * Submits an asynchronous task to a specific Worker in the Pool
 	 *
-	 * @param AsyncTask $task
-	 * @param int       $worker
+	 * @param int $worker
 	 *
 	 * @return void
 	 */
@@ -92,7 +89,7 @@ class ServerScheduler{
 		$this->asyncPool->submitTaskToWorker($task, $worker);
 	}
 
-	public function getAsyncPool(): AsyncPool {
+	public function getAsyncPool() : AsyncPool {
 		return $this->asyncPool;
 	}
 
@@ -100,9 +97,8 @@ class ServerScheduler{
 		return $this->asyncPool->getSize();
 	}
 
-    /**
-	 * @param Task $task
-	 * @param int  $delay
+	/**
+	 * @param int $delay
 	 *
 	 * @return null|TaskHandler
 	 */
@@ -111,8 +107,7 @@ class ServerScheduler{
 	}
 
 	/**
-	 * @param Task $task
-	 * @param int  $period
+	 * @param int $period
 	 *
 	 * @return null|TaskHandler
 	 */
@@ -121,9 +116,8 @@ class ServerScheduler{
 	}
 
 	/**
-	 * @param Task $task
-	 * @param int  $delay
-	 * @param int  $period
+	 * @param int $delay
+	 * @param int $period
 	 *
 	 * @return null|TaskHandler
 	 */
@@ -135,19 +129,16 @@ class ServerScheduler{
 	 * @param int $taskId
 	 */
 	public function cancelTask($taskId){
-		if($taskId !== null and isset($this->tasks[$taskId])){
+		if($taskId !== null && isset($this->tasks[$taskId])){
 			$this->tasks[$taskId]->cancel();
 			unset($this->tasks[$taskId]);
 		}
 	}
 
-	/**
-	 * @param Plugin $plugin
-	 */
 	public function cancelTasks(Plugin $plugin){
 		foreach($this->tasks as $taskId => $task){
 			$ptask = $task->getTask();
-			if($ptask instanceof PluginTask and $ptask->getOwner() === $plugin){
+			if($ptask instanceof PluginTask && $ptask->getOwner() === $plugin){
 				$task->cancel();
 				unset($this->tasks[$taskId]);
 			}
@@ -176,9 +167,8 @@ class ServerScheduler{
 	}
 
 	/**
-	 * @param Task $task
-	 * @param      $delay
-	 * @param      $period
+	 * @param $delay
+	 * @param $period
 	 *
 	 * @return null|TaskHandler
 	 *
@@ -191,7 +181,7 @@ class ServerScheduler{
 			}elseif(!$task->getOwner()->isEnabled()){
 				throw new PluginException("Plugin '" . $task->getOwner()->getName() . "' attempted to register a task while disabled");
 			}
-		}elseif($task instanceof CallbackTask and Server::getInstance()->getProperty("settings.deprecated-verbose", true)){
+		}elseif($task instanceof CallbackTask && Server::getInstance()->getProperty("settings.deprecated-verbose", true)){
 			$callable = $task->getCallable();
 			if(is_array($callable)){
 				if(is_object($callable[0])){
@@ -269,7 +259,7 @@ class ServerScheduler{
 	}
 
 	private function isReady($currentTicks){
-		return count($this->tasks) > 0 and $this->queue->current()->getNextRun() <= $currentTicks;
+		return count($this->tasks) > 0 && $this->queue->current()->getNextRun() <= $currentTicks;
 	}
 
 	/**

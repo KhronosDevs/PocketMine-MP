@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -24,6 +26,7 @@ namespace pocketmine\level\generator\populator;
 use pocketmine\block\Block;
 use pocketmine\level\ChunkManager;
 use pocketmine\utils\Random;
+use function mt_rand;
 
 class NetherLava extends Populator{
 	/** @var ChunkManager */
@@ -47,7 +50,7 @@ class NetherLava extends Populator{
 				$x = $random->nextRange($chunkX * 16, $chunkX * 16 + 15);
 				$z = $random->nextRange($chunkZ * 16, $chunkZ * 16 + 15);
 				$y = $this->getHighestWorkableBlock($x, $z);
-				if($y !== -1 and $this->canNetherLavaStay($x, $y, $z)){
+				if($y !== -1 && $this->canNetherLavaStay($x, $y, $z)){
 					$this->level->setBlockIdAt($x, $y, $z, Block::LAVA);
 					$this->level->updateBlockLight($x, $y, $z);
 					$this->lavaSpread($x, $y, $z);
@@ -80,7 +83,7 @@ class NetherLava extends Populator{
 
 			$k = $smallestFlowDecay + $multiplier;
 
-			if($k >= 8 or $smallestFlowDecay < 0){
+			if($k >= 8 || $smallestFlowDecay < 0){
 				$k = -1;
 			}
 
@@ -92,7 +95,7 @@ class NetherLava extends Populator{
 				}
 			}
 
-			if($decay < 8 and $k < 8 and $k > 1 and mt_rand(0, 4) !== 0){
+			if($decay < 8 && $k < 8 && $k > 1 && mt_rand(0, 4) !== 0){
 				$k = $decay;
 			}
 
@@ -116,7 +119,7 @@ class NetherLava extends Populator{
 			}else{
 				$this->flowIntoBlock($x, $y - 1, $z, $decay | 0x08);
 			}
-		}elseif($decay >= 0 and ($decay === 0 or !$this->canFlowInto($x, $y - 1, $z))){
+		}elseif($decay >= 0 && ($decay === 0 || !$this->canFlowInto($x, $y - 1, $z))){
 			$flags = $this->getOptimalFlowDirections($x, $y, $z);
 
 			$l = $decay + $multiplier;
@@ -158,7 +161,7 @@ class NetherLava extends Populator{
 
 	private function canFlowInto($x, $y, $z){
 		$id = $this->level->getBlockIdAt($x, $y, $z);
-		if($id === Block::AIR or $id === Block::LAVA or $id === Block::STILL_LAVA){
+		if($id === Block::AIR || $id === Block::LAVA || $id === Block::STILL_LAVA){
 			return true;
 		}
 		return false;
@@ -169,10 +172,10 @@ class NetherLava extends Populator{
 
 		for($j = 0; $j < 4; ++$j){
 			if(
-				($j === 0 and $previousDirection === 1) or
-				($j === 1 and $previousDirection === 0) or
-				($j === 2 and $previousDirection === 3) or
-				($j === 3 and $previousDirection === 2)
+				($j === 0 && $previousDirection === 1) ||
+				($j === 1 && $previousDirection === 0) ||
+				($j === 2 && $previousDirection === 3) ||
+				($j === 3 && $previousDirection === 2)
 			){
 				$x = $xx;
 				$y = $yy;
@@ -190,7 +193,7 @@ class NetherLava extends Populator{
 
 				if(!$this->canFlowInto($x, $y, $z)){
 					continue;
-				}elseif($this->canFlowInto($x, $y, $z) and $this->level->getBlockDataAt($x, $y, $z) === 0){
+				}elseif($this->canFlowInto($x, $y, $z) && $this->level->getBlockDataAt($x, $y, $z) === 0){
 					continue;
 				}elseif($this->canFlowInto($x, $y - 1, $z)){
 					return $accumulatedCost;
@@ -233,7 +236,7 @@ class NetherLava extends Populator{
 
 			if(!$this->canFlowInto($x, $y, $z)){
 				continue;
-			}elseif($this->canFlowInto($x, $y, $z) and $this->level->getBlockDataAt($x, $y, $z) === 0){
+			}elseif($this->canFlowInto($x, $y, $z) && $this->level->getBlockDataAt($x, $y, $z) === 0){
 				continue;
 			}elseif($this->canFlowInto($x, $y - 1, $z)){
 				$flowCost[$j] = 0;
@@ -270,7 +273,6 @@ class NetherLava extends Populator{
 
 		return ($decay >= 0 && $blockDecay >= $decay) ? $decay : $blockDecay;
 	}
-
 
 	private function canNetherLavaStay($x, $y, $z){
 		$b = $this->level->getBlockIdAt($x, $y, $z);

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -40,9 +42,7 @@ class PlayerInteractEvent extends PlayerEvent implements Cancellable{
 	const RIGHT_CLICK_AIR = 3;
 	const PHYSICAL = 4;
 
-	/**
-	 * @var \pocketmine\block\Block;
-	 */
+	/** @var \pocketmine\block\Block; */
 	protected $blockTouched;
 
 	protected $touchVector;
@@ -52,7 +52,7 @@ class PlayerInteractEvent extends PlayerEvent implements Cancellable{
 
 	/** @var \pocketmine\item\Item */
 	protected $item;
-	
+
 	protected $action;
 
 	public function __construct(Player $player, Item $item, Vector3 $block, $face, $action = PlayerInteractEvent::RIGHT_CLICK_BLOCK){

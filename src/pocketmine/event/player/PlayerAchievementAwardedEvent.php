@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -34,7 +36,6 @@ class PlayerAchievementAwardedEvent extends PlayerEvent implements Cancellable{
 	protected $achievement;
 
 	/**
-	 * @param Player $player
 	 * @param string $achievementId
 	 */
 	public function __construct(Player $player, $achievementId){

@@ -28,18 +28,14 @@ namespace pocketmine\promise;
  * @see PromiseResolver
  */
 final class PromiseSharedData{
-    /**
-     * @var \Closure[]
-     */
-    public $onSuccess = [];
+	/** @var \Closure[] */
+	public $onSuccess = [];
 
-    /**
-     * @var \Closure[]
-     */
-    public $onFailure = [];
+	/** @var \Closure[] */
+	public $onFailure = [];
 
-    /** @var bool|null */
-    public $state = null;
+	/** @var bool|null */
+	public $state = null;
 
-    public $result;
+	public $result;
 }

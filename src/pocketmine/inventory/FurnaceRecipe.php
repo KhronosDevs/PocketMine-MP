@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -35,10 +37,6 @@ class FurnaceRecipe implements Recipe{
 	/** @var Item */
 	private $ingredient;
 
-	/**
-	 * @param Item $result
-	 * @param Item $ingredient
-	 */
 	public function __construct(Item $result, Item $ingredient){
 		$this->output = clone $result;
 		$this->ingredient = clone $ingredient;
@@ -56,9 +54,6 @@ class FurnaceRecipe implements Recipe{
 		$this->id = $id;
 	}
 
-	/**
-	 * @param Item $item
-	 */
 	public function setInput(Item $item){
 		$this->ingredient = clone $item;
 	}

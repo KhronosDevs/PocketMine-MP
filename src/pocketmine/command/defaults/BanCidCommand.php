@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -24,8 +26,9 @@ namespace pocketmine\command\defaults;
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
 use pocketmine\event\TranslationContainer;
-use pocketmine\Player;
-use pocketmine\utils\TextFormat;
+use function array_shift;
+use function count;
+use function implode;
 
 class BanCidCommand extends VanillaCommand{
 

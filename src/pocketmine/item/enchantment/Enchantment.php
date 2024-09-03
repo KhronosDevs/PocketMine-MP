@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -67,6 +69,12 @@ use pocketmine\item\WoodenHoe;
 use pocketmine\item\WoodenPickaxe;
 use pocketmine\item\WoodenShovel;
 use pocketmine\item\WoodenSword;
+use function constant;
+use function count;
+use function defined;
+use function implode;
+use function mt_rand;
+use function strtoupper;
 
 class Enchantment{
 
@@ -132,7 +140,6 @@ class Enchantment{
 		"enchant", "free", "limited", "range", "of", "towards", "inside", "sphere", "cube", "self", "other", "ball", "mental", "physical", "grow", "shrink",
 		"demon", "elemental", "spirit", "animal", "creature", "beast", "humanoid", "undead", "fresh", "stale"];
 
-
 	/** @var Enchantment[] */
 	protected static $enchantments;
 
@@ -184,18 +191,18 @@ class Enchantment{
 		if(defined(Enchantment::class . "::TYPE_" . strtoupper($name))){
 			return self::getEnchantment(constant(Enchantment::class . "::TYPE_" . strtoupper($name)));
 		}elseif(defined(Enchantment::class . "::TYPE_WEAPON_" . strtoupper($name))){
-			return self::getEnchantment(constant(Enchantment::class . "::TYPE_WEAPON_" . strtoupper($name))); 
+			return self::getEnchantment(constant(Enchantment::class . "::TYPE_WEAPON_" . strtoupper($name)));
 		}elseif(defined(Enchantment::class . "::TYPE_ARMOR_" . strtoupper($name))){
-			return self::getEnchantment(constant(Enchantment::class . "::TYPE_ARMOR_" . strtoupper($name))); 
+			return self::getEnchantment(constant(Enchantment::class . "::TYPE_ARMOR_" . strtoupper($name)));
 		}elseif(defined(Enchantment::class . "::TYPE_MINING_" . strtoupper($name))){
-			return self::getEnchantment(constant(Enchantment::class . "::TYPE_MINING_" . strtoupper($name))); 
+			return self::getEnchantment(constant(Enchantment::class . "::TYPE_MINING_" . strtoupper($name)));
 		}elseif(defined(Enchantment::class . "::TYPE_BOW_" . strtoupper($name))){
-			return self::getEnchantment(constant(Enchantment::class . "::TYPE_BOW_" . strtoupper($name))); 
+			return self::getEnchantment(constant(Enchantment::class . "::TYPE_BOW_" . strtoupper($name)));
 		}elseif(defined(Enchantment::class . "::TYPE_FISHING_" . strtoupper($name))){
-			return self::getEnchantment(constant(Enchantment::class . "::TYPE_FISHING_" . strtoupper($name))); 
+			return self::getEnchantment(constant(Enchantment::class . "::TYPE_FISHING_" . strtoupper($name)));
 		}else{
 			return new Enchantment(self::TYPE_INVALID, "unknown", 0, 0, 0);
-	    }
+		}
 	}
 
 	public static function getEnchantAbility(Item $item){
@@ -207,19 +214,19 @@ class Enchantment{
 		}
 
 		if($item->isArmor()){
-			if($item instanceof ChainBoots or $item instanceof ChainChestplate or $item instanceof ChainHelmet or $item instanceof ChainLeggings) return 12;
-			if($item instanceof IronBoots or $item instanceof IronChestplate or $item instanceof IronHelmet or $item instanceof IronLeggings) return 9;
-			if($item instanceof DiamondBoots or $item instanceof DiamondChestplate or $item instanceof DiamondHelmet or $item instanceof DiamondLeggings) return 10;
-			if($item instanceof LeatherBoots or $item instanceof LeatherTunic or $item instanceof LeatherCap or $item instanceof LeatherPants) return 15;
-			if($item instanceof GoldBoots or $item instanceof GoldChestplate or $item instanceof GoldHelmet or $item instanceof GoldLeggings) return 25;
+			if($item instanceof ChainBoots || $item instanceof ChainChestplate || $item instanceof ChainHelmet || $item instanceof ChainLeggings) return 12;
+			if($item instanceof IronBoots || $item instanceof IronChestplate || $item instanceof IronHelmet || $item instanceof IronLeggings) return 9;
+			if($item instanceof DiamondBoots || $item instanceof DiamondChestplate || $item instanceof DiamondHelmet || $item instanceof DiamondLeggings) return 10;
+			if($item instanceof LeatherBoots || $item instanceof LeatherTunic || $item instanceof LeatherCap || $item instanceof LeatherPants) return 15;
+			if($item instanceof GoldBoots || $item instanceof GoldChestplate || $item instanceof GoldHelmet || $item instanceof GoldLeggings) return 25;
 		}
 
 		if($item->isTool()){
-			if($item instanceof WoodenAxe or $item instanceof WoodenHoe or $item instanceof WoodenPickaxe or $item instanceof WoodenShovel or $item instanceof WoodenSword) return 15;
-			if($item instanceof StoneAxe or $item instanceof StoneHoe or $item instanceof StonePickaxe or $item instanceof StoneShovel or $item instanceof StoneSword) return 5;
-			if($item instanceof DiamondAxe or $item instanceof DiamondHoe or $item instanceof DiamondPickaxe or $item instanceof DiamondShovel or $item instanceof DiamondSword) return 10;
-			if($item instanceof IronAxe or $item instanceof IronHoe or $item instanceof IronPickaxe or $item instanceof IronShovel or $item instanceof IronSword) return 14;
-			if($item instanceof GoldAxe or $item instanceof GoldHoe or $item instanceof GoldPickaxe or $item instanceof GoldShovel or $item instanceof GoldSword) return 22;
+			if($item instanceof WoodenAxe || $item instanceof WoodenHoe || $item instanceof WoodenPickaxe || $item instanceof WoodenShovel || $item instanceof WoodenSword) return 15;
+			if($item instanceof StoneAxe || $item instanceof StoneHoe || $item instanceof StonePickaxe || $item instanceof StoneShovel || $item instanceof StoneSword) return 5;
+			if($item instanceof DiamondAxe || $item instanceof DiamondHoe || $item instanceof DiamondPickaxe || $item instanceof DiamondShovel || $item instanceof DiamondSword) return 10;
+			if($item instanceof IronAxe || $item instanceof IronHoe || $item instanceof IronPickaxe || $item instanceof IronShovel || $item instanceof IronSword) return 14;
+			if($item instanceof GoldAxe || $item instanceof GoldHoe || $item instanceof GoldPickaxe || $item instanceof GoldShovel || $item instanceof GoldSword) return 22;
 		}
 
 		return 0;
@@ -366,7 +373,7 @@ class Enchantment{
 	}
 
 	public function equals(Enchantment $ent){
-		if($ent->getId() == $this->getId() and $ent->getLevel() == $this->getLevel() and $ent->getActivationType() == $this->getActivationType() and $ent->getRarity() == $this->getRarity()){
+		if($ent->getId() == $this->getId() && $ent->getLevel() == $this->getLevel() && $ent->getActivationType() == $this->getActivationType() && $ent->getRarity() == $this->getRarity()){
 			return true;
 		}
 		return false;

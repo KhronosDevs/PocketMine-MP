@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -27,6 +29,15 @@ use pocketmine\nbt\NBT;
 use pocketmine\Player;
 use pocketmine\utils\Binary;
 use pocketmine\utils\BinaryStream;
+use function chr;
+use function count;
+use function is_array;
+use function ord;
+use function pack;
+use function str_repeat;
+use function strlen;
+use function substr;
+use function unpack;
 
 class Chunk extends BaseFullChunk{
 
@@ -101,7 +112,7 @@ class Chunk extends BaseFullChunk{
 		}
 	}
 
-	public function setBlock($x, $y, $z, $blockId = null, $meta = null): bool{
+	public function setBlock($x, $y, $z, $blockId = null, $meta = null) : bool{
 		$i = ($x << 11) | ($z << 7) | $y;
 
 		$changed = false;
@@ -261,7 +272,7 @@ class Chunk extends BaseFullChunk{
 				$nbt = new NBT(NBT::LITTLE_ENDIAN);
 
 				$entityData = $provider->getDatabase()->get(substr($data, 0, 8) . LevelDB::ENTRY_ENTITIES);
-				if($entityData !== false and strlen($entityData) > 0){
+				if($entityData !== false && strlen($entityData) > 0){
 					$nbt->read($entityData, true);
 					$entities = $nbt->getData();
 					if(!is_array($entities)){
@@ -269,7 +280,7 @@ class Chunk extends BaseFullChunk{
 					}
 				}
 				$tileData = $provider->getDatabase()->get(substr($data, 0, 8) . LevelDB::ENTRY_TILES);
-				if($tileData !== false and strlen($tileData) > 0){
+				if($tileData !== false && strlen($tileData) > 0){
 					$nbt->read($tileData, true);
 					$tiles = $nbt->getData();
 					if(!is_array($tiles)){
@@ -277,7 +288,7 @@ class Chunk extends BaseFullChunk{
 					}
 				}
 				$tileData = $provider->getDatabase()->get(substr($data, 0, 8) . LevelDB::ENTRY_EXTRA_DATA);
-				if($tileData !== false and strlen($tileData) > 0){
+				if($tileData !== false && strlen($tileData) > 0){
 					$stream = new BinaryStream($tileData);
 					$count = $stream->getInt();
 					for($i = 0; $i < $count; ++$i){
@@ -312,12 +323,12 @@ class Chunk extends BaseFullChunk{
 		$chunkIndex = LevelDB::chunkIndex($this->getX(), $this->getZ());
 
 		$provider = $this->getProvider();
-		if($saveExtra and $provider instanceof LevelDB){
+		if($saveExtra && $provider instanceof LevelDB){
 			$nbt = new NBT(NBT::LITTLE_ENDIAN);
 			$entities = [];
 
 			foreach($this->getEntities() as $entity){
-				if(!($entity instanceof Player) and !$entity->closed){
+				if(!($entity instanceof Player) && !$entity->closed){
 					$entity->saveNBT();
 					$entities[] = $entity->namedtag;
 				}
@@ -329,7 +340,6 @@ class Chunk extends BaseFullChunk{
 			}else{
 				$provider->getDatabase()->delete($chunkIndex . LevelDB::ENTRY_ENTITIES);
 			}
-
 
 			$tiles = [];
 

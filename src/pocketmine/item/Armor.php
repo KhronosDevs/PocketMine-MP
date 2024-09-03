@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -19,13 +21,13 @@
  *
 */
 
-
 namespace pocketmine\item;
 
+use pocketmine\item\enchantment\enchantment;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\IntTag;
 use pocketmine\utils\Color;
-use pocketmine\item\enchantment\enchantment;
+use function mt_rand;
 
 abstract class Armor extends Item{
 	const TIER_LEATHER = 1;
@@ -48,9 +50,7 @@ abstract class Armor extends Item{
 	}
 
 	/**
-	 *
 	 * @param Item $object
-	 * @param int $cost
 	 *
 	 * @return bool
 	 */
@@ -77,7 +77,7 @@ abstract class Armor extends Item{
 
 	public function isUnbreakable(){
 		$tag = $this->getNamedTagEntry("Unbreakable");
-		return $tag !== null and $tag->getValue() > 0;
+		return $tag !== null && $tag->getValue() > 0;
 	}
 
 	public function setCustomColor(Color $color){

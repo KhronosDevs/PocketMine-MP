@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -25,6 +27,8 @@ use pocketmine\event\Timings;
 use pocketmine\plugin\Plugin;
 use pocketmine\Server;
 use pocketmine\utils\PluginException;
+use function array_keys;
+use function spl_object_hash;
 
 class PermissibleBase implements Permissible{
 	/** @var ServerOperator */
@@ -33,19 +37,12 @@ class PermissibleBase implements Permissible{
 	/** @var Permissible */
 	private $parent = null;
 
-	/**
-	 * @var PermissionAttachment[]
-	 */
+	/** @var PermissionAttachment[] */
 	private $attachments = [];
 
-	/**
-	 * @var PermissionAttachmentInfo[]
-	 */
+	/** @var PermissionAttachmentInfo[] */
 	private $permissions = [];
 
-	/**
-	 * @param ServerOperator $opable
-	 */
 	public function __construct(ServerOperator $opable){
 		$this->opable = $opable;
 		if($opable instanceof Permissible){
@@ -108,9 +105,9 @@ class PermissibleBase implements Permissible{
 		if(($perm = Server::getInstance()->getPluginManager()->getPermission($name)) !== null){
 			$perm = $perm->getDefault();
 
-			return $perm === Permission::DEFAULT_TRUE or ($this->isOp() and $perm === Permission::DEFAULT_OP) or (!$this->isOp() and $perm === Permission::DEFAULT_NOT_OP);
+			return $perm === Permission::DEFAULT_TRUE || ($this->isOp() && $perm === Permission::DEFAULT_OP) || (!$this->isOp() && $perm === Permission::DEFAULT_NOT_OP);
 		}else{
-			return Permission::$DEFAULT_PERMISSION === Permission::DEFAULT_TRUE or ($this->isOp() and Permission::$DEFAULT_PERMISSION === Permission::DEFAULT_OP) or (!$this->isOp() and Permission::$DEFAULT_PERMISSION === Permission::DEFAULT_NOT_OP);
+			return Permission::$DEFAULT_PERMISSION === Permission::DEFAULT_TRUE || ($this->isOp() && Permission::$DEFAULT_PERMISSION === Permission::DEFAULT_OP) || (!$this->isOp() && Permission::$DEFAULT_PERMISSION === Permission::DEFAULT_NOT_OP);
 		}
 
 	}
@@ -118,7 +115,6 @@ class PermissibleBase implements Permissible{
 	/**
 	 * //TODO: tick scheduled attachments
 	 *
-	 * @param Plugin $plugin
 	 * @param string $name
 	 * @param bool   $value
 	 *
@@ -135,7 +131,7 @@ class PermissibleBase implements Permissible{
 
 		$result = new PermissionAttachment($plugin, $this->parent !== null ? $this->parent : $this);
 		$this->attachments[spl_object_hash($result)] = $result;
-		if($name !== null and $value !== null){
+		if($name !== null && $value !== null){
 			$result->setPermission($name, $value);
 		}
 
@@ -145,8 +141,6 @@ class PermissibleBase implements Permissible{
 	}
 
 	/**
-	 * @param PermissionAttachment $attachment
-	 *
 	 * @throws \Throwable
 	 */
 	public function removeAttachment(PermissionAttachment $attachment){

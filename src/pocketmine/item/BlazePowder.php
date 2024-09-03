@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -22,7 +24,7 @@
 namespace pocketmine\item;
 
 class BlazePowder extends Item {
-    public function __construct($meta = 0, $count =1){
-        parent::__construct(self::BLAZE_POWDER, $meta, $count, "Blaze Powder");
-    }
+	public function __construct($meta = 0, $count = 1){
+		parent::__construct(self::BLAZE_POWDER, $meta, $count, "Blaze Powder");
+	}
 }

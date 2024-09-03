@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -25,6 +27,9 @@ use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
 use pocketmine\event\TranslationContainer;
 use pocketmine\utils\TextFormat;
+use function count;
+use function strtolower;
+use function substr;
 
 class WhitelistCommand extends VanillaCommand{
 
@@ -43,7 +48,7 @@ class WhitelistCommand extends VanillaCommand{
 			return true;
 		}
 
-		if(count($args) === 0 or count($args) > 2){
+		if(count($args) === 0 || count($args) > 2){
 			$sender->sendMessage(new TranslationContainer("commands.generic.usage", [$this->usageMessage]));
 			return true;
 		}

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -28,14 +30,14 @@ class CLIENT_HANDSHAKE_DataPacket extends Packet{
 
 	public $address;
 	public $port;
-	
+
 	public $systemAddresses = [];
-	
+
 	public $sendPing;
 	public $sendPong;
 
 	public function encode(){
-		
+
 	}
 
 	public function decode(){
@@ -45,7 +47,7 @@ class CLIENT_HANDSHAKE_DataPacket extends Packet{
 			$this->getAddress($addr, $port, $version);
 			$this->systemAddresses[$i] = [$addr, $port, $version];
 		}
-		
+
 		$this->sendPing = $this->getLong();
 		$this->sendPong = $this->getLong();
 	}

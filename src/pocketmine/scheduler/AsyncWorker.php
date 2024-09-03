@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,24 +25,26 @@ namespace pocketmine\scheduler;
 
 use pocketmine\snooze\SleeperNotifier;
 use pocketmine\Worker;
+use function gc_enable;
+use function ini_set;
 
 class AsyncWorker extends Worker{
 
-    /** @var SleeperNotifier */
-    private $notifier = null;
+	/** @var SleeperNotifier */
+	private $notifier = null;
 	private $logger;
 	private $id;
 
 	public function __construct(\ThreadedLogger $logger, $id, SleeperNotifier $notifier){
 		$this->logger = $logger;
 		$this->id = $id;
-        $this->notifier = $notifier;
+		$this->notifier = $notifier;
 	}
 
 	public function run(){
 		$this->registerClassLoader();
 		gc_enable();
-		ini_set("memory_limit", -1);
+		ini_set("memory_limit", '-1');
 
 		global $store;
 		$store = [];
@@ -54,12 +58,12 @@ class AsyncWorker extends Worker{
 		return "Asynchronous Worker #" . $this->id;
 	}
 
-    public function getId() {
-        return $this->id;
-    }
+	public function getId() {
+		return $this->id;
+	}
 
-    public function getNotifier(): SleeperNotifier {
-        return $this->notifier;
-    }
+	public function getNotifier() : SleeperNotifier {
+		return $this->notifier;
+	}
 
 }

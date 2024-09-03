@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * RakLib network library
  *
@@ -13,9 +15,7 @@
  *
  */
 
-
 namespace raklib\protocol;
-
 
 interface PacketReliability{
 

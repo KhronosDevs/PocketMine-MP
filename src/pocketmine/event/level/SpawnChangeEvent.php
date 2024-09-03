@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -34,10 +36,6 @@ class SpawnChangeEvent extends LevelEvent{
 	/** @var Position */
 	private $previousSpawn;
 
-	/**
-	 * @param Level    $level
-	 * @param Position $previousSpawn
-	 */
 	public function __construct(Level $level, Position $previousSpawn){
 		parent::__construct($level);
 		$this->previousSpawn = $previousSpawn;

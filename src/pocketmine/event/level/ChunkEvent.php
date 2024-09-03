@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -30,9 +32,6 @@ abstract class ChunkEvent extends LevelEvent{
 	/** @var FullChunk */
 	private $chunk;
 
-	/**
-	 * @param FullChunk $chunk
-	 */
 	public function __construct(FullChunk $chunk){
 		parent::__construct($chunk->getProvider()->getLevel());
 		$this->chunk = $chunk;

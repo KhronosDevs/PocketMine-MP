@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,8 +16,6 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\entity;
@@ -26,9 +25,15 @@ use pocketmine\entity\Entity;
 use pocketmine\event\Cancellable;
 use pocketmine\inventory\PlayerInventory;
 use pocketmine\item\Armor;
-use pocketmine\Player;
-use pocketmine\item\Item;
 use pocketmine\item\enchantment\enchantment;
+use pocketmine\item\Item;
+use pocketmine\Player;
+use function array_rand;
+use function ceil;
+use function is_array;
+use function max;
+use function min;
+use function mt_rand;
 
 class EntityDamageEvent extends EntityEvent implements Cancellable{
 	public static $handlerList = null;
@@ -59,7 +64,6 @@ class EntityDamageEvent extends EntityEvent implements Cancellable{
 
 	const CAUSE_LIGHTNING = 16;
 
-
 	private $cause;
 	private $EPF = 0;
 	private $fireProtectL = 0;
@@ -72,9 +76,7 @@ class EntityDamageEvent extends EntityEvent implements Cancellable{
 	private $thornsArmor;
 	private $thornsDamage = 0;
 
-
 	/**
-	 * @param Entity    $entity
 	 * @param int       $cause
 	 * @param int|int[] $damage
 	 *
@@ -98,7 +100,7 @@ class EntityDamageEvent extends EntityEvent implements Cancellable{
 		}
 
 		//For DAMAGE_RESISTANCE
-		if($cause !== self::CAUSE_VOID and $cause !== self::CAUSE_SUICIDE){
+		if($cause !== self::CAUSE_VOID && $cause !== self::CAUSE_SUICIDE){
 			if($entity->hasEffect(Effect::DAMAGE_RESISTANCE)){
 				$RES_level = 1 - 0.20 * ($entity->getEffect(Effect::DAMAGE_RESISTANCE)->getAmplifier() + 1);
 				if($RES_level < 0){
@@ -109,7 +111,7 @@ class EntityDamageEvent extends EntityEvent implements Cancellable{
 		}
 
 		//TODO: add zombie
-		if($entity instanceof Player and $entity->getInventory() instanceof PlayerInventory){
+		if($entity instanceof Player && $entity->getInventory() instanceof PlayerInventory){
 			switch($cause){
 				case self::CAUSE_CONTACT:
 				case self::CAUSE_ENTITY_ATTACK:
@@ -300,7 +302,7 @@ class EntityDamageEvent extends EntityEvent implements Cancellable{
 	 */
 	public function useArmors(){
 		if($this->entity instanceof Player){
-			if($this->entity->isSurvival() and $this->entity->isAlive()){
+			if($this->entity->isSurvival() && $this->entity->isAlive()){
 				foreach($this->usedArmors as $index => $cost){
 					$i = $this->entity->getInventory()->getArmorItem($index);
 					if($i->isArmor()){

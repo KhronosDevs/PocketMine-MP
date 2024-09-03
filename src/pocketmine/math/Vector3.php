@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -22,6 +24,14 @@
 namespace pocketmine\math;
 
 use pocketmine\utils\Random;
+use function abs;
+use function ceil;
+use function floor;
+use function max;
+use function pi;
+use function pow;
+use function round;
+use function sqrt;
 
 class Vector3{
 
@@ -229,15 +239,14 @@ class Vector3{
 	}
 
 	public function equals(Vector3 $v){
-		return $this->x == $v->x and $this->y == $v->y and $this->z == $v->z;
+		return $this->x == $v->x && $this->y == $v->y && $this->z == $v->z;
 	}
 
 	/**
 	 * Returns a new vector with x value equal to the second parameter, along the line between this vector and the
 	 * passed in vector, or null if not possible.
 	 *
-	 * @param Vector3 $v
-	 * @param float   $x
+	 * @param float $x
 	 *
 	 * @return Vector3
 	 */
@@ -252,7 +261,7 @@ class Vector3{
 
 		$f = ($x - $this->x) / $xDiff;
 
-		if($f < 0 or $f > 1){
+		if($f < 0 || $f > 1){
 			return null;
 		}else{
 			return new Vector3($this->x + $xDiff * $f, $this->y + $yDiff * $f, $this->z + $zDiff * $f);
@@ -263,8 +272,7 @@ class Vector3{
 	 * Returns a new vector with y value equal to the second parameter, along the line between this vector and the
 	 * passed in vector, or null if not possible.
 	 *
-	 * @param Vector3 $v
-	 * @param float   $y
+	 * @param float $y
 	 *
 	 * @return Vector3
 	 */
@@ -279,7 +287,7 @@ class Vector3{
 
 		$f = ($y - $this->y) / $yDiff;
 
-		if($f < 0 or $f > 1){
+		if($f < 0 || $f > 1){
 			return null;
 		}else{
 			return new Vector3($this->x + $xDiff * $f, $this->y + $yDiff * $f, $this->z + $zDiff * $f);
@@ -290,8 +298,7 @@ class Vector3{
 	 * Returns a new vector with z value equal to the second parameter, along the line between this vector and the
 	 * passed in vector, or null if not possible.
 	 *
-	 * @param Vector3 $v
-	 * @param float   $z
+	 * @param float $z
 	 *
 	 * @return Vector3
 	 */
@@ -306,7 +313,7 @@ class Vector3{
 
 		$f = ($z - $this->z) / $zDiff;
 
-		if($f < 0 or $f > 1){
+		if($f < 0 || $f > 1){
 			return null;
 		}else{
 			return new Vector3($this->x + $xDiff * $f, $this->y + $yDiff * $f, $this->z + $zDiff * $f);
@@ -328,10 +335,9 @@ class Vector3{
 	}
 
 	/**
-	 * @param Vector3 $pos
-	 * @param         $x
-	 * @param         $y
-	 * @param         $z
+	 * @param $x
+	 * @param $y
+	 * @param $z
 	 *
 	 * @return $this
 	 */

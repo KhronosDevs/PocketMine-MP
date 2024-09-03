@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -26,7 +28,7 @@ class RabbitStew extends Food{
 		parent::__construct(self::RABBIT_STEW, 0, $count, "Rabbit Stew");
 	}
 
-	public function getMaxStackSize() :int{
+	public function getMaxStackSize() : int{
 		return 1;
 	}
 

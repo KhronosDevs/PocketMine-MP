@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -23,8 +25,9 @@ namespace pocketmine\block;
 
 use pocketmine\item\Item;
 use pocketmine\level\Level;
-use pocketmine\Player;
 use pocketmine\math\Vector3;
+use pocketmine\Player;
+use function in_array;
 
 class RedstoneTorch extends RedstoneSource{
 
@@ -123,9 +126,9 @@ class RedstoneTorch extends RedstoneSource{
 			$sides = [Vector3::SIDE_EAST, Vector3::SIDE_WEST, Vector3::SIDE_SOUTH, Vector3::SIDE_NORTH, Vector3::SIDE_UP, Vector3::SIDE_DOWN];
 
 			foreach($sides as $side){
-				if(!in_array($side, $ignore)){
+				if(!in_array($side, $ignore, true)){
 					$block = $this->getSide($side);
-					if(!in_array($hash = Level::blockHash($block->x, $block->y, $block->z), $notCheck)){
+					if(!in_array($hash = Level::blockHash($block->x, $block->y, $block->z), $notCheck, true)){
 						$this->activateBlock($block);
 					}
 				}
@@ -150,17 +153,17 @@ class RedstoneTorch extends RedstoneSource{
 			$sides = [Vector3::SIDE_EAST, Vector3::SIDE_WEST, Vector3::SIDE_SOUTH, Vector3::SIDE_NORTH];
 
 			foreach($sides as $side){
-				if(!in_array($side, $ignore)){
+				if(!in_array($side, $ignore, true)){
 					$block = $this->getSide($side);
-					if(!in_array($hash = Level::blockHash($block->x, $block->y, $block->z), $notCheck)){
+					if(!in_array($hash = Level::blockHash($block->x, $block->y, $block->z), $notCheck, true)){
 						$this->deactivateBlock($block);
 					}
 				}
 			}
 
-			if(!in_array(Vector3::SIDE_DOWN, $ignore)){
+			if(!in_array(Vector3::SIDE_DOWN, $ignore, true)){
 				$block = $this->getSide(Vector3::SIDE_DOWN);
-				if(!in_array($hash = Level::blockHash($block->x, $block->y, $block->z), $notCheck)){
+				if(!in_array($hash = Level::blockHash($block->x, $block->y, $block->z), $notCheck, true)){
 					if(!$this->checkPower($block)){
 						/** @var $block ActiveRedstoneLamp */
 						if($block->getId() == Block::ACTIVE_REDSTONE_LAMP) $block->turnOff();
@@ -188,8 +191,8 @@ class RedstoneTorch extends RedstoneSource{
 			$below = $this->getSide(0);
 			$side = $this->getDamage();
 
-			if($this->getSide($faces[$side])->isTransparent() === true and
-				!($side === 0 and ($below->getId() === self::FENCE or
+			if($this->getSide($faces[$side])->isTransparent() === true &&
+				!($side === 0 && ($below->getId() === self::FENCE ||
 						$below->getId() === self::COBBLE_WALL
 					))
 			){
@@ -227,7 +230,7 @@ class RedstoneTorch extends RedstoneSource{
 	public function place(Item $item, Block $block, Block $target, $face, $fx, $fy, $fz, Player $player = null){
 		$below = $this->getSide(0);
 
-		if($target->isTransparent() === false and $face !== 0){
+		if($target->isTransparent() === false && $face !== 0){
 			$faces = [
 				1 => 5,
 				2 => 4,
@@ -240,9 +243,9 @@ class RedstoneTorch extends RedstoneSource{
 
 			return true;
 		}elseif(
-			$below->isTransparent() === false or $below->getId() === self::FENCE or
-			$below->getId() === self::COBBLE_WALL or
-			$below->getId() == Block::INACTIVE_REDSTONE_LAMP or
+			$below->isTransparent() === false || $below->getId() === self::FENCE ||
+			$below->getId() === self::COBBLE_WALL ||
+			$below->getId() == Block::INACTIVE_REDSTONE_LAMP ||
 			$below->getId() == Block::ACTIVE_REDSTONE_LAMP
 		){
 			$this->meta = 0;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -23,8 +25,14 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
 use pocketmine\event\TranslationContainer;
-use pocketmine\utils\TextFormat;
 use pocketmine\Player;
+use pocketmine\utils\TextFormat;
+use function count;
+use function explode;
+use function floor;
+use function is_numeric;
+use function max;
+use function min;
 
 class BiomeCommand extends VanillaCommand{
 
@@ -50,7 +58,7 @@ class BiomeCommand extends VanillaCommand{
 		if($sender instanceof Player){
 			if($args[0] == "set"){
 				$biome = isset($args[1]) ? $args[1] : 1;//默认改成草原
-				if(isset($sender->selectedPos[0]) and isset($sender->selectedPos[1])){
+				if(isset($sender->selectedPos[0]) && isset($sender->selectedPos[1])){
 					if(is_numeric($biome) === false){
 						$sender->sendMessage(TextFormat::RED . new TranslationContainer("pocketmine.command.biome.wrongBio"));
 						return false;
@@ -82,7 +90,7 @@ class BiomeCommand extends VanillaCommand{
 					$sender->sendMessage(TextFormat::RED . new TranslationContainer("pocketmine.command.biome.wrongCol"));
 					return false;
 				}
-				if(isset($sender->selectedPos[0]) and isset($sender->selectedPos[1])){
+				if(isset($sender->selectedPos[0]) && isset($sender->selectedPos[1])){
 					if($sender->selectedLev[0] !== $sender->selectedLev[1]){
 						$sender->sendMessage(TextFormat::RED . new TranslationContainer("pocketmine.command.biome.wrongLev"));
 						return false;

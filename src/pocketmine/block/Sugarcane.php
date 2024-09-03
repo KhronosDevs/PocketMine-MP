@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -40,7 +42,6 @@ class Sugarcane extends Flowable{
 		return "Sugarcane";
 	}
 
-
 	public function getDrops(Item $item) : array {
 		return [
 			[Item::SUGARCANE, 0, 1],
@@ -48,7 +49,7 @@ class Sugarcane extends Flowable{
 	}
 
 	public function onActivate(Item $item, Player $player = null){
-		if($item->getId() === Item::DYE and $item->getDamage() === 0x0F){ //Bonemeal
+		if($item->getId() === Item::DYE && $item->getDamage() === 0x0F){ //Bonemeal
 			if($this->getSide(0)->getId() !== self::SUGARCANE_BLOCK){
 				for($y = 1; $y < 3; ++$y){
 					$b = $this->getLevel()->getBlock(new Vector3($this->x, $this->y + $y, $this->z));
@@ -76,7 +77,7 @@ class Sugarcane extends Flowable{
 	public function onUpdate($type){
 		if($type === Level::BLOCK_UPDATE_NORMAL){
 			$down = $this->getSide(0);
-			if($down->isTransparent() === true and $down->getId() !== self::SUGARCANE_BLOCK){
+			if($down->isTransparent() === true && $down->getId() !== self::SUGARCANE_BLOCK){
 				$this->getLevel()->useBreakOn($this);
 
 				return Level::BLOCK_UPDATE_NORMAL;
@@ -111,12 +112,12 @@ class Sugarcane extends Flowable{
 			$this->getLevel()->setBlock($block, new Sugarcane(), true);
 
 			return true;
-		}elseif($down->getId() === self::GRASS or $down->getId() === self::DIRT or $down->getId() === self::SAND){
+		}elseif($down->getId() === self::GRASS || $down->getId() === self::DIRT || $down->getId() === self::SAND){
 			$block0 = $down->getSide(2);
 			$block1 = $down->getSide(3);
 			$block2 = $down->getSide(4);
 			$block3 = $down->getSide(5);
-			if(($block0 instanceof Water) or ($block1 instanceof Water) or ($block2 instanceof Water) or ($block3 instanceof Water)){
+			if(($block0 instanceof Water) || ($block1 instanceof Water) || ($block2 instanceof Water) || ($block3 instanceof Water)){
 				$this->getLevel()->setBlock($block, new Sugarcane(), true);
 
 				return true;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -22,7 +24,6 @@
 namespace pocketmine\item;
 
 use pocketmine\entity\Entity;
-use pocketmine\entity\Human;
 use pocketmine\event\entity\EntityEatItemEvent;
 use pocketmine\network\protocol\EntityEventPacket;
 use pocketmine\Player;
@@ -34,7 +35,7 @@ abstract class Food extends Item implements FoodSource{
 	}
 
 	public function canBeConsumedBy(Entity $entity) : bool{
-		return $entity instanceof Player and ($entity->getFood() < $entity->getMaxFood()) and $this->canBeConsumed();
+		return $entity instanceof Player && ($entity->getFood() < $entity->getMaxFood()) && $this->canBeConsumed();
 	}
 
 	public function getResidue(){

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -24,15 +26,17 @@ namespace pocketmine\tile;
 use pocketmine\entity\Entity;
 use pocketmine\event\entity\EntityGenerateEvent;
 use pocketmine\item\Item;
+use pocketmine\level\format\FullChunk;
 use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\DoubleTag;
-use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\FloatTag;
 use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\StringTag;
-use pocketmine\level\format\FullChunk;
 use pocketmine\Player;
+use function mt_getrandmax;
+use function mt_rand;
 
 class MobSpawner extends Spawnable{
 
@@ -132,7 +136,7 @@ class MobSpawner extends Spawnable{
 				$count++;
 			}
 		}
-		if($hasPlayer and $count < 15){ // Spawn limit = 15
+		if($hasPlayer && $count < 15){ // Spawn limit = 15
 			return true;
 		}
 		return false;

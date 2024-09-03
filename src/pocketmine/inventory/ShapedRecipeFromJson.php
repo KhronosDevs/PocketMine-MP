@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -22,9 +24,12 @@
 namespace pocketmine\inventory;
 
 use pocketmine\item\Item;
+use pocketmine\math\Vector2;
 use pocketmine\Server;
 use pocketmine\utils\UUID;
-use pocketmine\math\Vector2;
+use function array_fill;
+use function array_key_exists;
+use function count;
 
 class ShapedRecipeFromJson extends ShapedRecipe{
 	/** @var Item */
@@ -41,15 +46,14 @@ class ShapedRecipeFromJson extends ShapedRecipe{
 	private $shapeItems = [];
 
 	/**
-	 * @param Item     $result
-	 * @param int      $height
-	 * @param int      $width
+	 * @param int $height
+	 * @param int $width
 	 *
 	 * @throws \Exception
 	 */
 	public function __construct(Item $result, $height, $width){
 		for($h = 0; $h < $height; $h++){
-			if($width === 0 or $width > 3){
+			if($width === 0 || $width > 3){
 				throw new \InvalidStateException("Crafting rows should be 1, 2, 3 wide, not $width");
 			}
 			$this->ingredients[] = array_fill(0, $width, null);
@@ -89,7 +93,6 @@ class ShapedRecipeFromJson extends ShapedRecipe{
 
 	/**
 	 * @param string $key
-	 * @param Item   $item
 	 *
 	 * @return $this
 	 * @throws \Exception

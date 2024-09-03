@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -34,10 +36,6 @@ class PlayerDropItemEvent extends PlayerEvent implements Cancellable{
 	/** @var Item */
 	private $drop;
 
-	/**
-	 * @param Player $player
-	 * @param Item   $drop
-	 */
 	public function __construct(Player $player, Item $drop){
 		$this->player = $player;
 		$this->drop = $drop;

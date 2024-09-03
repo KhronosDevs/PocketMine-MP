@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -21,8 +23,8 @@
 
 namespace pocketmine\entity;
 
-use pocketmine\Player;
 use pocketmine\network\protocol\AddEntityPacket;
+use pocketmine\Player;
 
 class ZombieVillager extends Zombie{
 	const NETWORK_ID = 44;

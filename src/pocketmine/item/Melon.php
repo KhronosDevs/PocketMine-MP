@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -34,4 +36,3 @@ class Melon extends Food{
 		return 1.2;
 	}
 }
-

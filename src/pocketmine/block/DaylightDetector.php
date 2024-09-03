@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -22,12 +24,12 @@
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
-use pocketmine\Player;
 use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\nbt\tag\StringTag;
 use pocketmine\nbt\tag\IntTag;
-use pocketmine\tile\Tile;
+use pocketmine\nbt\tag\StringTag;
+use pocketmine\Player;
 use pocketmine\tile\DLDetector;
+use pocketmine\tile\Tile;
 
 class DaylightDetector extends RedstoneSource{
 	protected $id = self::DAYLIGHT_SENSOR;

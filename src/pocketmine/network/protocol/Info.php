@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,7 +25,6 @@
  * Minecraft: PE multiplayer protocol implementation
  */
 namespace pocketmine\network\protocol;
-
 
 interface Info{
 
@@ -98,14 +99,3 @@ interface Info{
 	const REPLACE_SELECTED_ITEM_PACKET = 0x40;
 	const ADD_ITEM_PACKET = 0x41;
 }
-
-
-
-
-
-
-
-
-
-
-

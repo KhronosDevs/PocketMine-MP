@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * PocketMine Standard PHP Library
  * Copyright (C) 2014 PocketMine Team <https://github.com/PocketMine/PocketMine-SPL>
@@ -26,7 +28,7 @@ class SplFixedByteArray extends SplFixedArray{
 
 	public function chunk($start, $size, $normalize = true){
 		$end = $start + $size;
-		if($normalize and $this->convert){
+		if($normalize && $this->convert){
 			$d = "";
 			for($i = $start; $i < $end; ++$i){
 				$d .= chr($this[$i]);

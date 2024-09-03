@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -26,6 +28,14 @@ use pocketmine\Server;
 use pocketmine\utils\Utils;
 use pocketmine\utils\UUID;
 use pocketmine\utils\VersionString;
+use function array_values;
+use function count;
+use function json_encode;
+use function md5;
+use function microtime;
+use function php_uname;
+use function strlen;
+use const PHP_VERSION;
 
 class SendUsageTask extends AsyncTask{
 
@@ -99,7 +109,6 @@ class SendUsageTask extends AsyncTask{
 					"ticks" => $server->getTick()
 				];
 
-
 				//This anonymizes the user ids so they cannot be reversed to the original
 				foreach($playerList as $k => $v){
 					$playerList[$k] = md5($v);
@@ -142,7 +151,7 @@ class SendUsageTask extends AsyncTask{
 		try{
 			Utils::postURL($this->endpoint, $this->data, 5, [
 				"Content-Type: application/json",
-				"Content-Length: ". strlen($this->data)
+				"Content-Length: " . strlen($this->data)
 			]);
 		}catch(\Throwable $e){
 

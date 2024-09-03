@@ -23,76 +23,78 @@ declare(strict_types=1);
 
 namespace pocketmine\promise;
 
+use function count;
+
 final class Promise{
 
-    /** @var PromiseSharedData */
-    private $shared;
+	/** @var PromiseSharedData */
+	private $shared;
 
-    /**
-     * @internal Do NOT call this directly; create a new Resolver and call Resolver->promise()
-     * @see PromiseResolver
-     */
-    public function __construct(PromiseSharedData $shared) {
-        $this->shared = $shared;
-    }
+	/**
+	 * @internal Do NOT call this directly; create a new Resolver and call Resolver->promise()
+	 * @see PromiseResolver
+	 */
+	public function __construct(PromiseSharedData $shared) {
+		$this->shared = $shared;
+	}
 
-    public function onCompletion(\Closure $onSuccess, \Closure $onFailure) {
-        $state = $this->shared->state;
-        if($state === true){
-            $onSuccess($this->shared->result);
-        }elseif($state === false){
-            $onFailure();
-        }else{
-            static $idCounter = 0;
-            $id = ++$idCounter;
-            $this->shared->onSuccess[$id] = $onSuccess;
-            $this->shared->onFailure[$id] = $onFailure;
-        }
-    }
+	public function onCompletion(\Closure $onSuccess, \Closure $onFailure) {
+		$state = $this->shared->state;
+		if($state === true){
+			$onSuccess($this->shared->result);
+		}elseif($state === false){
+			$onFailure();
+		}else{
+			static $idCounter = 0;
+			$id = ++$idCounter;
+			$this->shared->onSuccess[$id] = $onSuccess;
+			$this->shared->onFailure[$id] = $onFailure;
+		}
+	}
 
-    public function isResolved() : bool{
-        return $this->shared->state === true;
-    }
+	public function isResolved() : bool{
+		return $this->shared->state === true;
+	}
 
-    /**
-     * Returns a promise that will resolve only once all the Promises in
-     * `$promises` have resolved. The resolution value of the returned promise
-     * will be an array containing the resolution values of each Promises in
-     * `$promises` indexed by the respective Promises' array keys.
-     *
-     * @param Promise[] $promises
-     */
-    public static function all(array $promises) : Promise{
-        if(count($promises) === 0){
-            throw new \InvalidArgumentException("At least one promise must be provided");
-        }
+	/**
+	 * Returns a promise that will resolve only once all the Promises in
+	 * `$promises` have resolved. The resolution value of the returned promise
+	 * will be an array containing the resolution values of each Promises in
+	 * `$promises` indexed by the respective Promises' array keys.
+	 *
+	 * @param Promise[] $promises
+	 */
+	public static function all(array $promises) : Promise{
+		if(count($promises) === 0){
+			throw new \InvalidArgumentException("At least one promise must be provided");
+		}
 
-        $resolver = new PromiseResolver();
-        $values = [];
-        $toResolve = count($promises);
-        $continue = true;
+		$resolver = new PromiseResolver();
+		$values = [];
+		$toResolve = count($promises);
+		$continue = true;
 
-        foreach($promises as $key => $promise){
-            $promise->onCompletion(
-                function($value) use ($resolver, $key, $toResolve, &$values) {
-                    $values[$key] = $value;
+		foreach($promises as $key => $promise){
+			$promise->onCompletion(
+				function($value) use ($resolver, $key, $toResolve, &$values) {
+					$values[$key] = $value;
 
-                    if(count($values) === $toResolve){
-                        $resolver->resolve($values);
-                    }
-                },
-                function() use ($resolver, &$continue) {
-                    if($continue){
-                        $continue = false;
-                        $resolver->reject();
-                    }
-                }
-            );
+					if(count($values) === $toResolve){
+						$resolver->resolve($values);
+					}
+				},
+				function() use ($resolver, &$continue) {
+					if($continue){
+						$continue = false;
+						$resolver->reject();
+					}
+				}
+			);
 
-            if(!$continue) break;
-        }
+			if(!$continue) break;
+		}
 
-        return $resolver->getPromise();
-    }
+		return $resolver->getPromise();
+	}
 
 }

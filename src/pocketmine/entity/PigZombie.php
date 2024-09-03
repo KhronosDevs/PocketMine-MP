@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,18 +17,19 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
 namespace pocketmine\entity;
 
+use pocketmine\event\entity\EntityDamageByEntityEvent;
+use pocketmine\item\enchantment\Enchantment;
+use pocketmine\item\Item as ItemItem;
 use pocketmine\network\protocol\AddEntityPacket;
 use pocketmine\network\protocol\MobEquipmentPacket;
-use pocketmine\event\entity\EntityDamageByEntityEvent;
 use pocketmine\Player;
-use pocketmine\item\Item as ItemItem;
-use pocketmine\item\enchantment\Enchantment;
+use function mt_rand;
 
 class PigZombie extends Monster{
 	const NETWORK_ID = 36;
@@ -39,11 +42,11 @@ class PigZombie extends Monster{
 	public $gravity = 0.3;
 
 	public $dropExp = [5, 5];
-	
+
 	public function getName() : string{
 		return "PigZombie";
 	}
-	
+
 	public function spawnTo(Player $player){
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
@@ -60,7 +63,7 @@ class PigZombie extends Monster{
 		$player->dataPacket($pk);
 
 		parent::spawnTo($player);
-		
+
 		$pk = new MobEquipmentPacket();
 		$pk->eid = $this->getId();
 		$pk->item = new ItemItem(283);
@@ -73,7 +76,7 @@ class PigZombie extends Monster{
 	public function getDrops(){
 		$cause = $this->lastDamageCause;
 		$drops = [];
-		if($cause instanceof EntityDamageByEntityEvent and $cause->getDamager() instanceof Player){
+		if($cause instanceof EntityDamageByEntityEvent && $cause->getDamager() instanceof Player){
 			$lootingL = $cause->getDamager()->getItemInHand()->getEnchantmentLevel(Enchantment::TYPE_WEAPON_LOOTING);
 			if(mt_rand(1, 200) <= (5 + 2 * $lootingL)){
 				$drops[] = ItemItem::get(ItemItem::GOLD_INGOT, 0, 1);

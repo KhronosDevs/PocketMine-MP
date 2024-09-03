@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -23,10 +25,9 @@ namespace pocketmine\block;
 
 use pocketmine\entity\Entity;
 use pocketmine\item\Item;
-use pocketmine\math\Math;
-use pocketmine\math\Vector3;
 use pocketmine\level\Level;
 use pocketmine\level\sound\GenericSound;
+use pocketmine\math\Vector3;
 use pocketmine\Player;
 
 class PressurePlate extends RedstoneSource{
@@ -42,13 +43,13 @@ class PressurePlate extends RedstoneSource{
 	}
 
 	public function onEntityCollide(Entity $entity){
-		if($this->getLevel()->getServer()->redstoneEnabled and $this->canActivate){
+		if($this->getLevel()->getServer()->redstoneEnabled && $this->canActivate){
 			if(!$this->isActivated()){
 				$this->meta = 1;
 				$this->getLevel()->setBlock($this, $this, true, false);
 				$this->getLevel()->addSound(new GenericSound($this, 1000));
 			}
-			if(!$this->isActivated() or ($this->isActivated() and ($this->getLevel()->getServer()->getTick() % 30) == 0)){
+			if(!$this->isActivated() || ($this->isActivated() && ($this->getLevel()->getServer()->getTick() % 30) == 0)){
 				$this->activate();
 			}
 		}

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace pocketmine\plugin;
 
 use pocketmine\event\plugin\PluginDisableEvent;
@@ -7,15 +9,20 @@ use pocketmine\event\plugin\PluginEnableEvent;
 use pocketmine\Server;
 use pocketmine\utils\MainLogger;
 use pocketmine\utils\TextFormat;
+use function class_exists;
+use function dirname;
+use function file_exists;
+use function file_get_contents;
+use function is_dir;
+use function trigger_error;
+use const DIRECTORY_SEPARATOR;
+use const E_USER_WARNING;
 
 class FolderPluginLoader implements PluginLoader{
 
 	/** @var Server */
 	private $server;
 
-	/**
-	 * @param Server $server
-	 */
 	public function __construct(Server $server){
 		$this->server = $server;
 	}
@@ -29,11 +36,11 @@ class FolderPluginLoader implements PluginLoader{
 	 */
 	public function loadPlugin($file)
 	{
-		if(is_dir($file) and file_exists($file . "/plugin.yml") and file_exists($file . "/src/")){
+		if(is_dir($file) && file_exists($file . "/plugin.yml") && file_exists($file . "/src/")){
 			if(($description = $this->getPluginDescription($file)) instanceof PluginDescription){
 				MainLogger::getLogger()->info(TextFormat::LIGHT_PURPLE . "Loading source plugin " . $description->getFullName());
 				$dataFolder = dirname($file) . DIRECTORY_SEPARATOR . $description->getName();
-				if(file_exists($dataFolder) and !is_dir($dataFolder)){
+				if(file_exists($dataFolder) && !is_dir($dataFolder)){
 					trigger_error("Projected dataFolder '" . $dataFolder . "' for " . $description->getName() . " exists and is not a directory", E_USER_WARNING);
 
 					return null;
@@ -66,7 +73,7 @@ class FolderPluginLoader implements PluginLoader{
 	 * @return PluginDescription
 	 */
 	public function getPluginDescription($file){
-		if(is_dir($file) and file_exists($file . "/plugin.yml")){
+		if(is_dir($file) && file_exists($file . "/plugin.yml")){
 			$yaml = @file_get_contents($file . "/plugin.yml");
 			if($yaml != ""){
 				return new PluginDescription($yaml);
@@ -86,8 +93,6 @@ class FolderPluginLoader implements PluginLoader{
 	}
 
 	/**
-	 * @param PluginBase $plugin
-	 * @param PluginDescription $description
 	 * @param string $dataFolder
 	 * @param string $file
 	 */
@@ -96,11 +101,8 @@ class FolderPluginLoader implements PluginLoader{
 		$plugin->onLoad();
 	}
 
-	/**
-	 * @param Plugin $plugin
-	 */
 	public function enablePlugin(Plugin $plugin){
-		if($plugin instanceof PluginBase and !$plugin->isEnabled()){
+		if($plugin instanceof PluginBase && !$plugin->isEnabled()){
 			MainLogger::getLogger()->info("Enabling " . $plugin->getDescription()->getFullName());
 
 			$plugin->setEnabled(true);
@@ -109,11 +111,8 @@ class FolderPluginLoader implements PluginLoader{
 		}
 	}
 
-	/**
-	 * @param Plugin $plugin
-	 */
 	public function disablePlugin(Plugin $plugin){
-		if($plugin instanceof PluginBase and $plugin->isEnabled()){
+		if($plugin instanceof PluginBase && $plugin->isEnabled()){
 			MainLogger::getLogger()->info("Disabling " . $plugin->getDescription()->getFullName());
 
 			Server::getInstance()->getPluginManager()->callEvent(new PluginDisableEvent($plugin));

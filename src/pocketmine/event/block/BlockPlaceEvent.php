@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -37,7 +39,6 @@ class BlockPlaceEvent extends BlockEvent implements Cancellable{
 
 	/** @var \pocketmine\item\Item */
 	protected $item;
-
 
 	protected $blockReplace;
 	protected $blockAgainst;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,7 +26,34 @@ namespace pocketmine\command\defaults;
 use pocketmine\command\CommandSender;
 use pocketmine\event\TimingsHandler;
 use pocketmine\event\TranslationContainer;
-
+use function count;
+use function curl_close;
+use function curl_exec;
+use function curl_init;
+use function curl_setopt;
+use function fclose;
+use function file_exists;
+use function fopen;
+use function fseek;
+use function fwrite;
+use function microtime;
+use function mkdir;
+use function preg_match;
+use function round;
+use function stream_get_contents;
+use function strtolower;
+use const CURLOPT_AUTOREFERER;
+use const CURLOPT_FOLLOWLOCATION;
+use const CURLOPT_FORBID_REUSE;
+use const CURLOPT_FRESH_CONNECT;
+use const CURLOPT_HEADER;
+use const CURLOPT_HTTPHEADER;
+use const CURLOPT_POST;
+use const CURLOPT_POSTFIELDS;
+use const CURLOPT_RETURNTRANSFER;
+use const CURLOPT_SSL_VERIFYHOST;
+use const CURLOPT_SSL_VERIFYPEER;
+use const PHP_EOL;
 
 class TimingsCommand extends VanillaCommand{
 
@@ -75,7 +104,7 @@ class TimingsCommand extends VanillaCommand{
 		if($mode === "reset"){
 			TimingsHandler::reload();
 			$sender->sendMessage(new TranslationContainer("pocketmine.command.timings.reset"));
-		}elseif($mode === "merged" or $mode === "report" or $paste){
+		}elseif($mode === "merged" || $mode === "report" || $paste){
 
 			$sampleTime = microtime(true) - self::$timingStart;
 			$index = 0;
@@ -122,7 +151,6 @@ class TimingsCommand extends VanillaCommand{
 
 					return true;
 				}
-
 
 				$sender->sendMessage(new TranslationContainer("pocketmine.command.timings.timingsUpload", ["http://paste.ubuntu.com/" . $matches[1] . "/"]));
 				$sender->sendMessage(new TranslationContainer("pocketmine.command.timings.timingsRead", ["http://timings.aikar.co/?url=" . $matches[1]]));

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -30,7 +32,11 @@ use pocketmine\level\Level;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\Player;
 use pocketmine\tile\Tile;
-
+use function array_fill;
+use function chr;
+use function count;
+use function ord;
+use function strlen;
 
 abstract class BaseFullChunk implements FullChunk{
 
@@ -82,8 +88,8 @@ abstract class BaseFullChunk implements FullChunk{
 	 * @param string        $blockLight
 	 * @param int[]         $biomeColors
 	 * @param int[]         $heightMap
-	 * @param CompoundTag[]    $entities
-	 * @param CompoundTag[]    $tiles
+	 * @param CompoundTag[] $entities
+	 * @param CompoundTag[] $tiles
 	 */
 	protected function __construct($provider, $x, $z, $blocks, $data, $skyLight, $blockLight, array $biomeColors = [], array $heightMap = [], array $entities = [], array $tiles = [], array $extraData = []){
 		$this->provider = $provider;
@@ -129,7 +135,7 @@ abstract class BaseFullChunk implements FullChunk{
 	}
 
 	public function initChunk(){
-		if($this->getProvider() instanceof LevelProvider and !$this->isInit){
+		if($this->getProvider() instanceof LevelProvider && !$this->isInit){
 			$changed = false;
 			if($this->NBTentities !== null){
 				$this->getProvider()->getLevel()->timings->syncChunkLoadEntitiesTimer->startTiming();
@@ -140,7 +146,7 @@ abstract class BaseFullChunk implements FullChunk{
 							continue;
 						}
 
-						if(($nbt["Pos"][0] >> 4) !== $this->x or ($nbt["Pos"][2] >> 4) !== $this->z){
+						if(($nbt["Pos"][0] >> 4) !== $this->x || ($nbt["Pos"][2] >> 4) !== $this->z){
 							$changed = true;
 							continue; //Fixes entities allocated in wrong chunks.
 						}
@@ -163,7 +169,7 @@ abstract class BaseFullChunk implements FullChunk{
 							continue;
 						}
 
-						if(($nbt["x"] >> 4) !== $this->x or ($nbt["z"] >> 4) !== $this->z){
+						if(($nbt["x"] >> 4) !== $this->x || ($nbt["z"] >> 4) !== $this->z){
 							$changed = true;
 							continue; //Fixes tiles allocated in wrong chunks.
 						}
@@ -293,7 +299,7 @@ abstract class BaseFullChunk implements FullChunk{
 		if($cache){
 			$h = $this->getHeightMap($x, $z);
 
-			if($h !== 0 and $h !== 127){
+			if($h !== 0 && $h !== 127){
 				return $h;
 			}
 		}
@@ -311,21 +317,21 @@ abstract class BaseFullChunk implements FullChunk{
 
 	public function addEntity(Entity $entity){
 		$this->entities[$entity->getId()] = $entity;
-		if(!($entity instanceof Player) and $this->isInit){
+		if(!($entity instanceof Player) && $this->isInit){
 			$this->hasChanged = true;
 		}
 	}
 
 	public function removeEntity(Entity $entity){
 		unset($this->entities[$entity->getId()]);
-		if(!($entity instanceof Player) and $this->isInit){
+		if(!($entity instanceof Player) && $this->isInit){
 			$this->hasChanged = true;
 		}
 	}
 
 	public function addTile(Tile $tile){
 		$this->tiles[$tile->getId()] = $tile;
-		if(isset($this->tileList[$index = (($tile->z & 0x0f) << 12) | (($tile->x & 0x0f) << 8) | ($tile->y & 0xff)]) and $this->tileList[$index] !== $tile){
+		if(isset($this->tileList[$index = (($tile->z & 0x0f) << 12) | (($tile->x & 0x0f) << 8) | ($tile->y & 0xff)]) && $this->tileList[$index] !== $tile){
 			$this->tileList[$index]->close();
 		}
 		$this->tileList[$index] = $tile;
@@ -372,7 +378,7 @@ abstract class BaseFullChunk implements FullChunk{
 		if($level === null){
 			return true;
 		}
-		if($save === true and $this->hasChanged){
+		if($save === true && $this->hasChanged){
 			$level->saveChunk($this->getX(), $this->getZ());
 		}
 		if($safe === true){

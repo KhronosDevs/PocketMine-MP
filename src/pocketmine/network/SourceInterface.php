@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -35,10 +37,8 @@ interface SourceInterface{
 	/**
 	 * Sends a DataPacket to the interface, returns an unique identifier for the packet if $needACK is true
 	 *
-	 * @param Player     $player
-	 * @param DataPacket $packet
-	 * @param bool       $needACK
-	 * @param bool       $immediate
+	 * @param bool $needACK
+	 * @param bool $immediate
 	 *
 	 * @return int
 	 */
@@ -47,9 +47,7 @@ interface SourceInterface{
 	/**
 	 * Terminates the connection
 	 *
-	 * @param Player $player
 	 * @param string $reason
-	 *
 	 */
 	public function close(Player $player, $reason = "unknown reason");
 

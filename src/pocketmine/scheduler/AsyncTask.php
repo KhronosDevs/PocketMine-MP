@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -22,6 +24,10 @@
 namespace pocketmine\scheduler;
 
 use pocketmine\Server;
+use function in_array;
+use function is_scalar;
+use function serialize;
+use function unserialize;
 
 /**
  * Class used to run async tasks in other threads.
@@ -73,7 +79,7 @@ abstract class AsyncTask extends \Threaded implements \Collectable{
 		$this->isFinished = true;
 		//$this->setGarbage();
 
-        $this->worker->getNotifier()->wakeupSleeper();
+		$this->worker->getNotifier()->wakeupSleeper();
 	}
 
 	public function isCrashed(){
@@ -104,20 +110,19 @@ abstract class AsyncTask extends \Threaded implements \Collectable{
 
 	/**
 	 * @param mixed $result
-	 * @param bool $serialize
 	 */
 	public function setResult($result, bool $serialize = true) {
-        if (!$serialize) {
-            $this->result = $result;
-            $this->serialized = false;
-            return;
-        }
+		if (!$serialize) {
+			$this->result = $result;
+			$this->serialized = false;
+			return;
+		}
 
-        if (is_scalar($result) || $result === null) {
-            $this->result = $result;
-            $this->serialized = false;
-            return;
-        }
+		if (is_scalar($result) || $result === null) {
+			$this->result = $result;
+			$this->serialized = false;
+			return;
+		}
 
 		$this->result = serialize($result);
 		$this->serialized = true;
@@ -168,8 +173,6 @@ abstract class AsyncTask extends \Threaded implements \Collectable{
 	 * Actions to execute when completed (on main thread)
 	 * Implement this if you want to handle the data in your AsyncTask after it has been processed
 	 *
-	 * @param Server $server
-	 *
 	 * @return void
 	 */
 	public function onCompletion(Server $server){
@@ -178,7 +181,7 @@ abstract class AsyncTask extends \Threaded implements \Collectable{
 
 	public function cleanObject(){
 		foreach($this as $p => $v){
-			if(!($v instanceof \Threaded) and !in_array($p, ["isFinished", "isGarbage", "cancelRun"])){
+			if(!($v instanceof \Threaded) && !in_array($p, ["isFinished", "isGarbage", "cancelRun"], true)){
 				$this->{$p} = null;
 			}
 		}

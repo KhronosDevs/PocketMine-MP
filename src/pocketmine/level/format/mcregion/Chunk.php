@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,16 +26,26 @@ namespace pocketmine\level\format\mcregion;
 use pocketmine\level\format\generic\BaseFullChunk;
 use pocketmine\level\format\LevelProvider;
 use pocketmine\nbt\NBT;
-use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\ByteArrayTag;
+use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\nbt\tag\ListTag;
-use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\IntArrayTag;
+use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\LongTag;
 use pocketmine\Player;
 use pocketmine\utils\Binary;
 use pocketmine\utils\BinaryStream;
+use function array_fill;
+use function array_values;
+use function chr;
+use function count;
+use function ord;
+use function pack;
+use function str_repeat;
+use function substr;
+use function unpack;
+use const ZLIB_ENCODING_DEFLATE;
 
 class Chunk extends BaseFullChunk{
 
@@ -46,35 +58,35 @@ class Chunk extends BaseFullChunk{
 			$this->nbt = new CompoundTag("Level", []);
 			return;
 		}
-		
+
 		$this->nbt = $nbt;
 
-		if(isset($this->nbt->Entities) and $this->nbt->Entities instanceof ListTag){
+		if(isset($this->nbt->Entities) && $this->nbt->Entities instanceof ListTag){
 			$this->nbt->Entities->setTagType(NBT::TAG_Compound);
 		}else{
 			$this->nbt->Entities = new ListTag("Entities", []);
 			$this->nbt->Entities->setTagType(NBT::TAG_Compound);
 		}
 
-		if(isset($this->nbt->TileEntities) and $this->nbt->TileEntities instanceof ListTag){
+		if(isset($this->nbt->TileEntities) && $this->nbt->TileEntities instanceof ListTag){
 			$this->nbt->TileEntities->setTagType(NBT::TAG_Compound);
 		}else{
 			$this->nbt->TileEntities = new ListTag("TileEntities", []);
 			$this->nbt->TileEntities->setTagType(NBT::TAG_Compound);
 		}
 
-		if(isset($this->nbt->TileTicks) and $this->nbt->TileTicks instanceof ListTag){
+		if(isset($this->nbt->TileTicks) && $this->nbt->TileTicks instanceof ListTag){
 			$this->nbt->TileTicks->setTagType(NBT::TAG_Compound);
 		}else{
 			$this->nbt->TileTicks = new ListTag("TileTicks", []);
 			$this->nbt->TileTicks->setTagType(NBT::TAG_Compound);
 		}
 
-		if(!isset($this->nbt->BiomeColors) or !($this->nbt->BiomeColors instanceof IntArrayTag)){
+		if(!isset($this->nbt->BiomeColors) || !($this->nbt->BiomeColors instanceof IntArrayTag)){
 			$this->nbt->BiomeColors = new IntArrayTag("BiomeColors", array_fill(0, 256, 0));
 		}
 
-		if(!isset($this->nbt->HeightMap) or !($this->nbt->HeightMap instanceof IntArrayTag)){
+		if(!isset($this->nbt->HeightMap) || !($this->nbt->HeightMap instanceof IntArrayTag)){
 			$this->nbt->HeightMap = new IntArrayTag("HeightMap", array_fill(0, 256, 0));
 		}
 
@@ -90,7 +102,7 @@ class Chunk extends BaseFullChunk{
 
 		$extraData = [];
 
-		if(!isset($this->nbt->ExtraData) or !($this->nbt->ExtraData instanceof ByteArrayTag)){
+		if(!isset($this->nbt->ExtraData) || !($this->nbt->ExtraData instanceof ByteArrayTag)){
 			$this->nbt->ExtraData = new ByteArrayTag("ExtraData", Binary::writeInt(0));
 		}else{
 			$stream = new BinaryStream($this->nbt->ExtraData->getValue());
@@ -156,7 +168,7 @@ class Chunk extends BaseFullChunk{
 		}
 	}
 
-	public function setBlock($x, $y, $z, $blockId = null, $meta = null): bool{
+	public function setBlock($x, $y, $z, $blockId = null, $meta = null) : bool{
 		$i = ($x << 11) | ($z << 7) | $y;
 
 		$changed = false;
@@ -261,7 +273,7 @@ class Chunk extends BaseFullChunk{
 	 * @return bool
 	 */
 	public function isPopulated(){
-		return isset($this->nbt->TerrainPopulated) and $this->nbt->TerrainPopulated->getValue() > 0;
+		return isset($this->nbt->TerrainPopulated) && $this->nbt->TerrainPopulated->getValue() > 0;
 	}
 
 	/**
@@ -305,7 +317,7 @@ class Chunk extends BaseFullChunk{
 			$nbt->readCompressed($data, ZLIB_ENCODING_DEFLATE);
 			$chunk = $nbt->getData();
 
-			if(!isset($chunk->Level) or !($chunk->Level instanceof CompoundTag)){
+			if(!isset($chunk->Level) || !($chunk->Level instanceof CompoundTag)){
 				return null;
 			}
 
@@ -314,7 +326,7 @@ class Chunk extends BaseFullChunk{
 			return null;
 		}
 	}
-	
+
 	public static function fromFastBinary($data, LevelProvider $provider = null){
 
 		try{
@@ -352,7 +364,7 @@ class Chunk extends BaseFullChunk{
 			return null;
 		}
 	}
-	
+
 	public function toFastBinary(){
 		return
 			Binary::writeInt($this->x) .
@@ -386,7 +398,7 @@ class Chunk extends BaseFullChunk{
 		$entities = [];
 
 		foreach($this->getEntities() as $entity){
-			if(!($entity instanceof Player) and !$entity->closed){
+			if(!($entity instanceof Player) && !$entity->closed){
 				$entity->saveNBT();
 				$entities[] = $entity->namedtag;
 			}
@@ -394,7 +406,6 @@ class Chunk extends BaseFullChunk{
 
 		$nbt->Entities = new ListTag("Entities", $entities);
 		$nbt->Entities->setTagType(NBT::TAG_Compound);
-
 
 		$tiles = [];
 		foreach($this->getTiles() as $tile){

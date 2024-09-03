@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -25,12 +27,13 @@ use pocketmine\item\Item;
 use pocketmine\item\Tool;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\Player;
 use pocketmine\tile\Dropper as TileDropper;
 use pocketmine\tile\Tile;
+use function abs;
 
 class Dropper extends Solid implements ElectricalAppliance{
 
@@ -125,7 +128,7 @@ class Dropper extends Solid implements ElectricalAppliance{
 				$dropper = Tile::createTile(Tile::DROPPER, $this->getLevel()->getChunk($this->x >> 4, $this->z >> 4), $nbt);
 			}
 
-			if($player->isCreative() and $player->getServer()->limitedCreative){
+			if($player->isCreative() && $player->getServer()->limitedCreative){
 				return true;
 			}
 			$player->addWindow($dropper->getInventory());

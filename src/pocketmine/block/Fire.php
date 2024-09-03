@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -32,6 +34,9 @@ use pocketmine\item\Item;
 use pocketmine\level\Level;
 use pocketmine\math\Vector3;
 use pocketmine\Server;
+use function max;
+use function min;
+use function mt_rand;
 
 class Fire extends Flowable{
 
@@ -92,26 +97,26 @@ class Fire extends Flowable{
 	}
 
 	public function onUpdate($type){
-		if($type == Level::BLOCK_UPDATE_NORMAL or $type == Level::BLOCK_UPDATE_RANDOM or $type == Level::BLOCK_UPDATE_SCHEDULED){
-			if(!$this->getSide(Vector3::SIDE_DOWN)->isTopFacingSurfaceSolid() and !$this->canNeighborBurn()){
+		if($type == Level::BLOCK_UPDATE_NORMAL || $type == Level::BLOCK_UPDATE_RANDOM || $type == Level::BLOCK_UPDATE_SCHEDULED){
+			if(!$this->getSide(Vector3::SIDE_DOWN)->isTopFacingSurfaceSolid() && !$this->canNeighborBurn()){
 				$this->getLevel()->setBlock($this, new Air(), true);
 				return Level::BLOCK_UPDATE_NORMAL;
-			}elseif($type == Level::BLOCK_UPDATE_NORMAL or $type == Level::BLOCK_UPDATE_RANDOM){
+			}elseif($type == Level::BLOCK_UPDATE_NORMAL || $type == Level::BLOCK_UPDATE_RANDOM){
 				$this->getLevel()->scheduleUpdate($this, $this->getTickRate() + mt_rand(0, 10));
-			}elseif($type == Level::BLOCK_UPDATE_SCHEDULED and $this->getLevel()->getServer()->fireSpread){
+			}elseif($type == Level::BLOCK_UPDATE_SCHEDULED && $this->getLevel()->getServer()->fireSpread){
 				$forever = $this->getSide(Vector3::SIDE_DOWN)->getId() == Block::NETHERRACK;
 
 				//TODO: END
 
-				if(!$this->getSide(Vector3::SIDE_DOWN)->isTopFacingSurfaceSolid() and !$this->canNeighborBurn()){
+				if(!$this->getSide(Vector3::SIDE_DOWN)->isTopFacingSurfaceSolid() && !$this->canNeighborBurn()){
 					$this->getLevel()->setBlock($this, new Air(), true);
 				}
 
-				if(!$forever and $this->getLevel()->getWeather()->isRainy() and
-					($this->getLevel()->canBlockSeeSky($this) or
-						$this->getLevel()->canBlockSeeSky($this->getSide(Vector3::SIDE_EAST)) or
-						$this->getLevel()->canBlockSeeSky($this->getSide(Vector3::SIDE_WEST)) or
-						$this->getLevel()->canBlockSeeSky($this->getSide(Vector3::SIDE_SOUTH)) or
+				if(!$forever && $this->getLevel()->getWeather()->isRainy() &&
+					($this->getLevel()->canBlockSeeSky($this) ||
+						$this->getLevel()->canBlockSeeSky($this->getSide(Vector3::SIDE_EAST)) ||
+						$this->getLevel()->canBlockSeeSky($this->getSide(Vector3::SIDE_WEST)) ||
+						$this->getLevel()->canBlockSeeSky($this->getSide(Vector3::SIDE_SOUTH)) ||
 						$this->getLevel()->canBlockSeeSky($this->getSide(Vector3::SIDE_NORTH))
 					)
 				){
@@ -126,8 +131,8 @@ class Fire extends Flowable{
 
 					$this->getLevel()->scheduleUpdate($this, $this->getTickRate() + mt_rand(0, 10));
 
-					if(!$forever and !$this->canNeighborBurn()){
-						if(!$this->getSide(Vector3::SIDE_DOWN)->isTopFacingSurfaceSolid() or $meta > 3){
+					if(!$forever && !$this->canNeighborBurn()){
+						if(!$this->getSide(Vector3::SIDE_DOWN)->isTopFacingSurfaceSolid() || $meta > 3){
 							$this->getLevel()->setBlock($this, new Air(), true);
 						}
 					}elseif(!$forever && !($this->getSide(Vector3::SIDE_DOWN)->getBurnAbility() > 0) && $meta >= 15 && mt_rand(0, 4) == 0){
@@ -146,7 +151,7 @@ class Fire extends Flowable{
 
 						for($x = ($this->x - 1); $x <= ($this->x + 1); ++$x){
 							for($z = ($this->z - 1); $z <= ($this->z + 1); ++$z){
-								for($y = ($this->y -1); $y <= ($this->y + 4); ++$y){
+								for($y = ($this->y - 1); $y <= ($this->y + 4); ++$y){
 									$k = 100;
 
 									if($y > $this->y + 1){
@@ -160,7 +165,7 @@ class Fire extends Flowable{
 
 										//TODO: decrease t if the rainfall values are high
 
-										if($t > 0 and mt_rand(0, $k) <= $t){
+										if($t > 0 && mt_rand(0, $k) <= $t){
 											$damage = min(15, $meta + mt_rand(0, 5) / 4);
 
 											$this->getLevel()->setBlock($this->temporalVector->setComponents($x, $y, $z), new Fire($damage), true);

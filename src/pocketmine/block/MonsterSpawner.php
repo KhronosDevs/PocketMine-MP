@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____ 
+ *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
  * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
@@ -26,9 +28,9 @@ use pocketmine\item\Tool;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\StringTag;
-use pocketmine\tile\Tile;
-use pocketmine\tile\MobSpawner;
 use pocketmine\Player;
+use pocketmine\tile\MobSpawner;
+use pocketmine\tile\Tile;
 
 class MonsterSpawner extends Solid{
 
@@ -79,13 +81,13 @@ class MonsterSpawner extends Solid{
 			new IntTag("z", $block->z),
 			new IntTag("EntityId", 0),
 		]);
-		
+
 		if($item->hasCustomBlockData()){
 			foreach($item->getCustomBlockData() as $key => $v){
 				$nbt->{$key} = $v;
 			}
 		}
-		
+
 		Tile::createTile(Tile::MOB_SPAWNER, $this->getLevel()->getChunk($this->x >> 4, $this->z >> 4), $nbt);
 		return true;
 	}

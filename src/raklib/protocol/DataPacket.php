@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -20,6 +22,9 @@
 */
 
 namespace raklib\protocol;
+
+use function strlen;
+use function substr;
 
 #include <rules/RakLibPacket.h>
 

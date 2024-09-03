@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -30,7 +32,6 @@ interface LevelProvider{
 	const ORDER_ZXY = 1;
 
 	/**
-	 * @param Level  $level
 	 * @param string $path
 	 */
 	public function __construct(Level $level, $path);
@@ -62,7 +63,9 @@ interface LevelProvider{
 	 */
 	public function requestChunkTask($x, $z);
 
-	/** @return string */
+	/**
+	 * @return string
+	 */
 	public function getPath();
 
 	/**
@@ -170,9 +173,8 @@ interface LevelProvider{
 	public function isChunkLoaded($X, $Z);
 
 	/**
-	 * @param int       $chunkX
-	 * @param int       $chunkZ
-	 * @param FullChunk $chunk
+	 * @param int $chunkX
+	 * @param int $chunkZ
 	 *
 	 * @return mixed
 	 */
@@ -208,9 +210,6 @@ interface LevelProvider{
 	 */
 	public function getSpawn();
 
-	/**
-	 * @param Vector3 $pos
-	 */
 	public function setSpawn(Vector3 $pos);
 
 	/**

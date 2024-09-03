@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * PocketMine Standard PHP Library
  * Copyright (C) 2014 PocketMine Team <https://github.com/PocketMine/PocketMine-SPL>

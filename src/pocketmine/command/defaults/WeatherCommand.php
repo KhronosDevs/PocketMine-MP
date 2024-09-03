@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -27,6 +29,10 @@ use pocketmine\level\Level;
 use pocketmine\level\weather\Weather;
 use pocketmine\Player;
 use pocketmine\utils\TextFormat;
+use function count;
+use function max;
+use function min;
+use function mt_rand;
 
 class WeatherCommand extends VanillaCommand{
 
@@ -54,7 +60,7 @@ class WeatherCommand extends VanillaCommand{
 			$wea = Weather::getWeatherFromString($args[0]);
 			if(!isset($args[1])) $duration = mt_rand(min($sender->getServer()->weatherRandomDurationMin, $sender->getServer()->weatherRandomDurationMax), max($sender->getServer()->weatherRandomDurationMin, $sender->getServer()->weatherRandomDurationMax));
 			else $duration = (int) $args[1];
-			if($wea >= 0 and $wea <= 3){
+			if($wea >= 0 && $wea <= 3){
 				$sender->getLevel()->getWeather()->setWeather($wea, $duration);
 				$sender->sendMessage(new TranslationContainer("pocketmine.command.weather.changed", [$sender->getLevel()->getFolderName()]));
 				return true;
@@ -86,7 +92,7 @@ class WeatherCommand extends VanillaCommand{
 		$wea = Weather::getWeatherFromString($args[1]);
 		if(!isset($args[1])) $duration = mt_rand(min($sender->getServer()->weatherRandomDurationMin, $sender->getServer()->weatherRandomDurationMax), max($sender->getServer()->weatherRandomDurationMin, $sender->getServer()->weatherRandomDurationMax));
 		else $duration = (int) $args[1];
-		if($wea >= 0 and $wea <= 3){
+		if($wea >= 0 && $wea <= 3){
 			$level->getWeather()->setWeather($wea, $duration);
 			$sender->sendMessage(new TranslationContainer("pocketmine.command.weather.changed", [$level->getFolderName()]));
 			return true;

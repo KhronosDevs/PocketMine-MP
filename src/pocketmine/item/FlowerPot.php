@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -32,4 +34,4 @@ class FlowerPot extends Item {
 	public function getMaxStackSize() : int{
 		return 64;
 	}
-} 
+}

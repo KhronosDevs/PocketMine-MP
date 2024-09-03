@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -45,9 +47,6 @@ interface FullChunk{
 	 */
 	public function getProvider();
 
-	/**
-	 * @param LevelProvider $provider
-	 */
 	public function setProvider(LevelProvider $provider);
 
 	/**
@@ -67,9 +66,8 @@ interface FullChunk{
 	 * @param int $z       0-15
 	 * @param int $blockId , if null, do not change
 	 * @param int $meta    0-15, if null, do not change
-	 *
 	 */
-	public function setBlock($x, $y, $z, $blockId = null, $meta = null): bool;
+	public function setBlock($x, $y, $z, $blockId = null, $meta = null) : bool;
 
 	/**
 	 * @param int $x 0-15
@@ -235,24 +233,12 @@ interface FullChunk{
 
 	public function setGenerated($value = 1);
 
-	/**
-	 * @param Entity $entity
-	 */
 	public function addEntity(Entity $entity);
 
-	/**
-	 * @param Entity $entity
-	 */
 	public function removeEntity(Entity $entity);
 
-	/**
-	 * @param Tile $tile
-	 */
 	public function addTile(Tile $tile);
 
-	/**
-	 * @param Tile $tile
-	 */
 	public function removeTile(Tile $tile);
 
 	/**

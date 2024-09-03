@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -29,12 +31,12 @@ use pocketmine\item\Item as ItemItem;
 
 use pocketmine\nbt\NBT;
 
-
 use pocketmine\nbt\tag\ShortTag;
 use pocketmine\nbt\tag\StringTag;
-use pocketmine\network\Network;
 use pocketmine\network\protocol\AddItemEntityPacket;
 use pocketmine\Player;
+use function abs;
+use function floor;
 
 class Item extends Entity{
 	const NETWORK_ID = 64;
@@ -80,15 +82,14 @@ class Item extends Entity{
 			return;
 		}
 
-
 		$this->server->getPluginManager()->callEvent(new ItemSpawnEvent($this));
 	}
 
 	public function attack($damage, EntityDamageEvent $source){
 		if(
-			$source->getCause() === EntityDamageEvent::CAUSE_VOID or
-			$source->getCause() === EntityDamageEvent::CAUSE_FIRE_TICK or
-			$source->getCause() === EntityDamageEvent::CAUSE_ENTITY_EXPLOSION or
+			$source->getCause() === EntityDamageEvent::CAUSE_VOID ||
+			$source->getCause() === EntityDamageEvent::CAUSE_FIRE_TICK ||
+			$source->getCause() === EntityDamageEvent::CAUSE_ENTITY_EXPLOSION ||
 			$source->getCause() === EntityDamageEvent::CAUSE_BLOCK_EXPLOSION
 		){
 			parent::attack($damage, $source);
@@ -99,11 +100,11 @@ class Item extends Entity{
 		if($this->closed){
 			return false;
 		}
-		
+
 		$this->age++;
-		
+
 		$tickDiff = $currentTick - $this->lastUpdate;
-		if($tickDiff <= 0 and !$this->justCreated){
+		if($tickDiff <= 0 && !$this->justCreated){
 			return true;
 		}
 
@@ -115,7 +116,7 @@ class Item extends Entity{
 
 		if($this->isAlive()){
 
-			if($this->pickupDelay > 0 and $this->pickupDelay < 32767){ //Infinite delay
+			if($this->pickupDelay > 0 && $this->pickupDelay < 32767){ //Infinite delay
 				$this->pickupDelay -= $tickDiff;
 				if($this->pickupDelay < 0){
 					$this->pickupDelay = 0;
@@ -132,7 +133,7 @@ class Item extends Entity{
 
 			$friction = 1 - $this->drag;
 
-			if($this->onGround and (abs($this->motionX) > 0.00001 or abs($this->motionZ) > 0.00001)){
+			if($this->onGround && (abs($this->motionX) > 0.00001 || abs($this->motionZ) > 0.00001)){
 				$friction = $this->getLevel()->getBlock($this->temporalVector->setComponents((int) floor($this->x), (int) floor($this->y - 1), (int) floor($this->z) - 1))->getFrictionFactor() * $friction;
 			}
 
@@ -144,7 +145,7 @@ class Item extends Entity{
 				$this->motionY *= -0.5;
 			}
 
-			if($currentTick % 5 ==0)
+			if($currentTick % 5 == 0)
 				$this->updateMovement();
 
 			if($this->age > 2000){
@@ -161,7 +162,7 @@ class Item extends Entity{
 
 		$this->timings->stopTiming();
 
-		return $hasUpdate or !$this->onGround or abs($this->motionX) > 0.00001 or abs($this->motionY) > 0.00001 or abs($this->motionZ) > 0.00001;
+		return $hasUpdate || !$this->onGround || abs($this->motionX) > 0.00001 || abs($this->motionY) > 0.00001 || abs($this->motionZ) > 0.00001;
 	}
 
 	public function saveNBT(){

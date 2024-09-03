@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * RakLib network library
  *
@@ -17,8 +19,9 @@ namespace raklib\protocol;
 
 #include <rules/RakLibPacket.h>
 
-
 use raklib\RakLib;
+use function str_pad;
+use function strlen;
 
 class OPEN_CONNECTION_REQUEST_1 extends Packet{
 	public static $ID = 0x05;

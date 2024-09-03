@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -25,14 +27,20 @@ use pocketmine\level\format\FullChunk;
 use pocketmine\level\format\mcregion\McRegion;
 use pocketmine\level\Level;
 use pocketmine\nbt\NBT;
-use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\ByteArrayTag;
+use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\network\protocol\FullChunkDataPacket;
 use pocketmine\tile\Spawnable;
 use pocketmine\utils\BinaryStream;
 use pocketmine\utils\ChunkException;
-
+use function count;
+use function file_exists;
+use function glob;
+use function is_dir;
+use function pack;
+use function str_repeat;
+use function strpos;
 
 class Anvil extends McRegion{
 
@@ -55,7 +63,7 @@ class Anvil extends McRegion{
 	}
 
 	public static function isValid($path){
-		$isValid = (file_exists($path . "/level.dat") and is_dir($path . "/region/"));
+		$isValid = (file_exists($path . "/level.dat") && is_dir($path . "/region/"));
 
 		if($isValid){
 			$files = glob($path . "/region/*.mc*");
@@ -168,7 +176,7 @@ class Anvil extends McRegion{
 
 	public function isChunkGenerated($chunkX, $chunkZ){
 		if(($region = $this->getRegion($chunkX >> 5, $chunkZ >> 5)) !== null){
-			return $region->chunkExists($chunkX - $region->getX() * 32, $chunkZ - $region->getZ() * 32) and $this->getChunk($chunkX - $region->getX() * 32, $chunkZ - $region->getZ() * 32, true)->isGenerated();
+			return $region->chunkExists($chunkX - $region->getX() * 32, $chunkZ - $region->getZ() * 32) && $this->getChunk($chunkX - $region->getX() * 32, $chunkZ - $region->getZ() * 32, true)->isGenerated();
 		}
 
 		return false;

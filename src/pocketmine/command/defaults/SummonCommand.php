@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -22,15 +24,22 @@
 namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
+use pocketmine\entity\Entity;
 use pocketmine\event\TranslationContainer;
 use pocketmine\nbt\NBT;
-use pocketmine\Player;
-use pocketmine\entity\Entity;
-use pocketmine\utils\TextFormat;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\DoubleTag;
-use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\FloatTag;
+use pocketmine\nbt\tag\ListTag;
+use pocketmine\Player;
+use pocketmine\utils\TextFormat;
+use function count;
+use function is_numeric;
+use function lcg_value;
+use function max;
+use function min;
+use function strcmp;
+use function trim;
 
 class SummonCommand extends VanillaCommand{
 
@@ -48,7 +57,7 @@ class SummonCommand extends VanillaCommand{
 			return true;
 		}
 
-		if(count($args) != 1 and count($args) != 4 and count($args) != 5){
+		if(count($args) != 1 && count($args) != 4 && count($args) != 5){
 			$sender->sendMessage(new TranslationContainer("commands.generic.usage", [$this->usageMessage]));
 			return true;
 		}
@@ -56,7 +65,7 @@ class SummonCommand extends VanillaCommand{
 		$x = 0;
 		$y = 0;
 		$z = 0;
-		if(count($args) == 4 or count($args) == 5){            //position is set
+		if(count($args) == 4 || count($args) == 5){            //position is set
 			//TODO:simpilify them to one piece of code
 			//Code for setting $x
 			if(is_numeric($args[1])){                            //x is given directly
@@ -139,7 +148,7 @@ class SummonCommand extends VanillaCommand{
 				new FloatTag("", 0)
 			]),
 		]);
-		if(count($args) == 5 and $args[4]{0} == "{"){//Tags are found
+		if(count($args) == 5 && $args[4]{0} == "{"){//Tags are found
 			$nbtExtra = NBT::parseJSON($args[4]);
 			$nbt = NBT::combineCompoundTags($nbt, $nbtExtra, true);
 		}

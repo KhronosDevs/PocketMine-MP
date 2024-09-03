@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,6 +25,10 @@ namespace pocketmine\inventory;
 
 use pocketmine\item\Item;
 use pocketmine\Player;
+use function abs;
+use function count;
+use function microtime;
+use function spl_object_hash;
 
 class BaseTransaction implements Transaction{
 	/** @var Inventory */
@@ -45,7 +51,6 @@ class BaseTransaction implements Transaction{
 	/**
 	 * @param Inventory $inventory
 	 * @param int       $slot
-	 * @param Item      $targetItem
 	 * @param string[]  $achievements
 	 * @param int       $transactionType
 	 */
@@ -97,15 +102,15 @@ class BaseTransaction implements Transaction{
 	public function getTransactionType(){
 		return $this->transactionType;
 	}
-	
+
 	public function getAchievements(){
 		return $this->achievements;
 	}
-	
+
 	public function hasAchievements(){
 		return count($this->achievements) !== 0;
 	}
-	
+
 	public function addAchievement(string $achievementName){
 		$this->achievements[] = $achievementName;
 	}
@@ -153,43 +158,42 @@ class BaseTransaction implements Transaction{
 
 			if($countDiff < 0){	//Count decreased
 				return ["in" => null,
-						"out" => $item];
+					"out" => $item];
 			}elseif($countDiff > 0){ //Count increased
 				return [
-						"in" => $item,
-						"out" => null];
+					"in" => $item,
+					"out" => null];
 			}else{
 				//Should be impossible (identical items and no count change)
 				//This should be caught by the first condition even if it was possible
 				return null;
 			}
-		}elseif($sourceItem->getId() !== Item::AIR and $this->targetItem->getId() === Item::AIR){
+		}elseif($sourceItem->getId() !== Item::AIR && $this->targetItem->getId() === Item::AIR){
 			//Slot emptied (item removed)
 			return ["in" => null,
-					"out" => clone $sourceItem];
+				"out" => clone $sourceItem];
 
-		}elseif($sourceItem->getId() === Item::AIR and $this->targetItem->getId() !== Item::AIR){
+		}elseif($sourceItem->getId() === Item::AIR && $this->targetItem->getId() !== Item::AIR){
 			//Slot filled (item added)
 			return ["in" => $this->getTargetItem(),
-					"out" => null];
+				"out" => null];
 
 		}else{
 			//Some other slot change - an item swap (tool damage changes will be ignored as they are processed server-side before any change is sent by the client
 			return ["in" => $this->getTargetItem(),
-					"out" => clone $sourceItem];
+				"out" => clone $sourceItem];
 		}
 	}
 
 	/**
-	 * @param Player $source
 	 * @return bool
 	 *
 	 * Handles transaction execution. Returns whether transaction was successful or not.
 	 */
 
-	public function execute(Player $source): bool{
+	public function execute(Player $source) : bool{
 		if($this->getInventory()->processSlotChange($this)){ //This means that the transaction should be handled the normal way
-			if(!$source->getServer()->allowInventoryCheats and !$source->isCreative()){
+			if(!$source->getServer()->allowInventoryCheats && !$source->isCreative()){
 				$change = $this->getChange();
 
 				if($change === null){ //No changes to make, ignore this transaction
@@ -219,12 +223,12 @@ class BaseTransaction implements Transaction{
 			}
 			$this->getInventory()->setItem($this->getSlot(), $this->getTargetItem(), false);
 		}
-		
+
 		/* Process transaction achievements, like getting iron from a furnace */
 		foreach($this->achievements as $achievement){
 			$source->awardAchievement($achievement);
 		}
-		
+
 		return true;
 	}
 }

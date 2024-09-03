@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -41,7 +43,6 @@ class Torch extends Flowable{
 		return "Torch";
 	}
 
-
 	public function onUpdate($type){
 		if($type === Level::BLOCK_UPDATE_NORMAL){
 			$below = $this->getSide(0);
@@ -56,10 +57,10 @@ class Torch extends Flowable{
 				0 => 0,
 			];
 
-			if($this->getSide($faces[$side])->isTransparent() === true and
-					!($side === 0 and ($below->getId() === self::FENCE or
-									$below->getId() === self::COBBLE_WALL or
-									$below->getId() == Block::INACTIVE_REDSTONE_LAMP or
+			if($this->getSide($faces[$side])->isTransparent() === true &&
+					!($side === 0 && ($below->getId() === self::FENCE ||
+									$below->getId() === self::COBBLE_WALL ||
+									$below->getId() == Block::INACTIVE_REDSTONE_LAMP ||
 									$below->getId() == Block::ACTIVE_REDSTONE_LAMP)
 					)
 			){
@@ -75,7 +76,7 @@ class Torch extends Flowable{
 	public function place(Item $item, Block $block, Block $target, $face, $fx, $fy, $fz, Player $player = null){
 		$below = $this->getSide(0);
 
-		if($target->isTransparent() === false and $face !== 0){
+		if($target->isTransparent() === false && $face !== 0){
 			$faces = [
 				1 => 5,
 				2 => 4,
@@ -88,9 +89,9 @@ class Torch extends Flowable{
 
 			return true;
 		}elseif(
-				$below->isTransparent() === false or $below->getId() === self::FENCE or
-				$below->getId() === self::COBBLE_WALL or
-				$below->getId() == Block::INACTIVE_REDSTONE_LAMP or
+				$below->isTransparent() === false || $below->getId() === self::FENCE ||
+				$below->getId() === self::COBBLE_WALL ||
+				$below->getId() == Block::INACTIVE_REDSTONE_LAMP ||
 				$below->getId() == Block::ACTIVE_REDSTONE_LAMP
 		){
 			$this->meta = 0;

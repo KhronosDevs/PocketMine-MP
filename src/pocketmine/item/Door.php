@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -18,9 +20,9 @@
  * @link https://itxtech.org
  *
  */
- 
+
  namespace pocketmine\item;
- 
+
  abstract class Door extends Item{
 	public function getMaxStackSize() : int {
 		return 64;

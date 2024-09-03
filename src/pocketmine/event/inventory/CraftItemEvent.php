@@ -1,6 +1,7 @@
 <?php
+
+declare(strict_types=1);
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -14,8 +15,6 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 namespace pocketmine\event\inventory;
 
@@ -35,9 +34,7 @@ class CraftItemEvent extends Event implements Cancellable{
 	private $player;
 
 	/**
-	 * @param \pocketmine\Player $player
-	 * @param Item[]             $input
-	 * @param Recipe             $recipe
+	 * @param Item[] $input
 	 */
 	public function __construct(Player $player, array $input, Recipe $recipe){
 		$this->player = $player;

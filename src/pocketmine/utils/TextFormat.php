@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,18 +17,36 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
 namespace pocketmine\utils;
+
+use function is_array;
+use function json_encode;
+use function preg_last_error;
+use function preg_quote;
+use function preg_replace;
+use function preg_split;
+use function str_repeat;
+use function str_replace;
+use const JSON_UNESCAPED_SLASHES;
+use const PREG_BACKTRACK_LIMIT_ERROR;
+use const PREG_BAD_UTF8_ERROR;
+use const PREG_BAD_UTF8_OFFSET_ERROR;
+use const PREG_INTERNAL_ERROR;
+use const PREG_JIT_STACKLIMIT_ERROR;
+use const PREG_RECURSION_LIMIT_ERROR;
+use const PREG_SPLIT_DELIM_CAPTURE;
+use const PREG_SPLIT_NO_EMPTY;
 
 /**
  * Class used to handle Minecraft chat format, and convert it to other formats like ANSI or HTML
  */
 abstract class TextFormat{
 	const ESCAPE = "\xc2\xa7"; //§
-	
+
 	const BLACK = TextFormat::ESCAPE . "0";
 	const DARK_BLUE = TextFormat::ESCAPE . "1";
 	const DARK_GREEN = TextFormat::ESCAPE . "2";
@@ -59,7 +79,7 @@ abstract class TextFormat{
 	 * @return array
 	 */
 	public static function tokenize($string){
-		return preg_split("/(". TextFormat::ESCAPE ."[0123456789abcdefklmnor])/", $string, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE);
+		return preg_split("/(" . TextFormat::ESCAPE . "[0123456789abcdefklmnor])/", $string, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE);
 	}
 
 	/**
@@ -72,36 +92,36 @@ abstract class TextFormat{
 	 */
 	public static function clean($string, $removeFormat = true){
 		if($removeFormat){
-			return str_replace(TextFormat::ESCAPE, "", preg_replace(["/". TextFormat::ESCAPE ."[0123456789abcdefklmnor]/", "/\x1b[\\(\\][[0-9;\\[\\(]+[Bm]/"], "", $string));
+			return str_replace(TextFormat::ESCAPE, "", preg_replace(["/" . TextFormat::ESCAPE . "[0123456789abcdefklmnor]/", "/\x1b[\\(\\][[0-9;\\[\\(]+[Bm]/"], "", $string));
 		}
 		return str_replace("\x1b", "", preg_replace("/\x1b[\\(\\][[0-9;\\[\\(]+[Bm]/", "", $string));
 	}
 
 	private static function makePcreError() : \InvalidArgumentException{
-        $errorCode = preg_last_error();
-        $message = [
-            PREG_INTERNAL_ERROR => "Internal error",
-            PREG_BACKTRACK_LIMIT_ERROR => "Backtrack limit reached",
-            PREG_RECURSION_LIMIT_ERROR => "Recursion limit reached",
-            PREG_BAD_UTF8_ERROR => "Malformed UTF-8",
-            PREG_BAD_UTF8_OFFSET_ERROR => "Bad UTF-8 offset",
-            PREG_JIT_STACKLIMIT_ERROR => "PCRE JIT stack limit reached"
-        ][$errorCode] ?? "Unknown (code $errorCode)";
-        throw new \InvalidArgumentException("PCRE error: $message");
-    }
- 
-    private static function preg_replace(string $pattern, string $replacement, string $string) : string{
-        $result = preg_replace($pattern, $replacement, $string);
-		
-        if($result === null){
-            throw self::makePcreError();
-        }
-        return $result;
-    }
+		$errorCode = preg_last_error();
+		$message = [
+			PREG_INTERNAL_ERROR => "Internal error",
+			PREG_BACKTRACK_LIMIT_ERROR => "Backtrack limit reached",
+			PREG_RECURSION_LIMIT_ERROR => "Recursion limit reached",
+			PREG_BAD_UTF8_ERROR => "Malformed UTF-8",
+			PREG_BAD_UTF8_OFFSET_ERROR => "Bad UTF-8 offset",
+			PREG_JIT_STACKLIMIT_ERROR => "PCRE JIT stack limit reached"
+		][$errorCode] ?? "Unknown (code $errorCode)";
+		throw new \InvalidArgumentException("PCRE error: $message");
+	}
+
+	private static function preg_replace(string $pattern, string $replacement, string $string) : string{
+		$result = preg_replace($pattern, $replacement, $string);
+
+		if($result === null){
+			throw self::makePcreError();
+		}
+		return $result;
+	}
 
 	public static function colorize(string $string, string $placeholder = "&") : string{
-        return self::preg_replace('/' . preg_quote($placeholder, "/") . '([0-9a-gk-or])/u', TextFormat::ESCAPE . '$1', $string);
-    }
+		return self::preg_replace('/' . preg_quote($placeholder, "/") . '([0-9a-gk-or])/u', TextFormat::ESCAPE . '$1', $string);
+	}
 
 	/**
 	 * Returns an JSON-formatted string with colors/markup
@@ -115,7 +135,7 @@ abstract class TextFormat{
 			$string = self::tokenize($string);
 		}
 		$newString = [];
-		$pointer =& $newString;
+		$pointer = &$newString;
 		$color = "white";
 		$bold = false;
 		$italic = false;
@@ -130,7 +150,7 @@ abstract class TextFormat{
 					$newString["extra"] = [];
 				}
 				$newString["extra"][$index] = [];
-				$pointer =& $newString["extra"][$index];
+				$pointer = &$newString["extra"][$index];
 				if($color !== "white"){
 					$pointer["color"] = $color;
 				}

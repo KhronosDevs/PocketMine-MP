@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,6 +25,7 @@ namespace pocketmine\level\generator\biome;
 
 use pocketmine\level\generator\noise\Simplex;
 use pocketmine\utils\Random;
+use function call_user_func;
 
 class BiomeSelector{
 

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,12 +25,28 @@
  * Various Utilities used around the code
  */
 namespace pocketmine\utils;
+
 use pocketmine\entity\Entity;
+use function bcadd;
+use function bccomp;
+use function bcdiv;
+use function bcmod;
+use function bcmul;
+use function chr;
+use function ord;
+use function pack;
+use function preg_replace;
+use function sprintf;
+use function strlen;
+use function strrev;
+use function strval;
+use function substr;
+use function unpack;
+use const PHP_INT_SIZE;
 
 class Binary{
 	const BIG_ENDIAN = 0x00;
 	const LITTLE_ENDIAN = 0x01;
-
 
 	/**
 	 * Reads a 3-byte big-endian number
@@ -76,8 +94,6 @@ class Binary{
 
 	/**
 	 * Writes a coded metadata string
-	 *
-	 * @param array $data
 	 *
 	 * @return string
 	 */
@@ -134,7 +150,7 @@ class Binary{
 		$m = [];
 		$b = ord($value{$offset});
 		++$offset;
-		while($b !== 127 and isset($value{$offset})){
+		while($b !== 127 && isset($value{$offset})){
 			$bottom = $b & 0x1F;
 			$type = $b >> 5;
 			switch($type){
@@ -291,7 +307,7 @@ class Binary{
 	/**
 	 * Reads a 16-bit unsigned little-endian number
 	 *
-	 * @param      $str
+	 * @param $str
 	 *
 	 * @return int
 	 */
@@ -302,7 +318,7 @@ class Binary{
 	/**
 	 * Reads a 16-bit signed little-endian number
 	 *
-	 * @param      $str
+	 * @param $str
 	 *
 	 * @return int
 	 */
@@ -394,7 +410,7 @@ class Binary{
 			$value = "0";
 			for($i = 0; $i < 8; $i += 2){
 				$value = bcmul($value, "65536", 0);
-				$value = bcadd($value, self::readShort(substr($x, $i, 2)), 0);
+				$value = bcadd($value, strval(self::readShort(substr($x, $i, 2))), 0);
 			}
 
 			if(bccomp($value, "9223372036854775807") == 1){

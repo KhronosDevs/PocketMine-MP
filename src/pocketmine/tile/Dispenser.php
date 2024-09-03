@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -21,8 +23,8 @@
 
 namespace pocketmine\tile;
 
-use pocketmine\block\Block;
 use pocketmine\entity\Entity;
+use pocketmine\entity\Item as ItemEntity;
 use pocketmine\inventory\DispenserInventory;
 use pocketmine\inventory\InventoryHolder;
 use pocketmine\item\Item;
@@ -30,22 +32,19 @@ use pocketmine\level\format\FullChunk;
 use pocketmine\level\particle\SmokeParticle;
 use pocketmine\math\Vector3;
 use pocketmine\nbt\NBT;
+use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\DoubleTag;
 use pocketmine\nbt\tag\FloatTag;
-use pocketmine\nbt\tag\ShortTag;
-use pocketmine\entity\Item as ItemEntity;
-use pocketmine\entity\Egg;
-use pocketmine\entity\ThrownExpBottle;
-use pocketmine\entity\ThrownPotion;
-use pocketmine\entity\Arrow;
-use pocketmine\entity\Snowball;
 
-
-use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ListTag;
+use pocketmine\nbt\tag\ShortTag;
 
 use pocketmine\nbt\tag\StringTag;
+use function count;
+use function is_array;
+use function lcg_value;
+use function mt_rand;
 
 class Dispenser extends Spawnable implements InventoryHolder, Container, Nameable{
 
@@ -56,7 +55,7 @@ class Dispenser extends Spawnable implements InventoryHolder, Container, Nameabl
 		parent::__construct($chunk, $nbt);
 		$this->inventory = new DispenserInventory($this);
 
-		if(!isset($this->namedtag->Items) or !($this->namedtag->Items instanceof ListTag)){
+		if(!isset($this->namedtag->Items) || !($this->namedtag->Items instanceof ListTag)){
 			$this->namedtag->Items = new ListTag("Items", []);
 			$this->namedtag->Items->setTagType(NBT::TAG_Compound);
 		}
@@ -130,8 +129,7 @@ class Dispenser extends Spawnable implements InventoryHolder, Container, Nameabl
 	/**
 	 * This method should not be used by plugins, use the Inventory
 	 *
-	 * @param int  $index
-	 * @param Item $item
+	 * @param int $index
 	 *
 	 * @return bool
 	 */
@@ -140,7 +138,7 @@ class Dispenser extends Spawnable implements InventoryHolder, Container, Nameabl
 
 		$d = NBT::putItemHelper($item, $index);
 
-		if($item->getId() === Item::AIR or $item->getCount() <= 0){
+		if($item->getId() === Item::AIR || $item->getCount() <= 0){
 			if($i >= 0){
 				unset($this->namedtag->Items[$i]);
 			}

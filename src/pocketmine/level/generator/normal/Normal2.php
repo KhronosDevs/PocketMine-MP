@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -84,7 +86,6 @@ class Normal2 extends Normal{
 		return $this->selector->pickBiome($x + $xNoise - 1, $z + $zNoise - 1);
 	}
 
-
 	public function init(ChunkManager $level, Random $random){
 		$this->level = $level;
 		$this->random = $random;
@@ -167,7 +168,6 @@ class Normal2 extends Normal{
 		$this->populators[] = $ores;
 	}
 
-
 	public function generateChunk($chunkX, $chunkZ){
 		$this->random->setSeed(0xdeadbeef ^ ($chunkX << 8) ^ $chunkZ ^ $this->level->getSeed());
 
@@ -218,7 +218,7 @@ class Normal2 extends Normal{
 						$genyHeight = $this->seaFloorHeight;
 					}
 					$canRiver = false;
-				}else if($genyHeight <= $this->beathStopHeight && $genyHeight >= $this->beathStartHeight){
+				}elseif($genyHeight <= $this->beathStopHeight && $genyHeight >= $this->beathStartHeight){
 					//todo: there is no beach biome, use desert temporarily
 					$biome = Biome::getBiome(Biome::DESERT);
 				}else{
@@ -267,10 +267,10 @@ class Normal2 extends Normal{
 				//generating
 				$generateHeight = $genyHeight > $this->seaHeight ? $genyHeight : $this->seaHeight;
 				for($geny = 0; $geny <= $generateHeight; $geny++){
-					if($geny <= $this->bedrockDepth && ($geny == 0 or $this->random->nextRange(1, 5) == 1)){
+					if($geny <= $this->bedrockDepth && ($geny == 0 || $this->random->nextRange(1, 5) == 1)){
 						$chunk->setBlockId($genx, $geny, $genz, Block::BEDROCK);
 					}elseif($geny > $genyHeight){
-						if(($biome->getId() == Biome::ICE_PLAINS or $biome->getId() == Biome::TAIGA) and $geny == $this->seaHeight){
+						if(($biome->getId() == Biome::ICE_PLAINS || $biome->getId() == Biome::TAIGA) && $geny == $this->seaHeight){
 							$chunk->setBlockId($genx, $geny, $genz, Block::ICE);
 						}else{
 							$chunk->setBlockId($genx, $geny, $genz, Block::STILL_WATER);
@@ -288,7 +288,6 @@ class Normal2 extends Normal{
 		}
 
 	}
-
 
 	public function populateChunk($chunkX, $chunkZ){
 		$this->random->setSeed(0xdeadbeef ^ ($chunkX << 8) ^ $chunkZ ^ $this->level->getSeed());

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -20,6 +22,8 @@
 */
 
 namespace pocketmine\event;
+
+use function count;
 
 class TranslationContainer extends TextContainer{
 
@@ -57,7 +61,7 @@ class TranslationContainer extends TextContainer{
 	 * @param string $str
 	 */
 	public function setParameter($i, $str){
-		if($i < 0 or $i > count($this->params)){ //Intended, allow to set the last
+		if($i < 0 || $i > count($this->params)){ //Intended, allow to set the last
 			throw new \InvalidArgumentException("Invalid index $i, have " . count($this->params));
 		}
 

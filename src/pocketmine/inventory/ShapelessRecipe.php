@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,6 +26,7 @@ namespace pocketmine\inventory;
 use pocketmine\item\Item;
 use pocketmine\Server;
 use pocketmine\utils\UUID;
+use function count;
 
 class ShapelessRecipe implements Recipe{
 	/** @var Item */
@@ -55,8 +58,6 @@ class ShapelessRecipe implements Recipe{
 	}
 
 	/**
-	 * @param Item $item
-	 *
 	 * @returns ShapelessRecipe
 	 *
 	 * @throws \InvalidArgumentException
@@ -78,8 +79,6 @@ class ShapelessRecipe implements Recipe{
 	}
 
 	/**
-	 * @param Item $item
-	 *
 	 * @return $this
 	 */
 	public function removeIngredient(Item $item){

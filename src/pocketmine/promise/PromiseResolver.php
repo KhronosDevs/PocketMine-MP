@@ -24,43 +24,43 @@ declare(strict_types=1);
 namespace pocketmine\promise;
 
 final class PromiseResolver{
-    /** @var PromiseSharedData */
-    private $shared;
-    /** @var Promise */
-    private $promise;
+	/** @var PromiseSharedData */
+	private $shared;
+	/** @var Promise */
+	private $promise;
 
-    public function __construct(){
-        $this->shared = new PromiseSharedData();
-        $this->promise = new Promise($this->shared);
-    }
+	public function __construct(){
+		$this->shared = new PromiseSharedData();
+		$this->promise = new Promise($this->shared);
+	}
 
-    public function resolve($value) {
-        if($this->shared->state !== null){
-            throw new \LogicException("Promise has already been resolved/rejected");
-        }
-        $this->shared->state = true;
-        $this->shared->result = $value;
-        foreach($this->shared->onSuccess as $c){
-            $c($value);
-        }
-        $this->shared->onSuccess = [];
-        $this->shared->onFailure = [];
-    }
+	public function resolve($value) {
+		if($this->shared->state !== null){
+			throw new \LogicException("Promise has already been resolved/rejected");
+		}
+		$this->shared->state = true;
+		$this->shared->result = $value;
+		foreach($this->shared->onSuccess as $c){
+			$c($value);
+		}
+		$this->shared->onSuccess = [];
+		$this->shared->onFailure = [];
+	}
 
-    public function reject() {
-        if($this->shared->state !== null){
-            throw new \LogicException("Promise has already been resolved/rejected");
-        }
-        $this->shared->state = false;
-        foreach($this->shared->onFailure as $c){
-            $c();
-        }
-        $this->shared->onSuccess = [];
-        $this->shared->onFailure = [];
-    }
+	public function reject() {
+		if($this->shared->state !== null){
+			throw new \LogicException("Promise has already been resolved/rejected");
+		}
+		$this->shared->state = false;
+		foreach($this->shared->onFailure as $c){
+			$c();
+		}
+		$this->shared->onSuccess = [];
+		$this->shared->onFailure = [];
+	}
 
-    public function getPromise() : Promise{
-        return $this->promise;
-    }
+	public function getPromise() : Promise{
+		return $this->promise;
+	}
 
 }

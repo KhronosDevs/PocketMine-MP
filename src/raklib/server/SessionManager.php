@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace raklib\server;
 
 use raklib\Binary;
@@ -32,12 +34,25 @@ use raklib\protocol\UNCONNECTED_PING;
 use raklib\protocol\UNCONNECTED_PING_OPEN_CONNECTIONS;
 use raklib\protocol\UNCONNECTED_PONG;
 use raklib\RakLib;
+use function asort;
+use function chr;
+use function count;
+use function max;
+use function microtime;
+use function mt_rand;
+use function ord;
+use function serialize;
+use function strlen;
+use function strval;
+use function substr;
+use function time_sleep_until;
+use const PHP_INT_MAX;
 
 class SessionManager{
-	
+
 	const RAKLIB_TPS = 100;
 	const RAKLIB_TIME_PER_TICK = 1 / self::RAKLIB_TPS;
-	
+
 	protected $packetPool = [];
 
 	/** @var RakLibServer */
@@ -62,6 +77,8 @@ class SessionManager{
 
 	protected $block = [];
 	protected $ipSec = [];
+
+	public $serverId;
 
 	public $portChecking = false;
 
@@ -107,14 +124,12 @@ class SessionManager{
 		foreach($this->sessions as $session){
 			$session->update($time);
 
-            if ($this->ticks % 40 != 0 || !$session instanceof Session) continue;
+			if ($this->ticks % 40 != 0 || !$session instanceof Session) continue;
 
-            $this->streamPing($session);
-        }
+			$this->streamPing($session);
+		}
 
 		$this->ipSec = [];
-
-
 
 		if(($this->ticks % self::RAKLIB_TPS) === 0){
 			$diff = max(0.005, $time - $this->lastMeasure);
@@ -142,13 +157,13 @@ class SessionManager{
 		++$this->ticks;
 	}
 
-    protected function streamPing(Session $session){
-        $identifier = $session->getAddress() .":". $session->getPort();
-        $ping = $session->getPing();
+	protected function streamPing(Session $session){
+		$identifier = $session->getAddress() . ":" . $session->getPort();
+		$ping = $session->getPing();
 
-        $buffer = chr(RakLib::PACKET_PING) . chr(strlen($identifier)) . $identifier . chr(strlen($ping)) . $ping;
-        $this->server->pushThreadToMainPacket($buffer);
-    }
+		$buffer = chr(RakLib::PACKET_PING) . chr(strlen($identifier)) . $identifier . chr(strlen(strval($ping))) . $ping;
+		$this->server->pushThreadToMainPacket($buffer);
+	}
 
 	private function receivePacket(){
 		$len = $this->socket->readPacket($buffer, $source, $port);
@@ -255,7 +270,9 @@ class SessionManager{
 	}
 
 	public function receiveStream(){
-		if(strlen($packet = $this->server->readMainToThreadPacket()) > 0){
+		$packet = $this->server->readMainToThreadPacket();
+
+		if($packet !== null && strlen($packet) > 0){
 			$id = ord($packet{0});
 			$offset = 1;
 			if($id === RakLib::PACKET_ENCAPSULATED){
@@ -339,7 +356,7 @@ class SessionManager{
 
 	public function blockAddress($address, $timeout = 300){
 		$final = microtime(true) + $timeout;
-		if(!isset($this->block[$address]) or $timeout === -1){
+		if(!isset($this->block[$address]) || $timeout === -1){
 			if($timeout === -1){
 				$final = PHP_INT_MAX;
 			}else{
@@ -357,7 +374,7 @@ class SessionManager{
 
 	/**
 	 * @param string $ip
-	 * @param int	$port
+	 * @param int    $port
 	 *
 	 * @return Session
 	 */
@@ -416,7 +433,7 @@ class SessionManager{
 
 	private function registerPackets(){
 		$this->packetPool = new \SplFixedArray(256);
-		
+
 		//$this->registerPacket(UNCONNECTED_PING::$ID, UNCONNECTED_PING::class);
 		$this->registerPacket(UNCONNECTED_PING_OPEN_CONNECTIONS::$ID, UNCONNECTED_PING_OPEN_CONNECTIONS::class);
 		$this->registerPacket(OPEN_CONNECTION_REQUEST_1::$ID, OPEN_CONNECTION_REQUEST_1::class);

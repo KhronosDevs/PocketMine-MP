@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -41,8 +43,7 @@ interface Chunk extends FullChunk{
 	public function getSection($fY);
 
 	/**
-	 * @param int          $fY 0-7
-	 * @param ChunkSection $section
+	 * @param int $fY 0-7
 	 *
 	 * @return boolean
 	 */

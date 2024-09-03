@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -21,6 +23,20 @@
 
 namespace pocketmine\utils;
 
+use function bin2hex;
+use function getmypid;
+use function getmyuid;
+use function hash;
+use function hex2bin;
+use function hexdec;
+use function implode;
+use function mt_rand;
+use function str_replace;
+use function strlen;
+use function substr;
+use function time;
+use function trim;
+
 class UUID{
 
 	private $parts = [0, 0, 0, 0];
@@ -40,7 +56,7 @@ class UUID{
 	}
 
 	public function equals(UUID $uuid){
-		return $uuid->parts[0] === $this->parts[0] and $uuid->parts[1] === $this->parts[1] and $uuid->parts[2] === $this->parts[2] and $uuid->parts[3] === $this->parts[3];
+		return $uuid->parts[0] === $this->parts[0] && $uuid->parts[1] === $this->parts[1] && $uuid->parts[2] === $this->parts[2] && $uuid->parts[3] === $this->parts[3];
 	}
 
 	/**

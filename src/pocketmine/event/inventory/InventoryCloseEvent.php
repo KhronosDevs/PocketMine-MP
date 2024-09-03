@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,8 +16,6 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\inventory;
@@ -30,10 +29,6 @@ class InventoryCloseEvent extends InventoryEvent{
 	/** @var Player */
 	private $who;
 
-	/**
-	 * @param Inventory $inventory
-	 * @param Player    $who
-	 */
 	public function __construct(Inventory $inventory, Player $who){
 		$this->who = $who;
 		parent::__construct($inventory);

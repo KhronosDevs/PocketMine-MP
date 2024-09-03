@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -34,10 +36,6 @@ class PlayerItemConsumeEvent extends PlayerEvent implements Cancellable{
 	/** @var Item */
 	private $item;
 
-	/**
-	 * @param Player $player
-	 * @param Item   $item
-	 */
 	public function __construct(Player $player, Item $item){
 		$this->player = $player;
 		$this->item = $item;

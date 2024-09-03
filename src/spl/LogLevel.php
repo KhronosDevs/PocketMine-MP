@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * PocketMine Standard PHP Library
  * Copyright (C) 2014 PocketMine Team <https://github.com/PocketMine/PocketMine-SPL>
@@ -16,12 +18,12 @@
 */
 
 interface LogLevel{
-    const EMERGENCY = "emergency";
-    const ALERT = "alert";
-    const CRITICAL = "critical";
-    const ERROR = "error";
-    const WARNING = "warning";
-    const NOTICE = "notice";
-    const INFO = "info";
-    const DEBUG = "debug";
+	const EMERGENCY = "emergency";
+	const ALERT = "alert";
+	const CRITICAL = "critical";
+	const ERROR = "error";
+	const WARNING = "warning";
+	const NOTICE = "notice";
+	const INFO = "info";
+	const DEBUG = "debug";
 }

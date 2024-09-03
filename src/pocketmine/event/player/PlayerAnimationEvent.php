@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -36,8 +38,7 @@ class PlayerAnimationEvent extends PlayerEvent implements Cancellable{
 	private $animationType;
 
 	/**
-	 * @param Player $player
-	 * @param int    $animation
+	 * @param int $animation
 	 */
 	public function __construct(Player $player, $animation = self::ARM_SWING){
 		$this->player = $player;

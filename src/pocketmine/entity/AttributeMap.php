@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -21,6 +23,8 @@
 
 namespace pocketmine\entity;
 
+use function array_filter;
+
 class AttributeMap implements \ArrayAccess{
 	/** @var Attribute[] */
 	private $attributes = [];
@@ -30,8 +34,6 @@ class AttributeMap implements \ArrayAccess{
 	}
 
 	/**
-	 * @param int $id
-	 *
 	 * @return Attribute|null
 	 */
 	public function getAttribute(int $id){
@@ -43,7 +45,7 @@ class AttributeMap implements \ArrayAccess{
 	 */
 	public function needSend() : array{
 		return array_filter($this->attributes, function (Attribute $attribute){
-			return $attribute->isSyncable() and $attribute->isDesynchronized();
+			return $attribute->isSyncable() && $attribute->isDesynchronized();
 		});
 	}
 

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,6 +26,33 @@ namespace pocketmine\utils;
 use LogLevel;
 use pocketmine\Thread;
 use pocketmine\Worker;
+use function call_user_func;
+use function date;
+use function file_put_contents;
+use function get_class;
+use function strlen;
+use function strpos;
+use function substr;
+use function time;
+use function touch;
+use function trim;
+use const E_COMPILE_ERROR;
+use const E_COMPILE_WARNING;
+use const E_CORE_ERROR;
+use const E_CORE_WARNING;
+use const E_DEPRECATED;
+use const E_ERROR;
+use const E_NOTICE;
+use const E_PARSE;
+use const E_RECOVERABLE_ERROR;
+use const E_STRICT;
+use const E_USER_DEPRECATED;
+use const E_USER_ERROR;
+use const E_USER_NOTICE;
+use const E_USER_WARNING;
+use const E_WARNING;
+use const FILE_APPEND;
+use const PHP_EOL;
 
 class MainLogger extends \AttachableThreadedLogger{
 	protected $logFile;
@@ -33,7 +62,7 @@ class MainLogger extends \AttachableThreadedLogger{
 	private $logResource;
 	/** @var MainLogger */
 	public static $logger = null;
-	
+
 	private $consoleCallback;
 
 	/** Extra Settings */
@@ -152,7 +181,7 @@ class MainLogger extends \AttachableThreadedLogger{
 		if($errno === 0){
 			$type = LogLevel::CRITICAL;
 		}else{
-			$type = ($errno === E_ERROR or $errno === E_USER_ERROR) ? LogLevel::ERROR : (($errno === E_USER_WARNING or $errno === E_WARNING) ? LogLevel::WARNING : LogLevel::NOTICE);
+			$type = ($errno === E_ERROR || $errno === E_USER_ERROR) ? LogLevel::ERROR : (($errno === E_USER_WARNING || $errno === E_WARNING) ? LogLevel::WARNING : LogLevel::NOTICE);
 		}
 		$errno = isset($errorConversion[$errno]) ? $errorConversion[$errno] : $errno;
 		if(($pos = strpos($errstr, "\n")) !== false){
@@ -204,7 +233,7 @@ class MainLogger extends \AttachableThreadedLogger{
 		$thread = \Thread::getCurrentThread();
 		if($thread === null){
 			$threadName = "Server thread";
-		}elseif($thread instanceof Thread or $thread instanceof Worker){
+		}elseif($thread instanceof Thread || $thread instanceof Worker){
 			$threadName = $thread->getThreadName() . " thread";
 		}else{
 			$threadName = (new \ReflectionClass($thread))->getShortName() . " thread";
@@ -306,7 +335,7 @@ class MainLogger extends \AttachableThreadedLogger{
 	public function setWrite($write){
 		$this->write = $write;
 	}
-	
+
 	public function setConsoleCallback($callback){
 		$this->consoleCallback = $callback;
 	}

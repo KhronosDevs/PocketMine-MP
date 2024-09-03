@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -18,14 +20,14 @@
  * @link https://itxtech.org
  *
  */
- 
+
 namespace pocketmine\item;
 
 class CookedMutton extends Food{
 	public function __construct($meta = 0, $count = 1){
 		parent::__construct(self::COOKED_MUTTON, $meta, $count, "Cooked Mutton");
 	}
-	
+
 	public function getFoodRestore() : int{
 		return 6;
 	}
@@ -35,4 +37,3 @@ class CookedMutton extends Food{
 	}
 
 }
-

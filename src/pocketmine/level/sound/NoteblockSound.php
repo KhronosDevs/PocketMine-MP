@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -23,7 +25,6 @@ namespace pocketmine\level\sound;
 
 use pocketmine\math\Vector3;
 use pocketmine\network\protocol\BlockEventPacket;
-use pocketmine\network\protocol\LevelEventPacket;
 
 class NoteblockSound extends GenericSound{
 	protected $instrument;

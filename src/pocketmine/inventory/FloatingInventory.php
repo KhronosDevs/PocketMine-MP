@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  _____   _____   __   _   _   _____  __    __  _____
  * /  ___| | ____| |  \ | | | | /  ___/ \ \  / / /  ___/
  * | |     | |__   |   \| | | | | |___   \ \/ /  | |___
@@ -16,7 +17,6 @@
  *
  * @author iTX Technologies
  * @link https://itxtech.org
- *
  */
 
 namespace pocketmine\inventory;
@@ -26,10 +26,6 @@ namespace pocketmine\inventory;
  */
 class FloatingInventory extends BaseInventory{
 
-	/**
-	 * @param InventoryHolder $holder
-	 * @param InventoryType   $inventoryType
-	 */
 	public function __construct(InventoryHolder $holder){
 		parent::__construct($holder, InventoryType::get(InventoryType::PLAYER_FLOATING));
 	}

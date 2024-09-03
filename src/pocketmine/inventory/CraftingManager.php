@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -20,23 +22,21 @@
 
 namespace pocketmine\inventory;
 
-use pocketmine\block\Planks;
-use pocketmine\block\Quartz;
-use pocketmine\block\Sandstone;
-use pocketmine\block\Slab;
-use pocketmine\block\Stone;
-use pocketmine\block\StoneBricks;
-use pocketmine\block\StoneWall;
-use pocketmine\block\Wood;
-use pocketmine\block\Wood2;
 use pocketmine\event\Timings;
 use pocketmine\item\Item;
 use pocketmine\item\Potion;
 use pocketmine\network\protocol\CraftingDataPacket;
-use pocketmine\utils\UUID;
 use pocketmine\Server;
-use pocketmine\utils\MainLogger;
 use pocketmine\utils\Config;
+use pocketmine\utils\MainLogger;
+use pocketmine\utils\UUID;
+use function array_chunk;
+use function array_values;
+use function count;
+use function min;
+use function strlen;
+use function substr_count;
+use function usort;
 
 class CraftingManager
 {
@@ -107,7 +107,7 @@ class CraftingManager
 					break;
 			}
 		}
-		
+
 		$this->buildCraftingDataCache();
 	}
 
@@ -140,8 +140,6 @@ class CraftingManager
 
 	/**
 	 * Returns a CraftingDataPacket for sending to players. Rebuilds the cache if it is outdated.
-	 *
-	 * @return CraftingDataPacket
 	 */
 	public function getCraftingDataPacket() : CraftingDataPacket{
 		if($this->craftingDataCache === null){
@@ -379,7 +377,6 @@ class CraftingManager
 			"XXX",
 			" Y "
 		))->setIngredient("X", Item::get(Item::BEETROOT, 0, 6))->setIngredient("Y", Item::get(Item::BOWL, 0, 1)));
-
 
 		$this->registerRecipe((new BigShapedRecipe(
 			Item::get(Item::BREAD, 0, 1),
@@ -819,7 +816,6 @@ class CraftingManager
 	}
 
 	/**
-	 * @param UUID $id
 	 * @return Recipe
 	 */
 	public function getRecipe(UUID $id)
@@ -849,8 +845,6 @@ class CraftingManager
 	}
 
 	/**
-	 * @param Item $input
-	 *
 	 * @return FurnaceRecipe
 	 */
 	public function matchFurnaceRecipe(Item $input)
@@ -863,11 +857,7 @@ class CraftingManager
 		return null;
 	}
 
-
 	/**
-	 * @param Item $input
-	 * @param Item $potion
-	 *
 	 * @return BrewingRecipe
 	 */
 	public function matchBrewingRecipe(Item $input, Item $potion)
@@ -879,9 +869,6 @@ class CraftingManager
 		return null;
 	}
 
-	/**
-	 * @param ShapedRecipe $recipe
-	 */
 	public function registerShapedRecipe(ShapedRecipe $recipe)
 	{
 		$result = $recipe->getResult();
@@ -901,9 +888,6 @@ class CraftingManager
 		$this->craftingDataCache = null;
 	}
 
-	/**
-	 * @param ShapelessRecipe $recipe
-	 */
 	public function registerShapelessRecipe(ShapelessRecipe $recipe)
 	{
 		$result = $recipe->getResult();
@@ -918,9 +902,6 @@ class CraftingManager
 		$this->craftingDataCache = null;
 	}
 
-	/**
-	 * @param FurnaceRecipe $recipe
-	 */
 	public function registerFurnaceRecipe(FurnaceRecipe $recipe)
 	{
 		$input = $recipe->getInput();
@@ -928,9 +909,6 @@ class CraftingManager
 		$this->craftingDataCache = null;
 	}
 
-	/**
-	 * @param BrewingRecipe $recipe
-	 */
 	public function registerBrewingRecipe(BrewingRecipe $recipe)
 	{
 		$input = $recipe->getInput();
@@ -939,7 +917,6 @@ class CraftingManager
 	}
 
 	/**
-	 * @param ShapelessRecipe $recipe
 	 * @return bool
 	 */
 	public function matchRecipe(ShapelessRecipe $recipe)
@@ -991,9 +968,6 @@ class CraftingManager
 		return $hasRecipe !== null;
 	}
 
-	/**
-	 * @param Recipe $recipe
-	 */
 	public function registerRecipe(Recipe $recipe)
 	{
 		$recipe->setId(UUID::fromData(++self::$RECIPE_COUNT, $recipe->getResult()->getId(), $recipe->getResult()->getDamage(), $recipe->getResult()->getCount(), $recipe->getResult()->getCompoundTag()));

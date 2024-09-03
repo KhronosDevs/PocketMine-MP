@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -26,10 +28,8 @@ namespace pocketmine\plugin;
 
 use pocketmine\command\CommandExecutor;
 
-
 /**
  * It is recommended to use PluginBase for the actual plugin
- *
  */
 interface Plugin extends CommandExecutor{
 

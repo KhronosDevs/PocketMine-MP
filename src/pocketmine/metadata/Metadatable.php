@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -28,8 +30,7 @@ interface Metadatable{
 	/**
 	 * Sets a metadata value in the implementing object's metadata store.
 	 *
-	 * @param string        $metadataKey
-	 * @param MetadataValue $newMetadataValue
+	 * @param string $metadataKey
 	 *
 	 * @return void
 	 */
@@ -60,7 +61,6 @@ interface Metadatable{
 	 * metadata store.
 	 *
 	 * @param string $metadataKey
-	 * @param Plugin $owningPlugin
 	 *
 	 * @return void
 	 */

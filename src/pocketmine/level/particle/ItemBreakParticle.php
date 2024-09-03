@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -21,8 +23,8 @@
 
 namespace pocketmine\level\particle;
 
-use pocketmine\math\Vector3;
 use pocketmine\item\Item;
+use pocketmine\math\Vector3;
 
 class ItemBreakParticle extends GenericParticle{
 	public function __construct(Vector3 $pos, Item $item){

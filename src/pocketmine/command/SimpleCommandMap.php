@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,7 +25,6 @@ namespace pocketmine\command;
 
 use pocketmine\command\defaults\BanCidByNameCommand;
 use pocketmine\command\defaults\BanCidCommand;
-use pocketmine\command\defaults\PingCommand;
 use pocketmine\command\defaults\BanCommand;
 use pocketmine\command\defaults\BanIpByNameCommand;
 use pocketmine\command\defaults\BanIpCommand;
@@ -48,10 +49,11 @@ use pocketmine\command\defaults\ListCommand;
 use pocketmine\command\defaults\LvdatCommand;
 use pocketmine\command\defaults\MeCommand;
 use pocketmine\command\defaults\OpCommand;
-use pocketmine\command\defaults\PardonCommand;
 use pocketmine\command\defaults\PardonCidCommand;
+use pocketmine\command\defaults\PardonCommand;
 use pocketmine\command\defaults\PardonIpCommand;
 use pocketmine\command\defaults\ParticleCommand;
+use pocketmine\command\defaults\PingCommand;
 use pocketmine\command\defaults\PluginsCommand;
 use pocketmine\command\defaults\ReloadCommand;
 use pocketmine\command\defaults\SaveCommand;
@@ -80,17 +82,21 @@ use pocketmine\Player;
 use pocketmine\Server;
 use pocketmine\utils\MainLogger;
 use pocketmine\utils\TextFormat;
+use function array_rand;
+use function array_shift;
+use function count;
+use function explode;
+use function strlen;
+use function strpos;
+use function strtolower;
+use function trim;
 
 class SimpleCommandMap implements CommandMap{
 
-	/**
-	 * @var Command[]
-	 */
+	/** @var Command[] */
 	protected $knownCommands = [];
-	
-	/**
-	 * @var bool[]
-	 */
+
+	/** @var bool[] */
 	protected $commandConfig = [];
 
 	/** @var Server */
@@ -164,7 +170,6 @@ class SimpleCommandMap implements CommandMap{
 		}
 	}
 
-
 	public function registerAll($fallbackPrefix, array $commands){
 		foreach($commands as $command){
 			$this->register($fallbackPrefix, $command);
@@ -176,9 +181,9 @@ class SimpleCommandMap implements CommandMap{
 			$label = $command->getName();
 		}
 		$label = strtolower(trim($label));
-		
+
 		//Check if command was disabled in config and for override
-		if(!(($this->commandConfig[$label] ?? $this->commandConfig["default"] ?? true) or $overrideConfig)){
+		if(!(($this->commandConfig[$label] ?? $this->commandConfig["default"] ?? true) || $overrideConfig)){
 			return false;
 		}
 		$fallbackPrefix = strtolower(trim($fallbackPrefix));
@@ -204,11 +209,11 @@ class SimpleCommandMap implements CommandMap{
 
 	private function registerAlias(Command $command, $isAlias, $fallbackPrefix, $label){
 		$this->knownCommands[$fallbackPrefix . ":" . $label] = $command;
-		if(($command instanceof VanillaCommand or $isAlias) and isset($this->knownCommands[$label])){
+		if(($command instanceof VanillaCommand || $isAlias) && isset($this->knownCommands[$label])){
 			return false;
 		}
 
-		if(isset($this->knownCommands[$label]) and $this->knownCommands[$label]->getLabel() !== null and $this->knownCommands[$label]->getLabel() === $label){
+		if(isset($this->knownCommands[$label]) && $this->knownCommands[$label]->getLabel() !== null && $this->knownCommands[$label]->getLabel() === $label){
 			return false;
 		}
 
@@ -314,7 +319,6 @@ class SimpleCommandMap implements CommandMap{
 		return $this->knownCommands;
 	}
 
-
 	/**
 	 * @return void
 	 */
@@ -322,7 +326,7 @@ class SimpleCommandMap implements CommandMap{
 		$values = $this->server->getCommandAliases();
 
 		foreach($values as $alias => $commandStrings){
-			if(strpos($alias, ":") !== false or strpos($alias, " ") !== false){
+			if(strpos($alias, ":") !== false || strpos($alias, " ") !== false){
 				$this->server->getLogger()->warning($this->server->getLanguage()->translateString("pocketmine.command.alias.illegal", [$alias]));
 				continue;
 			}
@@ -358,6 +362,5 @@ class SimpleCommandMap implements CommandMap{
 
 		}
 	}
-
 
 }

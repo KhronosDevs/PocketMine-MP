@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -40,9 +42,7 @@ class PlayerFishEvent extends PlayerEvent implements Cancellable{
 	private $hook;
 
 	/**
-	 * @param Player $player
-	 * @param Item   $item
-	 * @param        $fishingHook
+	 * @param $fishingHook
 	 */
 	public function __construct(Player $player, Item $item, $fishingHook = null){
 		$this->player = $player;

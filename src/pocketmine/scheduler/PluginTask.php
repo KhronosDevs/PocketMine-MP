@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -31,9 +33,6 @@ abstract class PluginTask extends Task{
 	/** @var Plugin */
 	protected $owner;
 
-	/**
-	 * @param Plugin $owner
-	 */
 	public function __construct(Plugin $owner){
 		$this->owner = $owner;
 	}

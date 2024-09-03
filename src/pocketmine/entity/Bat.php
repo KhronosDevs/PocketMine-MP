@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -21,10 +23,10 @@
 
 namespace pocketmine\entity;
 
-use pocketmine\nbt\tag\ByteTag;
 use pocketmine\level\format\FullChunk;
-use pocketmine\network\protocol\AddEntityPacket;
+use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\network\protocol\AddEntityPacket;
 use pocketmine\Player;
 
 class Bat extends FlyingAnimal{

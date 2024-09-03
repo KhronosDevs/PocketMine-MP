@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -28,17 +30,18 @@ namespace pocketmine\block;
 
 use pocketmine\item\Item;
 use pocketmine\item\Tool;
+use pocketmine\math\AxisAlignedBB;
+use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\Player;
-use pocketmine\tile\Tile;
-use pocketmine\math\AxisAlignedBB;
-use pocketmine\nbt\tag\ByteTag;
 use pocketmine\tile\Skull;
+use pocketmine\tile\Tile;
+use function floor;
 
 class SkullBlock extends Transparent{
-	
+
 	const SKELETON = 0;
 	const WITHER_SKELETON = 1;
 	const ZOMBIE_HEAD = 2;
@@ -54,7 +57,7 @@ class SkullBlock extends Transparent{
 	public function getHardness() {
 		return 1;
 	}
-	
+
 	public function isHelmet(){
 		return true;
 	}
@@ -91,11 +94,11 @@ class SkullBlock extends Transparent{
 				new ByteTag("SkullType", $item->getDamage()),
 				$rot
 			]);
-			
+
 			if($item->hasCustomBlockData()){
-			    foreach($item->getCustomBlockData() as $key => $v){
-				    $nbt->{$key} = $v;
-			    }
+				foreach($item->getCustomBlockData() as $key => $v){
+					$nbt->{$key} = $v;
+				}
 			}
 
 			$chunk = $this->getLevel()->getChunk($this->x >> 4, $this->z >> 4);
@@ -132,7 +135,7 @@ class SkullBlock extends Transparent{
 
 	public function getDrops(Item $item) : array {
 		/** @var Skull $tile */
-		if($this->getLevel()!=null && (($tile = $this->getLevel()->getTile($this)) instanceof Skull)){
+		if($this->getLevel() != null && (($tile = $this->getLevel()->getTile($this)) instanceof Skull)){
 			return [[Item::SKULL, $tile->getSkullType(), 1]];
 		}else
 			return [[Item::SKULL, 0, 1]];

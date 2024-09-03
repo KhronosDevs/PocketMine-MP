@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,6 +26,20 @@ namespace pocketmine\command;
 use pocketmine\Thread;
 use pocketmine\utils\MainLogger;
 use pocketmine\utils\Utils;
+use function extension_loaded;
+use function feof;
+use function fgets;
+use function fopen;
+use function function_exists;
+use function getopt;
+use function is_resource;
+use function posix_isatty;
+use function readline_add_history;
+use function readline_callback_handler_install;
+use function readline_callback_handler_remove;
+use function readline_callback_read_char;
+use function stream_select;
+use function trim;
 
 class CommandReader extends Thread{
 	private $readline;

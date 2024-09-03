@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -34,9 +36,6 @@ class DropItemTransaction extends BaseTransaction{
 
 	protected $sourceItem = null;
 
-	/**
-	 * @param Item $droppedItem
-	 */
 	public function __construct(Item $droppedItem){
 		$this->targetItem = $droppedItem;
 	}
@@ -59,12 +58,12 @@ class DropItemTransaction extends BaseTransaction{
 
 	public function getChange(){
 		return ["in" => $this->getTargetItem(),
-				"out" => null];
+			"out" => null];
 	}
 
-	public function execute(Player $source): bool{
+	public function execute(Player $source) : bool{
 		$droppedItem = $this->getTargetItem();
-		if(!$source->getServer()->allowInventoryCheats and !$source->isCreative()){
+		if(!$source->getServer()->allowInventoryCheats && !$source->isCreative()){
 			if(!$source->getFloatingInventory()->contains($droppedItem)){
 				return false;
 			}

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -20,6 +22,9 @@
 */
 
 namespace pocketmine;
+
+use function interface_exists;
+use const PTHREADS_INHERIT_ALL;
 
 /**
  * This class must be extended by all custom threading classes
@@ -55,7 +60,7 @@ abstract class Thread extends \Thread{
 	public function start(int $options = PTHREADS_INHERIT_ALL){
 		ThreadManager::getInstance()->add($this);
 
-		if(!$this->isRunning() and !$this->isJoined() and !$this->isTerminated()){
+		if(!$this->isRunning() && !$this->isJoined() && !$this->isTerminated()){
 			if($this->getClassLoader() === null){
 				$this->setClassLoader();
 			}

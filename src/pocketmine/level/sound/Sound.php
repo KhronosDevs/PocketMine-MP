@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -25,7 +27,7 @@ use pocketmine\math\Vector3;
 use pocketmine\network\protocol\DataPacket;
 
 abstract class Sound extends Vector3{
-	
+
 	/**
 	 * @return DataPacket|DataPacket[]
 	 */

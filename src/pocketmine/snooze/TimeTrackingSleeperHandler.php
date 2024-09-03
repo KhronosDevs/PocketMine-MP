@@ -1,5 +1,5 @@
 <?php
- 
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -18,40 +18,40 @@
  *
  *
  */
- 
+
 declare(strict_types=1);
- 
+
 namespace pocketmine\snooze;
 
 use pocketmine\event\TimingsHandler;
-use pocketmine\snooze\SleeperHandler;
- 
+use function microtime;
+
 final class TimeTrackingSleeperHandler extends SleeperHandler{
- 
-    private $notificationProcessingTimeNs = 0;
-    private $timings;
- 
-    public function __construct(TimingsHandler $timings){
-        parent::__construct();
-        $this->timings = $timings;
-    }
- 
-    public function getNotificationProcessingTime(): int {
-        return $this->notificationProcessingTimeNs;
-    }
- 
-    public function resetNotificationProcessingTime() {
-        $this->notificationProcessingTimeNs = 0;
-    }
- 
-    public function processNotifications() {
-        $startTime = microtime(true);
-        $this->timings->startTiming();
-        try{
-            parent::processNotifications();
-        } finally {
-            $this->notificationProcessingTimeNs += microtime(true) - $startTime;
-            $this->timings->stopTiming();
-        }
-    }
+
+	private $notificationProcessingTimeNs = 0;
+	private $timings;
+
+	public function __construct(TimingsHandler $timings){
+		parent::__construct();
+		$this->timings = $timings;
+	}
+
+	public function getNotificationProcessingTime() : int {
+		return $this->notificationProcessingTimeNs;
+	}
+
+	public function resetNotificationProcessingTime() {
+		$this->notificationProcessingTimeNs = 0;
+	}
+
+	public function processNotifications() {
+		$startTime = microtime(true);
+		$this->timings->startTiming();
+		try{
+			parent::processNotifications();
+		} finally {
+			$this->notificationProcessingTimeNs += microtime(true) - $startTime;
+			$this->timings->stopTiming();
+		}
+	}
 }

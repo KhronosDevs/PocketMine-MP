@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,6 +25,7 @@ namespace pocketmine\level\format\generic;
 
 use pocketmine\level\format\ChunkSection;
 use pocketmine\utils\ChunkException;
+use function str_repeat;
 
 /**
  * Stub used to detect empty chunks
@@ -68,7 +71,7 @@ class EmptyChunkSection implements ChunkSection{
 		$meta = 0;
 	}
 
-	final public function setBlock($x, $y, $z, $id = null, $meta = null): bool{
+	final public function setBlock($x, $y, $z, $id = null, $meta = null) : bool{
 		throw new ChunkException("Tried to modify an empty Chunk");
 	}
 

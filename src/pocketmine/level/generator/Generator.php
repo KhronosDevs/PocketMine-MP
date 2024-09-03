@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -28,12 +30,16 @@ use pocketmine\level\ChunkManager;
 use pocketmine\level\generator\noise\Noise;
 use pocketmine\level\generator\normal\Normal;
 use pocketmine\utils\Random;
+use function array_fill;
+use function array_keys;
+use function is_subclass_of;
+use function strtolower;
 
 abstract class Generator{
 	private static $list = [];
 
 	public static function addGenerator($object, $name){
-		if(is_subclass_of($object, Generator::class) and !isset(Generator::$list[$name = strtolower($name)])){
+		if(is_subclass_of($object, Generator::class) && !isset(Generator::$list[$name = strtolower($name)])){
 			Generator::$list[$name] = $object;
 
 			return true;
@@ -73,12 +79,11 @@ abstract class Generator{
 	}
 
 	/**
-	 * @param Noise $noise
-	 * @param int   $xSize
-	 * @param int   $samplingRate
-	 * @param int   $x
-	 * @param int   $y
-	 * @param int   $z
+	 * @param int $xSize
+	 * @param int $samplingRate
+	 * @param int $x
+	 * @param int $y
+	 * @param int $z
 	 *
 	 * @return \SplFixedArray
 	 */
@@ -107,13 +112,12 @@ abstract class Generator{
 	}
 
 	/**
-	 * @param Noise $noise
-	 * @param int   $xSize
-	 * @param int   $zSize
-	 * @param int   $samplingRate
-	 * @param int   $x
-	 * @param int   $y
-	 * @param int   $z
+	 * @param int $xSize
+	 * @param int $zSize
+	 * @param int $samplingRate
+	 * @param int $x
+	 * @param int $y
+	 * @param int $z
 	 *
 	 * @return \SplFixedArray
 	 */
@@ -143,7 +147,7 @@ abstract class Generator{
 			}
 
 			for($zz = 0; $zz < $zSize; ++$zz){
-				if($xx % $samplingRate !== 0 or $zz % $samplingRate !== 0){
+				if($xx % $samplingRate !== 0 || $zz % $samplingRate !== 0){
 					$nx = (int) ($xx / $samplingRate) * $samplingRate;
 					$nz = (int) ($zz / $samplingRate) * $samplingRate;
 					$noiseArray[$xx][$zz] = Noise::bilinearLerp(
@@ -159,16 +163,15 @@ abstract class Generator{
 	}
 
 	/**
-	 * @param Noise $noise
-	 * @param int   $xSize
-	 * @param int   $ySize
-	 * @param int   $zSize
-	 * @param int   $xSamplingRate
-	 * @param int   $ySamplingRate
-	 * @param int   $zSamplingRate
-	 * @param int   $x
-	 * @param int   $y
-	 * @param int   $z
+	 * @param int $xSize
+	 * @param int $ySize
+	 * @param int $zSize
+	 * @param int $xSamplingRate
+	 * @param int $ySamplingRate
+	 * @param int $zSamplingRate
+	 * @param int $x
+	 * @param int $y
+	 * @param int $z
 	 *
 	 * @return \SplFixedArray
 	 */
@@ -205,7 +208,7 @@ abstract class Generator{
 		for($xx = 0; $xx < $xSize; ++$xx){
 			for($zz = 0; $zz < $zSize; ++$zz){
 				for($yy = 0; $yy < $ySize; ++$yy){
-					if($xx % $xSamplingRate !== 0 or $zz % $zSamplingRate !== 0 or $yy % $ySamplingRate !== 0){
+					if($xx % $xSamplingRate !== 0 || $zz % $zSamplingRate !== 0 || $yy % $ySamplingRate !== 0){
 						$nx = (int) ($xx / $xSamplingRate) * $xSamplingRate;
 						$ny = (int) ($yy / $ySamplingRate) * $ySamplingRate;
 						$nz = (int) ($zz / $zSamplingRate) * $zSamplingRate;

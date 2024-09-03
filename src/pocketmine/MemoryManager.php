@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -25,7 +27,35 @@ use pocketmine\event\server\LowMemoryEvent;
 use pocketmine\event\Timings;
 use pocketmine\scheduler\GarbageCollectionTask;
 use pocketmine\utils\Utils;
-
+use function count;
+use function file_exists;
+use function file_put_contents;
+use function fopen;
+use function fwrite;
+use function gc_collect_cycles;
+use function gc_disable;
+use function gc_enable;
+use function get_class;
+use function getReferenceCount;
+use function implode;
+use function ini_set;
+use function is_array;
+use function is_object;
+use function is_resource;
+use function is_string;
+use function json_encode;
+use function md5;
+use function min;
+use function mkdir;
+use function preg_match;
+use function print_r;
+use function round;
+use function spl_object_hash;
+use function strlen;
+use function strtoupper;
+use function substr;
+use const JSON_PRETTY_PRINT;
+use const JSON_UNESCAPED_SLASHES;
 
 class MemoryManager{
 
@@ -98,7 +128,7 @@ class MemoryManager{
 		$hardLimit = ((int) $this->server->getProperty("memory.main-hard-limit", $defaultMemory));
 
 		if($hardLimit <= 0){
-			ini_set("memory_limit", -1);
+			ini_set("memory_limit", '-1');
 		}else{
 			ini_set("memory_limit", $hardLimit . "M");
 		}
@@ -127,7 +157,7 @@ class MemoryManager{
 	}
 
 	public function canUseChunkCache(){
-		return !($this->lowMemory and $this->chunkTrigger);
+		return !($this->lowMemory && $this->chunkTrigger);
 	}
 
 	public function getViewDistance($distance){
@@ -135,7 +165,7 @@ class MemoryManager{
 	}
 
 	public function trigger($memory, $limit, $global = false, $triggerCount = 0){
-		$this->server->getLogger()->debug("[Memory Manager] ".($global ? "Global " : "") ."Low memory triggered, limit ". round(($limit / 1024) / 1024, 2)."MB, using ". round(($memory / 1024) / 1024, 2)."MB");
+		$this->server->getLogger()->debug("[Memory Manager] " . ($global ? "Global " : "") . "Low memory triggered, limit " . round(($limit / 1024) / 1024, 2) . "MB, using " . round(($memory / 1024) / 1024, 2) . "MB");
 
 		if($this->cacheTrigger){
 			foreach($this->server->getLevels() as $level){
@@ -143,7 +173,7 @@ class MemoryManager{
 			}
 		}
 
-		if($this->chunkTrigger and $this->chunkCollect){
+		if($this->chunkTrigger && $this->chunkCollect){
 			foreach($this->server->getLevels() as $level){
 				$level->doChunkGarbageCollection();
 			}
@@ -157,24 +187,24 @@ class MemoryManager{
 			$cycles = $this->triggerGarbageCollector();
 		}
 
-		$this->server->getLogger()->debug("[Memory Manager] Freed " . round(($ev->getMemoryFreed() / 1024) / 1024, 2)."MB, $cycles cycles");
+		$this->server->getLogger()->debug("[Memory Manager] Freed " . round(($ev->getMemoryFreed() / 1024) / 1024, 2) . "MB, $cycles cycles");
 	}
 
 	public function check(){
 		Timings::$memoryManagerTimer->startTiming();
 
-		if(($this->memoryLimit > 0 or $this->globalMemoryLimit > 0) and ++$this->checkTicker >= $this->checkRate){
+		if(($this->memoryLimit > 0 || $this->globalMemoryLimit > 0) && ++$this->checkTicker >= $this->checkRate){
 			$this->checkTicker = 0;
 			$memory = Utils::getMemoryUsage(true);
 			$trigger = false;
-			if($this->memoryLimit > 0 and $memory[0] > $this->memoryLimit){
+			if($this->memoryLimit > 0 && $memory[0] > $this->memoryLimit){
 				$trigger = 0;
-			}elseif($this->globalMemoryLimit > 0 and $memory[1] > $this->globalMemoryLimit){
+			}elseif($this->globalMemoryLimit > 0 && $memory[1] > $this->globalMemoryLimit){
 				$trigger = 1;
 			}
 
 			if($trigger !== false){
-				if($this->lowMemory and $this->continuousTrigger){
+				if($this->lowMemory && $this->continuousTrigger){
 					if(++$this->continuousTriggerTicker >= $this->continuousTriggerRate){
 						$this->continuousTriggerTicker = 0;
 						$this->trigger($memory[$trigger], $this->memoryLimit, $trigger > 0, ++$this->continuousTriggerCount);
@@ -189,7 +219,7 @@ class MemoryManager{
 			}
 		}
 
-		if($this->garbageCollectionPeriod > 0 and ++$this->garbageCollectionTicker >= $this->garbageCollectionPeriod){
+		if($this->garbageCollectionPeriod > 0 && ++$this->garbageCollectionTicker >= $this->garbageCollectionPeriod){
 			$this->garbageCollectionTicker = 0;
 			$this->triggerGarbageCollector();
 		}
@@ -227,7 +257,6 @@ class MemoryManager{
 		if(!is_object($object)){
 			throw new \InvalidArgumentException("Not an object!");
 		}
-
 
 		$identifier = spl_object_hash($object) . ":" . get_class($object);
 
@@ -301,7 +330,7 @@ class MemoryManager{
 
 	public function dumpServerMemory($outputFolder, $maxNesting, $maxStringSize){
 		gc_disable();
-		ini_set("memory_limit",-1);
+		ini_set("memory_limit", '-1');
 		if(!file_exists($outputFolder)){
 			mkdir($outputFolder, 0777, true);
 		}
@@ -357,12 +386,12 @@ class MemoryManager{
 					$this->continueDump($property->getValue($object), $info["properties"][$property->getName()], $objects, $refCounts, 0, $maxNesting, $maxStringSize);
 				}
 
-				fwrite($obData, "$hash@$className: ". json_encode($info, JSON_UNESCAPED_SLASHES) . "\n");
+				fwrite($obData, "$hash@$className: " . json_encode($info, JSON_UNESCAPED_SLASHES) . "\n");
 
 				if(!isset($objects["staticProperties"][$className])){
 					$staticProperties[$className] = [];
 					foreach($reflection->getProperties() as $property){
-						if(!$property->isStatic() or $property->getDeclaringClass()->getName() !== $className){
+						if(!$property->isStatic() || $property->getDeclaringClass()->getName() !== $className){
 							continue;
 						}
 
@@ -415,7 +444,7 @@ class MemoryManager{
 				$this->continueDump($value, $data[$key], $objects, $refCounts, $recursion + 1, $maxNesting, $maxStringSize);
 			}
 		}elseif(is_string($from)){
-			$data = "(string) len(".strlen($from).") " . substr(Utils::printable($from), 0, $maxStringSize);
+			$data = "(string) len(" . strlen($from) . ") " . substr(Utils::printable($from), 0, $maxStringSize);
 		}elseif(is_resource($from)){
 			$data = "(resource) " . print_r($from, true);
 		}else{

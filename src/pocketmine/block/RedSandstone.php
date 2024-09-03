@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -18,12 +20,12 @@
  * @link https://itxtech.org
  *
  */
- 
+
 namespace pocketmine\block;
 
 class RedSandstone extends Sandstone{
 	protected $id = Block::RED_SANDSTONE;
-	
+
 	public function getName() : string{
 		static $names = [
 			0 => "Red Sandstone",

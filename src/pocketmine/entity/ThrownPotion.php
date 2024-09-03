@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -21,13 +23,13 @@
 
 namespace pocketmine\entity;
 
+use pocketmine\item\Potion;
 use pocketmine\level\format\FullChunk;
 use pocketmine\level\particle\SpellParticle;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\ShortTag;
 use pocketmine\network\protocol\AddEntityPacket;
 use pocketmine\Player;
-use pocketmine\item\Potion;
 
 class ThrownPotion extends Projectile{
 	const NETWORK_ID = 86;
@@ -51,11 +53,11 @@ class ThrownPotion extends Projectile{
 		unset($this->dataProperties[self::DATA_SHOOTER_ID]);
 		$this->setDataProperty(self::DATA_POTION_ID, self::DATA_TYPE_SHORT, $this->getPotionId());
 	}
-	
+
 	public function getPotionId() : int{
 		return (int) $this->namedtag["PotionId"];
 	}
-	
+
 	public function kill(){
 		$color = Potion::getColor($this->getPotionId());
 		$this->getLevel()->addParticle(new SpellParticle($this, $color[0], $color[1], $color[2]));
@@ -67,7 +69,7 @@ class ThrownPotion extends Projectile{
 				}
 			}
 		}
-		
+
 		parent::kill();
 	}
 
@@ -82,12 +84,12 @@ class ThrownPotion extends Projectile{
 
 		$this->age++;
 
-		if($this->age > 1200 or $this->isCollided){
+		if($this->age > 1200 || $this->isCollided){
 			$this->kill();
 			$this->close();
 			$hasUpdate = true;
 		}
-		
+
 		if($this->onGround) {
 			$this->kill();
 			$this->close();

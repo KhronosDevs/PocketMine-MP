@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -21,12 +23,12 @@
 
 namespace pocketmine\entity;
 
-
 use pocketmine\level\format\FullChunk;
-use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\level\particle\SpellParticle;
+use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\network\protocol\AddEntityPacket;
 use pocketmine\Player;
+use function mt_rand;
 
 class ThrownExpBottle extends Projectile{
 	const NETWORK_ID = 68;
@@ -53,7 +55,7 @@ class ThrownExpBottle extends Projectile{
 
 		$this->age++;
 
-		if($this->age > 1200 or $this->isCollided){
+		if($this->age > 1200 || $this->isCollided){
 			$this->kill();
 			$this->close();
 			$this->getLevel()->addParticle(new SpellParticle($this, 46, 82, 153));

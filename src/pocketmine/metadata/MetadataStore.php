@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -34,9 +36,8 @@ abstract class MetadataStore{
 	/**
 	 * Adds a metadata value to an object.
 	 *
-	 * @param mixed         $subject
-	 * @param string        $metadataKey
-	 * @param MetadataValue $newMetadataValue
+	 * @param mixed  $subject
+	 * @param string $metadataKey
 	 *
 	 * @throws \Exception
 	 */
@@ -95,7 +96,6 @@ abstract class MetadataStore{
 	 *
 	 * @param mixed  $subject
 	 * @param string $metadataKey
-	 * @param Plugin $owningPlugin
 	 *
 	 * @throws \Exception
 	 */
@@ -113,8 +113,6 @@ abstract class MetadataStore{
 	 * Invalidates all metadata in the metadata store that originates from the
 	 * given plugin. Doing this will force each invalidated metadata item to
 	 * be recalculated the next time it is accessed.
-	 *
-	 * @param Plugin $owningPlugin
 	 */
 	public function invalidateAll(Plugin $owningPlugin){
 		/** @var $values MetadataValue[] */
@@ -129,8 +127,7 @@ abstract class MetadataStore{
 	 * Creates a unique name for the object receiving metadata by combining
 	 * unique data from the subject with a metadataKey.
 	 *
-	 * @param Metadatable $subject
-	 * @param string      $metadataKey
+	 * @param string $metadataKey
 	 *
 	 * @return string
 	 *

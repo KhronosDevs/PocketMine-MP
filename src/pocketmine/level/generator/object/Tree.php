@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -25,6 +27,7 @@ use pocketmine\block\Block;
 use pocketmine\block\Sapling;
 use pocketmine\level\ChunkManager;
 use pocketmine\utils\Random;
+use function abs;
 
 abstract class Tree{
 	public $overridable = [
@@ -66,7 +69,7 @@ abstract class Tree{
 				break;
 			case Sapling::OAK:
 			default:
-				if(!$noBigTree and $random->nextRange(0, 9) === 0){
+				if(!$noBigTree && $random->nextRange(0, 9) === 0){
 					$tree = new BigTree();
 				}else{
 					$tree = new OakTree();
@@ -78,11 +81,10 @@ abstract class Tree{
 		}
 	}
 
-
 	public function canPlaceObject(ChunkManager $level, $x, $y, $z, Random $random){
 		$radiusToCheck = 0;
 		for($yy = 0; $yy < $this->treeHeight + 3; ++$yy){
-			if($yy == 1 or $yy === $this->treeHeight){
+			if($yy == 1 || $yy === $this->treeHeight){
 				++$radiusToCheck;
 			}
 			for($xx = -$radiusToCheck; $xx < ($radiusToCheck + 1); ++$xx){
@@ -108,7 +110,7 @@ abstract class Tree{
 				$xOff = abs($xx - $x);
 				for($zz = $z - $mid; $zz <= $z + $mid; ++$zz){
 					$zOff = abs($zz - $z);
-					if($xOff === $mid and $zOff === $mid and ($yOff === 0 or $random->nextBoundedInt(2) === 0)){
+					if($xOff === $mid && $zOff === $mid && ($yOff === 0 || $random->nextBoundedInt(2) === 0)){
 						continue;
 					}
 					if(!Block::$solid[$level->getBlockIdAt($xx, $yy, $zz)]){

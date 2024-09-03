@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,8 +16,6 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\entity;
@@ -27,9 +26,6 @@ use pocketmine\event\Cancellable;
 class ItemDespawnEvent extends EntityEvent implements Cancellable{
 	public static $handlerList = null;
 
-	/**
-	 * @param Item $item
-	 */
 	public function __construct(Item $item){
 		$this->entity = $item;
 

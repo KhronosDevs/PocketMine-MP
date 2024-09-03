@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -22,12 +24,17 @@
 namespace pocketmine\entity;
 
 use pocketmine\block\Wool;
-use pocketmine\nbt\tag\ByteTag;
-use pocketmine\network\protocol\AddEntityPacket;
-use pocketmine\Player;
 use pocketmine\item\Item as ItemItem;
 use pocketmine\level\format\FullChunk;
+use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\network\protocol\AddEntityPacket;
+use pocketmine\Player;
+use function count;
+use function explode;
+use function intval;
+use function mt_rand;
+use function str_repeat;
 
 class Sheep extends Animal implements Colorable{
 	const NETWORK_ID = 13;
@@ -37,7 +44,7 @@ class Sheep extends Animal implements Colorable{
 	public $width = 0.625;
 	public $length = 1.4375;
 	public $height = 1.8;
-	
+
 	public function getName() : string{
 		return "Sheep";
 	}
@@ -78,7 +85,7 @@ class Sheep extends Animal implements Colorable{
 	public function setColor(int $color){
 		$this->namedtag->Color = new ByteTag("Color", $color);
 	}
-	
+
 	public function spawnTo(Player $player){
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
@@ -96,7 +103,7 @@ class Sheep extends Animal implements Colorable{
 
 		parent::spawnTo($player);
 	}
-	
+
 	public function getDrops(){
 		$drops = [
 			ItemItem::get(ItemItem::WOOL, $this->getColor(), 1)

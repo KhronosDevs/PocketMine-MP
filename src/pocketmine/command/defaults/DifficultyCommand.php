@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,10 +26,9 @@ namespace pocketmine\command\defaults;
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
 use pocketmine\event\TranslationContainer;
-use pocketmine\network\Network;
 use pocketmine\network\protocol\SetDifficultyPacket;
 use pocketmine\Server;
-
+use function count;
 
 class DifficultyCommand extends VanillaCommand{
 

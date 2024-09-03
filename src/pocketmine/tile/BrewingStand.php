@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -23,17 +25,18 @@ namespace pocketmine\tile;
 
 use pocketmine\inventory\BrewingInventory;
 use pocketmine\inventory\InventoryHolder;
-use pocketmine\item\Item;
 use pocketmine\item\Fish;
+use pocketmine\item\Item;
 use pocketmine\level\format\FullChunk;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\ShortTag;
 use pocketmine\nbt\tag\StringTag;
-use pocketmine\nbt\tag\IntTag;
 use pocketmine\network\protocol\ContainerSetDataPacket;
 use pocketmine\Server;
+use function microtime;
 
 class BrewingStand extends Spawnable implements InventoryHolder, Container, Nameable{
 	const MAX_BREW_TIME = 400;
@@ -64,7 +67,7 @@ class BrewingStand extends Spawnable implements InventoryHolder, Container, Name
 		parent::__construct($chunk, $nbt);
 		$this->inventory = new BrewingInventory($this);
 
-		if(!isset($this->namedtag->Items) or !($this->namedtag->Items instanceof ListTag)){
+		if(!isset($this->namedtag->Items) || !($this->namedtag->Items instanceof ListTag)){
 			$this->namedtag->Items = new ListTag("Items", []);
 			$this->namedtag->Items->setTagType(NBT::TAG_Compound);
 		}
@@ -157,8 +160,7 @@ class BrewingStand extends Spawnable implements InventoryHolder, Container, Name
 	/**
 	 * This method should not be used by plugins, use the Inventory
 	 *
-	 * @param int  $index
-	 * @param Item $item
+	 * @param int $index
 	 *
 	 * @return bool
 	 */
@@ -167,7 +169,7 @@ class BrewingStand extends Spawnable implements InventoryHolder, Container, Name
 
 		$d = NBT::putItemHelper($item, $index);
 
-		if($item->getId() === Item::AIR or $item->getCount() <= 0){
+		if($item->getId() === Item::AIR || $item->getCount() <= 0){
 			if($i >= 0){
 				unset($this->namedtag->Items[$i]);
 			}
@@ -223,14 +225,14 @@ class BrewingStand extends Spawnable implements InventoryHolder, Container, Name
 		$canBrew = false;
 
 		for($i = 1; $i <= 3; $i++){//查瓶子
-			if($this->inventory->getItem($i)->getId() === Item::POTION or
+			if($this->inventory->getItem($i)->getId() === Item::POTION ||
 				$this->inventory->getItem($i)->getId() === Item::SPLASH_POTION
 			){
 				$canBrew = true;
 			}
 		}
 
-		if($ingredient->getId() !== Item::AIR and $ingredient->getCount() > 0){//有原料
+		if($ingredient->getId() !== Item::AIR && $ingredient->getCount() > 0){//有原料
 			if($canBrew){//查原料
 				if(!$this->checkIngredient($ingredient)){
 					$canBrew = false;
@@ -271,7 +273,7 @@ class BrewingStand extends Spawnable implements InventoryHolder, Container, Name
 				for($i = 1; $i <= 3; $i++){
 					$potion = $this->inventory->getItem($i);
 					$recipe = Server::getInstance()->getCraftingManager()->matchBrewingRecipe($ingredient, $potion);
-					if($recipe != null and $potion->getId() !== Item::AIR){
+					if($recipe != null && $potion->getId() !== Item::AIR){
 						$this->inventory->setItem($i, $recipe->getResult());
 					}
 				}

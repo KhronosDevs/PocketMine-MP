@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -29,9 +31,9 @@ class GoldenApple extends Food{
 	public function __construct($meta = 0, $count = 1){
 		parent::__construct(self::GOLDEN_APPLE, $meta, $count, "Golden Apple");
 	}
-	
-	public function canBeConsumedBy(Entity $entity): bool{
-		return $entity instanceof Human and $this->canBeConsumed();
+
+	public function canBeConsumedBy(Entity $entity) : bool{
+		return $entity instanceof Human && $this->canBeConsumed();
 	}
 
 	public function getFoodRestore() : int{
@@ -49,4 +51,3 @@ class GoldenApple extends Food{
 		];
 	}
 }
-

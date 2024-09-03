@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -25,6 +27,12 @@ use pocketmine\event\TranslationContainer;
 use pocketmine\Server;
 use pocketmine\utils\MainLogger;
 use pocketmine\utils\TextFormat;
+use function count;
+use function intval;
+use function ord;
+use function strlen;
+use function strpos;
+use function substr;
 
 class FormattedCommandAlias extends Command{
 	private $formatStrings = [];
@@ -70,7 +78,6 @@ class FormattedCommandAlias extends Command{
 
 	/**
 	 * @param string $formatString
-	 * @param array  $args
 	 *
 	 * @return string
 	 * @throws \InvalidArgumentException
@@ -79,7 +86,7 @@ class FormattedCommandAlias extends Command{
 		$index = strpos($formatString, '$');
 		while($index !== false){
 			$start = $index;
-			if($index > 0 and $formatString{$start - 1} === "\\"){
+			if($index > 0 && $formatString{$start - 1} === "\\"){
 				$formatString = substr($formatString, 0, $start - 1) . substr($formatString, $start);
 				$index = strpos($formatString, '$', $index);
 				continue;
@@ -96,7 +103,7 @@ class FormattedCommandAlias extends Command{
 
 			$argStart = $index;
 
-			while($index < strlen($formatString) and self::inRange(ord($formatString{$index}) - 48, 0, 9)){
+			while($index < strlen($formatString) && self::inRange(ord($formatString{$index}) - 48, 0, 9)){
 				++$index;
 			}
 
@@ -114,19 +121,19 @@ class FormattedCommandAlias extends Command{
 
 			$rest = false;
 
-			if($index < strlen($formatString) and $formatString{$index} === "-"){
+			if($index < strlen($formatString) && $formatString{$index} === "-"){
 				$rest = true;
 				++$index;
 			}
 
 			$end = $index;
 
-			if($required and $position >= count($args)){
+			if($required && $position >= count($args)){
 				throw new \InvalidArgumentException("Missing required argument " . ($position + 1));
 			}
 
 			$replacement = "";
-			if($rest and $position < count($args)){
+			if($rest && $position < count($args)){
 				for($i = $position; $i < count($args); ++$i){
 					if($i !== $position){
 						$replacement .= " ";
@@ -156,7 +163,7 @@ class FormattedCommandAlias extends Command{
 	 * @return bool
 	 */
 	private static function inRange($i, $j, $k){
-		return $i >= $j and $i <= $k;
+		return $i >= $j && $i <= $k;
 	}
 
 }

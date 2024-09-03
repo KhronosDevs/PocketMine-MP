@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -22,6 +24,8 @@
 namespace pocketmine\level\format\anvil;
 
 use pocketmine\nbt\tag\CompoundTag;
+use function chr;
+use function ord;
 
 class ChunkSection implements \pocketmine\level\format\ChunkSection{
 
@@ -85,7 +89,7 @@ class ChunkSection implements \pocketmine\level\format\ChunkSection{
 		}
 	}
 
-	public function setBlock($x, $y, $z, $blockId = null, $meta = null): bool{
+	public function setBlock($x, $y, $z, $blockId = null, $meta = null) : bool{
 		$i = ($y << 8) + ($z << 4) + $x;
 
 		$changed = false;

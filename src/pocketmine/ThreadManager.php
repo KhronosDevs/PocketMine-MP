@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -21,6 +23,8 @@
 
 namespace pocketmine;
 
+use function spl_object_hash;
+
 class ThreadManager extends \Volatile{
 
 	/** @var ThreadManager */
@@ -41,7 +45,7 @@ class ThreadManager extends \Volatile{
 	 * @param Worker|Thread $thread
 	 */
 	public function add($thread){
-		if($thread instanceof Thread or $thread instanceof Worker){
+		if($thread instanceof Thread || $thread instanceof Worker){
 			$this->{spl_object_hash($thread)} = $thread;
 		}
 	}
@@ -50,7 +54,7 @@ class ThreadManager extends \Volatile{
 	 * @param Worker|Thread $thread
 	 */
 	public function remove($thread){
-		if($thread instanceof Thread or $thread instanceof Worker){
+		if($thread instanceof Thread || $thread instanceof Worker){
 			unset($this->{spl_object_hash($thread)});
 		}
 	}

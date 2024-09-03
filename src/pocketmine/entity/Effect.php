@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,10 +26,11 @@ namespace pocketmine\entity;
 use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\event\entity\EntityRegainHealthEvent;
 use pocketmine\event\player\PlayerExhaustEvent;
-use pocketmine\network\Network;
 use pocketmine\network\protocol\MobEffectPacket;
 use pocketmine\Player;
-
+use function constant;
+use function defined;
+use function strtoupper;
 
 class Effect{
 	const SPEED = 1;
@@ -310,7 +313,7 @@ class Effect{
 
 			if($this->id === Effect::SPEED){
 				$attr = $entity->getAttributeMap()->getAttribute(Attribute::MOVEMENT_SPEED);
-				if($modify and $oldEffect !== null){
+				if($modify && $oldEffect !== null){
 					$speed = $attr->getValue() / (1 + 0.2 * ($oldEffect->getAmplifier() + 1));
 				}else{
 					$speed = $attr->getValue();
@@ -319,7 +322,7 @@ class Effect{
 				$attr->setValue($speed);
 			}elseif($this->id === Effect::SLOWNESS){
 				$attr = $entity->getAttributeMap()->getAttribute(Attribute::MOVEMENT_SPEED);
-				if($modify and $oldEffect !== null){
+				if($modify && $oldEffect !== null){
 					$speed = $attr->getValue() / (1 - 0.15 * ($oldEffect->getAmplifier() + 1));
 				}else{
 					$speed = $attr->getValue();

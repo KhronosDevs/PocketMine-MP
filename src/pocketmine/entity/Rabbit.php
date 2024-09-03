@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -21,15 +23,17 @@
 
 namespace pocketmine\entity;
 
-use pocketmine\item\enchantment\Enchantment;
-use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\event\entity\EntityDamageByEntityEvent;
+use pocketmine\event\entity\EntityDamageEvent;
+use pocketmine\item\enchantment\Enchantment;
 use pocketmine\item\Item as ItemItem;
-use pocketmine\nbt\tag\ByteTag;
-use pocketmine\network\protocol\AddEntityPacket;
 use pocketmine\level\format\FullChunk;
+use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\network\protocol\AddEntityPacket;
 use pocketmine\Player;
+use function count;
+use function mt_rand;
 
 class Rabbit extends Animal{
 	const NETWORK_ID = 18;
@@ -103,7 +107,7 @@ class Rabbit extends Animal{
 	public function getDrops(){
 		$lootingL = 0;
 		$cause = $this->lastDamageCause;
-		if($cause instanceof EntityDamageByEntityEvent and $cause->getDamager() instanceof Player){
+		if($cause instanceof EntityDamageByEntityEvent && $cause->getDamager() instanceof Player){
 			$lootingL = $cause->getDamager()->getItemInHand()->getEnchantmentLevel(Enchantment::TYPE_WEAPON_LOOTING);
 		}
 		$drops = [ItemItem::get(ItemItem::RABBIT_HIDE, 0, mt_rand(0, 1))];
@@ -118,6 +122,5 @@ class Rabbit extends Animal{
 		}
 		return $drops;
 	}
-
 
 }

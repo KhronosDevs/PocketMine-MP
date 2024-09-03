@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -23,7 +25,67 @@
  * Various Utilities used around the code
  */
 namespace pocketmine\utils;
+
 use pocketmine\ThreadManager;
+use function array_merge;
+use function bin2hex;
+use function chunk_split;
+use function count;
+use function curl_close;
+use function curl_exec;
+use function curl_init;
+use function curl_setopt;
+use function dechex;
+use function exec;
+use function file;
+use function file_exists;
+use function file_get_contents;
+use function get_current_user;
+use function get_loaded_extensions;
+use function getenv;
+use function gettype;
+use function hexdec;
+use function implode;
+use function is_array;
+use function is_string;
+use function memory_get_usage;
+use function ord;
+use function php_uname;
+use function phpversion;
+use function preg_grep;
+use function preg_match;
+use function preg_match_all;
+use function preg_replace;
+use function random_bytes;
+use function sha1;
+use function spl_object_hash;
+use function str_pad;
+use function str_split;
+use function strip_tags;
+use function stripos;
+use function strlen;
+use function strpos;
+use function strtolower;
+use function sys_get_temp_dir;
+use function trim;
+use const CURLOPT_AUTOREFERER;
+use const CURLOPT_CONNECTTIMEOUT;
+use const CURLOPT_FOLLOWLOCATION;
+use const CURLOPT_FORBID_REUSE;
+use const CURLOPT_FRESH_CONNECT;
+use const CURLOPT_HTTPHEADER;
+use const CURLOPT_POST;
+use const CURLOPT_POSTFIELDS;
+use const CURLOPT_RETURNTRANSFER;
+use const CURLOPT_SSL_VERIFYHOST;
+use const CURLOPT_SSL_VERIFYPEER;
+use const CURLOPT_TIMEOUT;
+use const PHP_EOL;
+use const PHP_INT_MAX;
+use const PHP_INT_SIZE;
+use const PHP_MAXPATHLEN;
+use const STR_PAD_LEFT;
+use const STR_PAD_RIGHT;
 
 /**
  * Big collection of functions
@@ -36,8 +98,6 @@ class Utils{
 
 	/**
 	 * Generates an unique identifier to a callable
-	 *
-	 * @param callable $variable
 	 *
 	 * @return string
 	 */
@@ -60,7 +120,7 @@ class Utils{
 	 * @return UUID
 	 */
 	public static function getMachineUniqueId($extra = ""){
-		if(self::$serverUniqueId !== null and $extra === ""){
+		if(self::$serverUniqueId !== null && $extra === ""){
 			return self::$serverUniqueId;
 		}
 
@@ -128,7 +188,7 @@ class Utils{
 	public static function getIP($force = false){
 		if(Utils::$online === false){
 			return false;
-		}elseif(Utils::$ip !== false and $force !== true){
+		}elseif(Utils::$ip !== false && $force !== true){
 			return Utils::$ip;
 		}
 		$ip = trim(strip_tags(Utils::getURL("https://api.ipify.org")));
@@ -170,7 +230,7 @@ class Utils{
 	 * @return string
 	 */
 	public static function getOS($recalculate = false){
-		if(self::$os === null or $recalculate){
+		if(self::$os === null || $recalculate){
 			$uname = php_uname("s");
 			if(stripos($uname, "Darwin") !== false){
 				if(strpos(php_uname("m"), "iP") === 0){
@@ -178,7 +238,7 @@ class Utils{
 				}else{
 					self::$os = "mac";
 				}
-			}elseif(stripos($uname, "Win") !== false or $uname === "Msys"){
+			}elseif(stripos($uname, "Win") !== false || $uname === "Msys"){
 				self::$os = "win";
 			}elseif(stripos($uname, "Linux") !== false){
 				if(@file_exists("/system/build.prop")){
@@ -186,22 +246,21 @@ class Utils{
 				}else{
 					self::$os = "linux";
 				}
-			}elseif(stripos($uname, "BSD") !== false or $uname === "DragonFly"){
+			}elseif(stripos($uname, "BSD") !== false || $uname === "DragonFly"){
 				self::$os = "bsd";
 			}else{
 				self::$os = "other";
 			}
 		}
-		
+
 		return self::$os;
 	}
-
 
 	public static function getRealMemoryUsage(){
 		$stack = 0;
 		$heap = 0;
 
-		if(Utils::getOS() === "linux" or Utils::getOS() === "android"){
+		if(Utils::getOS() === "linux" || Utils::getOS() === "android"){
 			$mappings = file("/proc/self/maps");
 			foreach($mappings as $line){
 				if(preg_match("#([a-z0-9]+)\\-([a-z0-9]+) [rwxp\\-]{4} [a-z0-9]+ [^\\[]*\\[([a-zA-z0-9]+)\\]#", trim($line), $matches) > 0){
@@ -221,7 +280,7 @@ class Utils{
 		$reserved = memory_get_usage();
 		$VmSize = null;
 		$VmRSS = null;
-		if(Utils::getOS() === "linux" or Utils::getOS() === "android"){
+		if(Utils::getOS() === "linux" || Utils::getOS() === "android"){
 			$status = file_get_contents("/proc/self/status");
 			if(preg_match("/VmRSS:[ \t]+([0-9]+) kB/", $status, $matches) > 0){
 				$VmRSS = $matches[1] * 1024;
@@ -250,7 +309,7 @@ class Utils{
 	}
 
 	public static function getThreadCount(){
-		if(Utils::getOS() === "linux" or Utils::getOS() === "android"){
+		if(Utils::getOS() === "linux" || Utils::getOS() === "android"){
 			if(preg_match("/Threads:[ \t]+([0-9]+)/", file_get_contents("/proc/self/status"), $matches) > 0){
 				return (int) $matches[1];
 			}
@@ -263,7 +322,7 @@ class Utils{
 	public static function getCoreCount($recalculate = false){
 		static $processors = 0;
 
-		if($processors > 0 and !$recalculate){
+		if($processors > 0 && !$recalculate){
 			return $processors;
 		}else{
 			$processors = 0;
@@ -314,7 +373,6 @@ class Utils{
 
 		return $output;
 	}
-
 
 	/**
 	 * Returns a string that can be printed, replaces non-printable characters
@@ -372,7 +430,6 @@ class Utils{
 	 *
 	 * @param     $page
 	 * @param int $timeout default 10
-	 * @param array $extraHeaders
 	 *
 	 * @return bool|mixed
 	 */
@@ -404,7 +461,6 @@ class Utils{
 	 * @param              $page
 	 * @param array|string $args
 	 * @param int          $timeout
-	 * @param array $extraHeaders
 	 *
 	 * @return bool|mixed
 	 */

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * RakLib network library
  *
@@ -17,6 +19,11 @@ namespace raklib\protocol;
 
 #ifndef COMPILE
 use raklib\Binary;
+use function chr;
+use function explode;
+use function ord;
+use function strlen;
+use function substr;
 
 #endif
 
@@ -28,7 +35,6 @@ abstract class Packet{
 	protected $offset = 0;
 	public $buffer;
 	public $sendTime;
-	
 
 	protected function get($len){
 		if($len < 0){
@@ -73,7 +79,7 @@ abstract class Packet{
 	protected function getAddress(&$addr, &$port, &$version = null){
 		$version = $this->getByte();
 		if($version === 4){
-			$addr = ((~$this->getByte()) & 0xff) .".". ((~$this->getByte()) & 0xff) .".". ((~$this->getByte()) & 0xff) .".". ((~$this->getByte()) & 0xff);
+			$addr = ((~$this->getByte()) & 0xff) . "." . ((~$this->getByte()) & 0xff) . "." . ((~$this->getByte()) & 0xff) . "." . ((~$this->getByte()) & 0xff);
 			$port = $this->getShort(false);
 		}else{
 			//TODO: IPv6
@@ -116,7 +122,7 @@ abstract class Packet{
 		$this->putShort(strlen($v));
 		$this->put($v);
 	}
-	
+
 	protected function putAddress($addr, $port, $version = 4){
 		$this->putByte($version);
 		if($version === 4){

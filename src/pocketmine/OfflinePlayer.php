@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -21,11 +23,12 @@
 
 namespace pocketmine;
 
-
-use pocketmine\metadata\MetadataValue;
 use pocketmine\metadata\Metadatable;
+use pocketmine\metadata\MetadataValue;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\plugin\Plugin;
+use function file_exists;
+use function strtolower;
 
 class OfflinePlayer implements IPlayer, Metadatable{
 
@@ -34,7 +37,6 @@ class OfflinePlayer implements IPlayer, Metadatable{
 	private $namedtag;
 
 	/**
-	 * @param Server $server
 	 * @param string $name
 	 */
 	public function __construct(Server $server, $name){
@@ -47,11 +49,11 @@ class OfflinePlayer implements IPlayer, Metadatable{
 		}
 	}
 
-	public function isOnline(){
+	public function isOnline() : bool{
 		return $this->getPlayer() !== null;
 	}
 
-	public function getName() : string{
+	public function getName(){
 		return $this->name;
 	}
 
@@ -75,7 +77,7 @@ class OfflinePlayer implements IPlayer, Metadatable{
 		}
 	}
 
-	public function isBanned(){
+	public function isBanned() : bool{
 		return $this->server->getNameBans()->isBanned(strtolower($this->getName()));
 	}
 
@@ -87,7 +89,7 @@ class OfflinePlayer implements IPlayer, Metadatable{
 		}
 	}
 
-	public function isWhitelisted(){
+	public function isWhitelisted() : bool{
 		return $this->server->isWhitelisted(strtolower($this->getName()));
 	}
 
@@ -130,6 +132,5 @@ class OfflinePlayer implements IPlayer, Metadatable{
 	public function removeMetadata($metadataKey, Plugin $plugin){
 		$this->server->getPlayerMetadata()->removeMetadata($this, $metadataKey, $plugin);
 	}
-
 
 }

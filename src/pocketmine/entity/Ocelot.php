@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -21,11 +23,12 @@
 
 namespace pocketmine\entity;
 
-use pocketmine\nbt\tag\ByteTag;
-use pocketmine\network\protocol\AddEntityPacket;
 use pocketmine\level\format\FullChunk;
+use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\network\protocol\AddEntityPacket;
 use pocketmine\Player;
+use function mt_rand;
 
 class Ocelot extends Animal{
 	const NETWORK_ID = 22;
@@ -42,7 +45,7 @@ class Ocelot extends Animal{
 	public $height = 0.75;
 
 	public $dropExp = [1, 3];
-	
+
 	public function getName() : string{
 		return "Ocelot";
 	}

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -20,6 +22,8 @@
 */
 
 namespace pocketmine\inventory;
+
+use function count;
 
 /**
  * Saves all the information regarding default inventory sizes and types

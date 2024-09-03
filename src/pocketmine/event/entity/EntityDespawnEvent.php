@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,8 +16,6 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\entity;
@@ -36,9 +35,6 @@ class EntityDespawnEvent extends EntityEvent{
 
 	private $entityType;
 
-	/**
-	 * @param Entity $entity
-	 */
 	public function __construct(Entity $entity){
 		$this->entity = $entity;
 		$this->entityType = $entity::NETWORK_ID;

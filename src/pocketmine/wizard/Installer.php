@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -27,6 +29,18 @@ namespace pocketmine\wizard;
 
 use pocketmine\utils\Config;
 use pocketmine\utils\Utils;
+use function base64_encode;
+use function fgets;
+use function gethostbyname;
+use function getmypid;
+use function in_array;
+use function random_bytes;
+use function sleep;
+use function strtolower;
+use function strtoupper;
+use function substr;
+use function trim;
+use const STDIN;
 
 class Installer{
 	const DEFAULT_NAME = "Minecraft: PE Server";
@@ -36,7 +50,7 @@ class Installer{
 	const DEFAULT_GAMEMODE = 0;
 	const DEFAULT_LEVEL_NAME = "world";
 	const DEFAULT_LEVEL_TYPE = "DEFAULT";
-	
+
 	const LEVEL_TYPES = [
 		"DEFAULT",
 		"FLAT",
@@ -64,7 +78,6 @@ class Installer{
 			$this->defaultLang = $lang;
 		}while($lang == false);
 		$this->lang = new InstallerLang($lang);
-
 
 		echo "[*] " . $this->lang->language_has_been_selected . "\n";
 
@@ -129,28 +142,28 @@ LICENSE;
 		do{
 			echo "[?] " . $this->lang->server_port . " (" . self::DEFAULT_PORT . "): ";
 			$port = (int) $this->getInput(self::DEFAULT_PORT);
-			if($port <= 0 or $port > 65535){
+			if($port <= 0 || $port > 65535){
 				echo "[!] " . $this->lang->invalid_port . "\n";
 			}
-		}while($port <= 0 or $port > 65535);
+		}while($port <= 0 || $port > 65535);
 		$config->set("server-port", $port);
-		
+
 		echo "[*] " . $this->lang->online_mode_info . "\n";
 		echo "[?] " . $this->lang->online_mode . " (y/N): ";
 		$config->set("online-mode", strtolower($this->getInput("y")) == "y");
-		
+
 		echo "[?] " . $this->lang->level_name . " (" . self::DEFAULT_LEVEL_NAME . "): ";
 		$config->set("level-name", $this->getInput(self::DEFAULT_LEVEL_NAME));
-		
+
 		do{
 			echo "[?] " . $this->lang->level_type . " (" . self::DEFAULT_LEVEL_TYPE . "): ";
 			$type = strtoupper((string) $this->getInput(self::DEFAULT_LEVEL_TYPE));
-			if(!in_array($type, self::LEVEL_TYPES)){
+			if(!in_array($type, self::LEVEL_TYPES, true)){
 				echo "[!] " . $this->lang->invalid_level_type . "\n";
 			}
-		}while(!in_array($type, self::LEVEL_TYPES));
+		}while(!in_array($type, self::LEVEL_TYPES, true));
 		$config->set("level-type", $type);
-		
+
 		/*echo "[*] " . $this->lang->ram_warning . "\n";
 		echo "[?] " . $this->lang->server_ram . " (" . self::DEFAULT_MEMORY . "): ";
 		$config->set("memory-limit", ((int) $this->getInput(self::DEFAULT_MEMORY)) . "M");*/
@@ -158,7 +171,7 @@ LICENSE;
 		do{
 			echo "[?] " . $this->lang->default_gamemode . ": (" . self::DEFAULT_GAMEMODE . "): ";
 			$gamemode = (int) $this->getInput(self::DEFAULT_GAMEMODE);
-		}while($gamemode < 0 or $gamemode > 3);
+		}while($gamemode < 0 || $gamemode > 3);
 		$config->set("gamemode", $gamemode);
 		echo "[?] " . $this->lang->max_players . " (" . self::DEFAULT_PLAYERS . "): ";
 		$config->set("max-players", (int) $this->getInput(self::DEFAULT_PLAYERS));
@@ -169,7 +182,7 @@ LICENSE;
 		}else{
 			$config->set("spawn-protection", 16);
 		}
-		
+
 		echo "[?] " . $this->lang->announce_player_achievements . " (y/N): ";
 		if(strtolower($this->getInput("n")) === "y"){
 			$config->set("announce-player-achievements", "on");
@@ -233,7 +246,6 @@ LICENSE;
 		}*/
 		$config->save();
 
-
 		echo "[*] " . $this->lang->ip_get . "\n";
 
 		$externalIP = Utils::getIP();
@@ -256,6 +268,5 @@ LICENSE;
 
 		return $input === "" ? $default : $input;
 	}
-
 
 }

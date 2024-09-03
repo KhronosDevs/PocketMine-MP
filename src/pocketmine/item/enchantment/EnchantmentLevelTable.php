@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -21,9 +23,9 @@
 
 namespace pocketmine\item\enchantment;
 
-use pocketmine\item\Armor;
 use pocketmine\item\Item;
 use pocketmine\utils\Range;
+use function array_keys;
 
 class EnchantmentLevelTable{
 
@@ -185,8 +187,6 @@ class EnchantmentLevelTable{
 	}
 
 	/**
-	 * @param Item $item
-	 * @param int  $modifiedLevel
 	 * @return Enchantment[]
 	 */
 	public static function getPossibleEnchantments(Item $item, int $modifiedLevel){
@@ -197,64 +197,64 @@ class EnchantmentLevelTable{
 		if($item->getId() == Item::BOOK){
 			$enchantmentIds = array_keys(self::$map);
 		}elseif($item->isArmor()){
-			$enchantmentIds[] = Enchantment::TYPE_ARMOR_PROTECTION; 
-			$enchantmentIds[] = Enchantment::TYPE_ARMOR_FIRE_PROTECTION; 
-			$enchantmentIds[] = Enchantment::TYPE_ARMOR_EXPLOSION_PROTECTION; 
-			$enchantmentIds[] = Enchantment::TYPE_ARMOR_PROJECTILE_PROTECTION; 
-			$enchantmentIds[] = Enchantment::TYPE_ARMOR_THORNS; 
+			$enchantmentIds[] = Enchantment::TYPE_ARMOR_PROTECTION;
+			$enchantmentIds[] = Enchantment::TYPE_ARMOR_FIRE_PROTECTION;
+			$enchantmentIds[] = Enchantment::TYPE_ARMOR_EXPLOSION_PROTECTION;
+			$enchantmentIds[] = Enchantment::TYPE_ARMOR_PROJECTILE_PROTECTION;
+			$enchantmentIds[] = Enchantment::TYPE_ARMOR_THORNS;
 
 			if($item->isBoots()){
-				$enchantmentIds[] = Enchantment::TYPE_ARMOR_FALL_PROTECTION; 
+				$enchantmentIds[] = Enchantment::TYPE_ARMOR_FALL_PROTECTION;
 			}
 
 			if($item->isHelmet()){
-				$enchantmentIds[] = Enchantment::TYPE_WATER_BREATHING; 
-				$enchantmentIds[] = Enchantment::TYPE_WATER_AFFINITY; 
+				$enchantmentIds[] = Enchantment::TYPE_WATER_BREATHING;
+				$enchantmentIds[] = Enchantment::TYPE_WATER_AFFINITY;
 			}
 
 		}elseif($item->isSword()){
-			$enchantmentIds[] = Enchantment::TYPE_WEAPON_SHARPNESS; 
-			$enchantmentIds[] = Enchantment::TYPE_WEAPON_SMITE; 
-			$enchantmentIds[] = Enchantment::TYPE_WEAPON_ARTHROPODS; 
-			$enchantmentIds[] = Enchantment::TYPE_WEAPON_KNOCKBACK; 
-			$enchantmentIds[] = Enchantment::TYPE_WEAPON_FIRE_ASPECT; 
-			$enchantmentIds[] = Enchantment::TYPE_WEAPON_LOOTING; 
+			$enchantmentIds[] = Enchantment::TYPE_WEAPON_SHARPNESS;
+			$enchantmentIds[] = Enchantment::TYPE_WEAPON_SMITE;
+			$enchantmentIds[] = Enchantment::TYPE_WEAPON_ARTHROPODS;
+			$enchantmentIds[] = Enchantment::TYPE_WEAPON_KNOCKBACK;
+			$enchantmentIds[] = Enchantment::TYPE_WEAPON_FIRE_ASPECT;
+			$enchantmentIds[] = Enchantment::TYPE_WEAPON_LOOTING;
 
 		}elseif($item->isTool()){
-			$enchantmentIds[] = Enchantment::TYPE_MINING_EFFICIENCY; 
-			$enchantmentIds[] = Enchantment::TYPE_MINING_SILK_TOUCH; 
-			$enchantmentIds[] = Enchantment::TYPE_MINING_FORTUNE; 
+			$enchantmentIds[] = Enchantment::TYPE_MINING_EFFICIENCY;
+			$enchantmentIds[] = Enchantment::TYPE_MINING_SILK_TOUCH;
+			$enchantmentIds[] = Enchantment::TYPE_MINING_FORTUNE;
 
 		}elseif($item->getId() == Item::BOW){
-			$enchantmentIds[] = Enchantment::TYPE_BOW_POWER; 
-			$enchantmentIds[] = Enchantment::TYPE_BOW_KNOCKBACK; 
-			$enchantmentIds[] = Enchantment::TYPE_BOW_FLAME; 
-			$enchantmentIds[] = Enchantment::TYPE_BOW_INFINITY; 
+			$enchantmentIds[] = Enchantment::TYPE_BOW_POWER;
+			$enchantmentIds[] = Enchantment::TYPE_BOW_KNOCKBACK;
+			$enchantmentIds[] = Enchantment::TYPE_BOW_FLAME;
+			$enchantmentIds[] = Enchantment::TYPE_BOW_INFINITY;
 
 		}elseif($item->getId() == Item::FISHING_ROD){
-			$enchantmentIds[] = Enchantment::TYPE_FISHING_FORTUNE; 
-			$enchantmentIds[] = Enchantment::TYPE_FISHING_LURE; 
+			$enchantmentIds[] = Enchantment::TYPE_FISHING_FORTUNE;
+			$enchantmentIds[] = Enchantment::TYPE_FISHING_LURE;
 
 		}
 
 		if($item->isTool() || $item->isArmor()){
-			$enchantmentIds[] = Enchantment::TYPE_MINING_DURABILITY; 
+			$enchantmentIds[] = Enchantment::TYPE_MINING_DURABILITY;
 		}
 
 		foreach($enchantmentIds as $enchantmentId) {
 			$enchantment = Enchantment::getEnchantment($enchantmentId);
-            $ranges = self::$map[$enchantmentId];
-            $i = 0;
+			$ranges = self::$map[$enchantmentId];
+			$i = 0;
 			/** @var Range $range */
 			foreach($ranges as $range) {
-	            $i++;
-	            if($range->isInRange($modifiedLevel)){
-		            $result[] = $enchantment->setLevel($i);
-	            }
-            }
-        }
+				$i++;
+				if($range->isInRange($modifiedLevel)){
+					$result[] = $enchantment->setLevel($i);
+				}
+			}
+		}
 
-        return $result;
-    }
+		return $result;
+	}
 
 }

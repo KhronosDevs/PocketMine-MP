@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -20,6 +22,13 @@
 */
 
 namespace pocketmine\permission;
+
+use function array_shift;
+use function count;
+use function explode;
+use function strlen;
+use function strtolower;
+use function trim;
 
 class BanEntry{
 	public static $format = "Y-m-d H:i:s O";
@@ -114,7 +123,7 @@ class BanEntry{
 					$entry->setSource(trim(array_shift($str)));
 					if(count($str) > 0){
 						$expire = trim(array_shift($str));
-						if(strtolower($expire) !== "forever" and strlen($expire) > 0){
+						if(strtolower($expire) !== "forever" && strlen($expire) > 0){
 							$entry->setExpires(\DateTime::createFromFormat(self::$format, $expire));
 						}
 						if(count($str) > 0){

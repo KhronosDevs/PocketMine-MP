@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -22,7 +24,12 @@
 namespace pocketmine\level\format\anvil;
 
 use pocketmine\level\format\LevelProvider;
-
+use function file_exists;
+use function fopen;
+use function stream_set_read_buffer;
+use function stream_set_write_buffer;
+use function time;
+use function touch;
 
 class RegionLoader extends \pocketmine\level\format\mcregion\RegionLoader{
 

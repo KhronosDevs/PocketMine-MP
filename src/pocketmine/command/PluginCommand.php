@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,7 +26,6 @@ namespace pocketmine\command;
 use pocketmine\event\TranslationContainer;
 use pocketmine\plugin\Plugin;
 
-
 class PluginCommand extends Command implements PluginIdentifiableCommand{
 
 	/** @var Plugin */
@@ -35,7 +36,6 @@ class PluginCommand extends Command implements PluginIdentifiableCommand{
 
 	/**
 	 * @param string $name
-	 * @param Plugin $owner
 	 */
 	public function __construct($name, Plugin $owner){
 		parent::__construct($name);
@@ -56,7 +56,7 @@ class PluginCommand extends Command implements PluginIdentifiableCommand{
 
 		$success = $this->executor->onCommand($sender, $this, $commandLabel, $args);
 
-		if(!$success and $this->usageMessage !== ""){
+		if(!$success && $this->usageMessage !== ""){
 			$sender->sendMessage(new TranslationContainer("commands.generic.usage", [$this->usageMessage]));
 		}
 
@@ -67,9 +67,6 @@ class PluginCommand extends Command implements PluginIdentifiableCommand{
 		return $this->executor;
 	}
 
-	/**
-	 * @param CommandExecutor $executor
-	 */
 	public function setExecutor(CommandExecutor $executor){
 		$this->executor = ($executor != null) ? $executor : $this->owningPlugin;
 	}

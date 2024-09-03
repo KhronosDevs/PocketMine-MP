@@ -40,12 +40,12 @@ final class NotifierEntry {
 		$this->callback = $callback;
 	}
 
-	public function getNotifier(): SleeperNotifier {
-        return $this->notifier;
-    }
+	public function getNotifier() : SleeperNotifier {
+		return $this->notifier;
+	}
 
-	public function getCallback(): \Closure {
-        return $this->callback;
-    }
+	public function getCallback() : \Closure {
+		return $this->callback;
+	}
 
 }

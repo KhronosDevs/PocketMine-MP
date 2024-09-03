@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -27,7 +29,6 @@ use pocketmine\event\player\PlayerExhaustEvent;
 use pocketmine\event\player\PlayerExperienceChangeEvent;
 use pocketmine\inventory\FloatingInventory;
 use pocketmine\inventory\InventoryHolder;
-use pocketmine\inventory\InventoryType;
 use pocketmine\inventory\PlayerInventory;
 use pocketmine\inventory\SimpleTransactionQueue;
 use pocketmine\item\enchantment\Enchantment;
@@ -39,12 +40,19 @@ use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\FloatTag;
 use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ListTag;
-use pocketmine\nbt\tag\ShortTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\network\protocol\AddPlayerPacket;
 use pocketmine\network\protocol\RemoveEntityPacket;
 use pocketmine\Player;
 use pocketmine\utils\UUID;
+use function floor;
+use function max;
+use function microtime;
+use function min;
+use function mt_rand;
+use function strlen;
+use const PHP_INT_MAX;
+use const PHP_INT_MIN;
 
 class Human extends Creature implements ProjectileSource, InventoryHolder{
 
@@ -120,8 +128,6 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 	 * WARNING: This method does not check if full and may throw an exception if out of bounds.
 	 * Use {@link Human::addFood()} for this purpose
 	 *
-	 * @param float $new
-	 *
 	 * @throws \InvalidArgumentException
 	 */
 	public function setFood(float $new){
@@ -159,8 +165,6 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 	 * WARNING: This method does not check if saturated and may throw an exception if out of bounds.
 	 * Use {@link Human::addSaturation()} for this purpose
 	 *
-	 * @param float $saturation
-	 *
 	 * @throws \InvalidArgumentException
 	 */
 	public function setSaturation(float $saturation){
@@ -179,8 +183,6 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 	/**
 	 * WARNING: This method does not check if exhausted and does not consume saturation/food.
 	 * Use {@link Human::exhaust()} for this purpose.
-	 *
-	 * @param float $exhaustion
 	 */
 	public function setExhaustion(float $exhaustion){
 		$this->attributeMap->getAttribute(Attribute::EXHAUSTION)->setValue($exhaustion);
@@ -188,9 +190,6 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 
 	/**
 	 * Increases a human's exhaustion level.
-	 *
-	 * @param float $amount
-	 * @param int   $cause
 	 *
 	 * @return float the amount of exhaustion level increased
 	 */
@@ -260,11 +259,8 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 	/**
 	 * Changes the total exp of a player
 	 *
-	 * @param int $xp
 	 * @param bool $syncLevel This will reset the level to be in sync with the total. Usually you don't want to do this,
 	 *                        because it'll mess up use of xp in anvils and enchanting tables.
-	 *
-	 * @return bool
 	 */
 	public function setTotalXp(int $xp, bool $syncLevel = false) : bool{
 		$xp &= 0x7fffffff;
@@ -343,10 +339,6 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 
 	/**
 	 * Returns the total amount of exp required to reach the specified level.
-	 *
-	 * @param int $level
-	 *
-	 * @return int
 	 */
 	public static function getTotalXpRequirement(int $level) : int{
 		if($level <= 16){
@@ -361,10 +353,6 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 
 	/**
 	 * Returns the amount of exp required to complete the specified level.
-	 *
-	 * @param int $level
-	 *
-	 * @return int
 	 */
 	public static function getLevelXpRequirement(int $level) : int{
 		if($level <= 16){
@@ -379,8 +367,6 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 
 	/**
 	 * Converts a quantity of exp into a level and a progress percentage
-	 *
-	 * @param int $xp
 	 *
 	 * @return int[]
 	 */
@@ -450,62 +436,61 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 				$this->setNameTag($this->namedtag["NameTag"]);
 			}
 
-			if(isset($this->namedtag->Skin) and $this->namedtag->Skin instanceof CompoundTag){
+			if(isset($this->namedtag->Skin) && $this->namedtag->Skin instanceof CompoundTag){
 				$this->setSkin($this->namedtag->Skin["Data"], $this->namedtag->Skin["Name"]);
 			}
 
 			$this->uuid = UUID::fromData($this->getId(), $this->getSkinData(), $this->getNameTag());
 		}
 
-
 		parent::initEntity();
 
-		if(!isset($this->namedtag->foodLevel) or !($this->namedtag->foodLevel instanceof IntTag)){
+		if(!isset($this->namedtag->foodLevel) || !($this->namedtag->foodLevel instanceof IntTag)){
 			$this->namedtag->foodLevel = new IntTag("foodLevel", $this->getFood());
 		}else{
 			$this->setFood($this->namedtag["foodLevel"]);
 		}
 
-		if(!isset($this->namedtag->foodExhaustionLevel) or !($this->namedtag->foodExhaustionLevel instanceof IntTag)){
+		if(!isset($this->namedtag->foodExhaustionLevel) || !($this->namedtag->foodExhaustionLevel instanceof IntTag)){
 			$this->namedtag->foodExhaustionLevel = new FloatTag("foodExhaustionLevel", $this->getExhaustion());
 		}else{
 			$this->setExhaustion($this->namedtag["foodExhaustionLevel"]);
 		}
 
-		if(!isset($this->namedtag->foodSaturationLevel) or !($this->namedtag->foodSaturationLevel instanceof IntTag)){
+		if(!isset($this->namedtag->foodSaturationLevel) || !($this->namedtag->foodSaturationLevel instanceof IntTag)){
 			$this->namedtag->foodSaturationLevel = new FloatTag("foodSaturationLevel", $this->getSaturation());
 		}else{
 			$this->setSaturation($this->namedtag["foodSaturationLevel"]);
 		}
 
-		if(!isset($this->namedtag->foodTickTimer) or !($this->namedtag->foodTickTimer instanceof IntTag)){
+		if(!isset($this->namedtag->foodTickTimer) || !($this->namedtag->foodTickTimer instanceof IntTag)){
 			$this->namedtag->foodTickTimer = new IntTag("foodTickTimer", $this->foodTickTimer);
 		}else{
 			$this->foodTickTimer = $this->namedtag["foodTickTimer"];
 		}
 
-		if(!isset($this->namedtag->XpLevel) or !($this->namedtag->XpLevel instanceof IntTag)){
+		if(!isset($this->namedtag->XpLevel) || !($this->namedtag->XpLevel instanceof IntTag)){
 			$this->namedtag->XpLevel = new IntTag("XpLevel", 0);
 		}
 		$this->setXpLevel($this->namedtag["XpLevel"]);
 
-		if(!isset($this->namedtag->XpP) or !($this->namedtag->XpP instanceof FloatTag)){
+		if(!isset($this->namedtag->XpP) || !($this->namedtag->XpP instanceof FloatTag)){
 			$this->namedtag->XpP = new FloatTag("XpP", 0);
 		}
 		$this->setXpProgress($this->namedtag["XpP"]);
 
-		if(!isset($this->namedtag->XpTotal) or !($this->namedtag->XpTotal instanceof IntTag)){
+		if(!isset($this->namedtag->XpTotal) || !($this->namedtag->XpTotal instanceof IntTag)){
 			$this->namedtag->XpTotal = new IntTag("XpTotal", 0);
 		}
 		$this->totalXp = $this->namedtag["XpTotal"];
 
-		if(!isset($this->namedtag->XpSeed) or !($this->namedtag->XpSeed instanceof IntTag)){
+		if(!isset($this->namedtag->XpSeed) || !($this->namedtag->XpSeed instanceof IntTag)){
 			$this->namedtag->XpSeed = new IntTag("XpSeed", mt_rand(PHP_INT_MIN, PHP_INT_MAX));
 		}
 		$this->xpSeed = $this->namedtag["XpSeed"];
 	}
 
-	public function getAbsorption() : int{
+	public function getAbsorption() : float{
 		return $this->attributeMap->getAttribute(Attribute::ABSORPTION)->getValue();
 	}
 
@@ -537,7 +522,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 			$health = $this->getHealth();
 			if($food >= 18){
 				$this->foodTickTimer++;
-				if($this->foodTickTimer >= 80 and $health < $this->getMaxHealth()){
+				if($this->foodTickTimer >= 80 && $health < $this->getMaxHealth()){
 					$this->heal(1, new EntityRegainHealthEvent($this, 1, EntityRegainHealthEvent::CAUSE_SATURATION));
 					$this->exhaust(3.0, PlayerExhaustEvent::CAUSE_HEALTH_REGEN);
 					$this->foodTickTimer = 0;
@@ -611,7 +596,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 			//Armour
 			for($slot = 100; $slot < 104; ++$slot){
 				$item = $this->inventory->getItem($this->inventory->getSize() + $slot - 100);
-				if($item instanceof ItemItem and $item->getId() !== ItemItem::AIR){
+				if($item instanceof ItemItem && $item->getId() !== ItemItem::AIR){
 					$this->namedtag->Inventory[$slot] = NBT::putItemHelper($item, $slot);
 				}
 			}
@@ -638,7 +623,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 	}
 
 	public function spawnTo(Player $player){
-		if($player !== $this and !isset($this->hasSpawned[$player->getLoaderId()])){
+		if($player !== $this && !isset($this->hasSpawned[$player->getLoaderId()])){
 			$this->hasSpawned[$player->getLoaderId()] = $player;
 
 			if(strlen($this->skin) < 64 * 32 * 4){
@@ -694,7 +679,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 			}else{
 				$this->server->getLogger()->debug("Attempted to drop a null crafting inventory\n");
 			}
-			if(!($this instanceof Player) or $this->loggedIn){
+			if(!($this instanceof Player) || $this->loggedIn){
 				foreach($this->inventory->getViewers() as $viewer){
 					$viewer->removeWindow($this->inventory);
 				}

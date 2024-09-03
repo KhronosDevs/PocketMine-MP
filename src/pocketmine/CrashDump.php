@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -27,6 +29,56 @@ use pocketmine\plugin\PluginLoadOrder;
 use pocketmine\utils\Utils;
 use pocketmine\utils\VersionString;
 use raklib\RakLib;
+use function base64_encode;
+use function class_exists;
+use function \pocketmine\cleanPath;
+use function count;
+use function date;
+use function error_get_last;
+use function file;
+use function file_exists;
+use function file_get_contents;
+use function fopen;
+use function fwrite;
+use function get_loaded_extensions;
+use function getTrace;
+use function implode;
+use function is_resource;
+use function json_encode;
+use function max;
+use function ob_end_clean;
+use function ob_get_contents;
+use function ob_start;
+use function php_uname;
+use function phpinfo;
+use function phpversion;
+use function preg_replace;
+use function str_split;
+use function strpos;
+use function substr;
+use function time;
+use function zend_version;
+use function zlib_encode;
+use const E_COMPILE_ERROR;
+use const E_COMPILE_WARNING;
+use const E_CORE_ERROR;
+use const E_CORE_WARNING;
+use const E_DEPRECATED;
+use const E_ERROR;
+use const E_NOTICE;
+use const E_PARSE;
+use const E_RECOVERABLE_ERROR;
+use const E_STRICT;
+use const E_USER_DEPRECATED;
+use const E_USER_ERROR;
+use const E_USER_NOTICE;
+use const E_USER_WARNING;
+use const E_WARNING;
+use const FILE_IGNORE_NEW_LINES;
+use const JSON_UNESCAPED_SLASHES;
+use const PHP_EOL;
+use const PHP_OS;
+use const ZLIB_ENCODING_DEFLATE;
 
 class CrashDump{
 
@@ -56,7 +108,7 @@ class CrashDump{
 			$this->addLine("CrashDump crashed while generating base crash data");
 			$this->addLine();
 		}
-		
+
 		$this->generalData();
 		$this->pluginsData();
 
@@ -184,8 +236,8 @@ class CrashDump{
 		$this->addLine("File: " . $error["file"]);
 		$this->addLine("Line: " . $error["line"]);
 		$this->addLine("Type: " . $error["type"]);
-		
-		if(strpos($error["file"], "src/pocketmine/") === false and strpos($error["file"], "src/raklib/") === false and file_exists($error["fullFile"])){
+
+		if(strpos($error["file"], "src/pocketmine/") === false && strpos($error["file"], "src/raklib/") === false && file_exists($error["fullFile"])){
 			$this->addLine();
 			$this->addLine("THIS CRASH WAS CAUSED BY A PLUGIN");
 			$this->data["plugin"] = true;
@@ -245,7 +297,7 @@ class CrashDump{
 		$this->addLine();
 		$this->addLine("Server uptime: " . $this->server->getUptime());
 		$this->addLine("Number of loaded worlds: " . count($this->server->getLevels()));
-		$this->addLine("Players online: ".count($this->server->getOnlinePlayers())."/".$this->server->getMaxPlayers());
+		$this->addLine("Players online: " . count($this->server->getOnlinePlayers()) . "/" . $this->server->getMaxPlayers());
 	}
 
 	public function addLine($line = ""){

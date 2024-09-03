@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -22,14 +24,15 @@
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
+use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\FloatTag;
 use pocketmine\nbt\tag\IntTag;
-use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\StringTag;
-use pocketmine\tile\Tile;
-use pocketmine\tile\ItemFrame as ItemFrameTile;
 use pocketmine\Player;
+use pocketmine\tile\ItemFrame as ItemFrameTile;
+use pocketmine\tile\Tile;
+use function mt_rand;
 
 class ItemFrame extends Transparent{
 	protected $id = self::ITEM_FRAME_BLOCK;
@@ -91,7 +94,7 @@ class ItemFrame extends Transparent{
 	}
 
 	public function getDrops(Item $item) : array{
-		if($this->getLevel()==null){
+		if($this->getLevel() == null){
 			return [];
 		}
 		$tile = $this->getLevel()->getTile($this);
@@ -113,7 +116,7 @@ class ItemFrame extends Transparent{
 	}
 
 	public function place(Item $item, Block $block, Block $target, $face, $fx, $fy, $fz, Player $player = null){
-		if($target->isTransparent() === false and $face > 1 and $block->isSolid() === false){
+		if($target->isTransparent() === false && $face > 1 && $block->isSolid() === false){
 			$faces = [
 				2 => 3,
 				3 => 2,
@@ -130,13 +133,13 @@ class ItemFrame extends Transparent{
 				new ByteTag("ItemRotation", 0),
 				new FloatTag("ItemDropChance", 1.0)
 			]);
-			
+
 			if($item->hasCustomBlockData()){
-			    foreach($item->getCustomBlockData() as $key => $v){
-				    $nbt->{$key} = $v;
-			    }
-		    }
-		    
+				foreach($item->getCustomBlockData() as $key => $v){
+					$nbt->{$key} = $v;
+				}
+			}
+
 			Tile::createTile(Tile::ITEM_FRAME, $this->getLevel()->getChunk($this->x >> 4, $this->z >> 4), $nbt);
 			return true;
 		}

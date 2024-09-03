@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -31,9 +33,6 @@ abstract class LevelEvent extends Event{
 	/** @var \pocketmine\level\Level */
 	private $level;
 
-	/**
-	 * @param Level $level
-	 */
 	public function __construct(Level $level){
 		$this->level = $level;
 	}

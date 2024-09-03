@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -27,6 +29,8 @@ use pocketmine\event\TranslationContainer;
 use pocketmine\math\Vector3;
 use pocketmine\Player;
 use pocketmine\utils\TextFormat;
+use function count;
+use function round;
 
 class TeleportCommand extends VanillaCommand{
 
@@ -44,7 +48,7 @@ class TeleportCommand extends VanillaCommand{
 			return true;
 		}
 
-		if(count($args) < 1 or count($args) > 6){
+		if(count($args) < 1 || count($args) > 6){
 			$sender->sendMessage(new TranslationContainer("commands.generic.usage", [$this->usageMessage]));
 
 			return true;
@@ -53,7 +57,7 @@ class TeleportCommand extends VanillaCommand{
 		$target = null;
 		$origin = $sender;
 
-		if(count($args) === 1 or count($args) === 3){
+		if(count($args) === 1 || count($args) === 3){
 			if($sender instanceof Player){
 				$target = $sender;
 			}else{
@@ -93,7 +97,7 @@ class TeleportCommand extends VanillaCommand{
 
 			return true;
 		}elseif($target->getLevel() !== null){
-			if(count($args) === 4 or count($args) === 6){
+			if(count($args) === 4 || count($args) === 6){
 				$pos = 1;
 			}else{
 				$pos = 0;
@@ -105,7 +109,7 @@ class TeleportCommand extends VanillaCommand{
 			$yaw = $target->getYaw();
 			$pitch = $target->getPitch();
 
-			if(count($args) === 6 or (count($args) === 5 and $pos === 3)){
+			if(count($args) === 6 || (count($args) === 5 && $pos === 3)){
 				$yaw = $args[$pos++];
 				$pitch = $args[$pos++];
 			}

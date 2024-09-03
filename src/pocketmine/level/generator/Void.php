@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -23,10 +25,9 @@ namespace pocketmine\level\generator;
 
 use pocketmine\block\Block;
 use pocketmine\level\ChunkManager;
-use pocketmine\level\generator\biome\Biome;
+use pocketmine\level\format\FullChunk;
 use pocketmine\math\Vector3;
 use pocketmine\utils\Random;
-use pocketmine\level\format\FullChunk;
 
 class Void extends Generator{
 	/** @var ChunkManager */
@@ -71,7 +72,7 @@ class Void extends Generator{
 			}
 
 			$spawn = $this->getSpawn();
-			if($spawn->getX() >> 4 === $chunkX and $spawn->getZ() >> 4 === $chunkZ){
+			if($spawn->getX() >> 4 === $chunkX && $spawn->getZ() >> 4 === $chunkZ){
 				$this->chunk->setBlockId(0, 64, 0, Block::GRASS);
 			}else{
 				$this->emptyChunk = clone $this->chunk;

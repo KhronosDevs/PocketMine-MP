@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,14 +17,28 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+use function base64_decode;
+use function chr;
+use function explode;
+use function extension_loaded;
+use function in_array;
+use function json_decode;
+use function openssl_verify;
+use function ord;
+use function str_repeat;
+use function strtr;
+use function substr;
+use function time;
+use function wordwrap;
+use function zlib_decode;
 
+#include <rules/DataPacket.h>
 
 class LoginPacket extends DataPacket{
 	const NETWORK_ID = Info::LOGIN_PACKET;
@@ -42,7 +58,7 @@ class LoginPacket extends DataPacket{
 
 	public function decode(){
 		$this->protocol = $this->getInt();
-		if(!in_array($this->protocol, Info::ACCEPTED_PROTOCOLS)){
+		if(!in_array($this->protocol, Info::ACCEPTED_PROTOCOLS, true)){
 			return; //Do not attempt to decode for non-accepted protocols
 		}
 		$str = zlib_decode($this->get($this->getInt()), 1024 * 1024 * 64);
@@ -67,7 +83,7 @@ class LoginPacket extends DataPacket{
 				if($verified){
 					$verified = isset($webtoken["nbf"]) && $webtoken["nbf"] <= $time && isset($webtoken["exp"]) && $webtoken["exp"] > $time;
 				}
-				if($verified and isset($webtoken["identityPublicKey"])){
+				if($verified && isset($webtoken["identityPublicKey"])){
 					// Looped key chain. #blamemojang
 					if($webtoken["identityPublicKey"] != self::MOJANG_PUBKEY) $chainKey = $webtoken["identityPublicKey"];
 					break;
@@ -90,7 +106,7 @@ class LoginPacket extends DataPacket{
 			$this->serverAddress = $skinToken["ServerAddress"];
 		}
 		if(isset($skinToken["SkinData"])){
-			$this->skin = base64_decode($skinToken["SkinData"]);
+			$this->skin = base64_decode($skinToken["SkinData"], true);
 		}
 		if(isset($skinToken["SkinId"])){
 			$this->skinId = $skinToken["SkinId"];
@@ -103,17 +119,17 @@ class LoginPacket extends DataPacket{
 	public function encode(){
 
 	}
-	
+
 	public function decodeToken($token, $key){
 		$tokens = explode(".", $token);
 		list($headB64, $payloadB64, $sigB64) = $tokens;
 
-		if($key !== null and extension_loaded("openssl")){
+		if($key !== null && extension_loaded("openssl")){
 			$sig = base64_decode(strtr($sigB64, '-_', '+/'), true);
 			$rawLen = 48; // ES384
-			for($i = $rawLen; $i > 0 and $sig[$rawLen - $i] == chr(0); $i--) {}
+			for($i = $rawLen; $i > 0 && $sig[$rawLen - $i] == chr(0); $i--) {}
 			$j = $i + (ord($sig[$rawLen - $i]) >= 128 ? 1 : 0);
-			for($k = $rawLen; $k > 0 and $sig[2 * $rawLen - $k] == chr(0); $k--) {}
+			for($k = $rawLen; $k > 0 && $sig[2 * $rawLen - $k] == chr(0); $k--) {}
 			$l = $k + (ord($sig[2 * $rawLen - $k]) >= 128 ? 1 : 0);
 			$len = 2 + $j + 2 + $l;
 			$derSig = chr(48);
@@ -132,7 +148,7 @@ class LoginPacket extends DataPacket{
 			$verified = false;
 		}
 
-		return array($verified, json_decode(base64_decode($payloadB64), true));
+		return [$verified, json_decode(base64_decode($payloadB64, true), true)];
 	}
 
 }

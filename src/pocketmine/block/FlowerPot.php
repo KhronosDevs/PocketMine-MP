@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*
  * Copied from ImagicalMine
  * THIS IS COPIED FROM THE PLUGIN FlowerPot MADE BY @beito123!!
@@ -11,15 +13,15 @@ namespace pocketmine\block;
 
 use pocketmine\item\Item;
 use pocketmine\level\Level;
-use pocketmine\math\Vector3;
-use pocketmine\Player;
-use pocketmine\tile\Tile;
 use pocketmine\math\AxisAlignedBB;
-use pocketmine\nbt\tag\StringTag;
+use pocketmine\math\Vector3;
+use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ShortTag;
-use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\StringTag;
+use pocketmine\Player;
 use pocketmine\tile\FlowerPot as FlowerPotTile;
+use pocketmine\tile\Tile;
 
 class FlowerPot extends Flowable{
 	protected $id = Block::FLOWER_POT_BLOCK;
@@ -58,13 +60,13 @@ class FlowerPot extends Flowable{
 				new ShortTag("item", 0),
 				new IntTag("data", 0),
 			]);
-			
+
 			if($item->hasCustomBlockData()){
-			    foreach($item->getCustomBlockData() as $key => $v){
-				    $nbt->{$key} = $v;
-			    }
-		    }
-		    
+				foreach($item->getCustomBlockData() as $key => $v){
+					$nbt->{$key} = $v;
+				}
+			}
+
 			$pot = Tile::createTile("FlowerPot", $this->getLevel()->getChunk($this->x >> 4, $this->z >> 4), $nbt);
 			return true;
 		}
@@ -113,11 +115,11 @@ class FlowerPot extends Flowable{
 	}
 
 	public function getDrops(Item $item) : array {
-		$items = array([Item::FLOWER_POT, 0, 1]);
+		$items = [[Item::FLOWER_POT, 0, 1]];
 		/** @var FlowerPotTile $tile */
-		if($this->getLevel()!=null && (($tile = $this->getLevel()->getTile($this)) instanceof FlowerPotTile)){
+		if($this->getLevel() != null && (($tile = $this->getLevel()->getTile($this)) instanceof FlowerPotTile)){
 			if($tile->getFlowerPotItem() !== Item::AIR){
-				$items[] = array($tile->getFlowerPotItem(), $tile->getFlowerPotData(), 1);
+				$items[] = [$tile->getFlowerPotItem(), $tile->getFlowerPotData(), 1];
 			}
 		}
 		return $items;

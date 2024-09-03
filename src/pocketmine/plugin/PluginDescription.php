@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,6 +25,14 @@ namespace pocketmine\plugin;
 
 use pocketmine\permission\Permission;
 use pocketmine\utils\PluginException;
+use function constant;
+use function defined;
+use function is_array;
+use function preg_replace;
+use function str_replace;
+use function stripos;
+use function strtoupper;
+use function yaml_parse;
 
 class PluginDescription{
 	private $name;
@@ -41,21 +51,17 @@ class PluginDescription{
 
 	private $geniapi;
 
-	/**
-	 * @var Permission[]
-	 */
+	/** @var Permission[] */
 	private $permissions = [];
 
 	/**
 	 * @param string|array $yamlString
 	 */
 	public function __construct($yamlString){
-		$this->loadMap(!is_array($yamlString) ? \yaml_parse($yamlString) : $yamlString);
+		$this->loadMap(!is_array($yamlString) ? yaml_parse($yamlString) : $yamlString);
 	}
 
 	/**
-	 * @param array $plugin
-	 *
 	 * @throws PluginException
 	 */
 	private function loadMap(array $plugin){
@@ -77,7 +83,7 @@ class PluginDescription{
 			throw new PluginException("Invalid PluginDescription main, cannot start within the PocketMine namespace");
 		}
 
-		if(isset($plugin["commands"]) and is_array($plugin["commands"])){
+		if(isset($plugin["commands"]) && is_array($plugin["commands"])){
 			$this->commands = $plugin["commands"];
 		}
 
@@ -193,9 +199,6 @@ class PluginDescription{
 		return $this->main;
 	}
 
-	/**
-	 * @return string
-	 */
 	public function getName() : string{
 		return $this->name;
 	}

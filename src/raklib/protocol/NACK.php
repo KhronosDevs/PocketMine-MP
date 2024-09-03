@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * RakLib network library
  *
@@ -14,7 +16,6 @@
  */
 
 namespace raklib\protocol;
-
 
 class NACK extends AcknowledgePacket{
 	public static $ID = 0xa0;

@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  _____   _____   __   _   _   _____  __    __  _____
  * /  ___| | ____| |  \ | | | | /  ___/ \ \  / / /  ___/
  * | |     | |__   |   \| | | | | |___   \ \/ /  | |___
@@ -16,7 +17,6 @@
  *
  * @author iTX Technologies
  * @link https://itxtech.org
- *
  */
 
 namespace pocketmine\block;
@@ -24,6 +24,10 @@ namespace pocketmine\block;
 use pocketmine\item\Item;
 use pocketmine\math\Vector3;
 use pocketmine\Player;
+use function abs;
+use function count;
+use function in_array;
+use function is_array;
 
 class Rail extends Flowable{
 
@@ -37,7 +41,6 @@ class Rail extends Flowable{
 	const CURVED_SOUTH_WEST = 6;
 	const CURVED_SOUTH_EAST = 9;
 	const CURVED_NORTH_EAST = 8;
-
 
 	protected $id = self::RAIL;
 	/** @var Vector3 [] */
@@ -56,7 +59,6 @@ class Rail extends Flowable{
 	}
 
 	/**
-	 * @param Rail $block
 	 * @return bool
 	 */
 	public function canConnect(Rail $block){
@@ -96,10 +98,10 @@ class Rail extends Flowable{
 					foreach($connected as $key => $value){
 						$subtract[$key] = $value->subtract($this);
 					}
-					if(abs($subtract[0]->x) == abs($subtract[1]->z) and abs($subtract[1]->x) == abs($subtract[0]->z)){
+					if(abs($subtract[0]->x) == abs($subtract[1]->z) && abs($subtract[1]->x) == abs($subtract[0]->z)){
 						$v3 = $connected[0]->subtract($this)->add($connected[1]->subtract($this));
 						$this->meta = $v3->x == 1 ? ($v3->z == 1 ? 6 : 9) : ($v3->z == 1 ? 7 : 8);
-					}elseif($subtract[0]->y == 1 or $subtract[1]->y == 1){
+					}elseif($subtract[0]->y == 1 || $subtract[1]->y == 1){
 						$v3 = $subtract[0]->y == 1 ? $subtract[0] : $subtract[1];
 						$this->meta = $v3->x == 0 ? ($v3->z == -1 ? 4 : 5) : ($v3->x == 1 ? 2 : 3);
 					}else{
@@ -117,7 +119,7 @@ class Rail extends Flowable{
 	public function place(Item $item, Block $block, Block $target, $face, $fx, $fy, $fz, Player $player = null){
 		$downBlock = $this->getSide(Vector3::SIDE_DOWN);
 
-		if($downBlock instanceof Rail or !$this->isBlock($downBlock)){//判断是否可以放置
+		if($downBlock instanceof Rail || !$this->isBlock($downBlock)){//判断是否可以放置
 			return false;
 		}
 
@@ -153,10 +155,10 @@ class Rail extends Flowable{
 				foreach($connected as $key => $value){
 					$subtract[$key] = $value->subtract($this);
 				}
-				if(abs($subtract[0]->x) == abs($subtract[1]->z) and abs($subtract[1]->x) == abs($subtract[0]->z)){
+				if(abs($subtract[0]->x) == abs($subtract[1]->z) && abs($subtract[1]->x) == abs($subtract[0]->z)){
 					$v3 = $connected[0]->subtract($this)->add($connected[1]->subtract($this));
 					$this->meta = $v3->x == 1 ? ($v3->z == 1 ? 6 : 9) : ($v3->z == 1 ? 7 : 8);
-				}elseif($subtract[0]->y == 1 or $subtract[1]->y == 1){
+				}elseif($subtract[0]->y == 1 || $subtract[1]->y == 1){
 					$v3 = $subtract[0]->y == 1 ? $subtract[0] : $subtract[1];
 					$this->meta = $v3->x == 0 ? ($v3->z == -1 ? 4 : 5) : ($v3->x == 1 ? 2 : 3);
 				}else{
@@ -171,7 +173,6 @@ class Rail extends Flowable{
 	}
 
 	/**
-	 * @param Rail $rail
 	 * @return array
 	 */
 	public static function check(Rail $rail){
@@ -194,7 +195,7 @@ class Rail extends Flowable{
 			$v3 = new Vector3($rail->x + $blocks[0][0], $rail->y + $y, $rail->z + $blocks[0][1]);
 			$id = $rail->getLevel()->getBlockIdAt($v3->x, $v3->y, $v3->z);
 			$meta = $rail->getLevel()->getBlockDataAt($v3->x, $v3->y, $v3->z);
-			if(in_array($id, [self::RAIL, self::ACTIVATOR_RAIL, self::DETECTOR_RAIL, self::POWERED_RAIL]) and in_array([$rail->x - $v3->x, $rail->z - $v3->z], $array[$meta])){
+			if(in_array($id, [self::RAIL, self::ACTIVATOR_RAIL, self::DETECTOR_RAIL, self::POWERED_RAIL], true) && in_array([$rail->x - $v3->x, $rail->z - $v3->z], $array[$meta], true)){
 				$connected[] = $v3;
 				break;
 			}
@@ -203,7 +204,7 @@ class Rail extends Flowable{
 			$v3 = new Vector3($rail->x + $blocks[1][0], $rail->y + $y, $rail->z + $blocks[1][1]);
 			$id = $rail->getLevel()->getBlockIdAt($v3->x, $v3->y, $v3->z);
 			$meta = $rail->getLevel()->getBlockDataAt($v3->x, $v3->y, $v3->z);
-			if(in_array($id, [self::RAIL, self::ACTIVATOR_RAIL, self::DETECTOR_RAIL, self::POWERED_RAIL]) and in_array([$rail->x - $v3->x, $rail->z - $v3->z], $array[$meta])){
+			if(in_array($id, [self::RAIL, self::ACTIVATOR_RAIL, self::DETECTOR_RAIL, self::POWERED_RAIL], true) && in_array([$rail->x - $v3->x, $rail->z - $v3->z], $array[$meta], true)){
 				$connected[] = $v3;
 				break;
 			}

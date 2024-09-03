@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,8 +16,6 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\inventory;
@@ -31,10 +30,6 @@ class InventoryPickupArrowEvent extends InventoryEvent implements Cancellable{
 	/** @var Arrow */
 	private $arrow;
 
-	/**
-	 * @param Inventory $inventory
-	 * @param Arrow     $arrow
-	 */
 	public function __construct(Inventory $inventory, Arrow $arrow){
 		$this->arrow = $arrow;
 		parent::__construct($inventory);

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -21,12 +23,13 @@
 
 namespace pocketmine\command\defaults;
 
-
 use pocketmine\command\CommandSender;
 use pocketmine\entity\Effect;
 use pocketmine\entity\InstantEffect;
 use pocketmine\event\TranslationContainer;
 use pocketmine\utils\TextFormat;
+use function count;
+use function strtolower;
 
 class EffectCommand extends VanillaCommand{
 
@@ -55,8 +58,8 @@ class EffectCommand extends VanillaCommand{
 			$sender->sendMessage(new TranslationContainer(TextFormat::RED . "%commands.generic.player.notFound"));
 			return true;
 		}
-		
-		if($player->getName()!=$sender->getName() && !$sender->hasPermission("pocketmine.command.effect.other")){
+
+		if($player->getName() != $sender->getName() && !$sender->hasPermission("pocketmine.command.effect.other")){
 			$sender->sendMessage("You don't have permission to give effect to other player .");
 			return true;
 		}
@@ -99,7 +102,7 @@ class EffectCommand extends VanillaCommand{
 
 		if(count($args) >= 5){
 			$v = strtolower($args[4]);
-			if($v === "on" or $v === "true" or $v === "t" or $v === "1"){
+			if($v === "on" || $v === "true" || $v === "t" || $v === "1"){
 				$effect->setVisible(false);
 			}
 		}
@@ -124,7 +127,6 @@ class EffectCommand extends VanillaCommand{
 				self::broadcastCommandMessage($sender, new TranslationContainer("%commands.effect.success", [$effect->getName(), $effect->getId(), $effect->getAmplifier(), $player->getDisplayName(), $effect->getDuration() / 20]));
 			}
 		}
-
 
 		return true;
 	}

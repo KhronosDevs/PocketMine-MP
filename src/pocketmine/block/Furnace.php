@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -24,8 +26,8 @@ namespace pocketmine\block;
 use pocketmine\item\Item;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\Player;
 use pocketmine\tile\Furnace as FurnaceTile;
@@ -42,7 +44,7 @@ class Furnace extends Solid{
 	public function getName() : string{
 		return "Furnace";
 	}
-	
+
 	public function canBeActivated() : bool {
 		return true;
 	}
@@ -107,13 +109,13 @@ class Furnace extends Solid{
 				$furnace = Tile::createTile("Furnace", $this->getLevel()->getChunk($this->x >> 4, $this->z >> 4), $nbt);
 			}
 
-			if(isset($furnace->namedtag->Lock) and $furnace->namedtag->Lock instanceof StringTag){
+			if(isset($furnace->namedtag->Lock) && $furnace->namedtag->Lock instanceof StringTag){
 				if($furnace->namedtag->Lock->getValue() !== $item->getCustomName()){
 					return true;
 				}
 			}
 
-			if($player->isCreative() and $player->getServer()->limitedCreative){
+			if($player->isCreative() && $player->getServer()->limitedCreative){
 				return true;
 			}
 

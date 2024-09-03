@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -24,6 +26,7 @@ namespace pocketmine\block;
 use pocketmine\item\Item;
 use pocketmine\item\Tool;
 use pocketmine\math\Vector3;
+use function in_array;
 
 class ActiveRedstoneLamp extends Solid implements ElectricalAppliance, SolidLight{
 	protected $id = self::ACTIVE_REDSTONE_LAMP;
@@ -62,7 +65,7 @@ class ActiveRedstoneLamp extends Solid implements ElectricalAppliance, SolidLigh
 		if($this->isLightedByAround()){
 			$sides = [Vector3::SIDE_EAST, Vector3::SIDE_WEST, Vector3::SIDE_SOUTH, Vector3::SIDE_NORTH, Vector3::SIDE_UP, Vector3::SIDE_DOWN];
 			foreach($sides as $side){
-				if(!in_array($side, $ignore)){
+				if(!in_array($side, $ignore, true)){
 					/** @var ActiveRedstoneLamp $block */
 					$block = $this->getSide($side);
 					if($block->getId() == $this->id){
@@ -90,7 +93,7 @@ class ActiveRedstoneLamp extends Solid implements ElectricalAppliance, SolidLigh
 			$sides = [Vector3::SIDE_EAST, Vector3::SIDE_WEST, Vector3::SIDE_SOUTH, Vector3::SIDE_NORTH, Vector3::SIDE_UP, Vector3::SIDE_DOWN];
 
 			foreach($sides as $side){
-				if(!in_array($side, $ignore)){
+				if(!in_array($side, $ignore, true)){
 					/** @var ActiveRedstoneLamp $block */
 					$block = $this->getSide($side);
 					if($block->getId() == $this->id){

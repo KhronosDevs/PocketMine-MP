@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -24,6 +26,9 @@
  */
 namespace pocketmine\math;
 
+use function max;
+use function min;
+use function sqrt;
 
 abstract class Math{
 
@@ -40,8 +45,8 @@ abstract class Math{
 	public static function clamp($value, $low, $high){
 		return min($high, max($low, $value));
 	}
-	
-	public static function solveQuadratic($a, $b, $c): array{
+
+	public static function solveQuadratic($a, $b, $c) : array{
 		$x[0] = (-$b + sqrt($b ** 2 - 4 * $a * $c)) / (2 * $a);
 		$x[1] = (-$b - sqrt($b ** 2 - 4 * $a * $c)) / (2 * $a);
 		if($x[0] == $x[1]){

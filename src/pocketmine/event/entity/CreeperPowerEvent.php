@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -22,8 +24,8 @@
 namespace pocketmine\event\entity;
 
 use pocketmine\entity\Creeper;
-use pocketmine\event\Cancellable;
 use pocketmine\entity\Lightning;
+use pocketmine\event\Cancellable;
 
 class CreeperPowerEvent extends EntityEvent implements Cancellable{
 	public static $handlerList = null;

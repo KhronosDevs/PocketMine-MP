@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,14 +16,13 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\entity;
 
 use pocketmine\entity\Entity;
 use pocketmine\event\Cancellable;
+use function round;
 
 class EntityCombustEvent extends EntityEvent implements Cancellable{
 	public static $handlerList = null;
@@ -31,9 +31,8 @@ class EntityCombustEvent extends EntityEvent implements Cancellable{
 	protected $ProtectLevel;
 
 	/**
-	 * @param Entity $combustee
-	 * @param int    $duration
-	 * @param int    $ProtectLevel
+	 * @param int $duration
+	 * @param int $ProtectLevel
 	 */
 	public function __construct(Entity $combustee, $duration, $ProtectLevel = 0){
 		$this->entity = $combustee;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -28,6 +30,7 @@ use pocketmine\level\Level;
 use pocketmine\level\Position;
 use pocketmine\Player;
 use pocketmine\utils\TextFormat;
+use function count;
 
 class ChunkInfoCommand extends VanillaCommand{
 	public function __construct($name){
@@ -44,13 +47,13 @@ class ChunkInfoCommand extends VanillaCommand{
 			return true;
 		}
 
-		if(!$sender instanceof Player and count($args) < 4){
+		if(!$sender instanceof Player && count($args) < 4){
 			$sender->sendMessage(new TranslationContainer("commands.generic.usage", [$this->usageMessage]));
 
 			return false;
 		}
 
-		if($sender instanceof Player and count($args) < 4){
+		if($sender instanceof Player && count($args) < 4){
 			$pos = $sender->getPosition();
 		}else{
 			$level = $sender->getServer()->getLevelByName($args[3]);
@@ -62,7 +65,7 @@ class ChunkInfoCommand extends VanillaCommand{
 			$pos = new Position((int) $args[0], (int) $args[1], (int) $args[2], $level);
 		}
 
-		if(!isset($args[4]) or $args[0] != "regenerate"){
+		if(!isset($args[4]) || $args[0] != "regenerate"){
 			$chunk = $pos->getLevel()->getChunk($pos->x >> 4, $pos->z >> 4);
 			McRegion::getRegionIndex($chunk->getX(), $chunk->getZ(), $x, $z);
 

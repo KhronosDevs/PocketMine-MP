@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -44,7 +46,6 @@ interface Permissible extends ServerOperator{
 	public function hasPermission($name);
 
 	/**
-	 * @param Plugin $plugin
 	 * @param string $name
 	 * @param bool   $value
 	 *
@@ -53,12 +54,9 @@ interface Permissible extends ServerOperator{
 	public function addAttachment(Plugin $plugin, $name = null, $value = null);
 
 	/**
-	 * @param PermissionAttachment $attachment
-	 *
 	 * @return void
 	 */
 	public function removeAttachment(PermissionAttachment $attachment);
-
 
 	/**
 	 * @return void

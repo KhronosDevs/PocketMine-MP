@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -25,14 +27,16 @@ use pocketmine\entity\Entity;
 use pocketmine\item\Item;
 use pocketmine\level\Level;
 use pocketmine\level\sound\TNTPrimeSound;
-use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\DoubleTag;
-use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\FloatTag;
+use pocketmine\nbt\tag\ListTag;
 use pocketmine\Player;
 use pocketmine\utils\Random;
+use function cos;
+use function sin;
+use const M_PI;
 
 class TNT extends Solid implements ElectricalAppliance{
 
@@ -64,7 +68,7 @@ class TNT extends Solid implements ElectricalAppliance{
 
 	public function prime(Player $player = null){
 		$this->meta = 1;
-		if($player != null and $player->isCreative()){
+		if($player != null && $player->isCreative()){
 			$dropItem = false;
 		}else{
 			$dropItem = true;
@@ -97,7 +101,7 @@ class TNT extends Solid implements ElectricalAppliance{
 			$sides = [0, 1, 2, 3, 4, 5];
 			foreach($sides as $side){
 				$block = $this->getSide($side);
-				if($block instanceof RedstoneSource and $block->isActivated($this)){
+				if($block instanceof RedstoneSource && $block->isActivated($this)){
 					$this->prime();
 					$this->getLevel()->setBlock($this, new Air(), true);
 					break;

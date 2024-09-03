@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,16 +16,13 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\entity;
 
-use pocketmine\entity\Entity;
-use pocketmine\Event;
-use pocketmine\event\Cancellable;
 use pocketmine\entity\Effect;
+use pocketmine\entity\Entity;
+use pocketmine\event\Cancellable;
 
 class EntityEffectAddEvent extends EntityEvent implements Cancellable{
 

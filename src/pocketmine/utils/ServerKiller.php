@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -22,6 +24,8 @@
 namespace pocketmine\utils;
 
 use pocketmine\Thread;
+use function getmypid;
+use function time;
 
 class ServerKiller extends Thread{
 

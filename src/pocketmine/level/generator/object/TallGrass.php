@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -25,6 +27,7 @@ use pocketmine\block\Block;
 use pocketmine\level\ChunkManager;
 use pocketmine\math\Vector3 as Vector3;
 use pocketmine\utils\Random;
+use function count;
 
 class TallGrass{
 	public static function growGrass(ChunkManager $level, Vector3 $pos, Random $random, $count = 15, $radius = 10){
@@ -40,7 +43,7 @@ class TallGrass{
 		for($c = 0; $c < $count; ++$c){
 			$x = $random->nextRange($pos->x - $radius, $pos->x + $radius);
 			$z = $random->nextRange($pos->z - $radius, $pos->z + $radius);
-			if($level->getBlockIdAt($x, $pos->y + 1, $z) === Block::AIR and $level->getBlockIdAt($x, $pos->y, $z) === Block::GRASS){
+			if($level->getBlockIdAt($x, $pos->y + 1, $z) === Block::AIR && $level->getBlockIdAt($x, $pos->y, $z) === Block::GRASS){
 				$t = $arr[$random->nextRange(0, $arrC)];
 				$level->setBlockIdAt($x, $pos->y + 1, $z, $t[0]);
 				$level->setBlockDataAt($x, $pos->y + 1, $z, $t[1]);

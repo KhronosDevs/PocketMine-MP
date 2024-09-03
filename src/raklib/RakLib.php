@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * RakLib network library
  *
@@ -15,6 +17,14 @@
 
 namespace raklib;
 
+use function dirname;
+use function extension_loaded;
+use function phpversion;
+use function substr_count;
+use function version_compare;
+use const DIRECTORY_SEPARATOR;
+use const PHP_EOL;
+use const PHP_VERSION;
 
 //Dependencies check
 $errors = 0;
@@ -58,7 +68,7 @@ abstract class RakLib{
 
 	const FLAG_NEED_ACK = 0b00001000;
 
-    const PACKET_PING = 0x0a;
+	const PACKET_PING = 0x0a;
 
 	/*
 	 * Internal Packet:

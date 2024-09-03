@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -22,6 +24,7 @@
 namespace pocketmine\metadata;
 
 use pocketmine\IPlayer;
+use function strtolower;
 
 class PlayerMetadataStore extends MetadataStore{
 

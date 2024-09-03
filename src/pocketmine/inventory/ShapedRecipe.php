@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -22,9 +24,13 @@
 namespace pocketmine\inventory;
 
 use pocketmine\item\Item;
+use pocketmine\math\Vector2;
 use pocketmine\Server;
 use pocketmine\utils\UUID;
-use pocketmine\math\Vector2;
+use function array_fill;
+use function array_key_exists;
+use function count;
+use function strlen;
 
 class ShapedRecipe implements Recipe{
 	/** @var Item */
@@ -41,7 +47,6 @@ class ShapedRecipe implements Recipe{
 	private $shapeItems = [];
 
 	/**
-	 * @param Item     $result
 	 * @param string[] $shape
 	 *
 	 * @throws \Throwable
@@ -54,7 +59,7 @@ class ShapedRecipe implements Recipe{
 			throw new \InvalidStateException("Crafting recipes should be 1, 2, 3 rows, not " . count($shape));
 		}
 		foreach($shape as $y => $row){
-			if(strlen($row) === 0 or strlen($row) > 3){
+			if(strlen($row) === 0 || strlen($row) > 3){
 				throw new \InvalidStateException("Crafting rows should be 1, 2, 3 characters, not " . count($row));
 			}
 			$this->ingredients[] = array_fill(0, strlen($row), null);
@@ -99,7 +104,6 @@ class ShapedRecipe implements Recipe{
 
 	/**
 	 * @param string $key
-	 * @param Item   $item
 	 *
 	 * @return $this
 	 * @throws \Exception
@@ -141,21 +145,21 @@ class ShapedRecipe implements Recipe{
 	}
 
 	/**
- 	 * @return Item[]
- 	 */
- 	public function getIngredientList(){
- 		$ingredients = [];
- 		for ($x = 0; $x < 3; ++$x){
- 			for ($y = 0; $y < 3; ++$y){
- 				if (!empty($this->ingredients[$x][$y])){
- 					if ($this->ingredients[$x][$y]->getId() !== Item::AIR){
- 						$ingredients[] = clone $this->ingredients[$x][$y];
- 					}
- 				}
- 			}
- 		}
- 		return $ingredients;
- 	}
+	 * @return Item[]
+	 */
+	public function getIngredientList(){
+		$ingredients = [];
+		for ($x = 0; $x < 3; ++$x){
+			for ($y = 0; $y < 3; ++$y){
+				if (!empty($this->ingredients[$x][$y])){
+					if ($this->ingredients[$x][$y]->getId() !== Item::AIR){
+						$ingredients[] = clone $this->ingredients[$x][$y];
+					}
+				}
+			}
+		}
+		return $ingredients;
+	}
 
 	/**
 	 * @param $x

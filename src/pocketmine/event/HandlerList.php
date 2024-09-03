@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -23,22 +25,17 @@ namespace pocketmine\event;
 
 use pocketmine\plugin\Plugin;
 use pocketmine\plugin\RegisteredListener;
+use function spl_object_hash;
 
 class HandlerList{
 
-	/**
-	 * @var RegisteredListener[]
-	 */
+	/** @var RegisteredListener[] */
 	private $handlers = null;
 
-	/**
-	 * @var RegisteredListener[][]
-	 */
+	/** @var RegisteredListener[][] */
 	private $handlerSlots = [];
 
-	/**
-	 * @var HandlerList[]
-	 */
+	/** @var HandlerList[] */
 	private static $allLists = [];
 
 	public static function bakeAll(){
@@ -54,7 +51,7 @@ class HandlerList{
 	 * @param Plugin|Listener|null $object
 	 */
 	public static function unregisterAll($object = null){
-		if($object instanceof Listener or $object instanceof Plugin){
+		if($object instanceof Listener || $object instanceof Plugin){
 			foreach(self::$allLists as $h){
 				$h->unregister($object);
 			}
@@ -81,12 +78,10 @@ class HandlerList{
 	}
 
 	/**
-	 * @param RegisteredListener $listener
-	 *
 	 * @throws \Throwable
 	 */
 	public function register(RegisteredListener $listener){
-		if($listener->getPriority() < EventPriority::MONITOR or $listener->getPriority() > EventPriority::LOWEST){
+		if($listener->getPriority() < EventPriority::MONITOR || $listener->getPriority() > EventPriority::LOWEST){
 			return;
 		}
 		if(isset($this->handlerSlots[$listener->getPriority()][spl_object_hash($listener)])){
@@ -109,12 +104,12 @@ class HandlerList{
 	 * @param RegisteredListener|Listener|Plugin $object
 	 */
 	public function unregister($object){
-		if($object instanceof Plugin or $object instanceof Listener){
+		if($object instanceof Plugin || $object instanceof Listener){
 			$changed = false;
 			foreach($this->handlerSlots as $priority => $list){
 				foreach($list as $hash => $listener){
-					if(($object instanceof Plugin and $listener->getPlugin() === $object)
-						or ($object instanceof Listener and $listener->getListener() === $object)
+					if(($object instanceof Plugin && $listener->getPlugin() === $object)
+						|| ($object instanceof Listener && $listener->getListener() === $object)
 					){
 						unset($this->handlerSlots[$priority][$hash]);
 						$changed = true;

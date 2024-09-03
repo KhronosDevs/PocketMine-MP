@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * RakLib network library
  *
@@ -17,6 +19,9 @@ namespace raklib\protocol;
 
 #ifndef COMPILE
 use raklib\Binary;
+use function count;
+use function sort;
+use const SORT_NUMERIC;
 
 #endif
 
@@ -78,7 +83,7 @@ abstract class AcknowledgePacket extends Packet{
 		$count = $this->getShort();
 		$this->packets = [];
 		$cnt = 0;
-		for($i = 0; $i < $count and !$this->feof() and $cnt < 4096; ++$i){
+		for($i = 0; $i < $count && !$this->feof() && $cnt < 4096; ++$i){
 			if($this->getByte() === 0){
 				$start = $this->getLTriad();
 				$end = $this->getLTriad();

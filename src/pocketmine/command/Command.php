@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -29,6 +31,8 @@ use pocketmine\event\TimingsHandler;
 use pocketmine\event\TranslationContainer;
 use pocketmine\Server;
 use pocketmine\utils\TextFormat;
+use function explode;
+use function str_replace;
 
 abstract class Command{
 	/** @var string */
@@ -40,14 +44,10 @@ abstract class Command{
 	/** @var string */
 	private $label;
 
-	/**
-	 * @var string[]
-	 */
+	/** @var string[] */
 	private $aliases = [];
 
-	/**
-	 * @var string[]
-	 */
+	/** @var string[] */
 	private $activeAliases = [];
 
 	/** @var CommandMap */
@@ -86,17 +86,13 @@ abstract class Command{
 	}
 
 	/**
-	 * @param CommandSender $sender
-	 * @param string        $commandLabel
-	 * @param string[]      $args
+	 * @param string   $commandLabel
+	 * @param string[] $args
 	 *
 	 * @return mixed
 	 */
 	public abstract function execute(CommandSender $sender, $commandLabel, array $args);
 
-	/**
-	 * @return string
-	 */
 	public function getName() : string{
 		return $this->name;
 	}
@@ -116,8 +112,6 @@ abstract class Command{
 	}
 
 	/**
-	 * @param CommandSender $target
-	 *
 	 * @return bool
 	 */
 	public function testPermission(CommandSender $target){
@@ -135,12 +129,10 @@ abstract class Command{
 	}
 
 	/**
-	 * @param CommandSender $target
-	 *
 	 * @return bool
 	 */
 	public function testPermissionSilent(CommandSender $target){
-		if($this->permission === null or $this->permission === ""){
+		if($this->permission === null || $this->permission === ""){
 			return true;
 		}
 
@@ -175,8 +167,6 @@ abstract class Command{
 	/**
 	 * Registers the command into a Command map
 	 *
-	 * @param CommandMap $commandMap
-	 *
 	 * @return bool
 	 */
 	public function register(CommandMap $commandMap){
@@ -190,8 +180,6 @@ abstract class Command{
 	}
 
 	/**
-	 * @param CommandMap $commandMap
-	 *
 	 * @return bool
 	 */
 	public function unregister(CommandMap $commandMap){
@@ -207,12 +195,10 @@ abstract class Command{
 	}
 
 	/**
-	 * @param CommandMap $commandMap
-	 *
 	 * @return bool
 	 */
 	private function allowChangesFrom(CommandMap $commandMap){
-		return $this->commandMap === null or $this->commandMap === $commandMap;
+		return $this->commandMap === null || $this->commandMap === $commandMap;
 	}
 
 	/**
@@ -282,14 +268,13 @@ abstract class Command{
 	}
 
 	/**
-	 * @param CommandSender $source
-	 * @param string        $message
-	 * @param bool          $sendToSource
+	 * @param string $message
+	 * @param bool   $sendToSource
 	 */
 	public static function broadcastCommandMessage(CommandSender $source, $message, $sendToSource = true){
 		if($message instanceof TextContainer){
 			$m = clone $message;
-			$result = "[".$source->getName().": ".($source->getServer()->getLanguage()->get($m->getText()) !== $m->getText() ? "%" : "") . $m->getText() ."]";
+			$result = "[" . $source->getName() . ": " . ($source->getServer()->getLanguage()->get($m->getText()) !== $m->getText() ? "%" : "") . $m->getText() . "]";
 
 			$users = $source->getServer()->getPluginManager()->getPermissionSubscriptions(Server::BROADCAST_CHANNEL_ADMINISTRATIVE);
 			$colored = TextFormat::GRAY . TextFormat::ITALIC . $result;
@@ -304,7 +289,7 @@ abstract class Command{
 			$colored = new TranslationContainer(TextFormat::GRAY . TextFormat::ITALIC . "%chat.type.admin", [$source->getName(), $message]);
 		}
 
-		if($sendToSource === true and !($source instanceof ConsoleCommandSender)){
+		if($sendToSource === true && !($source instanceof ConsoleCommandSender)){
 			$source->sendMessage($message);
 		}
 

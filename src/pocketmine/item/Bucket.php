@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,7 +17,7 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
@@ -24,8 +26,8 @@ namespace pocketmine\item;
 use pocketmine\block\Air;
 use pocketmine\block\Block;
 use pocketmine\block\Liquid;
-use pocketmine\event\player\PlayerBucketFillEvent;
 use pocketmine\event\player\PlayerBucketEmptyEvent;
+use pocketmine\event\player\PlayerBucketFillEvent;
 use pocketmine\level\Level;
 use pocketmine\Player;
 
@@ -46,7 +48,7 @@ class Bucket extends Item{
 		$targetBlock = Block::get($this->meta);
 
 		if($targetBlock instanceof Air){
-			if($target instanceof Liquid and $target->getDamage() === 0){
+			if($target instanceof Liquid && $target->getDamage() === 0){
 				$result = clone $this;
 				$id = $target->getId();
 				if($id == self::STILL_WATER){
@@ -74,7 +76,7 @@ class Bucket extends Item{
 			if(!$ev->isCancelled()){
 				//Only disallow water placement in the Nether, allow other liquids to be placed
 				//In vanilla, water buckets are emptied when used in the Nether, but no water placed.
-				if(!($player->getLevel()->getDimension() === Level::DIMENSION_NETHER and $targetBlock->getID() === self::WATER)){
+				if(!($player->getLevel()->getDimension() === Level::DIMENSION_NETHER && $targetBlock->getID() === self::WATER)){
 					$player->getLevel()->setBlock($block, $targetBlock, true, true);
 				}
 				if($player->isSurvival()){

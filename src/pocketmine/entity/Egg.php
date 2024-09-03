@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -23,8 +25,8 @@ namespace pocketmine\entity;
 
 use pocketmine\level\format\FullChunk;
 use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\Player;
 use pocketmine\network\protocol\AddEntityPacket;
+use pocketmine\Player;
 
 class Egg extends Projectile{
 	const NETWORK_ID = 82;
@@ -49,7 +51,7 @@ class Egg extends Projectile{
 
 		$hasUpdate = parent::onUpdate($currentTick);
 
-		if($this->age > 1200 or $this->isCollided){
+		if($this->age > 1200 || $this->isCollided){
 			$this->kill();
 			$hasUpdate = true; //Chance to spawn chicken
 		}

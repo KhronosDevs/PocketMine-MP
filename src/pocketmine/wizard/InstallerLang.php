@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,12 +17,24 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
 namespace pocketmine\wizard;
 
+use function array_shift;
+use function arsort;
+use function count;
+use function explode;
+use function file_exists;
+use function file_get_contents;
+use function implode;
+use function key;
+use function reset;
+use function str_replace;
+use function substr;
+use function trim;
 
 class InstallerLang{
 	public static $languages = [
@@ -44,7 +58,7 @@ class InstallerLang{
 		}else{
 			$files = [];
 			foreach(new \DirectoryIterator(\pocketmine\PATH . "src/pocketmine/lang/Installer/") as $file){
-				if($file->getExtension() === "ini" and substr($file->getFilename(), 0, 2) === $lang){
+				if($file->getExtension() === "ini" && substr($file->getFilename(), 0, 2) === $lang){
 					$files[$file->getFilename()] = $file->getSize();
 				}
 			}
@@ -88,7 +102,7 @@ class InstallerLang{
 
 	public function get($name, $search = [], $replace = []){
 		if(!isset($this->texts[$this->lang][$name])){
-			if($this->lang !== "en" and isset($this->texts["en"][$name])){
+			if($this->lang !== "en" && isset($this->texts["en"][$name])){
 				return $this->texts["en"][$name];
 			}else{
 				return $name;

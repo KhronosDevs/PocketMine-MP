@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____  
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \ 
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/ 
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_| 
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -15,20 +17,21 @@
  *
  * @author PocketMine Team
  * @link http://www.pocketmine.net/
- * 
+ *
  *
 */
 
 namespace pocketmine\block;
 
 use pocketmine\event\block\LeavesDecayEvent;
+use pocketmine\item\enchantment\enchantment;
 use pocketmine\item\Item;
 use pocketmine\item\Tool;
-use pocketmine\item\Dye;
-use pocketmine\item\enchantment\enchantment;
 use pocketmine\level\Level;
 use pocketmine\Player;
 use pocketmine\Server;
+use function min;
+use function mt_rand;
 
 class Leaves extends Transparent{
 	const OAK = 0;
@@ -37,7 +40,7 @@ class Leaves extends Transparent{
 	const JUNGLE = 3;
 	const ACACIA = 0;
 	const DARK_OAK = 1;
-	
+
 	const WOOD_TYPE = self::WOOD;
 
 	protected $id = self::LEAVES;
@@ -80,7 +83,7 @@ class Leaves extends Transparent{
 		}
 		if($pos->getId() === static::WOOD_TYPE){
 			return true;
-		}elseif($pos->getId() === $this->id and $distance < 3){
+		}elseif($pos->getId() === $this->id && $distance < 3){
 			$visited[$index] = true;
 			$down = $pos->getSide(0)->getId();
 			if($down === static::WOOD_TYPE){
@@ -151,7 +154,7 @@ class Leaves extends Transparent{
 
 				Server::getInstance()->getPluginManager()->callEvent($ev = new LeavesDecayEvent($this));
 
-				if($ev->isCancelled() or $this->findLog($this, $visited, 0, $check) === true){
+				if($ev->isCancelled() || $this->findLog($this, $visited, 0, $check) === true){
 					$this->getLevel()->setBlock($this, $this, false, false);
 				}else{
 					$this->getLevel()->useBreakOn($this);
@@ -171,7 +174,7 @@ class Leaves extends Transparent{
 
 	public function getDrops(Item $item) : array {
 		$drops = [];
-		if($item->isShears() or $item->getEnchantmentLevel(Enchantment::TYPE_MINING_SILK_TOUCH) > 0){
+		if($item->isShears() || $item->getEnchantmentLevel(Enchantment::TYPE_MINING_SILK_TOUCH) > 0){
 			$drops[] = [$this->id, $this->meta & 0x03, 1];
 		}else{
 			$fortunel = $item->getEnchantmentLevel(Enchantment::TYPE_MINING_FORTUNE);
@@ -181,7 +184,7 @@ class Leaves extends Transparent{
 				$drops[] = [Item::SAPLING, $this->meta & 0x03, 1];
 			}
 			$rates = [200,180,160,120];
-			if(($this->meta & 0x03) === self::OAK and mt_rand(1, $rates[$fortunel]) === 1){ //Apples
+			if(($this->meta & 0x03) === self::OAK && mt_rand(1, $rates[$fortunel]) === 1){ //Apples
 				$drops[] = [Item::APPLE, 0, 1];
 			}
 		}

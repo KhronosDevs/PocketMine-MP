@@ -1,7 +1,8 @@
 <?php
 
+declare(strict_types=1);
+
 /**
- *
  *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
@@ -15,8 +16,6 @@
  *
  * @author PocketMine Team
  * @link   http://www.pocketmine.net/
- *
- *
  */
 
 namespace pocketmine\event\inventory;
@@ -31,10 +30,6 @@ class InventoryPickupItemEvent extends InventoryEvent implements Cancellable{
 	/** @var Item */
 	private $item;
 
-	/**
-	 * @param Inventory $inventory
-	 * @param Item      $item
-	 */
 	public function __construct(Inventory $inventory, Item $item){
 		$this->item = $item;
 		parent::__construct($inventory);
