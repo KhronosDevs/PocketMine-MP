@@ -120,21 +120,26 @@ namespace pocketmine {
 	}
 
 	$autoloader = new CompatibleClassLoader();
+
 	$autoloader->addPath(\pocketmine\PATH . "src");
 	$autoloader->addPath(\pocketmine\PATH . "src" . DIRECTORY_SEPARATOR . "spl");
+
 	$autoloader->register(true);
 
 
 	set_time_limit(0); //Who set it to 30 seconds?!?!
 
 	gc_enable();
+
 	error_reporting(-1);
+
 	ini_set("allow_url_fopen", '1');
 	ini_set("display_errors", '1');
 	ini_set("display_startup_errors", '1');
 	ini_set("default_charset", "utf-8");
 
 	ini_set("memory_limit", '-1');
+
 	define('pocketmine\START_TIME', microtime(true));
 
 	$opts = getopt("", ["data:", "plugins:", "no-wizard", "enable-profiler"]);
@@ -320,8 +325,6 @@ namespace pocketmine {
 			case "win":
 				exec("taskkill.exe /F /PID " . ((int) $pid) . " > NUL");
 				break;
-			case "mac":
-			case "linux":
 			default:
 				if(function_exists("posix_kill")){
 					posix_kill($pid, SIGKILL);
@@ -390,32 +393,27 @@ namespace pocketmine {
 		++$errors;
 	}
 
-	if(!extension_loaded("sockets")){
-		$logger->critical("Unable to find the Socket extension.");
-		++$errors;
+	foreach ([
+		'sockets' => 'Socket',
+		'curl' => 'cURL',
+		'yaml' => 'YAML',
+		'sqlite3' => 'SQLite3',
+		'zlib' => 'ZLib'
+	] as $extensionId => $extensionName) {
+		if (!extension_loaded($extensionId)) {
+			$logger->critical('Unable to find the ' . $extensionName . ' extension.');
+			$errors += 1;
+		}
 	}
 
 	$pthreads_version = phpversion("pthreads");
 	if(substr_count($pthreads_version, ".") < 2){
 		$pthreads_version = "0.$pthreads_version";
 	}
+
 	if(version_compare($pthreads_version, "3.1.5") < 0){
 		$logger->critical("pthreads >= 3.1.5 is required, while you have $pthreads_version.");
 		++$errors;
-	}
-
-	if(!extension_loaded("uopz")){
-		//$logger->notice("Couldn't find the uopz extension. Some functions may be limited");
-	}
-
-	if(extension_loaded("pocketmine")){
-		if(version_compare(phpversion("pocketmine"), "0.0.1") < 0){
-			$logger->critical("You have the native PocketMine extension, but your version is lower than 0.0.1.");
-			++$errors;
-		}elseif(version_compare(phpversion("pocketmine"), "0.0.4") > 0){
-			$logger->critical("You have the native PocketMine extension, but your version is higher than 0.0.4.");
-			++$errors;
-		}
 	}
 	
 	if(extension_loaded("xdebug")){
@@ -425,26 +423,6 @@ namespace pocketmine {
 	You are running PocketMine with xdebug enabled. This has a major impact on performance.
 
 		");
-	}
-
-	if(!extension_loaded("curl")){
-		$logger->critical("Unable to find the cURL extension.");
-		++$errors;
-	}
-
-	if(!extension_loaded("yaml")){
-		$logger->critical("Unable to find the YAML extension.");
-		++$errors;
-	}
-
-	if(!extension_loaded("sqlite3")){
-		$logger->critical("Unable to find the SQLite3 extension.");
-		++$errors;
-	}
-
-	if(!extension_loaded("zlib")){
-		$logger->critical("Unable to find the Zlib extension.");
-		++$errors;
 	}
 
 	if($errors > 0){
