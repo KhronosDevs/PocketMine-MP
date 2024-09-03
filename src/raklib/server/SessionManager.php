@@ -93,7 +93,7 @@ class SessionManager{
 
 	public function initialize(string $mainPath) {
 		if (Phar::running(true) !== '') {
-			$mainPath .= DIRECTORY_SEPARATOR;
+			$mainPath = dirname(str_replace('phar://', '', $mainPath)) . DIRECTORY_SEPARATOR;
 		}
 
 		$config = new Config($mainPath . 'khronos.yml', Config::YAML);
