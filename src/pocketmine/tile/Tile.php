@@ -74,6 +74,23 @@ abstract class Tile extends Position{
 	/** @var \pocketmine\event\TimingsHandler */
 	public $tickTimer;
 
+	public static function init(){
+		Tile::registerTile(BrewingStand::class);
+		Tile::registerTile(Cauldron::class);
+		Tile::registerTile(Chest::class);
+		Tile::registerTile(Dispenser::class);
+		Tile::registerTile(DLDetector::class);
+		Tile::registerTile(Dropper::class);
+		Tile::registerTile(EnchantTable::class);
+		Tile::registerTile(FlowerPot::class);
+		Tile::registerTile(Furnace::class);
+		Tile::registerTile(Hopper::class);
+		Tile::registerTile(ItemFrame::class);
+		Tile::registerTile(MobSpawner::class);
+		Tile::registerTile(Sign::class);
+		Tile::registerTile(Skull::class);
+	}
+
 	/**
 	 * @param string $type
 	 * @param        $args
