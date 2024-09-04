@@ -114,6 +114,7 @@ use function asort;
 use function base64_encode;
 use function bccomp;
 use function class_exists;
+use function \pocketmine\cleanPath;
 use function cli_set_process_title;
 use function count;
 use function define;
@@ -127,7 +128,6 @@ use function function_exists;
 use function gc_collect_cycles;
 use function getmypid;
 use function getopt;
-use function \pocketmine\getTrace;
 use function implode;
 use function ini_set;
 use function is_array;
@@ -136,7 +136,6 @@ use function is_numeric;
 use function is_string;
 use function is_subclass_of;
 use function json_decode;
-use function \pocketmine\kill;
 use function max;
 use function microtime;
 use function min;
@@ -149,6 +148,7 @@ use function register_shutdown_function;
 use function rename;
 use function round;
 use function spl_object_hash;
+use function str_repeat;
 use function str_replace;
 use function stripos;
 use function strlen;
@@ -386,7 +386,7 @@ class Server{
 	public function __construct(\ClassLoader $autoloader, \ThreadedLogger $logger, $filePath, $dataPath, $pluginPath, $defaultLang = "unknown"){
 		self::$instance = $this;
 		self::$sleeper = new \Threaded();
-		
+
 		$this->autoloader = $autoloader;
 		$this->logger = $logger;
 		$this->filePath = $filePath;
@@ -424,7 +424,7 @@ class Server{
 		}
 
 		$this->config = new Config($this->dataPath . "pocketmine.yml", Config::YAML, []);
-		
+
 		(new Config($this->dataPath . 'khronos.yml', Config::YAML, [
 			'pvp-mode' => false
 		]));
@@ -469,7 +469,7 @@ class Server{
 		if(file_exists($this->filePath . "src/pocketmine/resources/genisys_$lang.yml")){
 			$content = file_get_contents($file = $this->filePath . "src/pocketmine/resources/genisys_$lang.yml");
 		} else {
-	 		$content = file_get_contents($file = $this->filePath . "src/pocketmine/resources/genisys_eng.yml");
+			$content = file_get_contents($file = $this->filePath . "src/pocketmine/resources/genisys_eng.yml");
 		}
 
 		if(!file_exists($this->dataPath . "genisys.yml")){
@@ -593,7 +593,7 @@ class Server{
 		$this->network->setName($this->getMotd());
 
 		$this->queryRegenerateTask = new QueryRegenerateEvent($this, 5);
-		
+
 		$this->network->registerInterface(new RakLibInterface($this));
 	}
 
@@ -2617,7 +2617,7 @@ class Server{
 	public function getAdvancedProperty($variable, $defaultValue = null, Config $cfg = null){
 		$vars = explode(".", $variable);
 		$base = array_shift($vars);
-		
+
 		if($cfg == null) {
 			$cfg = $this->advancedConfig;
 		}

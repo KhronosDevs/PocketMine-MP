@@ -40,15 +40,18 @@ use raklib\RakLib;
 use function asort;
 use function chr;
 use function count;
+use function dirname;
 use function max;
 use function microtime;
 use function mt_rand;
 use function ord;
 use function serialize;
+use function str_replace;
 use function strlen;
 use function strval;
 use function substr;
 use function time_sleep_until;
+use const DIRECTORY_SEPARATOR;
 use const PHP_INT_MAX;
 
 class SessionManager{

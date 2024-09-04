@@ -81,7 +81,7 @@ class CompoundTag extends NamedTag implements \ArrayAccess{
 		return $tag;
 	}
 
-	public function setTag(string $name, Tag $tag): self {
+	public function setTag(string $name, Tag $tag) : self {
 		$this->{$name} = $tag;
 		return $this;
 	}
@@ -208,7 +208,7 @@ class CompoundTag extends NamedTag implements \ArrayAccess{
 	}
 
 	/**
-	 * @param int[]  $value
+	 * @param int[] $value
 	 *
 	 * @return $this
 	 */

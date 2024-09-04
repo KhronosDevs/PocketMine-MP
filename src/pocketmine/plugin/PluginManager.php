@@ -53,6 +53,7 @@ use function stripos;
 use function strpos;
 use function strtolower;
 use function strtoupper;
+use function strval;
 
 /**
  * Manages all the plugins, Permissions and Permissibles
@@ -325,7 +326,7 @@ class PluginManager{
 						unset($plugins[$name]);
 						$missingDependency = false;
 						$plugin = $this->loadPlugin($file, $loaders);
-						
+
 						if($plugin && $plugin instanceof Plugin){
 							$loadedPlugins[$name] = $plugin;
 						}else{

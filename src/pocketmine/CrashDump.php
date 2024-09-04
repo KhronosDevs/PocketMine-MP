@@ -31,7 +31,6 @@ use pocketmine\utils\VersionString;
 use raklib\RakLib;
 use function base64_encode;
 use function class_exists;
-use function \pocketmine\cleanPath;
 use function count;
 use function date;
 use function error_get_last;
@@ -199,7 +198,7 @@ class CrashDump{
 			$error = $lastExceptionError;
 		}else{
 			$error = (array) error_get_last();
-			$error["trace"] = @getTrace(3);
+			$error["trace"] = @\pocketmine\getTrace(3);
 			$errorConversion = [
 				E_ERROR => "E_ERROR",
 				E_WARNING => "E_WARNING",
@@ -218,7 +217,7 @@ class CrashDump{
 				E_USER_DEPRECATED => "E_USER_DEPRECATED",
 			];
 			$error["fullFile"] = $error["file"];
-			$error["file"] = cleanPath($error["file"]);
+			$error["file"] = \pocketmine\cleanPath($error["file"]);
 			$error["type"] = isset($errorConversion[$error["type"]]) ? $errorConversion[$error["type"]] : $error["type"];
 			if(($pos = strpos($error["message"], "\n")) !== false){
 				$error["message"] = substr($error["message"], 0, $pos);
