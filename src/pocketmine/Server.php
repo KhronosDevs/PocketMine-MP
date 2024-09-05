@@ -425,12 +425,13 @@ class Server{
 			@file_put_contents($this->dataPath . "pocketmine.yml", file_get_contents($this->filePath . "src/pocketmine/resources/pocketmine.yml"));
 		}
 
+		if(!file_exists($this->dataPath . "khronos.yml")){
+			@file_put_contents($this->dataPath . "khronos.yml", file_get_contents($this->filePath . "src/pocketmine/resources/khronos.yml"));
+		}
+
 		$this->config = new Config($this->dataPath . "pocketmine.yml", Config::YAML, []);
 
-		$this->khronosConfig = new Config($this->dataPath . 'khronos.yml', Config::YAML, [
-			'pvp-mode' => false,
-			'drop-items-on-death' => true
-		]);
+		$this->khronosConfig = new Config($this->dataPath . 'khronos.yml', Config::YAML, []);
 
 		if (!$this->khronosConfig->exists('pvp-mode')) {
 			$this->khronosConfig->set('pvp-mode', false);

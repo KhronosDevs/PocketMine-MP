@@ -1,0 +1,11 @@
+# Archivo de configuración de la gran Khronos API.
+
+# Modo pvp, este modo mejora la calidad de PvP, pero también hace que el servidor sea vulnerable a ataques DoS, aún así si quieres el clásico knockback/kb de la API default te recomiendo activarlo.
+# Para activarlo ponlo en true, para desactivarlo ponlo en false.
+# Valor por defecto: false
+pvp-mode: false
+
+# Tirar items de un jugador cuando muera.
+# Para activarlo ponlo en true, para desactivarlo ponlo en false.
+# Valor por defecto: true
+drop-items-on-death: true
