@@ -3855,11 +3855,15 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
 		$ev->setKeepExperience($this->server->keepExperience);
 		$this->server->getPluginManager()->callEvent($ev);
 
-		if(!$ev->getKeepInventory()){
+		$dropItemsOnDeath = $this->server->getKhronosConfig()->get('drop-items-on-death');
+
+		if ($dropItemsOnDeath === 'true' || $dropItemsOnDeath === true || $dropItemsOnDeath === 'on') {
 			foreach($ev->getDrops() as $item){
 				$this->level->dropItem($this, $item);
 			}
+		}
 
+		if(!$ev->getKeepInventory()){
 			if($this->inventory !== null){
 				$this->inventory->clearAll();
 			}

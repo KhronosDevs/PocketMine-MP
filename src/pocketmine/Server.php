@@ -315,6 +315,8 @@ class Server{
 
 	/** @var Config */
 	private $config;
+	/** @var Config */
+	private $khronosConfig;
 
 	/** @var Player[] */
 	private $players = [];
@@ -425,9 +427,20 @@ class Server{
 
 		$this->config = new Config($this->dataPath . "pocketmine.yml", Config::YAML, []);
 
-		(new Config($this->dataPath . 'khronos.yml', Config::YAML, [
-			'pvp-mode' => false
-		]));
+		$this->khronosConfig = new Config($this->dataPath . 'khronos.yml', Config::YAML, [
+			'pvp-mode' => false,
+			'drop-items-on-death' => true
+		]);
+
+		if (!$this->khronosConfig->exists('pvp-mode')) {
+			$this->khronosConfig->set('pvp-mode', false);
+		}
+
+		if (!$this->khronosConfig->exists('drop-items-on-death')) {
+			$this->khronosConfig->set('drop-items-on-death', true);
+		}
+
+		$this->khronosConfig->save();
 
 		$this->properties = new Config($this->dataPath . "server.properties", Config::PROPERTIES, [
 			"motd" => "Minecraft: PE Server",
@@ -901,6 +914,10 @@ class Server{
 	 */
 	public function getForceGamemode(){
 		return $this->getConfigBoolean("force-gamemode", false);
+	}
+
+	public function getKhronosConfig(): Config {
+		return $this->khronosConfig;
 	}
 
 	/**
