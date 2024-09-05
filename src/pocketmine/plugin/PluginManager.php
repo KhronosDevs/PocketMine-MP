@@ -145,7 +145,10 @@ class PluginManager{
 	 */
 	public function loadPlugin($path, $loaders = null){
 		foreach(($loaders === null ? $this->fileAssociations : $loaders) as $loader){
-			if(preg_match($loader->getPluginFilters(), basename($path)) > 0){
+			/** @var string $filters */
+			$filters = $loader->getPluginFilters();
+			
+			if(preg_match($filters, basename($path)) > 0){
 				$description = $loader->getPluginDescription($path);
 				if($description instanceof PluginDescription){
 					if(($plugin = $loader->loadPlugin($path)) instanceof Plugin){
