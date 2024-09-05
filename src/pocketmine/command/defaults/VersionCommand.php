@@ -73,6 +73,7 @@ class VersionCommand extends VanillaCommand{
 				$sender->getServer()->getVersion(),
 				Info::CURRENT_PROTOCOL
 			]));
+			$sender->sendMessage('Khronos version: ' . \pocketmine\KHRONOS_VERSION);
 		}else{
 			$pluginName = implode(" ", $args);
 			$exactPlugin = $sender->getServer()->getPluginManager()->getPlugin($pluginName);
