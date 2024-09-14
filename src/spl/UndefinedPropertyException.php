@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+
 
 /*
  * PocketMine Standard PHP Library

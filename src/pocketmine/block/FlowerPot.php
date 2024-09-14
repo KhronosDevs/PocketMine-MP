@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+
 /*
  * Copied from ImagicalMine
  * THIS IS COPIED FROM THE PLUGIN FlowerPot MADE BY @beito123!!

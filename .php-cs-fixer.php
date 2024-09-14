@@ -35,7 +35,7 @@ return (new PhpCsFixer\Config)
 		'concat_space' => [
 			'spacing' => 'one'
 		],
-		'declare_strict_types' => true,
+		'declare_strict_types' => false,
 		'elseif' => true,
 		'fully_qualified_strict_types' => true,
 		'global_namespace_import' => [

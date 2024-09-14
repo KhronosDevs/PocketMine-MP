@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+
 /*
  * DServerTask 2.0
  * @author MUedsa, PeratX
