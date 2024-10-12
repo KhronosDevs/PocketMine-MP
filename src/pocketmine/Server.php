@@ -1311,7 +1311,13 @@ class Server{
 	 * @return Player|null
 	 */
 	public function getPlayerExact(string $name){
-		return $this->playerList[$this->playerIds[strtolower($name)]] ?? null;
+		$id = strtolower($name);
+
+		if (!isset($this->playerIds[$id])) {
+			return null;
+		}
+
+		return $this->playerList[$this->playerIds[$id]] ?? null;
 	}
 
 	/**
