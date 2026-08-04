@@ -26,7 +26,7 @@
  */
 namespace pocketmine\utils;
 
-use pocketmine\ThreadManager;
+use pocketmine\pmmp\thread\ThreadManager;
 use function array_merge;
 use function bin2hex;
 use function chunk_split;
@@ -491,7 +491,7 @@ class Utils{
 	public static function javaStringHash($string){
 		$hash = 0;
 		for($i = 0; $i < strlen($string); $i++){
-			$ord = ord($string{$i});
+			$ord = ord($string[$i]);
 			if($ord & 0x80){
 				$ord -= 0x100;
 			}

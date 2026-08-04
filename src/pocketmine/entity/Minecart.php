@@ -71,7 +71,7 @@ class Minecart extends Vehicle{
 		parent::initEntity();
 	}
 
-	public function getName() : string{
+	public function getName(): string{
 		return "Minecart";
 	}
 

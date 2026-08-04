@@ -23,7 +23,7 @@
 
 namespace pocketmine\network\rcon;
 
-use pocketmine\Thread;
+use pocketmine\pmmp\thread\Thread;
 use pocketmine\utils\Binary;
 use pocketmine\utils\MainLogger;
 use function ltrim;

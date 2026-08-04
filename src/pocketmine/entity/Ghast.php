@@ -33,7 +33,7 @@ class Ghast extends FlyingAnimal{
 	public $length = 6;
 	public $height = 6;
 
-	public function getName() : string{
+	public function getName(): string{
 		return "Ghast";
 	}
 

@@ -28,42 +28,48 @@ use pocketmine\Worker;
 use function gc_enable;
 use function ini_set;
 
-class AsyncWorker extends Worker{
+class AsyncWorker extends Worker
+{
 
-	/** @var SleeperNotifier */
-	private $notifier = null;
-	private $logger;
-	private $id;
+    /** @var SleeperNotifier */
+    private $notifier = null;
+    private $logger;
+    private $id;
 
-	public function __construct(\ThreadedLogger $logger, $id, SleeperNotifier $notifier){
-		$this->logger = $logger;
-		$this->id = $id;
-		$this->notifier = $notifier;
-	}
+    public function __construct(\ThreadedLogger $logger, $id, SleeperNotifier $notifier)
+    {
+        $this->logger = $logger;
+        $this->id = $id;
+        $this->notifier = $notifier;
+    }
 
-	public function run(){
-		$this->registerClassLoader();
-		gc_enable();
-		ini_set("memory_limit", '-1');
+    public function run(): void
+    {
+        $this->registerClassLoader();
+        gc_enable();
+        ini_set("memory_limit", '-1');
 
-		global $store;
-		$store = [];
-	}
+        global $store;
+        $store = [];
+    }
 
-	public function handleException(\Throwable $e){
-		$this->logger->logException($e);
-	}
+    public function handleException(\Throwable $e)
+    {
+        $this->logger->logException($e);
+    }
 
-	public function getThreadName(){
-		return "Asynchronous Worker #" . $this->id;
-	}
+    public function getThreadName()
+    {
+        return "Asynchronous Worker #" . $this->id;
+    }
 
-	public function getId() {
-		return $this->id;
-	}
+    public function getId()
+    {
+        return $this->id;
+    }
 
-	public function getNotifier() : SleeperNotifier {
-		return $this->notifier;
-	}
-
+    public function getNotifier(): SleeperNotifier
+    {
+        return $this->notifier;
+    }
 }

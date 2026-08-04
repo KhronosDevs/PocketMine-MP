@@ -38,7 +38,7 @@ class ZombieVillager extends Zombie{
 		parent::initEntity();
 	}
 
-	public function getName() : string{
+	public function getName(): string{
 		return "Zombie Villager";
 	}
 

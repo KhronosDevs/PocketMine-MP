@@ -29,7 +29,7 @@ use function assert;
  * Notifiers are Threaded objects which can be attached to threaded sleepers in order to wake them up. They also record
  * state so that the main thread handler can determine which notifier woke up the sleeper.
  */
-class SleeperNotifier extends \Threaded{
+class SleeperNotifier extends \pmmp\thread\ThreadSafe{
 	/** @var ThreadedSleeper */
 	private $threadedSleeper;
 

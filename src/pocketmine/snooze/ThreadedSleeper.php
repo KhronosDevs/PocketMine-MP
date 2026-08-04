@@ -28,7 +28,7 @@ use function assert;
 /**
  * Notifiable Threaded class which tracks counts of notifications it receives.
  */
-class ThreadedSleeper extends \Threaded{
+class ThreadedSleeper extends \pmmp\thread\ThreadSafe{
 	/** @var int */
 	private $notifCount = 0;
 

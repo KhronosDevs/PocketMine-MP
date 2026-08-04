@@ -37,6 +37,9 @@ use function strpos;
 use function strval;
 use function substr;
 use function xdebug_get_function_stack;
+
+use pmmp\thread\Thread;
+use pmmp\thread\ThreadSafeArray;
 use const DIRECTORY_SEPARATOR;
 use const E_ALL;
 use const E_COMPILE_ERROR;
@@ -55,226 +58,248 @@ use const E_USER_NOTICE;
 use const E_USER_WARNING;
 use const E_WARNING;
 
-class RakLibServer extends \Thread{
-	protected $port;
-	protected $interface;
-	/** @var \ThreadedLogger */
-	protected $logger;
-	protected $loader;
+class RakLibServer extends \pmmp\thread\Thread
+{
+    protected $port;
+    protected $interface;
+    /** @var \ThreadedLogger */
+    protected $logger;
+    protected $loader;
 
-	public $loadPaths;
+    protected ThreadSafeArray $loadPaths;
 
-	protected $shutdown;
+    protected $shutdown;
 
-	/** @var \Threaded */
-	protected $externalQueue;
-	/** @var \Threaded */
-	protected $internalQueue;
+    /** @var \pmmp\thread\ThreadSafe */
+    protected $externalQueue;
+    /** @var \pmmp\thread\ThreadSafe */
+    protected $internalQueue;
 
-	protected $mainPath;
+    protected $mainPath;
 
-	/**
-	 * @param int    $port
-	 * @param string $interface
-	 *
-	 * @throws \Exception
-	 */
-	public function __construct(\ThreadedLogger $logger, \ClassLoader $loader, $port, $interface = "0.0.0.0"){
-		$this->port = (int) $port;
-		if($port < 1 || $port > 65536){
-			throw new \Exception("Invalid port range");
-		}
+    /**
+     * @param int    $port
+     * @param string $interface
+     *
+     * @throws \Exception
+     */
+    public function __construct(\ThreadedLogger $logger, \ClassLoader $loader, $port, $interface = "0.0.0.0")
+    {
+        $this->port = (int) $port;
+        if ($port < 1 || $port > 65536) {
+            throw new \Exception("Invalid port range");
+        }
 
-		$this->interface = $interface;
-		$this->logger = $logger;
-		$this->loader = $loader;
-		$loadPaths = [];
-		$this->addDependency($loadPaths, new \ReflectionClass($logger));
-		$this->addDependency($loadPaths, new \ReflectionClass($loader));
-		$this->loadPaths = array_reverse($loadPaths);
-		$this->shutdown = false;
+        $this->interface = $interface;
+        $this->logger = $logger;
+        $this->loader = $loader;
+        $loadPaths = [];
+        $this->addDependency($loadPaths, new \ReflectionClass($logger));
+        $this->addDependency($loadPaths, new \ReflectionClass($loader));
+        $this->loadPaths = new ThreadSafeArray();
 
-		$this->externalQueue = new \Threaded;
-		$this->internalQueue = new \Threaded;
+        foreach (array_reverse($loadPaths, true) as $name => $path) {
+            $this->loadPaths[$name] = $path;
+        }
+        $this->shutdown = false;
 
-		if(\Phar::running(true) !== ""){
-			$this->mainPath = \Phar::running(true);
-		}else{
-			$this->mainPath = getcwd() . DIRECTORY_SEPARATOR;
-		}
-		$this->start();
-	}
+        $this->externalQueue = new \pmmp\thread\ThreadSafeArray;
+        $this->internalQueue = new \pmmp\thread\ThreadSafeArray;
 
-	protected function addDependency(array &$loadPaths, \ReflectionClass $dep){
-		if($dep->getFileName() !== false){
-			$loadPaths[$dep->getName()] = $dep->getFileName();
-		}
+        if (\Phar::running(true) !== "") {
+            $this->mainPath = \Phar::running(true);
+        } else {
+            $this->mainPath = getcwd() . DIRECTORY_SEPARATOR;
+        }
+        $this->start(Thread::INHERIT_ALL);
+    }
 
-		if($dep->getParentClass() instanceof \ReflectionClass){
-			$this->addDependency($loadPaths, $dep->getParentClass());
-		}
+    protected function addDependency(array &$loadPaths, \ReflectionClass $dep)
+    {
+        if ($dep->getFileName() !== false) {
+            $loadPaths[$dep->getName()] = $dep->getFileName();
+        }
 
-		foreach($dep->getInterfaces() as $interface){
-			$this->addDependency($loadPaths, $interface);
-		}
-	}
+        if ($dep->getParentClass() instanceof \ReflectionClass) {
+            $this->addDependency($loadPaths, $dep->getParentClass());
+        }
 
-	public function isShutdown(){
-		return $this->shutdown === true;
-	}
+        foreach ($dep->getInterfaces() as $interface) {
+            $this->addDependency($loadPaths, $interface);
+        }
+    }
 
-	public function shutdown(){
-		$this->shutdown = true;
-	}
+    public function isShutdown()
+    {
+        return $this->shutdown === true;
+    }
 
-	public function getPort(){
-		return $this->port;
-	}
+    public function shutdown()
+    {
+        $this->shutdown = true;
+    }
 
-	public function getInterface(){
-		return $this->interface;
-	}
+    public function getPort()
+    {
+        return $this->port;
+    }
 
-	/**
-	 * @return \ThreadedLogger
-	 */
-	public function getLogger(){
-		return $this->logger;
-	}
+    public function getInterface()
+    {
+        return $this->interface;
+    }
 
-	/**
-	 * @return \Threaded
-	 */
-	public function getExternalQueue(){
-		return $this->externalQueue;
-	}
+    /**
+     * @return \ThreadedLogger
+     */
+    public function getLogger()
+    {
+        return $this->logger;
+    }
 
-	/**
-	 * @return \Threaded
-	 */
-	public function getInternalQueue(){
-		return $this->internalQueue;
-	}
+    /**
+     * @return \pmmp\thread\ThreadSafe
+     */
+    public function getExternalQueue()
+    {
+        return $this->externalQueue;
+    }
 
-	public function pushMainToThreadPacket($str){
-		$this->internalQueue[] = $str;
-	}
+    /**
+     * @return \pmmp\thread\ThreadSafe
+     */
+    public function getInternalQueue()
+    {
+        return $this->internalQueue;
+    }
 
-	public function readMainToThreadPacket(){
-		return $this->internalQueue->shift();
-	}
+    public function pushMainToThreadPacket($str)
+    {
+        $this->internalQueue[] = $str;
+    }
 
-	public function pushThreadToMainPacket($str){
-		$this->externalQueue[] = $str;
-	}
+    public function readMainToThreadPacket()
+    {
+        return $this->internalQueue->shift();
+    }
 
-	public function readThreadToMainPacket(){
-		return $this->externalQueue->shift();
-	}
+    public function pushThreadToMainPacket($str)
+    {
+        $this->externalQueue[] = $str;
+    }
 
-	public function shutdownHandler(){
-		if($this->shutdown !== true){
-			$this->getLogger()->emergency("RakLib crashed!");
-		}
-	}
+    public function readThreadToMainPacket()
+    {
+        return $this->externalQueue->shift();
+    }
 
-	public function errorHandler($errno, $errstr, $errfile, $errline, $context, $trace = null){
-		if(error_reporting() === 0){
-			return false;
-		}
-		$errorConversion = [
-			E_ERROR => "E_ERROR",
-			E_WARNING => "E_WARNING",
-			E_PARSE => "E_PARSE",
-			E_NOTICE => "E_NOTICE",
-			E_CORE_ERROR => "E_CORE_ERROR",
-			E_CORE_WARNING => "E_CORE_WARNING",
-			E_COMPILE_ERROR => "E_COMPILE_ERROR",
-			E_COMPILE_WARNING => "E_COMPILE_WARNING",
-			E_USER_ERROR => "E_USER_ERROR",
-			E_USER_WARNING => "E_USER_WARNING",
-			E_USER_NOTICE => "E_USER_NOTICE",
-			E_STRICT => "E_STRICT",
-			E_RECOVERABLE_ERROR => "E_RECOVERABLE_ERROR",
-			E_DEPRECATED => "E_DEPRECATED",
-			E_USER_DEPRECATED => "E_USER_DEPRECATED",
-		];
-		$errno = isset($errorConversion[$errno]) ? $errorConversion[$errno] : $errno;
-		if(($pos = strpos($errstr, "\n")) !== false){
-			$errstr = substr($errstr, 0, $pos);
-		}
+    public function shutdownHandler()
+    {
+        if ($this->shutdown !== true) {
+            $this->getLogger()->emergency("RakLib crashed!");
+        }
+    }
 
-		$errfile = $this->cleanPath($errfile);
+    public function errorHandler($errno, $errstr, $errfile, $errline, $trace = null)
+    {
+        if (error_reporting() === 0) {
+            return false;
+        }
+        $errorConversion = [
+            E_ERROR => "E_ERROR",
+            E_WARNING => "E_WARNING",
+            E_PARSE => "E_PARSE",
+            E_NOTICE => "E_NOTICE",
+            E_CORE_ERROR => "E_CORE_ERROR",
+            E_CORE_WARNING => "E_CORE_WARNING",
+            E_COMPILE_ERROR => "E_COMPILE_ERROR",
+            E_COMPILE_WARNING => "E_COMPILE_WARNING",
+            E_USER_ERROR => "E_USER_ERROR",
+            E_USER_WARNING => "E_USER_WARNING",
+            E_USER_NOTICE => "E_USER_NOTICE",
+            E_STRICT => "E_STRICT",
+            E_RECOVERABLE_ERROR => "E_RECOVERABLE_ERROR",
+            E_DEPRECATED => "E_DEPRECATED",
+            E_USER_DEPRECATED => "E_USER_DEPRECATED",
+        ];
+        $errno = isset($errorConversion[$errno]) ? $errorConversion[$errno] : $errno;
+        if (($pos = strpos($errstr, "\n")) !== false) {
+            $errstr = substr($errstr, 0, $pos);
+        }
 
-		$this->getLogger()->debug("An $errno error happened: \"$errstr\" in \"$errfile\" at line $errline");
+        $errfile = $this->cleanPath($errfile);
 
-		foreach(($trace = $this->getTrace($trace === null ? 3 : 0, $trace)) as $i => $line){
-			$this->getLogger()->debug($line);
-		}
+        $this->getLogger()->debug("An $errno error happened: \"$errstr\" in \"$errfile\" at line $errline");
 
-		return true;
-	}
+        foreach (($trace = $this->getTrace($trace === null ? 3 : 0, $trace)) as $i => $line) {
+            $this->getLogger()->debug($line);
+        }
 
-	public function getTrace($start = 1, $trace = null){
-		if($trace === null){
-			if(function_exists("xdebug_get_function_stack")){
-				$trace = array_reverse(xdebug_get_function_stack());
-			}else{
-				$e = new \Exception();
-				$trace = $e->getTrace();
-			}
-		}
+        return true;
+    }
 
-		$messages = [];
-		$j = 0;
-		for($i = (int) $start; isset($trace[$i]); ++$i, ++$j){
-			$params = "";
-			if(isset($trace[$i]["args"]) || isset($trace[$i]["params"])){
-				if(isset($trace[$i]["args"])){
-					$args = $trace[$i]["args"];
-				}else{
-					$args = $trace[$i]["params"];
-				}
-				foreach($args as $name => $value){
-					$params .= (is_object($value) ? get_class($value) . " " . (method_exists($value, "__toString") ? $value->__toString() : "object") : gettype($value) . " " . @strval($value)) . ", ";
-				}
-			}
-			$messages[] = "#$j " . (isset($trace[$i]["file"]) ? $this->cleanPath($trace[$i]["file"]) : "") . "(" . (isset($trace[$i]["line"]) ? $trace[$i]["line"] : "") . "): " . (isset($trace[$i]["class"]) ? $trace[$i]["class"] . (($trace[$i]["type"] === "dynamic" || $trace[$i]["type"] === "->") ? "->" : "::") : "") . $trace[$i]["function"] . "(" . substr($params, 0, -2) . ")";
-		}
+    public function getTrace($start = 1, $trace = null)
+    {
+        if ($trace === null) {
+            if (function_exists("xdebug_get_function_stack")) {
+                $trace = array_reverse(xdebug_get_function_stack());
+            } else {
+                $e = new \Exception();
+                $trace = $e->getTrace();
+            }
+        }
 
-		return $messages;
-	}
+        $messages = [];
+        $j = 0;
+        for ($i = (int) $start; isset($trace[$i]); ++$i, ++$j) {
+            $params = "";
+            if (isset($trace[$i]["args"]) || isset($trace[$i]["params"])) {
+                if (isset($trace[$i]["args"])) {
+                    $args = $trace[$i]["args"];
+                } else {
+                    $args = $trace[$i]["params"];
+                }
+                foreach ($args as $name => $value) {
+                    $params .= (is_object($value) ? get_class($value) . " " . (method_exists($value, "__toString") ? $value->__toString() : "object") : gettype($value) . " " . @strval($value)) . ", ";
+                }
+            }
+            $messages[] = "#$j " . (isset($trace[$i]["file"]) ? $this->cleanPath($trace[$i]["file"]) : "") . "(" . (isset($trace[$i]["line"]) ? $trace[$i]["line"] : "") . "): " . (isset($trace[$i]["class"]) ? $trace[$i]["class"] . (($trace[$i]["type"] === "dynamic" || $trace[$i]["type"] === "->") ? "->" : "::") : "") . $trace[$i]["function"] . "(" . substr($params, 0, -2) . ")";
+        }
 
-	public function cleanPath($path){
-		return rtrim(str_replace(["\\", ".php", "phar://", rtrim(str_replace(["\\", "phar://"], ["/", ""], $this->mainPath), "/")], ["/", "", "", ""], $path), "/");
-	}
+        return $messages;
+    }
 
-	public function run(){
-		try{
-			//Load removed dependencies, can't use require_once()
-			foreach($this->loadPaths as $name => $path){
-				if(!class_exists($name, false) && !interface_exists($name, false)){
-					require($path);
-				}
-			}
-			$this->loader->register(true);
+    public function cleanPath($path)
+    {
+        return rtrim(str_replace(["\\", ".php", "phar://", rtrim(str_replace(["\\", "phar://"], ["/", ""], $this->mainPath), "/")], ["/", "", "", ""], $path), "/");
+    }
 
-			gc_enable();
-			error_reporting(-1);
-			ini_set("display_errors", '1');
-			ini_set("display_startup_errors", '1');
+    public function run(): void
+    {
+        try {
+            //Load removed dependencies, can't use require_once()
+            foreach ($this->loadPaths as $name => $path) {
+                if (!class_exists($name, false) && !interface_exists($name, false)) {
+                    require($path);
+                }
+            }
+            $this->loader->register(true);
 
-			set_error_handler([$this, "errorHandler"], E_ALL);
-			register_shutdown_function([$this, "shutdownHandler"]);
+            gc_enable();
+            error_reporting(-1);
+            ini_set("display_errors", '1');
+            ini_set("display_startup_errors", '1');
 
-			$sessionManager = new SessionManager($this, new UDPServerSocket($this->getLogger(), $this->port, $this->interface));
+            set_error_handler([$this, "errorHandler"], E_ALL);
+            register_shutdown_function([$this, "shutdownHandler"]);
 
-			$sessionManager->registerPackets();
-			$sessionManager->initialize($this->mainPath);
-			$sessionManager->run();
-		}catch(\Throwable $e){
-			$this->logger->logException($e);
-		}
-	}
+            $sessionManager = new SessionManager($this, new UDPServerSocket($this->getLogger(), $this->port, $this->interface));
 
+            $sessionManager->registerPackets();
+            $sessionManager->initialize($this->mainPath);
+            $sessionManager->run();
+        } catch (\Throwable $e) {
+            $this->logger->logException($e);
+        }
+    }
 }

@@ -38,7 +38,7 @@ class SnowGolem extends Animal{
 		parent::initEntity();
 	}
 
-	public function getName() {
+	public function getName(): string {
 		return "Snow Golem";
 	}
 

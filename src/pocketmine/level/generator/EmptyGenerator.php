@@ -29,7 +29,7 @@ use pocketmine\level\format\FullChunk;
 use pocketmine\math\Vector3;
 use pocketmine\utils\Random;
 
-class Void extends Generator{
+class EmptyGenerator extends Generator{
 	/** @var ChunkManager */
 	private $level;
 	/** @var FullChunk */
@@ -45,7 +45,7 @@ class Void extends Generator{
 	}
 
 	public function getName(){
-		return "Void";
+		return "EmptyGenerator";
 	}
 
 	public function __construct(array $settings = []){

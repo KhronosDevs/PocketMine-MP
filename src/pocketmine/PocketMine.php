@@ -128,7 +128,7 @@ namespace pocketmine {
 
     gc_enable();
 
-    error_reporting(-1);
+    error_reporting(E_ALL & ~E_DEPRECATED);
 
     ini_set("allow_url_fopen", '1');
     ini_set("display_errors", '1');

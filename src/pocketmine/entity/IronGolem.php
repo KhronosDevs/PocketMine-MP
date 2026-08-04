@@ -40,7 +40,7 @@ class IronGolem extends Animal{
 		parent::initEntity();
 	}
 
-	public function getName() {
+	public function getName(): string {
 		return "Iron Golem";
 	}
 

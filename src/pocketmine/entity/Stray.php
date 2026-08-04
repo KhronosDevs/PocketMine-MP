@@ -33,7 +33,7 @@ class Stray extends Skeleton{
 
 	public $dropExp = [5, 5];
 
-	public function getName() : string{
+	public function getName(): string{
 		return "Stray";
 	}
 

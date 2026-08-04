@@ -35,7 +35,7 @@ class Enderman extends Monster{
 
 	public $dropExp = [5, 5];
 
-	public function getName() : string{
+	public function getName(): string{
 		return "Enderman";
 	}
 

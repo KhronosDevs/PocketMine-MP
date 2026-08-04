@@ -1,190 +1,205 @@
 <?php
 
-
-
-/*
- *
- *  ____            _        _   __  __ _                  __  __ ____
- * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
- * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
- * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * @author PocketMine Team
- * @link http://www.pocketmine.net/
- *
- *
-*/
-
 namespace pocketmine\scheduler;
 
+use pmmp\thread\Runnable;
 use pocketmine\Server;
 use function in_array;
 use function is_scalar;
 use function serialize;
 use function unserialize;
 
-/**
- * Class used to run async tasks in other threads.
- *
- * WARNING: Do not call PocketMine-MP API methods, or save objects from/on other Threads!!
- */
-abstract class AsyncTask extends \Threaded implements \Collectable{
+abstract class AsyncTask extends Runnable
+{
 
-	/** @var AsyncWorker $worker */
-	public $worker = null;
+    /**
+     * @var AsyncWorker|null
+     */
+    public $worker = null;
 
-	private $result = null;
-	private $serialized = false;
-	private $cancelRun = false;
-	/** @var int */
-	private $taskId = null;
+    protected $result = null;
+    protected $serialized = false;
+    protected $cancelRun = false;
 
-	private $crashed = false;
+    /**
+     * @var int|null
+     */
+    protected $taskId = null;
 
-	private $isGarbage = false;
+    protected $crashed = false;
+    protected $isGarbage = false;
+    protected $isFinished = false;
 
-	private $isFinished = false;
 
-	public function isGarbage() : bool{
-		return $this->isGarbage;
-	}
+    public function isGarbage(): bool
+    {
+        return $this->isGarbage;
+    }
 
-	public function setGarbage(){
-		$this->isGarbage = true;
-	}
+    public function setGarbage()
+    {
+        $this->isGarbage = true;
+    }
 
-	public function isFinished() : bool{
-		return $this->isFinished;
-	}
+    public function isFinished(): bool
+    {
+        return $this->isFinished;
+    }
 
-	public function run(){
-		$this->result = null;
-		$this->isGarbage = false;
 
-		if($this->cancelRun !== true){
-			try{
-				$this->onRun();
-			}catch(\Throwable $e){
-				$this->crashed = true;
-				$this->worker->handleException($e);
-			}
-		}
+    public function run(): void
+    {
+        $this->result = null;
+        $this->isGarbage = false;
 
-		$this->isFinished = true;
-		//$this->setGarbage();
+        if (!$this->cancelRun) {
+            try {
+                $this->onRun();
+            } catch (\Throwable $e) {
+                $this->crashed = true;
 
-		$this->worker->getNotifier()->wakeupSleeper();
-	}
+                if ($this->worker !== null && method_exists($this->worker, "handleException")) {
+                    $this->worker->handleException($e);
+                } else {
+                    echo "[AsyncTask] " . $e->getMessage() . PHP_EOL;
+                }
+            }
+        }
 
-	public function isCrashed(){
-		return $this->crashed;
-	}
+        $this->isFinished = true;
 
-	/**
-	 * @return mixed
-	 */
-	public function getResult(){
-		return $this->serialized ? unserialize($this->result) : $this->result;
-	}
+        $this->worker->getNotifier()->wakeupSleeper();
+    }
 
-	public function cancelRun(){
-		$this->cancelRun = true;
-	}
 
-	public function hasCancelledRun(){
-		return $this->cancelRun === true;
-	}
+    public function isCrashed(): bool
+    {
+        return $this->crashed;
+    }
 
-	/**
-	 * @return bool
-	 */
-	public function hasResult(){
-		return $this->result !== null;
-	}
 
-	/**
-	 * @param mixed $result
-	 */
-	public function setResult($result, bool $serialize = true) {
-		if (!$serialize) {
-			$this->result = $result;
-			$this->serialized = false;
-			return;
-		}
+    public function getResult()
+    {
+        return $this->serialized ? unserialize($this->result) : $this->result;
+    }
 
-		if (is_scalar($result) || $result === null) {
-			$this->result = $result;
-			$this->serialized = false;
-			return;
-		}
 
-		$this->result = serialize($result);
-		$this->serialized = true;
-	}
+    public function cancelRun()
+    {
+        $this->cancelRun = true;
+    }
 
-	public function setTaskId($taskId){
-		$this->taskId = $taskId;
-	}
 
-	public function getTaskId(){
-		return $this->taskId;
-	}
+    public function hasCancelledRun(): bool
+    {
+        return $this->cancelRun === true;
+    }
 
-	/**
-	 * Gets something into the local thread store.
-	 * You have to initialize this in some way from the task on run
-	 *
-	 * @param string $identifier
-	 * @return mixed
-	 */
-	public function getFromThreadStore($identifier){
-		global $store;
-		return $this->isGarbage() ? null : $store[$identifier];
-	}
 
-	/**
-	 * Saves something into the local thread store.
-	 * This might get deleted at any moment.
-	 *
-	 * @param string $identifier
-	 * @param mixed  $value
-	 */
-	public function saveToThreadStore($identifier, $value){
-		global $store;
-		if(!$this->isGarbage()){
-			$store[$identifier] = $value;
-		}
-	}
+    public function hasResult(): bool
+    {
+        return $this->result !== null;
+    }
 
-	/**
-	 * Actions to execute when run
-	 *
-	 * @return void
-	 */
-	public abstract function onRun();
 
-	/**
-	 * Actions to execute when completed (on main thread)
-	 * Implement this if you want to handle the data in your AsyncTask after it has been processed
-	 *
-	 * @return void
-	 */
-	public function onCompletion(Server $server){
+    public function setResult($result, bool $serialize = true)
+    {
 
-	}
+        if (!$serialize) {
+            $this->result = $result;
+            $this->serialized = false;
+            return;
+        }
 
-	public function cleanObject(){
-		foreach($this as $p => $v){
-			if(!($v instanceof \Threaded) && !in_array($p, ["isFinished", "isGarbage", "cancelRun"], true)){
-				$this->{$p} = null;
-			}
-		}
-	}
 
+        if (is_scalar($result) || $result === null) {
+            $this->result = $result;
+            $this->serialized = false;
+            return;
+        }
+
+
+        $this->result = serialize($result);
+        $this->serialized = true;
+    }
+
+
+    public function setTaskId($taskId)
+    {
+        $this->taskId = $taskId;
+    }
+
+
+    public function getTaskId()
+    {
+        return $this->taskId;
+    }
+
+
+    public function getFromThreadStore($identifier)
+    {
+
+        global $store;
+
+        if ($this->isGarbage()) {
+            return null;
+        }
+
+        return $store[$identifier] ?? null;
+    }
+
+
+    public function saveToThreadStore($identifier, $value)
+    {
+
+        global $store;
+
+        if (!$this->isGarbage()) {
+            $store[$identifier] = $value;
+        }
+    }
+
+
+    /**
+     * Ejecutado en el thread secundario.
+     */
+    abstract public function onRun();
+
+
+    /**
+     * Ejecutado en el hilo principal.
+     */
+    public function onCompletion(Server $server) {}
+
+
+
+    /**
+     * Limpieza segura para PHP 8.
+     */
+    public function cleanObject()
+    {
+
+        foreach (get_object_vars($this) as $p => $v) {
+
+            if (
+                !($v instanceof \pmmp\thread\ThreadSafe) &&
+                !in_array(
+                    $p,
+                    [
+                        "isFinished",
+                        "isGarbage",
+                        "cancelRun"
+                    ],
+                    true
+                )
+            ) {
+
+                try {
+                    $this->{$p} = null;
+                } catch (\Throwable $e) {
+                    // Ignorar propiedades internas
+                }
+            }
+        }
+    }
 }

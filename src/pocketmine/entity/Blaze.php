@@ -39,7 +39,7 @@ class Blaze extends Monster{
 
 	public $dropExp = [10, 10];
 
-	public function getName() : string{
+	public function getName(): string{
 		return "Blaze";
 	}
 

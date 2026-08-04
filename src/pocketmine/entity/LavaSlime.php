@@ -33,7 +33,7 @@ class LavaSlime extends Living{
 
 	public $dropExp = [1, 4];
 
-	public function getName() : string{
+	public function getName(): string{
 		return "LavaSlime";
 	}
 

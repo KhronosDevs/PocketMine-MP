@@ -17,159 +17,172 @@
  * GNU General Public License for more details.
 */
 
-class BaseClassLoader extends \Threaded implements ClassLoader{
+use pmmp\thread\ThreadSafe;
+use pmmp\thread\ThreadSafeArray;
 
-	/** @var \ClassLoader */
-	private $parent;
-	/** @var string[] */
-	private $lookup;
-	/** @var string[] */
-	private $classes;
+class BaseClassLoader extends ThreadSafe implements ClassLoader
+{
 
-	/**
-	 * @param ClassLoader $parent
-	 */
-	public function __construct(ClassLoader $parent = null){
-		$this->parent = $parent;
-		$this->lookup = new \Threaded;
-		$this->classes = new \Threaded;
-	}
+    /** @var \ClassLoader */
+    private $parent;
+    /** @var string[] */
+    private $lookup;
+    /** @var string[] */
+    private $classes;
 
-	/**
-	 * Adds a path to the lookup list
-	 *
-	 * @param string $path
-	 * @param bool   $prepend
-	 */
-	public function addPath($path, $prepend = false){
+    /**
+     * @param ClassLoader $parent
+     */
+    public function __construct(ClassLoader $parent = null)
+    {
+        $this->parent = $parent;
+        $this->lookup = new ThreadSafeArray;
+        $this->classes = new ThreadSafeArray;
+    }
 
-		foreach($this->lookup as $p){
-			if($p === $path){
-				return;
-			}
-		}
+    /**
+     * Adds a path to the lookup list
+     *
+     * @param string $path
+     * @param bool   $prepend
+     */
+    public function addPath($path, $prepend = false)
+    {
 
-		if($prepend){
-			$this->synchronized(function($path){
-				$entries = $this->getAndRemoveLookupEntries();
-				$this->lookup[] = $path;
-				foreach($entries as $entry){
-					$this->lookup[] = $entry;
-				}
-			}, $path);
-		}else{
-			$this->lookup[] = $path;
-		}
-	}
+        foreach ($this->lookup as $p) {
+            if ($p === $path) {
+                return;
+            }
+        }
 
-	protected function getAndRemoveLookupEntries(){
-		$entries = [];
-		while($this->count() > 0){
-			$entries[] = $this->shift();
-		}
-		return $entries;
-	}
+        if ($prepend) {
+            $this->synchronized(function ($path) {
+                $entries = $this->getAndRemoveLookupEntries();
+                $this->lookup[] = $path;
+                foreach ($entries as $entry) {
+                    $this->lookup[] = $entry;
+                }
+            }, $path);
+        } else {
+            $this->lookup[] = $path;
+        }
+    }
 
-	/**
-	 * Removes a path from the lookup list
-	 *
-	 * @param $path
-	 */
-	public function removePath($path){
-		foreach($this->lookup as $i => $p){
-			if($p === $path){
-				unset($this->lookup[$i]);
-			}
-		}
-	}
+    protected function getAndRemoveLookupEntries()
+    {
+        $entries = [];
+        while ($this->count() > 0) {
+            $entries[] = $this->shift();
+        }
+        return $entries;
+    }
 
-	/**
-	 * Returns an array of the classes loaded
-	 *
-	 * @return string[]
-	 */
-	public function getClasses(){
-		$classes = [];
-		foreach($this->classes as $class){
-			$classes[] = $class;
-		}
-		return $classes;
-	}
+    /**
+     * Removes a path from the lookup list
+     *
+     * @param $path
+     */
+    public function removePath($path)
+    {
+        foreach ($this->lookup as $i => $p) {
+            if ($p === $path) {
+                unset($this->lookup[$i]);
+            }
+        }
+    }
 
-	/**
-	 * Returns the parent ClassLoader, if any
-	 *
-	 * @return ClassLoader
-	 */
-	public function getParent(){
-		return $this->parent;
-	}
+    /**
+     * Returns an array of the classes loaded
+     *
+     * @return string[]
+     */
+    public function getClasses()
+    {
+        $classes = [];
+        foreach ($this->classes as $class) {
+            $classes[] = $class;
+        }
+        return $classes;
+    }
 
-	/**
-	 * Attaches the ClassLoader to the PHP runtime
-	 *
-	 * @param bool $prepend
-	 *
-	 * @return bool
-	 */
-	public function register($prepend = false){
-		spl_autoload_register([$this, "loadClass"], true, $prepend);
-	}
+    /**
+     * Returns the parent ClassLoader, if any
+     *
+     * @return ClassLoader
+     */
+    public function getParent()
+    {
+        return $this->parent;
+    }
 
-	/**
-	 * Called when there is a class to load
-	 *
-	 * @param string $name
-	 *
-	 * @return bool
-	 */
-	public function loadClass($name){
-		$path = $this->findClass($name);
-		if($path !== null){
-			include($path);
-			if(!class_exists($name, false) && !interface_exists($name, false) && !trait_exists($name, false)){
-				if($this->getParent() === null){
-					throw new ClassNotFoundException("Class $name not found");
-				}
-				return false;
-			}
+    /**
+     * Attaches the ClassLoader to the PHP runtime
+     *
+     * @param bool $prepend
+     *
+     * @return bool
+     */
+    public function register($prepend = false)
+    {
+        spl_autoload_register([$this, "loadClass"], true, $prepend);
+    }
 
-			if(method_exists($name, "onClassLoaded") && (new ReflectionClass($name))->getMethod("onClassLoaded")->isStatic()){
-				$name::onClassLoaded();
-			}
+    /**
+     * Called when there is a class to load
+     *
+     * @param string $name
+     *
+     * @return bool
+     */
+    public function loadClass($name)
+    {
+        $path = $this->findClass($name);
+        if ($path !== null) {
+            include($path);
+            if (!class_exists($name, false) && !interface_exists($name, false) && !trait_exists($name, false)) {
+                if ($this->getParent() === null) {
+                    throw new ClassNotFoundException("Class $name not found");
+                }
+                return false;
+            }
 
-			$this->classes[] = $name;
+            if (method_exists($name, "onClassLoaded") && (new ReflectionClass($name))->getMethod("onClassLoaded")->isStatic()) {
+                $name::onClassLoaded();
+            }
 
-			return true;
-		}elseif($this->getParent() === null){
-			throw new ClassNotFoundException("Class $name not found");
-		}
+            $this->classes[] = $name;
 
-		return false;
-	}
+            return true;
+        } elseif ($this->getParent() === null) {
+            throw new ClassNotFoundException("Class $name not found");
+        }
 
-	/**
-	 * Returns the path for the class, if any
-	 *
-	 * @param string $name
-	 *
-	 * @return string|null
-	 */
-	public function findClass($name){
-		$components = explode("\\", $name);
+        return false;
+    }
 
-		$baseName = implode(DIRECTORY_SEPARATOR, $components);
+    /**
+     * Returns the path for the class, if any
+     *
+     * @param string $name
+     *
+     * @return string|null
+     */
+    public function findClass($name)
+    {
+        $components = explode("\\", $name);
 
-		foreach($this->lookup as $path){
-			if(PHP_INT_SIZE === 8 && file_exists($path . DIRECTORY_SEPARATOR . $baseName . "__64bit.php")){
-				return $path . DIRECTORY_SEPARATOR . $baseName . "__64bit.php";
-			}elseif(PHP_INT_SIZE === 4 && file_exists($path . DIRECTORY_SEPARATOR . $baseName . "__32bit.php")){
-				return $path . DIRECTORY_SEPARATOR . $baseName . "__32bit.php";
-			}elseif(file_exists($path . DIRECTORY_SEPARATOR . $baseName . ".php")){
-				return $path . DIRECTORY_SEPARATOR . $baseName . ".php";
-			}
-		}
+        $baseName = implode(DIRECTORY_SEPARATOR, $components);
 
-		return null;
-	}
+        foreach ($this->lookup as $path) {
+            if (PHP_INT_SIZE === 8 && file_exists($path . DIRECTORY_SEPARATOR . $baseName . "__64bit.php")) {
+                return $path . DIRECTORY_SEPARATOR . $baseName . "__64bit.php";
+            } elseif (PHP_INT_SIZE === 4 && file_exists($path . DIRECTORY_SEPARATOR . $baseName . "__32bit.php")) {
+                return $path . DIRECTORY_SEPARATOR . $baseName . "__32bit.php";
+            } elseif (file_exists($path . DIRECTORY_SEPARATOR . $baseName . ".php")) {
+                return $path . DIRECTORY_SEPARATOR . $baseName . ".php";
+            }
+        }
+
+        return null;
+    }
 }

@@ -38,7 +38,7 @@ class Chicken extends Animal{
 
 	public $dropExp = [1, 3];
 
-	public function getName() : string{
+	public function getName(): string{
 		return "Chicken";
 	}
 

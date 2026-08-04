@@ -83,7 +83,7 @@ abstract class Living extends Entity implements Damageable{
 		$this->namedtag->Health = new ShortTag("Health", $this->getHealth());
 	}
 
-	public abstract function getName();
+	public abstract function getName(): string;
 
 	public function hasLineOfSight(Entity $entity){
 		//TODO: head height

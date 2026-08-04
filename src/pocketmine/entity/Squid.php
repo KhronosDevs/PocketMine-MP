@@ -58,7 +58,7 @@ class Squid extends WaterAnimal implements Ageable{
 		$this->setMaxHealth(5);
 	}
 
-	public function getName() : string{
+	public function getName(): string{
 		return "Squid";
 	}
 

@@ -58,7 +58,7 @@ class Painting extends Item{
 				["Match", 2, 2],
 				["Bust", 2, 2],
 				["Stage", 2, 2],
-				["Void", 2, 2],
+				["EmptyGenerator", 2, 2],
 				["SkullAndRoses", 2, 2],
 				//array("Wither", 2, 2),
 				["Fighters", 4, 2],
