@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use function array_filter;
@@ -29,7 +31,7 @@ class AttributeMap implements \ArrayAccess{
 	/** @var Attribute[] */
 	private $attributes = [];
 
-	public function addAttribute(Attribute $attribute){
+	public function addAttribute(Attribute $attribute) : void{
 		$this->attributes[$attribute->getId()] = $attribute;
 	}
 

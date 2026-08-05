@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\network\protocol\AddEntityPacket;
@@ -37,7 +39,7 @@ class MinecartHopper extends Minecart{
 		return self::TYPE_HOPPER;
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = MinecartHopper::NETWORK_ID;

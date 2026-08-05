@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\network\protocol\AddEntityPacket;
@@ -29,18 +31,18 @@ use pocketmine\Player;
 class Witch extends Monster{
 	const NETWORK_ID = 45;
 
-	public $dropExp = [5, 5];
+	public array $dropExp = [5, 5];
 
 	public function getName(): string{
 		return "Witch";
 	}
 
-	public function initEntity(){
+	public function initEntity() : void{
 		$this->setMaxHealth(26);
 		parent::initEntity();
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = Witch::NETWORK_ID;
@@ -57,7 +59,7 @@ class Witch extends Monster{
 		parent::spawnTo($player);
 	}
 
-	public function getDrops(){
+	public function getDrops() : array{
 		//TODO
 		return [];
 	}

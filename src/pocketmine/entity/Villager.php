@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\level\format\FullChunk;
@@ -62,14 +64,14 @@ class Villager extends Creature implements NPC, Ageable{
 		$this->setDataProperty(self::DATA_PROFESSION_ID, self::DATA_TYPE_BYTE, $this->getProfession());
 	}
 
-	protected function initEntity(){
+	protected function initEntity() : void{
 		parent::initEntity();
 		if(!isset($this->namedtag->Profession)){
 			$this->setProfession(self::PROFESSION_FARMER);
 		}
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = Villager::NETWORK_ID;
@@ -90,7 +92,7 @@ class Villager extends Creature implements NPC, Ageable{
 	/**
 	 * Sets the villager profession
 	 */
-	public function setProfession(int $profession){
+	public function setProfession(int $profession) : void{
 		$this->namedtag->Profession = new ByteTag("Profession", $profession);
 	}
 
@@ -99,7 +101,7 @@ class Villager extends Creature implements NPC, Ageable{
 		return min(4, max(0, $pro));
 	}
 
-	public function isBaby(){
+	public function isBaby() : bool{
 		return $this->getDataFlag(self::DATA_AGEABLE_FLAGS, self::DATA_FLAG_BABY);
 	}
 }

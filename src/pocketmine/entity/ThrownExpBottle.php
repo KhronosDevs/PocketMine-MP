@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\level\format\FullChunk;
@@ -44,7 +46,7 @@ class ThrownExpBottle extends Projectile{
 		parent::__construct($chunk, $nbt, $shootingEntity);
 	}
 
-	public function onUpdate($currentTick){
+	public function onUpdate($currentTick) : bool{
 		if($this->closed){
 			return false;
 		}
@@ -72,7 +74,7 @@ class ThrownExpBottle extends Projectile{
 		return $hasUpdate;
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->type = ThrownExpBottle::NETWORK_ID;
 		$pk->eid = $this->getId();

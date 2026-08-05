@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityDamageByEntityEvent;
@@ -37,13 +39,13 @@ class Blaze extends Monster{
 	public $length = 0.9;
 	public $height = 1.8;
 
-	public $dropExp = [10, 10];
+	public array $dropExp = [10, 10];
 
 	public function getName(): string{
 		return "Blaze";
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = self::NETWORK_ID;
@@ -60,7 +62,7 @@ class Blaze extends Monster{
 		parent::spawnTo($player);
 	}
 
-	public function getDrops(){
+	public function getDrops() : array{
 		$cause = $this->lastDamageCause;
 		//Only drop when kill by player or dog(No add now.)
 		if($cause instanceof EntityDamageByEntityEvent && $cause->getDamager() instanceof Player){

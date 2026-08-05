@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityDamageEvent;
@@ -78,7 +80,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 	public $width = 0.6;
 	public $length = 0.6;
 	public $height = 1.8;
-	public $eyeHeight = 1.62;
+	public ?float $eyeHeight = 1.62;
 
 	protected $skinId;
 	protected $skin;
@@ -89,25 +91,25 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 	protected $xpSeed;
 	protected $xpCooldown = 0;
 
-	public function getSkinData(){
+	public function getSkinData() : ?string{
 		return $this->skin;
 	}
 
-	public function getSkinId(){
+	public function getSkinId() : ?string{
 		return $this->skinId;
 	}
 
 	/**
 	 * @return UUID|null
 	 */
-	public function getUniqueId(){
+	public function getUniqueId() : ?UUID{
 		return $this->uuid;
 	}
 
 	/**
 	 * @return string
 	 */
-	public function getRawUniqueId(){
+	public function getRawUniqueId() : ?string{
 		return $this->rawUUID;
 	}
 
@@ -115,7 +117,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 	 * @param string $str
 	 * @param string $skinId
 	 */
-	public function setSkin($str, $skinId){
+	public function setSkin(string $str, string $skinId) : void{
 		$this->skin = $str;
 		$this->skinId = $skinId;
 	}
@@ -401,15 +403,15 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 	/**
 	 * @return PlayerInventory
 	 */
-	public function getInventory(){
+	public function getInventory() : PlayerInventory{
 		return $this->inventory;
 	}
 
-	public function getFloatingInventory(){
+	public function getFloatingInventory() : FloatingInventory{
 		return $this->floatingInventory;
 	}
 
-	public function getTransactionQueue(){
+	public function getTransactionQueue() : SimpleTransactionQueue{
 		//Is creating the transaction queue ondemand a good idea? I think only if it's destroyed afterwards. hmm...
 		if($this->transactionQueue === null){
 			//Potential for crashes here if a plugin attempts to use this, say for an NPC plugin or something...
@@ -418,7 +420,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 		return $this->transactionQueue;
 	}
 
-	protected function initEntity(){
+	protected function initEntity() : void{
 
 		$this->setDataFlag(self::DATA_PLAYER_FLAGS, self::DATA_PLAYER_FLAG_SLEEP, false);
 		$this->setDataProperty(self::DATA_PLAYER_BED_POSITION, self::DATA_TYPE_POS, [0, 0, 0]);
@@ -498,7 +500,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 		$this->attributeMap->getAttribute(Attribute::ABSORPTION)->setValue($absorption);
 	}
 
-	protected function addAttributes(){
+	protected function addAttributes() : void{
 		parent::addAttributes();
 
 		$this->attributeMap->addAttribute(Attribute::getAttribute(Attribute::SATURATION));
@@ -511,7 +513,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 		$this->attributeMap->addAttribute(Attribute::getAttribute(Attribute::ABSORPTION));
 	}
 
-	public function entityBaseTick($tickDiff = 1, $EnchantL = 0){
+	public function entityBaseTick($tickDiff = 1, $EnchantL = 0) : bool{
 		if($this->getInventory() instanceof PlayerInventory){
 			$EnchantL = $this->getInventory()->getHelmet()->getEnchantmentLevel(Enchantment::TYPE_WATER_BREATHING);
 		}
@@ -559,7 +561,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 		return $this->getNameTag();
 	}
 
-	public function getDrops(){
+	public function getDrops() : array{
 		$drops = [];
 		if($this->inventory !== null){
 			foreach($this->inventory->getContents() as $item){
@@ -570,7 +572,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 		return $drops;
 	}
 
-	public function saveNBT(){
+	public function saveNBT() : void{
 		parent::saveNBT();
 		$this->namedtag->Inventory = new ListTag("Inventory", []);
 		$this->namedtag->Inventory->setTagType(NBT::TAG_Compound);
@@ -622,7 +624,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 		$this->namedtag->foodTickTimer = new IntTag("foodTickTimer", $this->foodTickTimer);
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		if($player !== $this && !isset($this->hasSpawned[$player->getLoaderId()])){
 			$this->hasSpawned[$player->getLoaderId()] = $player;
 
@@ -660,7 +662,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 		}
 	}
 
-	public function despawnFrom(Player $player){
+	public function despawnFrom(Player $player) : void{
 		if(isset($this->hasSpawned[$player->getLoaderId()])){
 
 			$pk = new RemoveEntityPacket();
@@ -670,7 +672,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 		}
 	}
 
-	public function close(){
+	public function close() : void{
 		if(!$this->closed){
 			if($this->getFloatingInventory() instanceof FloatingInventory){
 				foreach($this->getFloatingInventory()->getContents() as $craftingItem){

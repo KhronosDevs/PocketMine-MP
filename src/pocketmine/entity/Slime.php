@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityDamageByEntityEvent;
@@ -38,13 +40,13 @@ class Slime extends Living{
 	public $length = 0.9;
 	public $height = 5;
 
-	public $dropExp = [1, 4];
+	public array $dropExp = [1, 4];
 
 	public function getName(): string{
 		return "Slime";
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = Slime::NETWORK_ID;
@@ -61,7 +63,7 @@ class Slime extends Living{
 		parent::spawnTo($player);
 	}
 
-	public function getDrops(){
+	public function getDrops() : array{
 		$drops = [ItemItem::get(ItemItem::SLIMEBALL, 0, 1)];
 		if ($this->lastDamageCause instanceof EntityDamageByEntityEvent && $this->lastDamageCause->getEntity() instanceof Player) {
 			if (mt_rand(0, 199) < 5) {

@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityDamageEvent;
@@ -44,9 +46,9 @@ class PrimedTNT extends Entity implements Explosive{
 	protected $gravity = 0.04;
 	protected $drag = 0.02;
 
-	protected $fuse;
+	protected int $fuse;
 
-	public $canCollide = false;
+	public bool $canCollide = false;
 
 	private $dropItem = true;
 
@@ -61,7 +63,7 @@ class PrimedTNT extends Entity implements Explosive{
 		}
 	}
 
-	protected function initEntity(){
+	protected function initEntity() : void{
 		parent::initEntity();
 
 		if(isset($this->namedtag->Fuse)){
@@ -71,16 +73,16 @@ class PrimedTNT extends Entity implements Explosive{
 		}
 	}
 
-	public function canCollideWith(Entity $entity){
+	public function canCollideWith(Entity $entity) : bool{
 		return false;
 	}
 
-	public function saveNBT(){
+	public function saveNBT() : void{
 		parent::saveNBT();
 		$this->namedtag->Fuse = new ByteTag("Fuse", $this->fuse);
 	}
 
-	public function onUpdate($currentTick){
+	public function onUpdate($currentTick) : bool{
 
 		if($this->closed){
 			return false;
@@ -128,7 +130,7 @@ class PrimedTNT extends Entity implements Explosive{
 		return $hasUpdate || $this->fuse >= 0 || abs($this->motionX) > 0.00001 || abs($this->motionY) > 0.00001 || abs($this->motionZ) > 0.00001;
 	}
 
-	public function explode(){
+	public function explode() : void{
 		$this->server->getPluginManager()->callEvent($ev = new ExplosionPrimeEvent($this, 4, $this->dropItem));
 
 		if(!$ev->isCancelled()){
@@ -140,7 +142,7 @@ class PrimedTNT extends Entity implements Explosive{
 		}
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->type = PrimedTNT::NETWORK_ID;
 		$pk->eid = $this->getId();

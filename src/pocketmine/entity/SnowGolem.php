@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\network\protocol\AddEntityPacket;
@@ -33,7 +35,7 @@ class SnowGolem extends Animal{
 	public $length = 0.9;
 	public $height = 1.8;
 
-	public function initEntity(){
+	public function initEntity() : void{
 		$this->setMaxHealth(4);
 		parent::initEntity();
 	}
@@ -42,7 +44,7 @@ class SnowGolem extends Animal{
 		return "Snow Golem";
 	}
 
-	public function spawnTo(Player $player) {
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = self::NETWORK_ID;

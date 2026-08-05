@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\block\Block;
@@ -61,7 +63,7 @@ class Minecart extends Vehicle{
 	private $moveVector = [];
 	private $requestedPosition = null;
 
-	public function initEntity(){
+	public function initEntity() : void{
 		$this->setMaxHealth(1);
 		$this->setHealth($this->getMaxHealth());
 		$this->moveVector[Entity::NORTH] = new Vector3(-1, 0, 0);
@@ -79,7 +81,7 @@ class Minecart extends Vehicle{
 		return self::TYPE_NORMAL;
 	}
 
-	public function onUpdate($currentTick){
+	public function onUpdate($currentTick) : bool{
 		if($this->closed !== false){
 			return false;
 		}
@@ -428,7 +430,7 @@ class Minecart extends Vehicle{
 	/**
 	 * @return Rail
 	 */
-	public function getNearestRail(){
+	public function getNearestRail() : ?Rail{
 		$minX = Math::floorFloat($this->boundingBox->minX);
 		$minY = Math::floorFloat($this->boundingBox->minY);
 		$minZ = Math::floorFloat($this->boundingBox->minZ);
@@ -459,7 +461,7 @@ class Minecart extends Vehicle{
 		return $nearestRail;
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = Minecart::NETWORK_ID;
@@ -490,7 +492,7 @@ class Minecart extends Vehicle{
 		}
 	}
 
-	public function getSaveId(){
+	public function getSaveId() : string{
 		$class = new \ReflectionClass(static::class);
 		return $class->getShortName();
 	}*/

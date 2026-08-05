@@ -32,7 +32,6 @@ use pocketmine\event\entity\EntityDrinkPotionEvent;
 use pocketmine\network\protocol\EntityEventPacket;
 use pocketmine\Player;
 use pocketmine\Server;
-use pocketmine\utils\Color;
 use function count;
 
 class Potion extends Item{
@@ -135,7 +134,7 @@ class Potion extends Item{
 		parent::__construct(self::POTION, $meta, $count, self::getNameByMeta($meta ?? 0));
 	}
 
-	public static function getColor(int $meta) : Color{
+	public static function getColor(int $meta) : array{
 		return Effect::getEffect(self::getEffectId($meta))->getColor();
 	}
 

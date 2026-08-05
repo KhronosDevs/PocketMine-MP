@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\item\Potion;
@@ -58,7 +60,7 @@ class ThrownPotion extends Projectile{
 		return (int) $this->namedtag["PotionId"];
 	}
 
-	public function kill(){
+	public function kill() : void{
 		$color = Potion::getColor($this->getPotionId());
 		$this->getLevel()->addParticle(new SpellParticle($this, $color[0], $color[1], $color[2]));
 		$players = $this->getViewers();
@@ -73,7 +75,7 @@ class ThrownPotion extends Projectile{
 		parent::kill();
 	}
 
-	public function onUpdate($currentTick){
+	public function onUpdate($currentTick) : bool{
 		if($this->closed){
 			return false;
 		}
@@ -100,7 +102,7 @@ class ThrownPotion extends Projectile{
 		return $hasUpdate;
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->type = ThrownPotion::NETWORK_ID;
 		$pk->eid = $this->getId();

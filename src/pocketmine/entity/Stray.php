@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\item\Item as ItemItem;
@@ -31,13 +33,13 @@ use pocketmine\Player;
 class Stray extends Skeleton{
 	const NETWORK_ID = 46;
 
-	public $dropExp = [5, 5];
+	public array $dropExp = [5, 5];
 
 	public function getName(): string{
 		return "Stray";
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = Stray::NETWORK_ID;

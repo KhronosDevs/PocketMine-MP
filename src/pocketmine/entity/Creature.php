@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityDamageEvent;
@@ -35,7 +37,7 @@ use function rad2deg;
 abstract class Creature extends Living{
 	public $attackingTick = 0;
 
-	public function onUpdate($tick){
+	public function onUpdate($tick) : bool{
 		if(!$this instanceof Human){
 			if($this->attackingTick > 0){
 				$this->attackingTick--;
@@ -74,7 +76,7 @@ abstract class Creature extends Living{
 		return parent::onUpdate($tick);
 	}
 
-	public function willMove($distance = 36){
+	public function willMove($distance = 36) : bool{
 		foreach($this->getViewers() as $viewer){
 			if($this->distance($viewer->getLocation()) <= $distance) return true;
 		}
@@ -210,7 +212,7 @@ abstract class Creature extends Living{
 		return false;
 	}
 
-	public function whatBlock(Level $level, $v3){  //boybook的y轴判断法 核心 什么方块？
+	public function whatBlock(Level $level, $v3) : string{  //boybook的y轴判断法 核心 什么方块？
 		$id = $level->getBlockIdAt($v3->x, $v3->y, $v3->z);
 		$damage = $level->getBlockDataAt($v3->x, $v3->y, $v3->z);
 		switch($id){
@@ -292,7 +294,7 @@ abstract class Creature extends Living{
 	 * @return float|int
 	 * 获取yaw角度
 	 */
-	public function getMyYaw($mx, $mz){  //根据motion计算转向角度
+	public function getMyYaw($mx, $mz) : int|float{  //根据motion计算转向角度
 		//转向计算
 		if($mz == 0){  //斜率不存在
 			if($mx < 0){
@@ -326,7 +328,7 @@ abstract class Creature extends Living{
 	 * @return float|int
 	 * 获取pitch角度
 	 */
-	public function getMyPitch(Vector3 $from, Vector3 $to){
+	public function getMyPitch(Vector3 $from, Vector3 $to) : int|float{
 		$distance = $from->distance($to);
 		$height = $to->y - $from->y;
 		if($height > 0){

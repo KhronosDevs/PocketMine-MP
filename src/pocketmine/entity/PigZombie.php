@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityDamageByEntityEvent;
@@ -41,13 +43,13 @@ class PigZombie extends Monster{
 	public $drag = 0.2;
 	public $gravity = 0.3;
 
-	public $dropExp = [5, 5];
+	public array $dropExp = [5, 5];
 
 	public function getName(): string{
 		return "PigZombie";
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = PigZombie::NETWORK_ID;
@@ -73,7 +75,7 @@ class PigZombie extends Monster{
 		$player->dataPacket($pk);
 	}
 
-	public function getDrops(){
+	public function getDrops() : array{
 		$cause = $this->lastDamageCause;
 		$drops = [];
 		if($cause instanceof EntityDamageByEntityEvent && $cause->getDamager() instanceof Player){

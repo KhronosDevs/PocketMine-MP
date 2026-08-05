@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityDamageByEntityEvent;
@@ -36,13 +38,13 @@ class Chicken extends Animal{
 	public $length = 0.6;
 	public $height = 1.8;
 
-	public $dropExp = [1, 3];
+	public array $dropExp = [1, 3];
 
 	public function getName(): string{
 		return "Chicken";
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = Chicken::NETWORK_ID;
@@ -59,7 +61,7 @@ class Chicken extends Animal{
 		parent::spawnTo($player);
 	}
 
-	public function getDrops(){
+	public function getDrops() : array{
 		$drops = [];
 		if ($this->lastDamageCause instanceof EntityDamageByEntityEvent && $this->lastDamageCause->getEntity() instanceof Player) {
 

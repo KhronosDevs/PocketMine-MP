@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityDamageByEntityEvent;
@@ -53,9 +55,9 @@ class Rabbit extends Animal{
 	public $width = 0.5;
 	public $length = 0.5;
 
-	public $dropExp = [1, 3];
+	public array $dropExp = [1, 3];
 
-	public function initEntity(){
+	public function initEntity() : void{
 		$this->setMaxHealth(3);
 		parent::initEntity();
 	}
@@ -74,7 +76,7 @@ class Rabbit extends Animal{
 		return $arr[mt_rand(0, count($arr) - 1)];
 	}
 
-	public function setRabbitType(int $type){
+	public function setRabbitType(int $type) : void{
 		$this->namedtag->RabbitType = new ByteTag("RabbitType", $type);
 	}
 
@@ -86,7 +88,7 @@ class Rabbit extends Animal{
 		return "Rabbit";
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = Rabbit::NETWORK_ID;
@@ -104,7 +106,7 @@ class Rabbit extends Animal{
 		parent::spawnTo($player);
 	}
 
-	public function getDrops(){
+	public function getDrops() : array{
 		$lootingL = 0;
 		$cause = $this->lastDamageCause;
 		if($cause instanceof EntityDamageByEntityEvent && $cause->getDamager() instanceof Player){

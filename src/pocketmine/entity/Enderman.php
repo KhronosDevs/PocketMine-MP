@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\network\protocol\AddEntityPacket;
@@ -33,13 +35,13 @@ class Enderman extends Monster{
 	public $length = 0.9;
 	public $height = 1.8;
 
-	public $dropExp = [5, 5];
+	public array $dropExp = [5, 5];
 
 	public function getName(): string{
 		return "Enderman";
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = Enderman::NETWORK_ID;

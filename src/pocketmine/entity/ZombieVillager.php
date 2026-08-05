@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\network\protocol\AddEntityPacket;
@@ -33,7 +35,7 @@ class ZombieVillager extends Zombie{
 	public $length = 0.891;
 	public $height = 2.125;
 
-	public function initEntity(){
+	public function initEntity() : void{
 		$this->setMaxHealth(20);
 		parent::initEntity();
 	}
@@ -42,7 +44,7 @@ class ZombieVillager extends Zombie{
 		return "Zombie Villager";
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->type = ZombieVillager::NETWORK_ID;
 		$pk->eid = $this->getId();

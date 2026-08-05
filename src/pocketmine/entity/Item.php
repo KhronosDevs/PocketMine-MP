@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityDamageEvent;
@@ -41,11 +43,11 @@ use function floor;
 class Item extends Entity{
 	const NETWORK_ID = 64;
 
-	protected $owner = null;
-	protected $thrower = null;
-	protected $pickupDelay = 0;
+	protected ?string $owner = null;
+	protected ?string $thrower = null;
+	protected int $pickupDelay = 0;
 	/** @var ItemItem */
-	protected $item;
+	protected ?ItemItem $item = null;
 
 	public $width = 0.25;
 	public $length = 0.25;
@@ -53,9 +55,9 @@ class Item extends Entity{
 	protected $gravity = 0.04;
 	protected $drag = 0.02;
 
-	public $canCollide = false;
+	public bool $canCollide = false;
 
-	protected function initEntity(){
+	protected function initEntity() : void{
 		parent::initEntity();
 
 		$this->setMaxHealth(5);
@@ -96,7 +98,7 @@ class Item extends Entity{
 		}
 	}
 
-	public function onUpdate($currentTick){
+	public function onUpdate($currentTick) : bool{
 		if($this->closed){
 			return false;
 		}
@@ -165,7 +167,7 @@ class Item extends Entity{
 		return $hasUpdate || !$this->onGround || abs($this->motionX) > 0.00001 || abs($this->motionY) > 0.00001 || abs($this->motionZ) > 0.00001;
 	}
 
-	public function saveNBT(){
+	public function saveNBT() : void{
 		parent::saveNBT();
 		$this->namedtag->Item = NBT::putItemHelper($this->item);
 		$this->namedtag->Health = new ShortTag("Health", $this->getHealth());
@@ -182,57 +184,57 @@ class Item extends Entity{
 	/**
 	 * @return ItemItem
 	 */
-	public function getItem(){
+	public function getItem() : ItemItem{
 		return $this->item;
 	}
 
-	public function canCollideWith(Entity $entity){
+	public function canCollideWith(Entity $entity) : bool{
 		return false;
 	}
 
 	/**
 	 * @return int
 	 */
-	public function getPickupDelay(){
+	public function getPickupDelay() : int{
 		return $this->pickupDelay;
 	}
 
 	/**
 	 * @param int $delay
 	 */
-	public function setPickupDelay($delay){
+	public function setPickupDelay($delay) : void{
 		$this->pickupDelay = $delay;
 	}
 
 	/**
 	 * @return string
 	 */
-	public function getOwner(){
+	public function getOwner() : ?string{
 		return $this->owner;
 	}
 
 	/**
 	 * @param string $owner
 	 */
-	public function setOwner($owner){
+	public function setOwner($owner) : void{
 		$this->owner = $owner;
 	}
 
 	/**
 	 * @return string
 	 */
-	public function getThrower(){
+	public function getThrower() : ?string{
 		return $this->thrower;
 	}
 
 	/**
 	 * @param string $thrower
 	 */
-	public function setThrower($thrower){
+	public function setThrower($thrower) : void{
 		$this->thrower = $thrower;
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddItemEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->x = $this->x;

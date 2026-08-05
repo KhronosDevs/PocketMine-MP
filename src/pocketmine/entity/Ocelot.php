@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\level\format\FullChunk;
@@ -44,7 +46,7 @@ class Ocelot extends Animal{
 	public $length = 2.188;
 	public $height = 0.75;
 
-	public $dropExp = [1, 3];
+	public array $dropExp = [1, 3];
 
 	public function getName(): string{
 		return "Ocelot";
@@ -59,7 +61,7 @@ class Ocelot extends Animal{
 		$this->setDataProperty(self::DATA_CAT_TYPE, self::DATA_TYPE_BYTE, $this->getCatType());
 	}
 
-	public function setCatType(int $type){
+	public function setCatType(int $type) : void{
 		$this->namedtag->CatType = new ByteTag("CatType", $type);
 	}
 
@@ -67,7 +69,7 @@ class Ocelot extends Animal{
 		return (int) $this->namedtag["CatType"];
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = self::NETWORK_ID;

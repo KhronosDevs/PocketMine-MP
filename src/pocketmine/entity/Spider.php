@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityDamageByEntityEvent;
@@ -35,13 +37,13 @@ class Spider extends Monster{
 	public $length = 0.9;
 	public $height = 1.9;
 
-	public $dropExp = [5, 5];
+	public array $dropExp = [5, 5];
 
 	public function getName(): string{
 		return "Spider";
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = Spider::NETWORK_ID;
@@ -59,7 +61,7 @@ class Spider extends Monster{
 		parent::spawnTo($player);
 	}
 
-	public function getDrops(){
+	public function getDrops() : array{
 		$drops = [ItemItem::get(ItemItem::STRING, 0, 1)];
 		if ($this->lastDamageCause instanceof EntityDamageByEntityEvent && $this->lastDamageCause->getEntity() instanceof Player) {
 			if (mt_rand(0, 199) < 5) {

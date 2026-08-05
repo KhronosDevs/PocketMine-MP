@@ -21,17 +21,19 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 abstract class WaterAnimal extends Creature implements Ageable{
-	public function initEntity(){
+	public function initEntity() : void{
 		parent::initEntity();
 		if($this->getDataProperty(self::DATA_AGEABLE_FLAGS) === null){
 			$this->setDataProperty(self::DATA_AGEABLE_FLAGS, self::DATA_TYPE_BYTE, 0);
 		}
 	}
 
-	public function isBaby(){
+	public function isBaby() : bool{
 		return $this->getDataFlag(self::DATA_AGEABLE_FLAGS, self::DATA_FLAG_BABY);
 	}
 }

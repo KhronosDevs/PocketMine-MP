@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\block\Anvil;
@@ -51,12 +53,12 @@ class FallingSand extends Entity{
 
 	protected $gravity = 0.04;
 	protected $drag = 0.02;
-	protected $blockId = 0;
-	protected $damage;
+	protected int $blockId = 0;
+	protected ?int $damage = null;
 
-	public $canCollide = false;
+	public bool $canCollide = false;
 
-	protected function initEntity(){
+	protected function initEntity() : void{
 		parent::initEntity();
 		if(isset($this->namedtag->TileID)){
 			$this->blockId = $this->namedtag["TileID"];
@@ -77,7 +79,7 @@ class FallingSand extends Entity{
 		$this->setDataProperty(self::DATA_BLOCK_INFO, self::DATA_TYPE_INT, $this->getBlock() | ($this->getDamage() << 8));
 	}
 
-	public function canCollideWith(Entity $entity){
+	public function canCollideWith(Entity $entity) : bool{
 		return false;
 	}
 
@@ -87,7 +89,7 @@ class FallingSand extends Entity{
 		}
 	}
 
-	public function onUpdate($currentTick){
+	public function onUpdate($currentTick) : bool{
 
 		if($this->closed){
 			return false;
@@ -172,20 +174,20 @@ class FallingSand extends Entity{
 		return $hasUpdate || !$this->onGround || abs($this->motionX) > 0.00001 || abs($this->motionY) > 0.00001 || abs($this->motionZ) > 0.00001;
 	}
 
-	public function getBlock(){
+	public function getBlock() : int{
 		return $this->blockId;
 	}
 
-	public function getDamage(){
+	public function getDamage() : ?int{
 		return $this->damage;
 	}
 
-	public function saveNBT(){
+	public function saveNBT() : void{
 		$this->namedtag->TileID = new IntTag("TileID", $this->blockId);
 		$this->namedtag->Data = new ByteTag("Data", $this->damage);
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->type = FallingSand::NETWORK_ID;
 		$pk->eid = $this->getId();

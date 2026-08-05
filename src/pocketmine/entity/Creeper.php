@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\CreeperPowerEvent;
@@ -36,13 +38,13 @@ class Creeper extends Monster{
 	const DATA_SWELL_OLD = 18;
 	const DATA_POWERED = 19;
 
-	public $dropExp = [5, 5];
+	public array $dropExp = [5, 5];
 
 	public function getName(): string{
 		return "Creeper";
 	}
 
-	public function initEntity(){
+	public function initEntity() : void{
 		parent::initEntity();
 
 		if(!isset($this->namedtag->powered)){
@@ -69,7 +71,7 @@ class Creeper extends Monster{
 		return $this->namedtag["powered"] == 0 ? false : true;
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = Creeper::NETWORK_ID;

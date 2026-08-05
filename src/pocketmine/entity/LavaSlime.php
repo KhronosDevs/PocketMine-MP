@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\network\protocol\AddEntityPacket;
@@ -31,13 +33,13 @@ class LavaSlime extends Living{
 
 	const DATA_SLIME_SIZE = 16;
 
-	public $dropExp = [1, 4];
+	public array $dropExp = [1, 4];
 
 	public function getName(): string{
 		return "LavaSlime";
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = LavaSlime::NETWORK_ID;

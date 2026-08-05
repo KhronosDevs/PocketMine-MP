@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\player\PlayerFishEvent;
@@ -44,12 +46,12 @@ class FishingHook extends Projectile{
 	protected $gravity = 0.1;
 	protected $drag = 0.05;
 
-	public $data = 0;
-	public $attractTimer = 100;
-	public $coughtTimer = 0;
-	public $damageRod = false;
+	public int $data = 0;
+	public int $attractTimer = 100;
+	public int $coughtTimer = 0;
+	public bool $damageRod = false;
 
-	public function initEntity(){
+	public function initEntity() : void{
 		parent::initEntity();
 
 		if(isset($this->namedtag->Data)){
@@ -63,15 +65,15 @@ class FishingHook extends Projectile{
 		parent::__construct($chunk, $nbt, $shootingEntity);
 	}
 
-	public function setData($id){
+	public function setData(int $id) : void{
 		$this->data = $id;
 	}
 
-	public function getData(){
+	public function getData() : int{
 		return $this->data;
 	}
 
-	public function onUpdate($currentTick){
+	public function onUpdate($currentTick) : bool{
 		if($this->closed){
 			return false;
 		}
@@ -157,7 +159,7 @@ class FishingHook extends Projectile{
 		return $this->damageRod;
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = FishingHook::NETWORK_ID;

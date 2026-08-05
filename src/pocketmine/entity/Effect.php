@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityDamageEvent;
@@ -63,9 +65,9 @@ class Effect{
 	const MAX_DURATION = 2147483648;
 
 	/** @var Effect[] */
-	protected static $effects;
+	protected static ?\SplFixedArray $effects = null;
 
-	public static function init(){
+	public static function init() : void{
 		self::$effects = new \SplFixedArray(256);
 
 		self::$effects[Effect::SPEED] = new Effect(Effect::SPEED, "%potion.moveSpeed", 124, 175, 198);
@@ -100,14 +102,14 @@ class Effect{
 	 * @param int $id
 	 * @return $this
 	 */
-	public static function getEffect($id){
+	public static function getEffect(int $id) : ?Effect{
 		if(isset(self::$effects[$id])){
-			return clone self::$effects[(int) $id];
+			return clone self::$effects[$id];
 		}
 		return null;
 	}
 
-	public static function getEffectByName($name){
+	public static function getEffectByName(string $name) : ?Effect{
 		if(defined(Effect::class . "::" . strtoupper($name))){
 			return self::getEffect(constant(Effect::class . "::" . strtoupper($name)));
 		}
@@ -115,26 +117,26 @@ class Effect{
 	}
 
 	/** @var int */
-	protected $id;
+	protected int $id;
 
-	protected $name;
+	protected string $name;
 
-	protected $duration;
+	protected int|float|null $duration = null;
 
-	protected $amplifier = 0;
+	protected int $amplifier = 0;
 
-	protected $color;
+	protected int $color;
 
-	protected $show = true;
+	protected bool $show = true;
 
-	protected $ambient = false;
+	protected bool $ambient = false;
 
-	protected $bad;
+	protected bool $bad;
 
-	public function __construct($id, $name, $r, $g, $b, $isBad = false){
+	public function __construct(int $id, string $name, int $r, int $g, int $b, bool $isBad = false){
 		$this->id = $id;
 		$this->name = $name;
-		$this->bad = (bool) $isBad;
+		$this->bad = $isBad;
 		$this->setColor($r, $g, $b);
 	}
 
@@ -142,32 +144,32 @@ class Effect{
 		return $this->name;
 	}
 
-	public function getId(){
+	public function getId() : int{
 		return $this->id;
 	}
 
-	public function setDuration($ticks){
+	public function setDuration($ticks) : self{
 		$this->duration = (($ticks > self::MAX_DURATION) ? self::MAX_DURATION : $ticks);
 		return $this;
 	}
 
-	public function getDuration(){
+	public function getDuration() : int|float|null{
 		return $this->duration;
 	}
 
-	public function isVisible(){
+	public function isVisible() : bool{
 		return $this->show;
 	}
 
-	public function setVisible($bool){
-		$this->show = (bool) $bool;
+	public function setVisible(bool $bool) : self{
+		$this->show = $bool;
 		return $this;
 	}
 
 	/**
 	 * @return int
 	 */
-	public function getAmplifier(){
+	public function getAmplifier() : int{
 		return $this->amplifier;
 	}
 
@@ -176,25 +178,25 @@ class Effect{
 	 *
 	 * @return $this
 	 */
-	public function setAmplifier($amplifier){
-		$this->amplifier = (int) $amplifier;
+	public function setAmplifier(int $amplifier) : self{
+		$this->amplifier = $amplifier;
 		return $this;
 	}
 
-	public function isAmbient(){
+	public function isAmbient() : bool{
 		return $this->ambient;
 	}
 
-	public function setAmbient($ambient = true){
-		$this->ambient = (bool) $ambient;
+	public function setAmbient(bool $ambient = true) : self{
+		$this->ambient = $ambient;
 		return $this;
 	}
 
-	public function isBad(){
+	public function isBad() : bool{
 		return $this->bad;
 	}
 
-	public function canTick(){
+	public function canTick() : bool{
 		if($this->amplifier < 0) $this->amplifier = 0;
 		switch($this->id){
 			case Effect::POISON:
@@ -232,7 +234,7 @@ class Effect{
 		return false;
 	}
 
-	public function applyEffect(Entity $entity){
+	public function applyEffect(Entity $entity) : void{
 		switch($this->id){
 			case Effect::POISON:
 				if($entity->getHealth() > 1){
@@ -287,15 +289,15 @@ class Effect{
 		}
 	}
 
-	public function getColor(){
+	public function getColor() : array{
 		return [$this->color >> 16, ($this->color >> 8) & 0xff, $this->color & 0xff];
 	}
 
-	public function setColor($r, $g, $b){
+	public function setColor(int $r, int $g, int $b) : void{
 		$this->color = (($r & 0xff) << 16) + (($g & 0xff) << 8) + ($b & 0xff);
 	}
 
-	public function add(Entity $entity, $modify = false, Effect $oldEffect = null){
+	public function add(Entity $entity, bool $modify = false, Effect $oldEffect = null) : void{
 		if($entity instanceof Player){
 			$pk = new MobEffectPacket();
 			$pk->eid = 0;
@@ -338,7 +340,7 @@ class Effect{
 		}
 	}
 
-	public function remove(Entity $entity){
+	public function remove(Entity $entity) : void{
 		if($entity instanceof Player){
 			$pk = new MobEffectPacket();
 			$pk->eid = 0;

@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\block\Liquid;
@@ -43,13 +45,13 @@ class Lightning extends Animal{
 		return "Lightning";
 	}
 
-	public function initEntity(){
+	public function initEntity() : void{
 		parent::initEntity();
 		$this->setMaxHealth(2);
 		$this->setHealth(2);
 	}
 
-	public function onUpdate($tick){
+	public function onUpdate($tick) : bool{
 		parent::onUpdate($tick);
 		if($this->age > 20){
 			$this->kill();
@@ -58,7 +60,7 @@ class Lightning extends Animal{
 		return true;
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = self::NETWORK_ID;
@@ -84,7 +86,7 @@ class Lightning extends Animal{
 		parent::spawnTo($player);
 	}
 
-	public function spawnToAll(){
+	public function spawnToAll() : void{
 		parent::spawnToAll();
 
 		if($this->getLevel()->getServer()->lightningFire){

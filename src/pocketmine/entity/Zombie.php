@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityDamageByEntityEvent;
@@ -44,7 +46,7 @@ class Zombie extends Monster{
 	public $length = 0.6;
 	public $height = 1.8;
 
-	public $dropExp = [5, 5];
+	public array $dropExp = [5, 5];
 
 	public $drag = 0.2;
 	public $gravity = 0.3;
@@ -64,7 +66,7 @@ class Zombie extends Monster{
 		return "Zombie";
 	}
 
-	public function initEntity(){
+	public function initEntity() : void{
 		$this->setMaxHealth(20);
 		parent::initEntity();
 	}
@@ -81,14 +83,14 @@ class Zombie extends Monster{
 		}
 	}
 
-	private function generateRandomDirection(){
+	private function generateRandomDirection() : Vector3{
 		return new Vector3(mt_rand(-1000, 1000) / 1000, 0, mt_rand(-1000, 1000) / 1000);
 	}
 
 	/*
 	 * 返回一个一位小数
 	*/
-	private function toFloat($num){
+	private function toFloat($num) : int|float{
 		while(((abs($num) > 1) || (abs($num) < 0.1)) && (abs($num) > 0)) {
 			if(abs($num) > 1) $num /= 10;
 			if(abs($num) < 0.1) $num *= 10;
@@ -96,11 +98,11 @@ class Zombie extends Monster{
 		return $num;
 	}
 
-	private function generateDirection(Vector3 $pos){
+	private function generateDirection(Vector3 $pos) : Vector3{
 		return new Vector3($this->toFloat($pos->x - $this->x), 0, $this->toFloat($pos->z - $this->z));
 	}
 
-	private function getNearestPlayer(){
+	private function getNearestPlayer() : Player|false{
 		$dis = PHP_INT_MAX;
 		$player = false;
 		foreach($this->getViewers() as $p){
@@ -112,7 +114,7 @@ class Zombie extends Monster{
 		return (($dis <= $this->hate_r) ? $p : false);
 	}
 
-	private function getVelY(){
+	private function getVelY() : int|float{
 		$expectedPos = (new Vector3($this->x + $this->moveDirection->x * $this->moveSpeed, $this->y + $this->motionY, $this->z + $this->moveDirection->z * $this->moveSpeed))->round();
 		$block0 = $this->getLevel()->getBlock($expectedPos);
 		$block1 = $this->getLevel()->getBlock($expectedPos->add(0, 1, 0));
@@ -120,7 +122,7 @@ class Zombie extends Monster{
 		return 0;
 	}
 
-	public function onUpdate($currentTick){
+	public function onUpdate($currentTick) : bool{
 		if($this->closed !== false){
 			return false;
 		}
@@ -218,7 +220,7 @@ class Zombie extends Monster{
 		return $hasUpdate || !$this->onGround || abs($this->motionX) > 0.00001 || abs($this->motionY) > 0.00001 || abs($this->motionZ) > 0.00001;
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = Zombie::NETWORK_ID;
@@ -236,7 +238,7 @@ class Zombie extends Monster{
 		parent::spawnTo($player);
 	}
 
-	public function getDrops(){
+	public function getDrops() : array{
 		$lootingL = 0;
 		$cause = $this->lastDamageCause;
 		$drops = [];

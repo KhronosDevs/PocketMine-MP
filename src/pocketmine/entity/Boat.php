@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityDamageEvent;
@@ -57,7 +59,7 @@ class Boat extends Vehicle{
 		return (int) $this->namedtag["WoodID"];
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = Boat::NETWORK_ID;
@@ -88,7 +90,7 @@ class Boat extends Vehicle{
 		}
 	}
 
-	public function onUpdate($currentTick){
+	public function onUpdate($currentTick) : bool{
 		if($this->closed){
 			return false;
 		}
@@ -128,13 +130,13 @@ class Boat extends Vehicle{
 		return $hasUpdate || !$this->onGround || abs($this->motionX) > 0.00001 || abs($this->motionY) > 0.00001 || abs($this->motionZ) > 0.00001;
 	}
 
-	public function getDrops(){
+	public function getDrops() : array{
 		return [
 			ItemItem::get(ItemItem::BOAT, 0, 1)
 		];
 	}
 
-	public function getSaveId(){
+	public function getSaveId() : string{
 		$class = new \ReflectionClass(static::class);
 		return $class->getShortName();
 	}

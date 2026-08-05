@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\player\PlayerPickupExpOrbEvent;
@@ -42,18 +44,18 @@ class XPOrb extends Entity{
 	protected $gravity = 0.04;
 	protected $drag = 0;
 
-	protected $experience = 0;
+	protected int $experience = 0;
 
-	protected $range = 6;
+	protected int $range = 6;
 
-	public function initEntity(){
+	public function initEntity() : void{
 		parent::initEntity();
 		if(isset($this->namedtag->Experience)){
 			$this->experience = $this->namedtag["Experience"];
 		}else $this->close();
 	}
 
-	public function onUpdate($currentTick){
+	public function onUpdate($currentTick) : bool{
 		if($this->closed){
 			return false;
 		}
@@ -135,19 +137,19 @@ class XPOrb extends Entity{
 		return $hasUpdate || !$this->onGround || abs($this->motionX) > 0.00001 || abs($this->motionY) > 0.00001 || abs($this->motionZ) > 0.00001;
 	}
 
-	public function canCollideWith(Entity $entity){
+	public function canCollideWith(Entity $entity) : bool{
 		return false;
 	}
 
-	public function setExperience($exp){
+	public function setExperience($exp) : void{
 		$this->experience = $exp;
 	}
 
-	public function getExperience(){
+	public function getExperience() : int{
 		return $this->experience;
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$this->setDataProperty(self::DATA_NO_AI, self::DATA_TYPE_BYTE, 1);
 		$pk = new AddEntityPacket();
 		$pk->type = XPOrb::NETWORK_ID;

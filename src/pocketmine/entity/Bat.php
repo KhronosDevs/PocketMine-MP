@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\level\format\FullChunk;
@@ -46,7 +48,7 @@ class Bat extends FlyingAnimal{
 		return "Bat";
 	}
 
-	public function initEntity(){
+	public function initEntity() : void{
 		$this->setMaxHealth(6);
 		parent::initEntity();
 	}
@@ -64,18 +66,18 @@ class Bat extends FlyingAnimal{
 		return (int) $this->namedtag["isResting"];
 	}
 
-	public function setResting(bool $resting){
+	public function setResting(bool $resting) : void{
 		$this->namedtag->isResting = new ByteTag("isResting", $resting ? 1 : 0);
 	}
 
-	public function onUpdate($currentTick){
+	public function onUpdate($currentTick) : bool{
 		if ($this->age > 20 * 60 * 10) {
 			$this->kill();
 		}
 		return parent::onUpdate($currentTick);
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddEntityPacket();
 		$pk->eid = $this->getId();
 		$pk->type = Bat::NETWORK_ID;

@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\event\entity\EntityCombustByEntityEvent;
@@ -48,10 +50,10 @@ abstract class Projectile extends Entity{
 	const DATA_SHOOTER_ID = 17;
 
 	/** @var Entity */
-	public $shootingEntity = null;
-	protected $damage = 0;
+	public ?Entity $shootingEntity = null;
+	protected int $damage = 0;
 
-	public $hadCollision = false;
+	public bool $hadCollision = false;
 
 	public function __construct(FullChunk $chunk, CompoundTag $nbt, Entity $shootingEntity = null){
 		$this->shootingEntity = $shootingEntity;
@@ -67,7 +69,7 @@ abstract class Projectile extends Entity{
 		}
 	}
 
-	protected function initEntity(){
+	protected function initEntity() : void{
 		parent::initEntity();
 
 		$this->setMaxHealth(1);
@@ -78,16 +80,16 @@ abstract class Projectile extends Entity{
 
 	}
 
-	public function canCollideWith(Entity $entity){
+	public function canCollideWith(Entity $entity) : bool{
 		return $entity instanceof Living && !$this->onGround;
 	}
 
-	public function saveNBT(){
+	public function saveNBT() : void{
 		parent::saveNBT();
 		$this->namedtag->Age = new ShortTag("Age", $this->age);
 	}
 
-	public function onUpdate($currentTick){
+	public function onUpdate($currentTick) : bool{
 		if($this->closed){
 			return false;
 		}

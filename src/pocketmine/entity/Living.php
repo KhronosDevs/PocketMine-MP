@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\block\Block;
@@ -50,7 +52,7 @@ abstract class Living extends Entity implements Damageable{
 
 	protected $invisible = false;
 
-	protected function initEntity(){
+	protected function initEntity() : void{
 		parent::initEntity();
 
 		if(isset($this->namedtag->HealF)){
@@ -67,7 +69,7 @@ abstract class Living extends Entity implements Damageable{
 		else $this->setHealth($this->namedtag["Health"]);
 	}
 
-	public function setHealth($amount){
+	public function setHealth($amount) : void{
 		$wasAlive = $this->isAlive();
 		parent::setHealth($amount);
 		if($this->isAlive() && !$wasAlive){
@@ -78,7 +80,7 @@ abstract class Living extends Entity implements Damageable{
 		}
 	}
 
-	public function saveNBT(){
+	public function saveNBT() : void{
 		parent::saveNBT();
 		$this->namedtag->Health = new ShortTag("Health", $this->getHealth());
 	}
@@ -91,7 +93,7 @@ abstract class Living extends Entity implements Damageable{
 		//return $this->getLevel()->rayTraceBlocks(Vector3::createVector($this->x, $this->y + $this->height, $this->z), Vector3::createVector($entity->x, $entity->y + $entity->height, $entity->z)) === null;
 	}
 
-	public function heal($amount, EntityRegainHealthEvent $source){
+	public function heal($amount, EntityRegainHealthEvent $source) : void{
 		parent::heal($amount, $source);
 		if($source->isCancelled()){
 			return;
@@ -140,7 +142,7 @@ abstract class Living extends Entity implements Damageable{
 		$this->attackTime = 10; //0.5 seconds cooldown
 	}
 
-	public function knockBack(Entity $attacker, $damage, $x, $z, $base = 0.4){
+	public function knockBack(Entity $attacker, $damage, float $x, float $z, float $base = 0.4) : void{
 		$f = sqrt($x * $x + $z * $z);
 		if($f <= 0){
 			return;
@@ -164,7 +166,7 @@ abstract class Living extends Entity implements Damageable{
 		$this->setMotion($motion);
 	}
 
-	public function kill(){
+	public function kill() : void{
 		if(!$this->isAlive()){
 			return;
 		}
@@ -175,7 +177,7 @@ abstract class Living extends Entity implements Damageable{
 		}
 	}
 
-	public function entityBaseTick($tickDiff = 1, $EnchantL = 0){
+	public function entityBaseTick($tickDiff = 1, $EnchantL = 0) : bool{
 		Timings::$timerLivingEntityBaseTick->startTiming();
 
 		$hasUpdate = parent::entityBaseTick($tickDiff);
@@ -230,7 +232,7 @@ abstract class Living extends Entity implements Damageable{
 	/**
 	 * @return ItemItem[]
 	 */
-	public function getDrops(){
+	public function getDrops() : array{
 		return [];
 	}
 
@@ -240,7 +242,7 @@ abstract class Living extends Entity implements Damageable{
 	 *
 	 * @return Block[]
 	 */
-	public function getLineOfSight($maxDistance, $maxLength = 0, array $transparent = []){
+	public function getLineOfSight(int $maxDistance, int $maxLength = 0, array $transparent = []) : array{
 		if($maxDistance > 120){
 			$maxDistance = 120;
 		}
@@ -285,7 +287,7 @@ abstract class Living extends Entity implements Damageable{
 	 *
 	 * @return Block
 	 */
-	public function getTargetBlock($maxDistance, array $transparent = []){
+	public function getTargetBlock(int $maxDistance, array $transparent = []) : ?Block{
 		try{
 			$block = $this->getLineOfSight($maxDistance, 1, $transparent)[0];
 			if($block instanceof Block){

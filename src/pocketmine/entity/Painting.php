@@ -7,6 +7,8 @@
  * @link https://github.com/Nukkit/Nukkit
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\entity;
 
 use pocketmine\block\Block;
@@ -21,7 +23,7 @@ class Painting extends Hanging{
 
 	private $motive;
 
-	public function initEntity(){
+	public function initEntity() : void{
 		$this->setMaxHealth(1);
 		parent::initEntity();
 
@@ -37,7 +39,7 @@ class Painting extends Hanging{
 		$this->kill();
 	}
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : void{
 		$pk = new AddPaintingPacket();
 		$pk->eid = $this->getId();
 		$pk->x = $this->x;
@@ -50,11 +52,11 @@ class Painting extends Hanging{
 		parent::spawnTo($player);
 	}
 
-	protected function updateMovement(){
+	protected function updateMovement() : void{
 		//Nothing to update, paintings cannot move.
 	}
 
-	public function getDrops(){
+	public function getDrops() : array{
 		return [ItemItem::get(ItemItem::PAINTING, 0, 1)];
 	}
 }
