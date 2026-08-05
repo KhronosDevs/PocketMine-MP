@@ -41,9 +41,9 @@ abstract class DataPacket extends BinaryStream{
 
 	const NETWORK_ID = 0;
 
-	public $isEncoded = false;
+	public bool $isEncoded = false;
 
-	public function pid(){
+	public function pid() : int{
 		return $this::NETWORK_ID;
 	}
 
@@ -51,19 +51,19 @@ abstract class DataPacket extends BinaryStream{
 
 	abstract public function decode();
 
-	public function reset(){
+	public function reset() : void{
 		$this->buffer = chr($this::NETWORK_ID);
 		$this->offset = 0;
 	}
 
 	public function clean(){
-		$this->buffer = null;
+		$this->buffer = "";
 		$this->isEncoded = false;
 		$this->offset = 0;
 		return $this;
 	}
 
-	public function __debugInfo(){
+	public function __debugInfo() : array{
 		$data = [];
 		foreach($this as $k => $v){
 			if($k === "buffer"){

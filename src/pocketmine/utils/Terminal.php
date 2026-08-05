@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\utils;
 
 use function defined;
@@ -31,34 +33,34 @@ use function posix_ttyname;
 use const STDOUT;
 
 abstract class Terminal{
-	public static $FORMAT_BOLD = "";
-	public static $FORMAT_OBFUSCATED = "";
-	public static $FORMAT_ITALIC = "";
-	public static $FORMAT_UNDERLINE = "";
-	public static $FORMAT_STRIKETHROUGH = "";
+	public static string $FORMAT_BOLD = "";
+	public static string $FORMAT_OBFUSCATED = "";
+	public static string $FORMAT_ITALIC = "";
+	public static string $FORMAT_UNDERLINE = "";
+	public static string $FORMAT_STRIKETHROUGH = "";
 
-	public static $FORMAT_RESET = "";
+	public static string $FORMAT_RESET = "";
 
-	public static $COLOR_BLACK = "";
-	public static $COLOR_DARK_BLUE = "";
-	public static $COLOR_DARK_GREEN = "";
-	public static $COLOR_DARK_AQUA = "";
-	public static $COLOR_DARK_RED = "";
-	public static $COLOR_PURPLE = "";
-	public static $COLOR_GOLD = "";
-	public static $COLOR_GRAY = "";
-	public static $COLOR_DARK_GRAY = "";
-	public static $COLOR_BLUE = "";
-	public static $COLOR_GREEN = "";
-	public static $COLOR_AQUA = "";
-	public static $COLOR_RED = "";
-	public static $COLOR_LIGHT_PURPLE = "";
-	public static $COLOR_YELLOW = "";
-	public static $COLOR_WHITE = "";
+	public static string $COLOR_BLACK = "";
+	public static string $COLOR_DARK_BLUE = "";
+	public static string $COLOR_DARK_GREEN = "";
+	public static string $COLOR_DARK_AQUA = "";
+	public static string $COLOR_DARK_RED = "";
+	public static string $COLOR_PURPLE = "";
+	public static string $COLOR_GOLD = "";
+	public static string $COLOR_GRAY = "";
+	public static string $COLOR_DARK_GRAY = "";
+	public static string $COLOR_BLUE = "";
+	public static string $COLOR_GREEN = "";
+	public static string $COLOR_AQUA = "";
+	public static string $COLOR_RED = "";
+	public static string $COLOR_LIGHT_PURPLE = "";
+	public static string $COLOR_YELLOW = "";
+	public static string $COLOR_WHITE = "";
 
-	private static $formattingCodes = null;
+	private static ?bool $formattingCodes = null;
 
-	public static function hasFormattingCodes(){
+	public static function hasFormattingCodes() : bool{
 		if(self::$formattingCodes === null){
 			$opts = getopt("", ["enable-ansi", "disable-ansi"]);
 			if(isset($opts["disable-ansi"])){
@@ -71,7 +73,7 @@ abstract class Terminal{
 		return self::$formattingCodes;
 	}
 
-	protected static function getFallbackEscapeCodes(){
+	protected static function getFallbackEscapeCodes() : void{
 		self::$FORMAT_BOLD = "\x1b[1m";
 		self::$FORMAT_OBFUSCATED = "";
 		self::$FORMAT_ITALIC = "\x1b[3m";
@@ -98,7 +100,7 @@ abstract class Terminal{
 		self::$COLOR_WHITE = "\x1b[38;5;231m";
 	}
 
-	protected static function getEscapeCodes(){
+	protected static function getEscapeCodes() : void{
 		self::$FORMAT_BOLD = `tput bold`;
 		self::$FORMAT_OBFUSCATED = `tput smacs`;
 		self::$FORMAT_ITALIC = `tput sitm`;
@@ -137,7 +139,7 @@ abstract class Terminal{
 		}
 	}
 
-	public static function init(){
+	public static function init() : void{
 		if(!self::hasFormattingCodes()){
 			return;
 		}

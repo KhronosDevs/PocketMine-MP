@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\math;
 
 use function implode;
@@ -28,9 +30,9 @@ use function max;
 use function substr;
 
 class Matrix implements \ArrayAccess{
-	private $matrix = [];
-	private $rows = 0;
-	private $columns = 0;
+	private array $matrix = [];
+	private int $rows = 0;
+	private int $columns = 0;
 
 	public function offsetExists(mixed $offset): bool{
 		return isset($this->matrix[(int) $offset]);
@@ -48,13 +50,13 @@ class Matrix implements \ArrayAccess{
 		unset($this->matrix[(int) $offset]);
 	}
 
-	public function __construct($rows, $columns, array $set = []){
-		$this->rows = max(1, (int) $rows);
-		$this->columns = max(1, (int) $columns);
+	public function __construct(int $rows, int $columns, array $set = []){
+		$this->rows = max(1, $rows);
+		$this->columns = max(1, $columns);
 		$this->set($set);
 	}
 
-	public function set(array $m){
+	public function set(array $m) : void{
 		for($r = 0; $r < $this->rows; ++$r){
 			$this->matrix[$r] = [];
 			for($c = 0; $c < $this->columns; ++$c){
@@ -63,36 +65,36 @@ class Matrix implements \ArrayAccess{
 		}
 	}
 
-	public function getRows(){
-		return ($this->rows);
+	public function getRows() : int{
+		return $this->rows;
 	}
 
-	public function getColumns(){
-		return ($this->columns);
+	public function getColumns() : int{
+		return $this->columns;
 	}
 
-	public function setElement($row, $column, $value){
+	public function setElement(int $row, int $column, mixed $value) : bool{
 		if($row > $this->rows || $row < 0 || $column > $this->columns || $column < 0){
 			return false;
 		}
-		$this->matrix[(int) $row][(int) $column] = $value;
+		$this->matrix[$row][$column] = $value;
 
 		return true;
 	}
 
-	public function getElement($row, $column){
+	public function getElement(int $row, int $column) : mixed{
 		if($row > $this->rows || $row < 0 || $column > $this->columns || $column < 0){
 			return false;
 		}
 
-		return $this->matrix[(int) $row][(int) $column];
+		return $this->matrix[$row][$column];
 	}
 
-	public function isSquare(){
+	public function isSquare() : bool{
 		return $this->rows === $this->columns;
 	}
 
-	public function add(Matrix $matrix){
+	public function add(Matrix $matrix) : Matrix|false{
 		if($this->rows !== $matrix->getRows() || $this->columns !== $matrix->getColumns()){
 			return false;
 		}
@@ -106,7 +108,7 @@ class Matrix implements \ArrayAccess{
 		return $result;
 	}
 
-	public function substract(Matrix $matrix){
+	public function substract(Matrix $matrix) : Matrix|false{
 		if($this->rows !== $matrix->getRows() || $this->columns !== $matrix->getColumns()){
 			return false;
 		}
@@ -120,7 +122,7 @@ class Matrix implements \ArrayAccess{
 		return $result;
 	}
 
-	public function multiplyScalar($number){
+	public function multiplyScalar(float $number) : Matrix{
 		$result = clone $this;
 		for($r = 0; $r < $this->rows; ++$r){
 			for($c = 0; $c < $this->columns; ++$c){
@@ -131,7 +133,7 @@ class Matrix implements \ArrayAccess{
 		return $result;
 	}
 
-	public function divideScalar($number){
+	public function divideScalar(float $number) : Matrix{
 		$result = clone $this;
 		for($r = 0; $r < $this->rows; ++$r){
 			for($c = 0; $c < $this->columns; ++$c){
@@ -142,7 +144,7 @@ class Matrix implements \ArrayAccess{
 		return $result;
 	}
 
-	public function transpose(){
+	public function transpose() : Matrix{
 		$result = new Matrix($this->columns, $this->rows);
 		for($r = 0; $r < $this->rows; ++$r){
 			for($c = 0; $c < $this->columns; ++$c){
@@ -154,7 +156,7 @@ class Matrix implements \ArrayAccess{
 	}
 
 	//Naive Matrix product, O(n^3)
-	public function product(Matrix $matrix){
+	public function product(Matrix $matrix) : Matrix|false{
 		if($this->columns !== $matrix->getRows()){
 			return false;
 		}
@@ -174,7 +176,7 @@ class Matrix implements \ArrayAccess{
 	}
 
 	//Computation of the determinant of 2x2 and 3x3 matrices
-	public function determinant(){
+	public function determinant() : int|float|false{
 		if($this->isSquare() !== true){
 			return false;
 		}
@@ -190,7 +192,7 @@ class Matrix implements \ArrayAccess{
 		return false;
 	}
 
-	public function __toString(){
+	public function __toString() : string{
 		$s = "";
 		for($r = 0; $r < $this->rows; ++$r){
 			$s .= implode(",", $this->matrix[$r]) . ";";

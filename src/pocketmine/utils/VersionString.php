@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\utils;
 
 use pocketmine\Server;
@@ -32,13 +34,13 @@ use function is_int;
  */
 class VersionString
 {
-    private $major;
-    private $build;
-    private $minor;
-    private $development = false;
-    public $generation;
+    private int $major = 0;
+    private int $build = 0;
+    private int $minor = 0;
+    private bool $development = false;
+    public int $generation = 0;
 
-    public function __construct($version = null)
+    public function __construct(int|string|null $version = null)
     {
         if ($version === null) {
             $version = Git::getRepositoryStatePretty(Server::getInstance()->getDataPath());
@@ -57,7 +59,7 @@ class VersionString
         }
     }
 
-    public function getNumber()
+    public function getNumber(): int
     {
         return (int) (($this->generation << 9) + ($this->major << 5) + $this->minor);
     }
@@ -65,52 +67,55 @@ class VersionString
     /**
      * @deprecated
      */
-    public function getStage()
+    public function getStage(): string
     {
         return "final";
     }
 
-    public function getGeneration()
+    public function getGeneration(): int
     {
         return $this->generation;
     }
 
-    public function getMajor()
+    public function getMajor(): int
     {
         return $this->major;
     }
 
-    public function getMinor()
+    public function getMinor(): int
     {
         return $this->minor;
     }
 
-    public function getRelease()
+    public function getRelease(): string
     {
         return $this->generation . "." . $this->major . ($this->minor > 0 ? "." . $this->minor : "");
     }
 
-    public function getBuild()
+    public function getBuild(): int
     {
         return $this->build;
     }
 
-    public function isDev()
+    public function isDev(): bool
     {
         return $this->development === true;
     }
 
-    public function get($build = false)
+    public function get(bool $build = false): string
     {
         return $this->getRelease() . ($this->development === true ? "dev" : "") . (($this->build > 0 && $build === true) ? "-" . $this->build : "");
     }
 
-    public function __toString()
+    public function __toString(): string
     {
         return $this->get();
     }
 
-    public function compare($target, $diff = false)
+    /**
+     * @param VersionString|int|string $target
+     */
+    public function compare(VersionString|int|string $target, bool $diff = false): int
     {
         if (($target instanceof VersionString) === false) {
             $target = new VersionString($target);

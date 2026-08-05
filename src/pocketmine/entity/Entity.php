@@ -2012,7 +2012,7 @@ abstract class Entity extends Location implements Metadatable
         $this->server->getEntityMetadata()->removeMetadata($this, $metadataKey, $plugin);
     }
 
-    public function __toString()
+    public function __toString(): string
     {
         return (new \ReflectionClass($this))->getShortName() . "(" . $this->getId() . ")";
     }

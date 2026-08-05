@@ -2,6 +2,8 @@
 
 
 
+declare(strict_types=1);
+
 namespace pocketmine\utils;
 
 use Closure;
@@ -12,7 +14,7 @@ use Closure;
 final class Stream {
 
     /** @var array */
-    private $array;
+    private array $array;
 
     private function __construct(array &$array) {
         $this->array = $array;
@@ -94,12 +96,12 @@ final class Stream {
 
     public function last(): Optional {
         if ($this->size() != 0) {
-			$lastKey = array_pop(array_keys($this->array));
+            $lastKey = array_pop(array_keys($this->array));
 
-			return Optional::of($this->array[$lastKey]);
-		}
+            return Optional::of($this->array[$lastKey]);
+        }
 
-		return Optional::empty();
+        return Optional::empty();
     }
 
     public function size(): int {
@@ -110,11 +112,11 @@ final class Stream {
         return $this->array;
     }
 
-    public static function of(array $array) {
+    public static function of(array $array): self {
         return new self($array);
     }
 
-    public static function ofRef(array &$array) {
+    public static function ofRef(array &$array): self {
         return new self($array);
     }
 

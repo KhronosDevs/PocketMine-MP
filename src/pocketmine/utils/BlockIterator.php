@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\utils;
 
 use pocketmine\block\Block;
@@ -36,35 +38,34 @@ use function sqrt;
  */
 class BlockIterator implements \Iterator{
 
-	/** @var Level */
-	private $level;
-	private $maxDistance;
+	private ?Level $level = null;
+	private int $maxDistance = 0;
 
-	private static $gridSize = 16777216; //1 << 24
+	private static int $gridSize = 16777216; //1 << 24
 
-	private $end = false;
+	private bool $end = false;
 
 	/** @var \SplFixedArray<Block>[3] */
-	private $blockQueue;
-	private $currentBlock = 0;
+	private ?\SplFixedArray $blockQueue = null;
+	private int $currentBlock = 0;
 	/** @var Block */
-	private $currentBlockObject = null;
-	private $currentDistance = 0;
-	private $maxDistanceInt = 0;
+	private ?Block $currentBlockObject = null;
+	private int $currentDistance = 0;
+	private int $maxDistanceInt = 0;
 
-	private $secondError;
-	private $thirdError;
+	private int $secondError = 0;
+	private int $thirdError = 0;
 
-	private $secondStep;
-	private $thirdStep;
+	private int $secondStep = 0;
+	private int $thirdStep = 0;
 
-	private $mainFace;
-	private $secondFace;
-	private $thirdFace;
+	private int $mainFace = 0;
+	private int $secondFace = 0;
+	private int $thirdFace = 0;
 
-	public function __construct(Level $level, Vector3 $start, Vector3 $direction, $yOffset = 0, $maxDistance = 0){
+	public function __construct(Level $level, Vector3 $start, Vector3 $direction, float $yOffset = 0, int $maxDistance = 0){
 		$this->level = $level;
-		$this->maxDistance = (int) $maxDistance;
+		$this->maxDistance = $maxDistance;
 		$this->blockQueue = new \SplFixedArray(3);
 
 		$startClone = new Vector3($start->x, $start->y, $start->z);
@@ -127,10 +128,10 @@ class BlockIterator implements \Iterator{
 		$secondd = $secondPosition - $secondDirection * $d;
 		$thirdd = $thirdPosition - $thirdDirection * $d;
 
-		$this->secondError = floor($secondd * self::$gridSize);
-		$this->secondStep = round($secondDirection / $mainDirection * self::$gridSize);
-		$this->thirdError = floor($thirdd * self::$gridSize);
-		$this->thirdStep = round($thirdDirection / $mainDirection * self::$gridSize);
+		$this->secondError = (int) floor($secondd * self::$gridSize);
+		$this->secondStep = (int) round($secondDirection / $mainDirection * self::$gridSize);
+		$this->thirdError = (int) floor($thirdd * self::$gridSize);
+		$this->thirdStep = (int) round($thirdDirection / $mainDirection * self::$gridSize);
 
 		if($this->secondError + $this->secondStep <= 0){
 			$this->secondError = -$this->secondStep + 1;
@@ -175,54 +176,54 @@ class BlockIterator implements \Iterator{
 			throw new \InvalidStateException("Start block missed in BlockIterator");
 		}
 
-		$this->maxDistanceInt = round($maxDistance / (sqrt($mainDirection ** 2 + $secondDirection ** 2 + $thirdDirection ** 2) / $mainDirection));
+		$this->maxDistanceInt = (int) round($maxDistance / (sqrt($mainDirection ** 2 + $secondDirection ** 2 + $thirdDirection ** 2) / $mainDirection));
 	}
 
-	private function blockEquals(Block $a, Block $b){
+	private function blockEquals(Block $a, Block $b) : bool{
 		return $a->x === $b->x && $a->y === $b->y && $a->z === $b->z;
 	}
 
-	private function getXFace(Vector3 $direction){
-		return (($direction->x) > 0) ? Vector3::SIDE_EAST : Vector3::SIDE_WEST;
+	private function getXFace(Vector3 $direction) : int{
+		return ($direction->x) > 0 ? Vector3::SIDE_EAST : Vector3::SIDE_WEST;
 	}
 
-	private function getYFace(Vector3 $direction){
-		return (($direction->y) > 0) ? Vector3::SIDE_UP : Vector3::SIDE_DOWN;
+	private function getYFace(Vector3 $direction) : int{
+		return ($direction->y) > 0 ? Vector3::SIDE_UP : Vector3::SIDE_DOWN;
 	}
 
-	private function getZFace(Vector3 $direction){
-		return (($direction->z) > 0) ? Vector3::SIDE_SOUTH : Vector3::SIDE_NORTH;
+	private function getZFace(Vector3 $direction) : int{
+		return ($direction->z) > 0 ? Vector3::SIDE_SOUTH : Vector3::SIDE_NORTH;
 	}
 
-	private function getXLength(Vector3 $direction){
+	private function getXLength(Vector3 $direction) : float{
 		return abs($direction->x);
 	}
 
-	private function getYLength(Vector3 $direction){
+	private function getYLength(Vector3 $direction) : float{
 		return abs($direction->y);
 	}
 
-	private function getZLength(Vector3 $direction){
+	private function getZLength(Vector3 $direction) : float{
 		return abs($direction->z);
 	}
 
-	private function getPosition($direction, $position, $blockPosition){
+	private function getPosition(float $direction, float $position, float $blockPosition) : float{
 		return $direction > 0 ? ($position - $blockPosition) : ($blockPosition + 1 - $position);
 	}
 
-	private function getXPosition(Vector3 $direction, Vector3 $position, Block $block){
+	private function getXPosition(Vector3 $direction, Vector3 $position, Block $block) : float{
 		return $this->getPosition($direction->x, $position->x, $block->x);
 	}
 
-	private function getYPosition(Vector3 $direction, Vector3 $position, Block $block){
+	private function getYPosition(Vector3 $direction, Vector3 $position, Block $block) : float{
 		return $this->getPosition($direction->y, $position->y, $block->y);
 	}
 
-	private function getZPosition(Vector3 $direction, Vector3 $position, Block $block){
+	private function getZPosition(Vector3 $direction, Vector3 $position, Block $block) : float{
 		return $this->getPosition($direction->z, $position->z, $block->z);
 	}
 
-	public function next(){
+	public function next(): void{
 		$this->scan();
 
 		if($this->currentBlock <= -1){
@@ -237,27 +238,27 @@ class BlockIterator implements \Iterator{
 	 *
 	 * @throws \OutOfBoundsException
 	 */
-	public function current(){
+	public function current(): mixed{
 		if($this->currentBlockObject === null){
 			throw new \OutOfBoundsException;
 		}
 		return $this->currentBlockObject;
 	}
 
-	public function rewind(){
+	public function rewind(): void{
 		throw new \InvalidStateException("BlockIterator doesn't support rewind()");
 	}
 
-	public function key(){
+	public function key(): int{
 		return $this->currentBlock - 1;
 	}
 
-	public function valid(){
+	public function valid(): bool{
 		$this->scan();
 		return $this->currentBlock !== -1;
 	}
 
-	private function scan(){
+	private function scan(): void{
 		if($this->currentBlock >= 0){
 			return;
 		}

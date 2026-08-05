@@ -28,8 +28,8 @@ use pocketmine\utils\LevelException;
 
 class Position extends Vector3{
 
-	/** @var Level */
-	public $level = null;
+	/** @var Level|null */
+	public ?Level $level = null;
 
 	/**
 	 * @param int   $x
@@ -44,11 +44,11 @@ class Position extends Vector3{
 		$this->level = $level;
 	}
 
-	public static function fromObject(Vector3 $pos, Level $level = null){
+	public static function fromObject(Vector3 $pos, ?Level $level = null) : Position{
 		return new Position($pos->x, $pos->y, $pos->z, $level);
 	}
 
-	public function add($x, $y = 0, $z = 0){
+	public function add($x, $y = 0, $z = 0) : Position{
 		if($x instanceof Vector3){
 			return new Position($this->x + $x->x, $this->y + $x->y, $this->z + $x->z, $this->level);
 		}else{
@@ -87,7 +87,7 @@ class Position extends Vector3{
 	 *
 	 * @throws LevelException
 	 */
-	public function getSide($side, $step = 1){
+	public function getSide(int $side, int $step = 1) : Position{
 		if(!$this->isValid()){
 			throw new LevelException("Undefined Level reference");
 		}
@@ -95,7 +95,7 @@ class Position extends Vector3{
 		return Position::fromObject(parent::getSide($side, $step), $this->level);
 	}
 
-	public function __toString(){
+	public function __toString() : string{
 		return "Position(level=" . ($this->isValid() ? $this->getLevel()->getName() : "null") . ",x=" . $this->x . ",y=" . $this->y . ",z=" . $this->z . ")";
 	}
 
@@ -106,14 +106,14 @@ class Position extends Vector3{
 	 *
 	 * @return Position
 	 */
-	public function setComponents($x, $y, $z){
+	public function setComponents($x, $y, $z) : Position{
 		$this->x = $x;
 		$this->y = $y;
 		$this->z = $z;
 		return $this;
 	}
 
-	public function fromObjectAdd(Vector3 $pos, $x, $y, $z){
+	public function fromObjectAdd(Vector3 $pos, $x, $y, $z) : Position{
 		if($pos instanceof Position){
 			$this->level = $pos->level;
 		}

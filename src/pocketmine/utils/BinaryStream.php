@@ -10,6 +10,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\utils;
 
 use pocketmine\item\Item;
@@ -21,38 +23,41 @@ use function substr;
 class BinaryStream extends \stdClass
 {
 
-    public $offset;
-    public $buffer;
+    public string $buffer = "";
+    public int $offset = 0;
 
-    public function __construct($buffer = "", $offset = 0)
+    public function __construct(string $buffer = "", int $offset = 0)
     {
         $this->buffer = $buffer;
         $this->offset = $offset;
     }
 
-    public function reset()
+    public function reset(): void
     {
         $this->buffer = "";
         $this->offset = 0;
     }
 
-    public function setBuffer($buffer = null, $offset = 0)
+    public function setBuffer(string $buffer, int $offset = 0): void
     {
         $this->buffer = $buffer;
-        $this->offset = (int) $offset;
+        $this->offset = $offset;
     }
 
-    public function getOffset()
+    public function getOffset(): int
     {
         return $this->offset;
     }
 
-    public function getBuffer()
+    public function getBuffer(): string
     {
         return $this->buffer;
     }
 
-    public function get($len)
+    /**
+     * @param int|bool $len If true, the rest of the buffer is returned.
+     */
+    public function get(int|bool $len): string
     {
         if ($len < 0) {
             $this->offset = strlen($this->buffer) - 1;
@@ -66,134 +71,134 @@ class BinaryStream extends \stdClass
             : substr($this->buffer, ($this->offset += $len) - $len, $len);
     }
 
-    public function put($str)
+    public function put(string $str): void
     {
         $this->buffer .= $str;
     }
 
-    public function getLong()
+    public function getLong(): int
     {
         return Binary::readLong($this->get(8));
     }
 
-    public function putLong($v)
+    public function putLong(int $v): void
     {
         $this->buffer .= Binary::writeLong($v);
     }
 
-    public function getInt()
+    public function getInt(): int
     {
         return Binary::readInt($this->get(4));
     }
 
-    public function putInt($v)
+    public function putInt(int $v): void
     {
         $this->buffer .= Binary::writeInt($v);
     }
 
-    public function getLLong()
+    public function getLLong(): int
     {
         return Binary::readLLong($this->get(8));
     }
 
-    public function putLLong($v)
+    public function putLLong(int $v): void
     {
         $this->buffer .= Binary::writeLLong($v);
     }
 
-    public function getLInt()
+    public function getLInt(): int
     {
         return Binary::readLInt($this->get(4));
     }
 
-    public function putLInt($v)
+    public function putLInt(int $v): void
     {
         $this->buffer .= Binary::writeLInt($v);
     }
 
-    public function getSignedShort()
+    public function getSignedShort(): int
     {
         return Binary::readSignedShort($this->get(2));
     }
 
-    public function putShort($v)
+    public function putShort(int $v): void
     {
         $this->buffer .= Binary::writeShort($v);
     }
 
-    public function getShort()
+    public function getShort(): int
     {
         return Binary::readShort($this->get(2));
     }
 
-    public function putSignedShort($v)
+    public function putSignedShort(int $v): void
     {
         $this->buffer .= Binary::writeShort($v);
     }
 
-    public function getFloat()
+    public function getFloat(): float
     {
         return Binary::readFloat($this->get(4));
     }
 
-    public function putFloat($v)
+    public function putFloat(float $v): void
     {
         $this->buffer .= Binary::writeFloat($v);
     }
 
-    public function getLShort($signed = true)
+    public function getLShort(bool $signed = true): int
     {
         return $signed
             ? Binary::readSignedLShort($this->get(2))
             : Binary::readLShort($this->get(2));
     }
 
-    public function putLShort($v)
+    public function putLShort(int $v): void
     {
         $this->buffer .= Binary::writeLShort($v);
     }
 
-    public function getLFloat()
+    public function getLFloat(): float
     {
         return Binary::readLFloat($this->get(4));
     }
 
-    public function putLFloat($v)
+    public function putLFloat(float $v): void
     {
         $this->buffer .= Binary::writeLFloat($v);
     }
 
-    public function getTriad()
+    public function getTriad(): int
     {
         return Binary::readTriad($this->get(3));
     }
 
-    public function putTriad($v)
+    public function putTriad(int $v): void
     {
         $this->buffer .= Binary::writeTriad($v);
     }
 
-    public function getLTriad()
+    public function getLTriad(): int
     {
         return Binary::readLTriad($this->get(3));
     }
 
-    public function putLTriad($v)
+    public function putLTriad(int $v): void
     {
         $this->buffer .= Binary::writeLTriad($v);
     }
 
-    public function getByte()
+    public function getByte(): int
     {
         return ord($this->buffer[$this->offset++]);
     }
 
-    public function putByte($v)
+    public function putByte(int $v): void
     {
         $this->buffer .= chr($v);
     }
 
-    public function getDataArray($len = 10)
+    public function getDataArray(int $len = 10): array
     {
         $data = [];
 
@@ -204,7 +209,7 @@ class BinaryStream extends \stdClass
         return $data;
     }
 
-    public function putDataArray(array $data = [])
+    public function putDataArray(array $data = []): void
     {
         foreach ($data as $v) {
             $this->putTriad(strlen($v));
@@ -212,17 +217,17 @@ class BinaryStream extends \stdClass
         }
     }
 
-    public function getUUID()
+    public function getUUID(): UUID
     {
         return UUID::fromBinary($this->get(16));
     }
 
-    public function putUUID(UUID $uuid)
+    public function putUUID(UUID $uuid): void
     {
         $this->put($uuid->toBinary());
     }
 
-    public function getSlot()
+    public function getSlot(): Item
     {
         $id = $this->getSignedShort();
 
@@ -249,7 +254,7 @@ class BinaryStream extends \stdClass
         );
     }
 
-    public function putSlot(Item $item)
+    public function putSlot(Item $item): void
     {
         if ($item->getId() === 0) {
             $this->putShort(0);
@@ -266,18 +271,18 @@ class BinaryStream extends \stdClass
         $this->put($nbt);
     }
 
-    public function getString()
+    public function getString(): string
     {
         return $this->get($this->getShort());
     }
 
-    public function putString($v)
+    public function putString(?string $v): void
     {
         $this->putShort($v === null ? 0 : strlen($v));
-        $this->put($v);
+        $this->put((string) $v);
     }
 
-    public function feof()
+    public function feof(): bool
     {
         return !isset($this->buffer[$this->offset]);
     }

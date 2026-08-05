@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\utils;
 
 use function is_array;
@@ -74,27 +76,20 @@ abstract class TextFormat{
 	/**
 	 * Splits the string by Format tokens
 	 *
-	 * @param string $string
-	 *
-	 * @return array
+	 * @return string[]
 	 */
-	public static function tokenize($string){
+	public static function tokenize(string $string) : array{
 		return preg_split("/(" . TextFormat::ESCAPE . "[0123456789abcdefklmnor])/", $string, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE);
 	}
 
 	/**
 	 * Cleans the string from Minecraft codes and ANSI Escape Codes
-	 *
-	 * @param string $string
-	 * @param bool   $removeFormat
-	 *
-	 * @return mixed
 	 */
-	public static function clean($string, $removeFormat = true){
+	public static function clean(string $string, bool $removeFormat = true) : string{
 		if($removeFormat){
-			return str_replace(TextFormat::ESCAPE, "", preg_replace(["/" . TextFormat::ESCAPE . "[0123456789abcdefklmnor]/", "/\x1b[\\(\\][[0-9;\\[\\(]+[Bm]/"], "", $string));
+			return str_replace(TextFormat::ESCAPE, "", self::preg_replace(["/" . TextFormat::ESCAPE . "[0123456789abcdefklmnor]/", "/\x1b[\(\\][[0-9;\[\(]+[Bm]/"], "", $string));
 		}
-		return str_replace("\x1b", "", preg_replace("/\x1b[\\(\\][[0-9;\\[\\(]+[Bm]/", "", $string));
+		return str_replace("\x1b", "", preg_replace("/\x1b[\(\\][[0-9;\[\(]+[Bm]/", "", $string));
 	}
 
 	private static function makePcreError() : \InvalidArgumentException{
@@ -110,7 +105,7 @@ abstract class TextFormat{
 		throw new \InvalidArgumentException("PCRE error: $message");
 	}
 
-	private static function preg_replace(string $pattern, string $replacement, string $string) : string{
+	private static function preg_replace(array|string $pattern, string $replacement, string $string) : string{
 		$result = preg_replace($pattern, $replacement, $string);
 
 		if($result === null){
@@ -124,13 +119,15 @@ abstract class TextFormat{
 	}
 
 	/**
-	 * Returns an JSON-formatted string with colors/markup
+	 * Returns a JSON-formatted string with colors/markup.
 	 *
-	 * @param string|array $string
+	 * NOTE: json_encode() may return false for malformed input, so the return type is kept as string|false.
 	 *
-	 * @return string
+	 * @param string|string[] $string
+	 *
+	 * @return string|false
 	 */
-	public static function toJSON($string){
+	public static function toJSON(string|array $string) : string|false{
 		if(!is_array($string)){
 			$string = self::tokenize($string);
 		}
@@ -314,11 +311,9 @@ abstract class TextFormat{
 	/**
 	 * Returns an HTML-formatted string with colors/markup
 	 *
-	 * @param string|array $string
-	 *
-	 * @return string
+	 * @param string|string[] $string
 	 */
-	public static function toHTML($string){
+	public static function toHTML(string|array $string) : string{
 		if(!is_array($string)){
 			$string = self::tokenize($string);
 		}
@@ -430,11 +425,9 @@ abstract class TextFormat{
 	/**
 	 * Returns a string with colorized ANSI Escape codes
 	 *
-	 * @param $string
-	 *
-	 * @return string
+	 * @param string|string[] $string
 	 */
-	public static function toANSI($string){
+	public static function toANSI(string|array $string) : string{
 		if(!is_array($string)){
 			$string = self::tokenize($string);
 		}

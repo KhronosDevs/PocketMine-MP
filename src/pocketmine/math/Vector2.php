@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\math;
 
 use pocketmine\utils\Random;
@@ -35,31 +37,34 @@ use function sqrt;
  * If this class is modified, remember to modify the PHP C extension.
  */
 class Vector2{
-	public $x;
-	public $y;
+	public float $x;
+	public float $y;
 
-	public function __construct($x = 0, $y = 0){
+	public function __construct(float $x = 0, float $y = 0){
 		$this->x = $x;
 		$this->y = $y;
 	}
 
-	public function getX(){
+	public function getX() : float{
 		return $this->x;
 	}
 
-	public function getY(){
+	public function getY() : float{
 		return $this->y;
 	}
 
-	public function getFloorX(){
+	public function getFloorX() : int{
 		return (int) $this->x;
 	}
 
-	public function getFloorY(){
+	public function getFloorY() : int{
 		return (int) $this->y;
 	}
 
-	public function add($x, $y = 0){
+	/**
+	 * @param Vector2|float $x
+	 */
+	public function add(Vector2|float $x, float $y = 0) : Vector2{
 		if($x instanceof Vector2){
 			return $this->add($x->x, $x->y);
 		}else{
@@ -67,7 +72,10 @@ class Vector2{
 		}
 	}
 
-	public function subtract($x, $y = 0){
+	/**
+	 * @param Vector2|float $x
+	 */
+	public function subtract(Vector2|float $x, float $y = 0) : Vector2{
 		if($x instanceof Vector2){
 			return $this->add(-$x->x, -$x->y);
 		}else{
@@ -75,31 +83,34 @@ class Vector2{
 		}
 	}
 
-	public function ceil(){
+	public function ceil() : Vector2{
 		return new Vector2((int) ($this->x + 1), (int) ($this->y + 1));
 	}
 
-	public function floor(){
+	public function floor() : Vector2{
 		return new Vector2((int) $this->x, (int) $this->y);
 	}
 
-	public function round(){
+	public function round() : Vector2{
 		return new Vector2(round($this->x), round($this->y));
 	}
 
-	public function abs(){
+	public function abs() : Vector2{
 		return new Vector2(abs($this->x), abs($this->y));
 	}
 
-	public function multiply($number){
+	public function multiply(float $number) : Vector2{
 		return new Vector2($this->x * $number, $this->y * $number);
 	}
 
-	public function divide($number){
+	public function divide(float $number) : Vector2{
 		return new Vector2($this->x / $number, $this->y / $number);
 	}
 
-	public function distance($x, $y = 0){
+	/**
+	 * @param Vector2|float $x
+	 */
+	public function distance(Vector2|float $x, float $y = 0) : float{
 		if($x instanceof Vector2){
 			return sqrt($this->distanceSquared($x->x, $x->y));
 		}else{
@@ -107,7 +118,10 @@ class Vector2{
 		}
 	}
 
-	public function distanceSquared($x, $y = 0){
+	/**
+	 * @param Vector2|float $x
+	 */
+	public function distanceSquared(Vector2|float $x, float $y = 0) : float{
 		if($x instanceof Vector2){
 			return $this->distanceSquared($x->x, $x->y);
 		}else{
@@ -115,15 +129,15 @@ class Vector2{
 		}
 	}
 
-	public function length(){
+	public function length() : float{
 		return sqrt($this->lengthSquared());
 	}
 
-	public function lengthSquared(){
+	public function lengthSquared() : float{
 		return $this->x * $this->x + $this->y * $this->y;
 	}
 
-	public function normalize(){
+	public function normalize() : Vector2{
 		$len = $this->lengthSquared();
 		if($len != 0){
 			return $this->divide(sqrt($len));
@@ -132,15 +146,15 @@ class Vector2{
 		return new Vector2(0, 0);
 	}
 
-	public function dot(Vector2 $v){
+	public function dot(Vector2 $v) : float{
 		return $this->x * $v->x + $this->y * $v->y;
 	}
 
-	public function __toString(){
+	public function __toString() : string{
 		return "Vector2(x=" . $this->x . ",y=" . $this->y . ")";
 	}
 
-	public static function createRandomDirection(Random $random){
+	public static function createRandomDirection(Random $random) : Vector2{
 		return VectorMath::getDirection2D($random->nextFloat() * 2 * pi());
 	}
 }

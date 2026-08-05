@@ -25,6 +25,8 @@
 * Copied from @beito123's FlowerPot plugin
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\utils;
 
 class Color {
@@ -46,14 +48,14 @@ class Color {
 	const COLOR_DYE_ORANGE = 14;
 	const COLOR_DYE_WHITE = 15;
 
-	private $red = 0;
-	private $green = 0;
-	private $blue = 0;
+	private int $red = 0;
+	private int $green = 0;
+	private int $blue = 0;
 
 	/** @var \SplFixedArray */
-	public static $dyeColors = null;
+	public static ?\SplFixedArray $dyeColors = null;
 
-	public static function init(){
+	public static function init() : void{
 		if(self::$dyeColors === null){
 			self::$dyeColors = new \SplFixedArray(16); //What's the point of making a 256-long array for 16 objects?
 			self::$dyeColors[self::COLOR_DYE_BLACK] = Color::getRGB(30, 27, 27);
@@ -75,11 +77,11 @@ class Color {
 		}
 	}
 
-	public static function getRGB($r, $g, $b){
-		return new Color((int) $r, (int) $g, (int) $b);
+	public static function getRGB(int $r, int $g, int $b) : Color{
+		return new Color($r, $g, $b);
 	}
 
-	public static function averageColor(Color ...$colors){
+	public static function averageColor(Color ...$colors) : Color{
 		$tr = 0;//total red
 		$tg = 0;//green
 		$tb = 0;//blue
@@ -90,39 +92,39 @@ class Color {
 			$tb += $c->getBlue();
 			++$count;
 		}
-		return Color::getRGB($tr / $count, $tg / $count, $tb / $count);
+		return Color::getRGB((int) ($tr / $count), (int) ($tg / $count), (int) ($tb / $count));
 	}
 
-	public static function getDyeColor($id){
+	public static function getDyeColor(int $id) : Color{
 		if(isset(self::$dyeColors[$id])){
 			return clone self::$dyeColors[$id];
 		}
 		return Color::getRGB(0, 0, 0);
 	}
 
-	public function __construct($r, $g, $b){
+	public function __construct(int $r, int $g, int $b){
 		$this->red = $r;
 		$this->green = $g;
 		$this->blue = $b;
 	}
 
-	public function getRed(){
-		return (int) $this->red;
+	public function getRed() : int{
+		return $this->red;
 	}
 
-	public function getBlue(){
-		return (int) $this->blue;
+	public function getBlue() : int{
+		return $this->blue;
 	}
 
-	public function getGreen(){
-		return (int) $this->green;
+	public function getGreen() : int{
+		return $this->green;
 	}
 
-	public function getColorCode(){
+	public function getColorCode() : int{
 		return ($this->red << 16 | $this->green << 8 | $this->blue) & 0xffffff;
 	}
 
-	public function __toString(){
+	public function __toString() : string{
 		return "Color(red:" . $this->red . ", green:" . $this->green . ", blue:" . $this->blue . ")";
 	}
 }

@@ -27,7 +27,7 @@ class StrangePacket extends DataPacket{
 	public $address;
 	public $port = 19132;
 
-	public function pid(){
+	public function pid() : int{
 		return 0x1b;
 	}
 

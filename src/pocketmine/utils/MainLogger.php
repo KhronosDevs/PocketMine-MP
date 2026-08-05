@@ -54,6 +54,11 @@ use const E_WARNING;
 use const FILE_APPEND;
 use const PHP_EOL;
 
+/**
+ * NOTE: This class deliberately avoids declare(strict_types=1) and typed properties.
+ * It is a pmmpthread Thread subclass and is used by every thread in the server;
+ * keeping it conservative preserves threading and interface compatibility.
+ */
 class MainLogger extends \AttachableThreadedLogger
 {
     protected $logFile;
@@ -73,13 +78,13 @@ class MainLogger extends \AttachableThreadedLogger
     public $shouldRecordMsg = false;
     private $lastGet = 0;
 
-    public function setSendMsg($b)
+    public function setSendMsg(bool $b): void
     {
         $this->shouldRecordMsg = $b;
         $this->lastGet = time();
     }
 
-    public function getMessages()
+    public function getMessages(): string
     {
         $msg = $this->shouldSendMsg;
         $this->shouldSendMsg = "";
@@ -109,47 +114,47 @@ class MainLogger extends \AttachableThreadedLogger
     /**
      * @return MainLogger
      */
-    public static function getLogger()
+    public static function getLogger(): MainLogger
     {
         return static::$logger;
     }
 
-    public function emergency($message, $name = "EMERGENCY")
+    public function emergency($message, $name = "EMERGENCY"): void
     {
         $this->send($message, \LogLevel::EMERGENCY, $name, TextFormat::RED);
     }
 
-    public function alert($message, $name = "ALERT")
+    public function alert($message, $name = "ALERT"): void
     {
         $this->send($message, \LogLevel::ALERT, $name, TextFormat::RED);
     }
 
-    public function critical($message, $name = "CRITICAL")
+    public function critical($message, $name = "CRITICAL"): void
     {
         $this->send($message, \LogLevel::CRITICAL, $name, TextFormat::RED);
     }
 
-    public function error($message, $name = "ERROR")
+    public function error($message, $name = "ERROR"): void
     {
         $this->send($message, \LogLevel::ERROR, $name, TextFormat::DARK_RED);
     }
 
-    public function warning($message, $name = "WARNING")
+    public function warning($message, $name = "WARNING"): void
     {
         $this->send($message, \LogLevel::WARNING, $name, TextFormat::YELLOW);
     }
 
-    public function notice($message, $name = "NOTICE")
+    public function notice($message, $name = "NOTICE"): void
     {
         $this->send($message, \LogLevel::NOTICE, $name, TextFormat::AQUA);
     }
 
-    public function info($message, $name = "INFO")
+    public function info($message, $name = "INFO"): void
     {
         $this->send($message, \LogLevel::INFO, $name, TextFormat::WHITE);
     }
 
-    public function debug($message, $name = "DEBUG")
+    public function debug($message, $name = "DEBUG"): void
     {
         if ($this->logDebug === false) {
             return;
@@ -160,12 +165,12 @@ class MainLogger extends \AttachableThreadedLogger
     /**
      * @param bool $logDebug
      */
-    public function setLogDebug($logDebug)
+    public function setLogDebug(bool $logDebug): void
     {
         $this->logDebug = (bool) $logDebug;
     }
 
-    public function logException(\Throwable $e, $trace = null)
+    public function logException(\Throwable $e, $trace = null): void
     {
         if ($trace === null) {
             $trace = $e->getTrace();
@@ -209,7 +214,7 @@ class MainLogger extends \AttachableThreadedLogger
         }
     }
 
-    public function log($level, $message)
+    public function log($level, $message): void
     {
         switch ($level) {
             case LogLevel::EMERGENCY:
@@ -239,12 +244,12 @@ class MainLogger extends \AttachableThreadedLogger
         }
     }
 
-    public function shutdown()
+    public function shutdown(): void
     {
         $this->shutdown = true;
     }
 
-    protected function send($message, $level, $prefix, $color)
+    protected function send($message, $level, $prefix, $color): void
     {
         $now = time();
 
@@ -266,7 +271,6 @@ class MainLogger extends \AttachableThreadedLogger
         }
 
         $message = TextFormat::toANSI(TextFormat::AQUA . "[" . date("H:i:s", $now) . "] " . TextFormat::RESET . $color . "[" . $threadName . "/" . $prefix . "]:" . " " . $message . TextFormat::RESET);
-        //$message = TextFormat::toANSI(TextFormat::AQUA . "[" . date("H:i:s") . "] ". TextFormat::RESET . $color ."<".$prefix . ">" . " " . $message . TextFormat::RESET);
         $cleanMessage = TextFormat::clean($message);
 
         if (!Terminal::hasFormattingCodes()) {
@@ -290,40 +294,6 @@ class MainLogger extends \AttachableThreadedLogger
             });
         }
     }
-
-    /*public function run(){
-		$this->shutdown = false;
-		if($this->write){
-			$this->logResource = fopen($this->logFile, "a+b");
-			if(!is_resource($this->logResource)){
-				throw new \RuntimeException("Couldn't open log file");
-			}
-
-			while($this->shutdown === false){
-				if(!$this->write) {
-					fclose($this->logResource);
-					break;
-				}
-				$this->synchronized(function(){
-					while($this->logStream->count() > 0){
-						$chunk = $this->logStream->shift();
-						fwrite($this->logResource, $chunk);
-					}
-
-					$this->wait(25000);
-				});
-			}
-
-			if($this->logStream->count() > 0){
-				while($this->logStream->count() > 0){
-					$chunk = $this->logStream->shift();
-					fwrite($this->logResource, $chunk);
-				}
-			}
-
-			fclose($this->logResource);
-		}
-	}*/
 
     public function run(): void
     {
@@ -351,12 +321,12 @@ class MainLogger extends \AttachableThreadedLogger
         }
     }
 
-    public function setWrite($write)
+    public function setWrite(bool $write): void
     {
         $this->write = $write;
     }
 
-    public function setConsoleCallback($callback)
+    public function setConsoleCallback(?callable $callback): void
     {
         $this->consoleCallback = $callback;
     }

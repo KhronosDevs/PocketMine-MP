@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 /**
  * Math related classes, like matrices, bounding boxes and vector
  */
@@ -32,21 +34,35 @@ use function sqrt;
 
 abstract class Math{
 
-	public static function floorFloat($n){
+	/**
+	 * Returns the largest integer less than or equal to $n.
+	 */
+	public static function floorFloat(float $n) : int{
 		$i = (int) $n;
 		return $n >= $i ? $i : $i - 1;
 	}
 
-	public static function ceilFloat($n){
+	/**
+	 * Returns the smallest integer greater than or equal to $n.
+	 */
+	public static function ceilFloat(float $n) : int{
 		$i = (int) ($n + 1);
 		return $n >= $i ? $i : $i - 1;
 	}
 
-	public static function clamp($value, $low, $high){
+	/**
+	 * Clamps $value between $low and $high (inclusive).
+	 */
+	public static function clamp(float $value, float $low, float $high) : float{
 		return min($high, max($low, $value));
 	}
 
-	public static function solveQuadratic($a, $b, $c) : array{
+	/**
+	 * Solves a quadratic equation ax^2 + bx + c = 0.
+	 *
+	 * @return float[]
+	 */
+	public static function solveQuadratic(float $a, float $b, float $c) : array{
 		$x[0] = (-$b + sqrt($b ** 2 - 4 * $a * $c)) / (2 * $a);
 		$x[1] = (-$b - sqrt($b ** 2 - 4 * $a * $c)) / (2 * $a);
 		if($x[0] == $x[1]){

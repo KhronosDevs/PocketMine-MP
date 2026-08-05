@@ -24,6 +24,8 @@
 /**
  * Various Utilities used around the code
  */
+declare(strict_types=1);
+
 namespace pocketmine\utils;
 
 use pocketmine\pmmp\thread\ThreadManager;
@@ -91,17 +93,17 @@ use const STR_PAD_RIGHT;
  * Big collection of functions
  */
 class Utils{
-	public static $online = true;
-	public static $ip = false;
-	public static $os;
-	private static $serverUniqueId = null;
+	public static bool $online = true;
+	public static string|false $ip = false;
+	public static ?string $os = null;
+	private static ?UUID $serverUniqueId = null;
 
 	/**
 	 * Generates an unique identifier to a callable
 	 *
 	 * @return string
 	 */
-	public static function getCallableIdentifier(callable $variable){
+	public static function getCallableIdentifier(callable $variable) : string{
 		if(is_array($variable)){
 			return sha1(strtolower(spl_object_hash($variable[0])) . "::" . strtolower($variable[1]));
 		}else{
@@ -119,13 +121,14 @@ class Utils{
 	 *
 	 * @return UUID
 	 */
-	public static function getMachineUniqueId($extra = ""){
+	public static function getMachineUniqueId(string $extra = "") : UUID{
 		if(self::$serverUniqueId !== null && $extra === ""){
 			return self::$serverUniqueId;
 		}
 
 		$machine = php_uname("a");
-		$machine .= file_exists("/proc/cpuinfo") ? implode(preg_grep("/(model name|Processor|Serial)/", file("/proc/cpuinfo"))) : "";
+		$cpuinfo = @file("/proc/cpuinfo");
+		$machine .= $cpuinfo === false ? "" : implode(preg_grep("/(model name|Processor|Serial)/", $cpuinfo));
 		$machine .= sys_get_temp_dir();
 		$machine .= $extra;
 		$os = Utils::getOS();
@@ -182,28 +185,35 @@ class Utils{
 	 *
 	 * @param bool $force default false, force IP check even when cached
 	 *
-	 * @return string
+	 * @return string|false
 	 */
-
-	public static function getIP($force = false){
+	public static function getIP(bool $force = false) : string|false{
 		if(Utils::$online === false){
 			return false;
 		}elseif(Utils::$ip !== false && $force !== true){
 			return Utils::$ip;
 		}
-		$ip = trim(strip_tags(Utils::getURL("https://api.ipify.org")));
+		$url = Utils::getURL("https://api.ipify.org");
+		$ip = $url === false ? "" : trim(strip_tags($url));
 		if($ip){
 			Utils::$ip = $ip;
 		}else{
 			$ip = Utils::getURL("http://www.checkip.org/");
+			if($ip === false){
+				$ip = "";
+			}
 			if(preg_match('#">([0-9a-fA-F\:\.]*)</span>#', $ip, $matches) > 0){
 				Utils::$ip = $matches[1];
 			}else{
 				$ip = Utils::getURL("http://checkmyip.org/");
+				if($ip === false){
+					$ip = "";
+				}
 				if(preg_match('#Your IP address is ([0-9a-fA-F\:\.]*)#', $ip, $matches) > 0){
 					Utils::$ip = $matches[1];
 				}else{
-					$ip = trim(Utils::getURL("http://ifconfig.me/ip"));
+					$url = Utils::getURL("http://ifconfig.me/ip");
+					$ip = $url === false ? "" : trim($url);
 					if($ip != ""){
 						Utils::$ip = $ip;
 					}else{
@@ -229,7 +239,7 @@ class Utils{
 	 *
 	 * @return string
 	 */
-	public static function getOS($recalculate = false){
+	public static function getOS(bool $recalculate = false) : string{
 		if(self::$os === null || $recalculate){
 			$uname = php_uname("s");
 			if(stripos($uname, "Darwin") !== false){
@@ -256,14 +266,20 @@ class Utils{
 		return self::$os;
 	}
 
-	public static function getRealMemoryUsage(){
+	/**
+	 * @return int[] [heap, stack]
+	 */
+	public static function getRealMemoryUsage() : array{
 		$stack = 0;
 		$heap = 0;
 
 		if(Utils::getOS() === "linux" || Utils::getOS() === "android"){
-			$mappings = file("/proc/self/maps");
+			$mappings = @file("/proc/self/maps");
+			if($mappings === false){
+				$mappings = [];
+			}
 			foreach($mappings as $line){
-				if(preg_match("#([a-z0-9]+)\\-([a-z0-9]+) [rwxp\\-]{4} [a-z0-9]+ [^\\[]*\\[([a-zA-z0-9]+)\\]#", trim($line), $matches) > 0){
+				if(preg_match("#([a-z0-9]+)\-([a-z0-9]+) [rwxp\-]{4} [a-z0-9]+ [^\\[]*\[([a-zA-z0-9]+)\]#", trim($line), $matches) > 0){
 					if(strpos($matches[3], "heap") === 0){
 						$heap += hexdec($matches[2]) - hexdec($matches[1]);
 					}elseif(strpos($matches[3], "stack") === 0){
@@ -276,12 +292,18 @@ class Utils{
 		return [$heap, $stack];
 	}
 
-	public static function getMemoryUsage($advanced = false){
+	/**
+	 * @return int|int[]
+	 */
+	public static function getMemoryUsage(bool $advanced = false) : int|array{
 		$reserved = memory_get_usage();
 		$VmSize = null;
 		$VmRSS = null;
 		if(Utils::getOS() === "linux" || Utils::getOS() === "android"){
 			$status = file_get_contents("/proc/self/status");
+			if($status === false){
+				$status = "";
+			}
 			if(preg_match("/VmRSS:[ \t]+([0-9]+) kB/", $status, $matches) > 0){
 				$VmRSS = $matches[1] * 1024;
 			}
@@ -308,9 +330,10 @@ class Utils{
 		return [$reserved, $VmRSS, $VmSize];
 	}
 
-	public static function getThreadCount(){
+	public static function getThreadCount() : int{
 		if(Utils::getOS() === "linux" || Utils::getOS() === "android"){
-			if(preg_match("/Threads:[ \t]+([0-9]+)/", file_get_contents("/proc/self/status"), $matches) > 0){
+			$status = file_get_contents("/proc/self/status");
+			if($status !== false && preg_match("/Threads:[ \t]+([0-9]+)/", $status, $matches) > 0){
 				return (int) $matches[1];
 			}
 		}
@@ -319,7 +342,7 @@ class Utils{
 		return count(ThreadManager::getInstance()->getAll()) + 3; //RakLib + MainLogger + Main Thread
 	}
 
-	public static function getCoreCount($recalculate = false){
+	public static function getCoreCount(bool $recalculate = false) : int{
 		static $processors = 0;
 
 		if($processors > 0 && !$recalculate){
@@ -332,20 +355,20 @@ class Utils{
 			case "linux":
 			case "android":
 				if(file_exists("/proc/cpuinfo")){
-					foreach(file("/proc/cpuinfo") as $l){
+					foreach(@file("/proc/cpuinfo") ?: [] as $l){
 						if(preg_match('/^processor[ \t]*:[ \t]*[0-9]+$/m', $l) > 0){
 							++$processors;
 						}
 					}
 				}else{
-					if(preg_match("/^([0-9]+)\\-([0-9]+)$/", trim(@file_get_contents("/sys/devices/system/cpu/present")), $matches) > 0){
+					$present = @file_get_contents("/sys/devices/system/cpu/present");
+					if($present !== false && preg_match("/^([0-9]+)\-([0-9]+)$/", trim($present), $matches) > 0){
 						$processors = (int) ($matches[2] - $matches[1]);
 					}
 				}
 				break;
 			case "bsd":
 			case "mac":
-				$processors = (int) `sysctl -n hw.ncpu`;
 				$processors = (int) `sysctl -n hw.ncpu`;
 				break;
 			case "win":
@@ -362,7 +385,7 @@ class Utils{
 	 *
 	 * @return string
 	 */
-	public static function hexdump($bin){
+	public static function hexdump(string $bin) : string{
 		$output = "";
 		$bin = str_split($bin, 16);
 		foreach($bin as $counter => $line){
@@ -377,11 +400,11 @@ class Utils{
 	/**
 	 * Returns a string that can be printed, replaces non-printable characters
 	 *
-	 * @param $str
+	 * @param mixed $str
 	 *
 	 * @return string
 	 */
-	public static function printable($str){
+	public static function printable(mixed $str) : string{
 		if(!is_string($str)){
 			return gettype($str);
 		}
@@ -401,39 +424,27 @@ class Utils{
 	 * @param int    &$rounds      Will be set to the number of rounds taken
 	 * @param int    &$drop        Will be set to the amount of dropped bytes
 	 *
-	 * @deprecated prefer PHP 7 random_bytes()
+	 * @deprecated prefer PHP random_bytes()
 	 * @return string
 	 */
-	public static function getRandomBytes($length = 16, $secure = true, $raw = true, $startEntropy = "", &$rounds = 0, &$drop = 0){
+	public static function getRandomBytes(int $length = 16, bool $secure = true, bool $raw = true, string $startEntropy = "", int &$rounds = 0, int &$drop = 0) : string{
 		$raw_output = random_bytes($length);
-		if ($raw) {
+		if($raw){
 			return $raw_output;
-		} else {
+		}else{
 			return bin2hex($raw_output);
 		}
 	}
 
-	/*
-	public static function angle3D($pos1, $pos2){
-		$X = $pos1["x"] - $pos2["x"];
-		$Z = $pos1["z"] - $pos2["z"];
-		$dXZ = sqrt(pow($X, 2) + pow($Z, 2));
-		$Y = $pos1["y"] - $pos2["y"];
-		$hAngle = rad2deg(atan2($Z, $X) - M_PI_2);
-		$vAngle = rad2deg(-atan2($Y, $dXZ));
-
-		return array("yaw" => $hAngle, "pitch" => $vAngle);
-	}*/
-
 	/**
 	 * GETs an URL using cURL
 	 *
-	 * @param     $page
-	 * @param int $timeout default 10
+	 * @param string $page
+	 * @param int    $timeout default 10
 	 *
-	 * @return bool|mixed
+	 * @return string|false
 	 */
-	public static function getURL($page, $timeout = 10, array $extraHeaders = []){
+	public static function getURL(string $page, int $timeout = 10, array $extraHeaders = []) : string|false{
 		if(Utils::$online === false){
 			return false;
 		}
@@ -447,8 +458,8 @@ class Utils{
 		curl_setopt($ch, CURLOPT_FRESH_CONNECT, 1);
 		curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, (int) $timeout);
-		curl_setopt($ch, CURLOPT_TIMEOUT, (int) $timeout);
+		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeout);
+		curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
@@ -458,13 +469,13 @@ class Utils{
 	/**
 	 * POSTs data to an URL
 	 *
-	 * @param              $page
-	 * @param array|string $args
-	 * @param int          $timeout
+	 * @param string        $page
+	 * @param array|string  $args
+	 * @param int           $timeout
 	 *
-	 * @return bool|mixed
+	 * @return string|false
 	 */
-	public static function postURL($page, $args, $timeout = 10, array $extraHeaders = []){
+	public static function postURL(string $page, array|string $args, int $timeout = 10, array $extraHeaders = []) : string|false{
 		if(Utils::$online === false){
 			return false;
 		}
@@ -480,15 +491,15 @@ class Utils{
 		curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 		curl_setopt($ch, CURLOPT_HTTPHEADER, array_merge(["User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64; rv:12.0) Gecko/20100101 Firefox/12.0 PocketMine-MP"], $extraHeaders));
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, (int) $timeout);
-		curl_setopt($ch, CURLOPT_TIMEOUT, (int) $timeout);
+		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeout);
+		curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
 		$ret = curl_exec($ch);
 		curl_close($ch);
 
 		return $ret;
 	}
 
-	public static function javaStringHash($string){
+	public static function javaStringHash(string $string) : int{
 		$hash = 0;
 		for($i = 0; $i < strlen($string); $i++){
 			$ord = ord($string[$i]);

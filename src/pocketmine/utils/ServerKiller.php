@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\utils;
 
 use pmmp\thread\Thread;
@@ -30,9 +32,9 @@ use function time;
 class ServerKiller extends Thread
 {
 
-    public $time;
+    public $time = 15;
 
-    public function __construct($time = 15)
+    public function __construct(int $time = 15)
     {
         $this->time = $time;
     }
@@ -49,7 +51,7 @@ class ServerKiller extends Thread
         }
     }
 
-    public function getThreadName()
+    public function getThreadName(): string
     {
         return "Server Killer";
     }

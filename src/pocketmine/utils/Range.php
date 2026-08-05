@@ -21,11 +21,13 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\utils;
 
 class Range{
-	public $minValue;
-	public $maxValue;
+	public readonly int $minValue;
+	public readonly int $maxValue;
 
 	public function __construct(int $min, int $max){
 		$this->minValue = $min;

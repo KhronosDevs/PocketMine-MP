@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\utils;
 
 use pocketmine\scheduler\FileWriteTask;
@@ -74,18 +76,18 @@ class Config{
 	const ENUMERATION = Config::ENUM;
 
 	/** @var array */
-	private $config = [];
+	private array $config = [];
 
-	private $nestedCache = [];
+	private array $nestedCache = [];
 
 	/** @var string */
-	private $file;
+	private string $file;
 	/** @var boolean */
-	private $correct = false;
+	private bool $correct = false;
 	/** @var integer */
-	private $type = Config::DETECT;
+	private int $type = Config::DETECT;
 
-	public static $formats = [
+	public static array $formats = [
 		"properties" => Config::PROPERTIES,
 		"cnf" => Config::CNF,
 		"conf" => Config::CNF,
@@ -109,7 +111,7 @@ class Config{
 	 * @param array  $default  Array with the default values that will be written to the file if it did not exist
 	 * @param null   &$correct Sets correct to true if everything has been loaded correctly
 	 */
-	public function __construct($file, $type = Config::DETECT, $default = [], &$correct = null){
+	public function __construct(string $file, int $type = Config::DETECT, array $default = [], ?bool &$correct = null){
 		$this->load($file, $type, $default);
 		$correct = $this->correct;
 	}
@@ -117,32 +119,27 @@ class Config{
 	/**
 	 * Removes all the changes in memory and loads the file again
 	 */
-	public function reload(){
+	public function reload() : void{
 		$this->config = [];
 		$this->nestedCache = [];
 		$this->correct = false;
 		$this->load($this->file, $this->type);
 	}
 
-	/**
-	 * @param $str
-	 *
-	 * @return mixed
-	 */
-	public static function fixYAMLIndexes($str){
-		return preg_replace("#^([ ]*)([a-zA-Z_]{1}[ ]*)\\:$#m", "$1\"$2\":", $str);
+	public static function fixYAMLIndexes(string $str) : string{
+		return (string) preg_replace("#^([ ]*)([a-zA-Z_]{1}[ ]*)\:$#m", "$1\"$2\":", $str);
 	}
 
 	/**
-	 * @param       $file
-	 * @param int   $type
-	 * @param array $default
+	 * @param string $file
+	 * @param int    $type
+	 * @param array  $default
 	 *
 	 * @return bool
 	 */
-	public function load($file, $type = Config::DETECT, $default = []){
+	public function load(string $file, int $type = Config::DETECT, array $default = []) : bool{
 		$this->correct = true;
-		$this->type = (int) $type;
+		$this->type = $type;
 		$this->file = $file;
 		if(!is_array($default)){
 			$default = [];
@@ -162,20 +159,26 @@ class Config{
 			}
 			if($this->correct === true){
 				$content = file_get_contents($this->file);
+				if($content === false){
+					$content = "";
+				}
 				switch($this->type){
 					case Config::PROPERTIES:
 					case Config::CNF:
 						$this->parseProperties($content);
 						break;
 					case Config::JSON:
-						$this->config = json_decode($content, true);
+						$parsed = json_decode($content, true);
+						$this->config = is_array($parsed) ? $parsed : [];
 						break;
 					case Config::YAML:
 						$content = self::fixYAMLIndexes($content);
-						$this->config = yaml_parse($content);
+						$parsed = yaml_parse($content);
+						$this->config = is_array($parsed) ? $parsed : [];
 						break;
 					case Config::SERIALIZED:
-						$this->config = unserialize($content);
+						$parsed = unserialize($content);
+						$this->config = is_array($parsed) ? $parsed : [];
 						break;
 					case Config::ENUM:
 						$this->parseList($content);
@@ -199,19 +202,11 @@ class Config{
 		return true;
 	}
 
-	/**
-	 * @return boolean
-	 */
-	public function check(){
+	public function check() : bool{
 		return $this->correct === true;
 	}
 
-	/**
-	 * @param bool $async
-	 *
-	 * @return boolean
-	 */
-	public function save($async = false){
+	public function save(bool $async = false) : bool{
 		if($this->correct === true){
 			try{
 				$content = null;
@@ -253,44 +248,23 @@ class Config{
 		}
 	}
 
-	/**
-	 * @param $k
-	 *
-	 * @return boolean|mixed
-	 */
-	public function __get($k){
+	public function __get(string $k) : mixed{
 		return $this->get($k);
 	}
 
-	/**
-	 * @param $k
-	 * @param $v
-	 */
-	public function __set($k, $v){
+	public function __set(string $k, mixed $v) : void{
 		$this->set($k, $v);
 	}
 
-	/**
-	 * @param $k
-	 *
-	 * @return boolean
-	 */
-	public function __isset($k){
+	public function __isset(string $k) : bool{
 		return $this->exists($k);
 	}
 
-	/**
-	 * @param $k
-	 */
-	public function __unset($k){
+	public function __unset(string $k) : void{
 		$this->remove($k);
 	}
 
-	/**
-	 * @param $key
-	 * @param $value
-	 */
-	public function setNested($key, $value){
+	public function setNested(string $key, mixed $value) : void{
 		$vars = explode(".", $key);
 		$base = array_shift($vars);
 
@@ -312,13 +286,7 @@ class Config{
 		$this->nestedCache[$key] = $value;
 	}
 
-	/**
-	 * @param       $key
-	 * @param mixed $default
-	 *
-	 * @return mixed
-	 */
-	public function getNested($key, $default = null){
+	public function getNested(string $key, mixed $default = null) : mixed{
 		if(isset($this->nestedCache[$key])){
 			return $this->nestedCache[$key];
 		}
@@ -343,13 +311,7 @@ class Config{
 		return $this->nestedCache[$key] = $base;
 	}
 
-	/**
-	 * @param       $k
-	 * @param mixed $default
-	 *
-	 * @return boolean|mixed
-	 */
-	public function get($k, $default = false){
+	public function get(string $k, mixed $default = false) : mixed{
 		return ($this->correct && isset($this->config[$k])) ? $this->config[$k] : $default;
 	}
 
@@ -357,7 +319,7 @@ class Config{
 	 * @param string $k key to be set
 	 * @param mixed  $v value to set key
 	 */
-	public function set($k, $v = true){
+	public function set(string $k, mixed $v = true) : void{
 		$this->config[$k] = $v;
 		foreach($this->nestedCache as $nestedKey => $nvalue){
 			if(substr($nestedKey, 0, strlen($k) + 1) === ($k . ".")){
@@ -366,20 +328,17 @@ class Config{
 		}
 	}
 
-	/**
-	 * @param array $v
-	 */
-	public function setAll($v){
+	public function setAll(array $v) : void{
 		$this->config = $v;
 	}
 
 	/**
-	 * @param      $k
-	 * @param bool $lowercase If set, searches Config in single-case / lowercase.
+	 * @param string $k
+	 * @param bool   $lowercase If set, searches Config in single-case / lowercase.
 	 *
 	 * @return boolean
 	 */
-	public function exists($k, $lowercase = false){
+	public function exists(string $k, bool $lowercase = false) : bool{
 		if($lowercase === true){
 			$k = strtolower($k); //Convert requested  key to lower
 			$array = array_change_key_case($this->config, CASE_LOWER); //Change all keys in array to lower
@@ -389,10 +348,7 @@ class Config{
 		}
 	}
 
-	/**
-	 * @param $k
-	 */
-	public function remove($k){
+	public function remove(string $k) : void{
 		unset($this->config[$k]);
 	}
 
@@ -401,21 +357,15 @@ class Config{
 	 *
 	 * @return array
 	 */
-	public function getAll($keys = false){
+	public function getAll(bool $keys = false) : array{
 		return ($keys === true ? array_keys($this->config) : $this->config);
 	}
 
-	public function setDefaults(array $defaults){
+	public function setDefaults(array $defaults) : void{
 		$this->fillDefaults($defaults, $this->config);
 	}
 
-	/**
-	 * @param $default
-	 * @param $data
-	 *
-	 * @return integer
-	 */
-	private function fillDefaults($default, &$data){
+	private function fillDefaults(array $default, array &$data) : int{
 		$changed = 0;
 		foreach($default as $k => $v){
 			if(is_array($v)){
@@ -432,10 +382,7 @@ class Config{
 		return $changed;
 	}
 
-	/**
-	 * @param $content
-	 */
-	private function parseList($content){
+	private function parseList(string $content) : void{
 		foreach(explode("\n", trim(str_replace("\r\n", "\n", $content))) as $v){
 			$v = trim($v);
 			if($v == ""){
@@ -445,10 +392,7 @@ class Config{
 		}
 	}
 
-	/**
-	 * @return string
-	 */
-	private function writeProperties(){
+	private function writeProperties() : string{
 		$content = "#Properties Config file\r\n#" . date("D M j H:i:s T Y") . "\r\n";
 		foreach($this->config as $k => $v){
 			if(is_bool($v) === true){
@@ -462,10 +406,7 @@ class Config{
 		return $content;
 	}
 
-	/**
-	 * @param $content
-	 */
-	private function parseProperties($content){
+	private function parseProperties(string $content) : void{
 		if(preg_match_all('/([a-zA-Z0-9\-_\.]*)=([^\r\n]*)/u', $content, $matches) > 0){ //false or 0 matches
 			foreach($matches[1] as $i => $k){
 				$v = trim($matches[2][$i]);

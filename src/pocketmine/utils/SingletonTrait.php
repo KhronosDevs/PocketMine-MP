@@ -2,24 +2,19 @@
 
 
 
+declare(strict_types=1);
+
 namespace pocketmine\utils;
 
 trait SingletonTrait {
 
-	/** @var self|null */
-	private static $instance = null;
+	private static ?self $instance = null;
 
-	/**
-	 * @return self
-	 */
-	private static function make() {
+	private static function make(): self {
 		return new self();
 	}
 
-	/**
-	 * @return self
-	 */
-	public static function getInstance() {
+	public static function getInstance(): self {
 		if(self::$instance === null) {
 			self::$instance = self::make();
 		}
@@ -27,11 +22,11 @@ trait SingletonTrait {
 		return self::$instance;
 	}
 
-	public static function setInstance($instance) {
+	public static function setInstance(self $instance): void {
 		self::$instance = $instance;
 	}
 
-	public static function reset() {
+	public static function reset(): void {
 		self::$instance = null;
 	}
 
