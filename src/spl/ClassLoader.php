@@ -17,12 +17,14 @@
  * GNU General Public License for more details.
 */
 
+declare(strict_types=1);
+
 interface ClassLoader{
 
 	/**
 	 * @param ClassLoader $parent
 	 */
-	public function __construct(ClassLoader $parent = null);
+	public function __construct(?ClassLoader $parent = null);
 
 	/**
 	 * Adds a path to the lookup list
@@ -30,14 +32,14 @@ interface ClassLoader{
 	 * @param string $path
 	 * @param bool   $prepend
 	 */
-	public function addPath($path, $prepend = false);
+	public function addPath(string $path, bool $prepend = false);
 
 	/**
 	 * Removes a path from the lookup list
 	 *
 	 * @param $path
 	 */
-	public function removePath($path);
+	public function removePath(string $path);
 
 	/**
 	 * Returns an array of the classes loaded
@@ -60,7 +62,7 @@ interface ClassLoader{
 	 *
 	 * @return bool
 	 */
-	public function register($prepend = false);
+	public function register(bool $prepend = false);
 
 	/**
 	 * Called when there is a class to load
@@ -71,7 +73,7 @@ interface ClassLoader{
 	 *
 	 * @throws ClassNotFoundException
 	 */
-	public function loadClass($name);
+	public function loadClass(string $name);
 
 	/**
 	 * Returns the path for the class, if any
@@ -80,5 +82,5 @@ interface ClassLoader{
 	 *
 	 * @return string|null
 	 */
-	public function findClass($name);
+	public function findClass(string $name);
 }

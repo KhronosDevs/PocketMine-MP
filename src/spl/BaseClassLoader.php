@@ -17,23 +17,25 @@
  * GNU General Public License for more details.
 */
 
+declare(strict_types=1);
+
 use pmmp\thread\ThreadSafe;
 use pmmp\thread\ThreadSafeArray;
 
 class BaseClassLoader extends ThreadSafe implements ClassLoader
 {
 
-    /** @var \ClassLoader */
-    private $parent;
-    /** @var string[] */
-    private $lookup;
-    /** @var string[] */
-    private $classes;
+    /** @var \ClassLoader|null */
+    private ?ClassLoader $parent;
+    /** @var ThreadSafeArray */
+    private ThreadSafeArray $lookup;
+    /** @var ThreadSafeArray */
+    private ThreadSafeArray $classes;
 
     /**
      * @param ClassLoader $parent
      */
-    public function __construct(ClassLoader $parent = null)
+    public function __construct(?ClassLoader $parent = null)
     {
         $this->parent = $parent;
         $this->lookup = new ThreadSafeArray;
@@ -46,7 +48,7 @@ class BaseClassLoader extends ThreadSafe implements ClassLoader
      * @param string $path
      * @param bool   $prepend
      */
-    public function addPath($path, $prepend = false)
+    public function addPath(string $path, bool $prepend = false): void
     {
 
         foreach ($this->lookup as $p) {
@@ -68,7 +70,7 @@ class BaseClassLoader extends ThreadSafe implements ClassLoader
         }
     }
 
-    protected function getAndRemoveLookupEntries()
+    protected function getAndRemoveLookupEntries(): array
     {
         $entries = [];
         while ($this->count() > 0) {
@@ -82,7 +84,7 @@ class BaseClassLoader extends ThreadSafe implements ClassLoader
      *
      * @param $path
      */
-    public function removePath($path)
+    public function removePath(string $path): void
     {
         foreach ($this->lookup as $i => $p) {
             if ($p === $path) {
@@ -96,7 +98,7 @@ class BaseClassLoader extends ThreadSafe implements ClassLoader
      *
      * @return string[]
      */
-    public function getClasses()
+    public function getClasses(): array
     {
         $classes = [];
         foreach ($this->classes as $class) {
@@ -110,7 +112,7 @@ class BaseClassLoader extends ThreadSafe implements ClassLoader
      *
      * @return ClassLoader
      */
-    public function getParent()
+    public function getParent(): ?ClassLoader
     {
         return $this->parent;
     }
@@ -122,9 +124,9 @@ class BaseClassLoader extends ThreadSafe implements ClassLoader
      *
      * @return bool
      */
-    public function register($prepend = false)
+    public function register(bool $prepend = false): bool
     {
-        spl_autoload_register([$this, "loadClass"], true, $prepend);
+        return spl_autoload_register([$this, "loadClass"], true, $prepend);
     }
 
     /**
@@ -134,7 +136,7 @@ class BaseClassLoader extends ThreadSafe implements ClassLoader
      *
      * @return bool
      */
-    public function loadClass($name)
+    public function loadClass(string $name): bool
     {
         $path = $this->findClass($name);
         if ($path !== null) {
@@ -167,7 +169,7 @@ class BaseClassLoader extends ThreadSafe implements ClassLoader
      *
      * @return string|null
      */
-    public function findClass($name)
+    public function findClass(string $name): ?string
     {
         $components = explode("\\", $name);
 

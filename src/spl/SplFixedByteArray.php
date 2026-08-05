@@ -17,16 +17,21 @@
  * GNU General Public License for more details.
 */
 
+declare(strict_types=1);
+
 class SplFixedByteArray extends SplFixedArray{
 
-	private $convert;
+	private bool $convert;
 
-	public function __construct($size, $convert = false){
+	public function __construct(int $size, bool $convert = false){
 		parent::__construct($size);
-		$this->convert = (bool) $convert;
+		$this->convert = $convert;
 	}
 
-	public function chunk($start, $size, $normalize = true){
+	/**
+	 * @return string|int[]
+	 */
+	public function chunk(int $start, int $size, bool $normalize = true) : string|array{
 		$end = $start + $size;
 		if($normalize && $this->convert){
 			$d = "";
@@ -48,9 +53,9 @@ class SplFixedByteArray extends SplFixedArray{
 	 *
 	 * @return SplFixedByteArray
 	 */
-	public static function fromString($str, $convert = false){
+	public static function fromString(string $str, bool $convert = false) : self{
 		$len = strlen($str);
-		$ob = new SplFixedByteArray($len, $convert);
+		$ob = new self($len, $convert);
 
 		if($convert){
 			for($i = 0; $i < $len; ++$i){
@@ -73,8 +78,8 @@ class SplFixedByteArray extends SplFixedArray{
 	 *
 	 * @return SplFixedByteArray
 	 */
-	public static function fromStringChunk($str, $size, $start = 0, $convert = false){
-		$ob = new SplFixedByteArray($size, $convert);
+	public static function fromStringChunk(string $str, int $size, int $start = 0, bool $convert = false) : self{
+		$ob = new self($size, $convert);
 
 		if($convert){
 			for($i = 0; $i < $size; ++$i){
@@ -89,7 +94,7 @@ class SplFixedByteArray extends SplFixedArray{
 		return $ob;
 	}
 
-	public function toString(){
+	public function toString() : string{
 		$result = "";
 		if($this->convert){
 			for($i = 0; $i < $this->getSize(); ++$i){
@@ -103,7 +108,7 @@ class SplFixedByteArray extends SplFixedArray{
 		return $result;
 	}
 
-	public function __toString(){
+	public function __toString() : string{
 		return $this->toString();
 	}
 }

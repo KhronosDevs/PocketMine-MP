@@ -17,23 +17,25 @@
  * GNU General Public License for more details.
 */
 
+declare(strict_types=1);
+
 abstract class ThreadedLoggerAttachment extends \pmmp\thread\ThreadSafe implements \LoggerAttachment{
 
-	/** @var \ThreadedLoggerAttachment */
-	protected $attachment = null;
+	/** @var ThreadedLoggerAttachment|null */
+	protected ?ThreadedLoggerAttachment $attachment = null;
 
 	/**
 	 * @param mixed  $level
 	 * @param string $message
 	 */
-	public final function call($level, $message){
+	public final function call(int|string $level, string $message) : void{
 		$this->log($level, $message);
 		if($this->attachment instanceof \ThreadedLoggerAttachment){
 			$this->attachment->call($level, $message);
 		}
 	}
 
-	public function addAttachment(ThreadedLoggerAttachment $attachment){
+	public function addAttachment(ThreadedLoggerAttachment $attachment) : void{
 		if($this->attachment instanceof \ThreadedLoggerAttachment){
 			$this->attachment->addAttachment($attachment);
 		}else{
@@ -41,7 +43,7 @@ abstract class ThreadedLoggerAttachment extends \pmmp\thread\ThreadSafe implemen
 		}
 	}
 
-	public function removeAttachment(ThreadedLoggerAttachment $attachment){
+	public function removeAttachment(ThreadedLoggerAttachment $attachment) : void{
 		if($this->attachment instanceof \ThreadedLoggerAttachment){
 			if($this->attachment === $attachment){
 				$this->attachment = null;
@@ -52,7 +54,7 @@ abstract class ThreadedLoggerAttachment extends \pmmp\thread\ThreadSafe implemen
 		}
 	}
 
-	public function removeAttachments(){
+	public function removeAttachments() : void{
 		if($this->attachment instanceof \ThreadedLoggerAttachment){
 			$this->attachment->removeAttachments();
 			$this->attachment = null;
@@ -62,7 +64,7 @@ abstract class ThreadedLoggerAttachment extends \pmmp\thread\ThreadSafe implemen
 	/**
 	 * @return \ThreadedLoggerAttachment[]
 	 */
-	public function getAttachments(){
+	public function getAttachments() : array{
 		$attachments = [];
 		if($this->attachment instanceof \ThreadedLoggerAttachment){
 			$attachments[] = $this->attachment;

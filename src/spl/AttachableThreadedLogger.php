@@ -17,12 +17,14 @@
  * GNU General Public License for more details.
 */
 
+declare(strict_types=1);
+
 abstract class AttachableThreadedLogger extends \ThreadedLogger{
 
-	/** @var \ThreadedLoggerAttachment */
-	protected $attachment = null;
+	/** @var ThreadedLoggerAttachment|null */
+	protected ?\ThreadedLoggerAttachment $attachment = null;
 
-	public function addAttachment(ThreadedLoggerAttachment $attachment){
+	public function addAttachment(ThreadedLoggerAttachment $attachment) : void{
 		if($this->attachment instanceof \ThreadedLoggerAttachment){
 			$this->attachment->addAttachment($attachment);
 		}else{
@@ -30,7 +32,7 @@ abstract class AttachableThreadedLogger extends \ThreadedLogger{
 		}
 	}
 
-	public function removeAttachment(ThreadedLoggerAttachment $attachment){
+	public function removeAttachment(ThreadedLoggerAttachment $attachment) : void{
 		if($this->attachment instanceof \ThreadedLoggerAttachment){
 			if($this->attachment === $attachment){
 				$this->attachment = null;
@@ -41,7 +43,7 @@ abstract class AttachableThreadedLogger extends \ThreadedLogger{
 		}
 	}
 
-	public function removeAttachments(){
+	public function removeAttachments() : void{
 		if($this->attachment instanceof \ThreadedLoggerAttachment){
 			$this->attachment->removeAttachments();
 			$this->attachment = null;
@@ -51,7 +53,7 @@ abstract class AttachableThreadedLogger extends \ThreadedLogger{
 	/**
 	 * @return \ThreadedLoggerAttachment[]
 	 */
-	public function getAttachments(){
+	public function getAttachments() : array{
 		$attachments = [];
 		if($this->attachment instanceof \ThreadedLoggerAttachment){
 			$attachments[] = $this->attachment;

@@ -17,80 +17,61 @@
  * GNU General Public License for more details.
 */
 
+declare(strict_types=1);
+
 interface Logger{
 
 	/**
 	 * System is unusable
-	 *
-	 * @param string $message
 	 */
-	public function emergency($message);
+	public function emergency(string $message);
 
 	/**
 	 * Action must me taken immediately
-	 *
-	 * @param string $message
 	 */
-	public function alert($message);
+	public function alert(string $message);
 
 	/**
 	 * Critical conditions
-	 *
-	 * @param string $message
 	 */
-	public function critical($message);
+	public function critical(string $message);
 
 	/**
 	 * Runtime errors that do not require immediate action but should typically
 	 * be logged and monitored.
-	 *
-	 * @param string $message
 	 */
-	public function error($message);
+	public function error(string $message);
 
 	/**
 	 * Exceptional occurrences that are not errors.
 	 *
 	 * Example: Use of deprecated APIs, poor use of an API, undesirable things
 	 * that are not necessarily wrong.
-	 *
-	 * @param string $message
 	 */
-	public function warning($message);
+	public function warning(string $message);
 
 	/**
 	 * Normal but significant events.
-	 *
-	 * @param string $message
 	 */
-	public function notice($message);
+	public function notice(string $message);
 
 	/**
 	 * Inersting events.
-	 *
-	 * @param string $message
 	 */
-	public function info($message);
+	public function info(string $message);
 
 	/**
 	 * Detailed debug information.
-	 *
-	 * @param string $message
 	 */
-	public function debug($message);
+	public function debug(string $message);
 
 	/**
 	 * Logs with an arbitrary level.
-	 *
-	 * @param mixed  $level
-	 * @param string $message
 	 */
-	public function log($level, $message);
+	public function log(int|string $level, string $message);
 
 	/**
 	 * Logs a Throwable object
-	 *
-	 * @param $trace
 	 */
-	public function logException(Throwable $e, $trace = null);
+	public function logException(Throwable $e, ?array $trace = null);
 }

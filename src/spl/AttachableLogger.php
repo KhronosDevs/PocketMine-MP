@@ -17,6 +17,8 @@
  * GNU General Public License for more details.
 */
 
+declare(strict_types=1);
+
 interface AttachableLogger extends \Logger{
 
 	public function addAttachment(LoggerAttachment $attachment);
