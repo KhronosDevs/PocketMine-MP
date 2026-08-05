@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\entity\Effect;
@@ -35,7 +37,7 @@ class Cake extends Transparent implements FoodSource{
 
 	protected $id = self::CAKE_BLOCK;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -43,7 +45,7 @@ class Cake extends Transparent implements FoodSource{
 		return true;
 	}
 
-	public function getHardness(){
+	public function getHardness() : int|float {
 		return 0.5;
 	}
 

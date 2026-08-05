@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -31,7 +33,7 @@ use function in_array;
 class ActiveRedstoneLamp extends Solid implements ElectricalAppliance, SolidLight{
 	protected $id = self::ACTIVE_REDSTONE_LAMP;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -39,15 +41,15 @@ class ActiveRedstoneLamp extends Solid implements ElectricalAppliance, SolidLigh
 		return "Active Redstone Lamp";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.3;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 
-	public function getLightLevel(){
+	public function getLightLevel() : int {
 		return 15;
 	}
 

@@ -26,6 +26,8 @@
  * https://github.com/beito123/PocketMine-MP-Plugins/blob/master/test%2FFlowerPot%2Fsrc%2Fbeito%2FFlowerPot%2Fomake%2FSkull.php
  *
  */
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -50,19 +52,19 @@ class SkullBlock extends Transparent{
 
 	protected $id = self::SKULL_BLOCK;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 1;
 	}
 
-	public function isHelmet(){
+	public function isHelmet() : bool {
 		return true;
 	}
 
-	public function isSolid(){
+	public function isSolid() : bool {
 		return false;
 	}
 
@@ -109,7 +111,7 @@ class SkullBlock extends Transparent{
 		return false;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 5;
 	}
 
@@ -124,7 +126,7 @@ class SkullBlock extends Transparent{
 		return $names[$this->meta & 0x04];
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 

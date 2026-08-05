@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -32,7 +34,7 @@ class DeadBush extends Flowable{
 
 	protected $id = self::DEAD_BUSH;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 

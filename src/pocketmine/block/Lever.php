@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -31,7 +33,7 @@ use pocketmine\Player;
 class Lever extends RedstoneSource{
 	protected $id = self::LEVER;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -158,11 +160,11 @@ class Lever extends RedstoneSource{
 		return (($this->meta & 0x08) === 0x08);
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.5;
 	}
 
-	public function getResistance(){
+	public function getResistance() : float{
 		return 2.5;
 	}
 

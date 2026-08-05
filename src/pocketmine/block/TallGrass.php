@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -36,11 +38,11 @@ class TallGrass extends Flowable{
 
 	protected $id = self::TALL_GRASS;
 
-	public function __construct($meta = 1){
+	public function __construct(?int $meta = 1){
 		$this->meta = $meta;
 	}
 
-	public function canBeReplaced(){
+	public function canBeReplaced() : bool {
 		return true;
 	}
 

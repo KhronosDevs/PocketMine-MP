@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -37,7 +39,7 @@ class Hopper extends Transparent{
 
 	protected $id = self::HOPPER_BLOCK;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -45,7 +47,7 @@ class Hopper extends Transparent{
 		return true;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 
@@ -53,7 +55,7 @@ class Hopper extends Transparent{
 		return "Hopper";
 	}
 
-	public function getHardness(){
+	public function getHardness() : int|float {
 		return 3;
 	}
 

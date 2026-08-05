@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -30,7 +32,7 @@ class WoodStairs extends Stair{
 
 	protected $id = self::WOOD_STAIRS;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -38,7 +40,7 @@ class WoodStairs extends Stair{
 		return "Wood Stairs";
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_AXE;
 	}
 
@@ -56,7 +58,7 @@ class WoodStairs extends Stair{
 		return 20;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 2;
 	}
 }

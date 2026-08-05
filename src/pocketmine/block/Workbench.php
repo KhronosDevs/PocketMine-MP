@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -32,7 +34,7 @@ class Workbench extends Solid{
 
 	protected $id = self::WORKBENCH;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -40,7 +42,7 @@ class Workbench extends Solid{
 		return true;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 2.5;
 	}
 
@@ -48,7 +50,7 @@ class Workbench extends Solid{
 		return "Crafting Table";
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_AXE;
 	}
 

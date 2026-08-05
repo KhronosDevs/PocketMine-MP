@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\entity\Entity;
@@ -36,7 +38,7 @@ class Cobweb extends Flowable{
 
 	}
 
-	public function hasEntityCollision(){
+	public function hasEntityCollision() : bool {
 		return true;
 	}
 
@@ -44,11 +46,11 @@ class Cobweb extends Flowable{
 		return "Cobweb";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 4;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_SHEARS;
 	}
 

@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\enchantment\enchantment;
@@ -40,15 +42,15 @@ class Glowstone extends Transparent implements SolidLight{
 		return "Glowstone";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.3;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 
-	public function getLightLevel(){
+	public function getLightLevel() : int {
 		return 15;
 	}
 

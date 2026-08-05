@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -30,7 +32,7 @@ class HayBale extends Solid{
 
 	protected $id = self::HAY_BALE;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -38,7 +40,7 @@ class HayBale extends Solid{
 		return "Hay Bale";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.5;
 	}
 

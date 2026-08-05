@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -34,11 +36,11 @@ class WaterLily extends Flowable{
 
 	protected $id = self::WATER_LILY;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
-	public function isSolid(){
+	public function isSolid() : bool {
 		return false;
 	}
 
@@ -46,15 +48,15 @@ class WaterLily extends Flowable{
 		return "Lily Pad";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 0;
 	}
 
-	public function canPassThrough(){
+	public function canPassThrough() : bool {
 		return true;
 	}
 

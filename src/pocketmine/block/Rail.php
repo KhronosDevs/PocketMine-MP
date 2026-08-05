@@ -19,6 +19,8 @@
  * @link https://itxtech.org
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -46,7 +48,7 @@ class Rail extends Flowable{
 	/** @var Vector3 [] */
 	protected $connected = [];
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -212,15 +214,15 @@ class Rail extends Flowable{
 		return $connected;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.7;
 	}
 
-	public function getResistance(){
+	public function getResistance() : float{
 		return 3.5;
 	}
 
-	public function canPassThrough(){
+	public function canPassThrough() : bool {
 		return true;
 	}
 }

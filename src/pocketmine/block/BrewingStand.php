@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -39,7 +41,7 @@ class BrewingStand extends Transparent{
 
 	protected $id = self::BREWING_STAND_BLOCK;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -75,7 +77,7 @@ class BrewingStand extends Transparent{
 		return true;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.5;
 	}
 
@@ -83,7 +85,7 @@ class BrewingStand extends Transparent{
 		return 2.5;
 	}
 
-	public function getLightLevel(){
+	public function getLightLevel() : int {
 		return 1;
 	}
 

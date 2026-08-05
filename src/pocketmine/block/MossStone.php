@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -30,7 +32,7 @@ class MossStone extends Solid{
 
 	protected $id = self::MOSS_STONE;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -38,11 +40,11 @@ class MossStone extends Solid{
 		return "Moss Stone";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 2;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 

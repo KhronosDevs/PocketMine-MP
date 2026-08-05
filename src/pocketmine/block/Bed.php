@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -34,7 +36,7 @@ class Bed extends Transparent{
 
 	protected $id = self::BED_BLOCK;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -42,7 +44,7 @@ class Bed extends Transparent{
 		return true;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.2;
 	}
 

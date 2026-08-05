@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -33,7 +35,7 @@ class Trapdoor extends Transparent{
 
 	protected $id = self::TRAPDOOR;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -41,11 +43,11 @@ class Trapdoor extends Transparent{
 		return "Wooden Trapdoor";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 3;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 15;
 	}
 
@@ -158,7 +160,7 @@ class Trapdoor extends Transparent{
 		return true;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_AXE;
 	}
 }

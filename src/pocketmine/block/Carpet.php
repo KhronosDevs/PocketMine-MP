@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -32,15 +34,15 @@ class Carpet extends Flowable{
 
 	protected $id = self::CARPET;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.1;
 	}
 
-	public function isSolid(){
+	public function isSolid() : bool {
 		return true;
 	}
 

@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -46,7 +48,7 @@ class DaylightDetector extends RedstoneSource{
 		return $this->boundingBox;
 	}
 
-	public function canBeFlowedInto(){
+	public function canBeFlowedInto() : bool {
 		return false;
 	}
 
@@ -87,11 +89,11 @@ class DaylightDetector extends RedstoneSource{
 		if($this->isActivated()) $this->deactivate();
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.2;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 1;
 	}
 

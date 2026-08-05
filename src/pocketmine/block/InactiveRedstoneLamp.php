@@ -21,12 +21,14 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 class InactiveRedstoneLamp extends ActiveRedstoneLamp{
 	protected $id = self::INACTIVE_REDSTONE_LAMP;
 
-	public function getLightLevel(){
+	public function getLightLevel() : int {
 		return 0;
 	}
 
@@ -34,7 +36,7 @@ class InactiveRedstoneLamp extends ActiveRedstoneLamp{
 		return "Inactive Redstone Lamp";
 	}
 
-	public function isLightedByAround(){
+	public function isLightedByAround() : bool {
 		return false;
 	}
 
@@ -48,7 +50,7 @@ class InactiveRedstoneLamp extends ActiveRedstoneLamp{
 		return true;
 	}
 
-	public function turnOff(){
+	public function turnOff() : bool {
 		return true;
 	}
 }

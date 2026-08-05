@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\enchantment\enchantment;
@@ -35,7 +37,7 @@ class Podzol extends Solid{
 
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_SHOVEL;
 	}
 
@@ -43,7 +45,7 @@ class Podzol extends Solid{
 		return "Podzol";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.5;
 	}
 

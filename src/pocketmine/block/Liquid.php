@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\entity\Entity;
@@ -33,28 +35,27 @@ use function mt_rand;
 
 abstract class Liquid extends Transparent{
 
-	/** @var Vector3 */
-	private $temporalVector = null;
+	private ?Vector3 $temporalVector = null;
 
-	public function hasEntityCollision(){
+	public function hasEntityCollision() : bool {
 		return true;
 	}
 
-	public function isBreakable(Item $item){
+	public function isBreakable(Item $item) : bool {
 		return false;
 	}
 
-	public function canBeReplaced(){
+	public function canBeReplaced() : bool {
 		return true;
 	}
 
-	public function isSolid(){
+	public function isSolid() : bool {
 		return false;
 	}
 
-	public $adjacentSources = 0;
-	public $isOptimalFlowDirection = [0, 0, 0, 0];
-	public $flowCost = [0, 0, 0, 0];
+	public int $adjacentSources = 0;
+	public array $isOptimalFlowDirection = [0, 0, 0, 0];
+	public array $flowCost = [0, 0, 0, 0];
 
 	public function getFluidHeightPercent(){
 		$d = $this->meta;
@@ -174,7 +175,7 @@ abstract class Liquid extends Transparent{
 		return $vector->normalize();
 	}
 
-	public function addVelocityToEntity(Entity $entity, Vector3 $vector){
+	public function addVelocityToEntity(Entity $entity, Vector3 $vector) : void{
 		$flow = $this->getFlowVector();
 		$vector->x += $flow->x;
 		$vector->y += $flow->y;
@@ -372,7 +373,7 @@ abstract class Liquid extends Transparent{
 		return $cost;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 100;
 	}
 

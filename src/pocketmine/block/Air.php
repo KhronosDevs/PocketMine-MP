@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -41,27 +43,27 @@ class Air extends Transparent{
 		return "Air";
 	}
 
-	public function canPassThrough(){
+	public function canPassThrough() : bool {
 		return true;
 	}
 
-	public function isBreakable(Item $item){
+	public function isBreakable(Item $item) : bool {
 		return false;
 	}
 
-	public function canBeFlowedInto(){
+	public function canBeFlowedInto() : bool {
 		return true;
 	}
 
-	public function canBeReplaced(){
+	public function canBeReplaced() : bool {
 		return true;
 	}
 
-	public function canBePlaced(){
+	public function canBePlaced() : bool {
 		return false;
 	}
 
-	public function isSolid(){
+	public function isSolid() : bool {
 		return false;
 	}
 
@@ -69,11 +71,11 @@ class Air extends Transparent{
 		return null;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 0;
 	}
 

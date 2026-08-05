@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\event\block\BlockGrowEvent;
@@ -34,7 +36,7 @@ class Sugarcane extends Flowable{
 
 	protected $id = self::SUGARCANE_BLOCK;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 

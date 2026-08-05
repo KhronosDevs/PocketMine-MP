@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Tool;
@@ -29,7 +31,7 @@ class Tripwire extends Transparent{
 
 	protected $id = self::TRIPWIRE;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -37,15 +39,15 @@ class Tripwire extends Transparent{
 		return "Tripwire";
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_SHEARS;
 	}
 
-	public function getHardness(){
+	public function getHardness() : int|float {
 		return 0;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 0;
 	}
 

@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -32,7 +34,7 @@ use pocketmine\Player;
 class WoodenButton extends RedstoneSource{
 	protected $id = self::WOODEN_BUTTON;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -123,7 +125,7 @@ class WoodenButton extends RedstoneSource{
 		return "Wooden Button";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.5;
 	}
 

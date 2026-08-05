@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\enchantment\enchantment;
@@ -34,7 +36,7 @@ class RedMushroomBlock extends Solid{
 
 	protected $id = self::RED_MUSHROOM_BLOCK;
 
-	public function __construct($meta = 14){
+	public function __construct(?int $meta = 14){
 		$this->meta = $meta;
 	}
 
@@ -46,11 +48,11 @@ class RedMushroomBlock extends Solid{
 		return "Red Mushroom Block";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.2;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 1;
 	}
 

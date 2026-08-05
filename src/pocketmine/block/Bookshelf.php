@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -38,11 +40,11 @@ class Bookshelf extends Solid{
 		return "Bookshelf";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 1.5;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_AXE;
 	}
 

@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -30,7 +32,7 @@ class WoodDoor extends Door{
 
 	protected $id = self::WOOD_DOOR_BLOCK;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -42,11 +44,11 @@ class WoodDoor extends Door{
 		return true;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 3;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_AXE;
 	}
 

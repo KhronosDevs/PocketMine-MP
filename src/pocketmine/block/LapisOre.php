@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\enchantment\enchantment;
@@ -36,11 +38,11 @@ class LapisOre extends Solid{
 
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 3;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 

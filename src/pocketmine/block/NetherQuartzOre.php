@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\enchantment\enchantment;
@@ -39,15 +41,15 @@ class NetherQuartzOre extends Solid{
 		return "Nether Quartz Ore";
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 3;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 15;
 	}
 

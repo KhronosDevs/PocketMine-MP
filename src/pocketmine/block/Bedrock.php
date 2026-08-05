@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -37,15 +39,15 @@ class Bedrock extends Solid{
 		return "Bedrock";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return -1;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 18000000;
 	}
 
-	public function isBreakable(Item $item){
+	public function isBreakable(Item $item) : bool {
 		return false;
 	}
 

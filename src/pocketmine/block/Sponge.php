@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 class Sponge extends Solid{
@@ -31,7 +33,7 @@ class Sponge extends Solid{
 
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.6;
 	}
 

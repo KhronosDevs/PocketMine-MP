@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -38,15 +40,15 @@ class Netherrack extends Solid{
 		return "Netherrack";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.4;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 2;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 

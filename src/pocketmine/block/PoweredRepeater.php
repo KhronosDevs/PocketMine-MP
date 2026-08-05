@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -35,7 +37,7 @@ class PoweredRepeater extends RedstoneSource{
 	const ACTION_ACTIVATE = "Repeater Activate";
 	const ACTION_DEACTIVATE = "Repeater Deactivate";
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 

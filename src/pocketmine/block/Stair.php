@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -145,11 +147,11 @@ abstract class Stair extends Transparent{
 		return true;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 2;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 15;
 	}
 

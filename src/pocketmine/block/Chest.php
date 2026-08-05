@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -39,7 +41,7 @@ class Chest extends Transparent{
 
 	protected $id = self::CHEST;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -47,7 +49,7 @@ class Chest extends Transparent{
 		return true;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 2.5;
 	}
 
@@ -55,7 +57,7 @@ class Chest extends Transparent{
 		return "Chest";
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_AXE;
 	}
 

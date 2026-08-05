@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\inventory\EnchantInventory;
@@ -43,7 +45,7 @@ class EnchantingTable extends Transparent{
 
 	}
 
-	public function getLightLevel(){
+	public function getLightLevel() : int {
 		return 12;
 	}
 
@@ -86,11 +88,11 @@ class EnchantingTable extends Transparent{
 		return true;
 	}
 
-	public function getHardness(){
+	public function getHardness() : int|float {
 		return 5;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 6000;
 	}
 
@@ -98,7 +100,7 @@ class EnchantingTable extends Transparent{
 		return "Enchanting Table";
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 

@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\entity\Entity;
@@ -34,7 +36,7 @@ class Ladder extends Transparent{
 
 	protected $id = self::LADDER;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -42,15 +44,15 @@ class Ladder extends Transparent{
 		return "Ladder";
 	}
 
-	public function hasEntityCollision(){
+	public function hasEntityCollision() : bool {
 		return true;
 	}
 
-	public function isSolid(){
+	public function isSolid() : bool {
 		return false;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.4;
 	}
 
@@ -146,7 +148,7 @@ class Ladder extends Transparent{
 		return false;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_AXE;
 	}
 

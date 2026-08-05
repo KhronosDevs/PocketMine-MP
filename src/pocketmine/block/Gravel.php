@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\enchantment\enchantment;
@@ -40,11 +42,11 @@ class Gravel extends Fallable{
 		return "Gravel";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.6;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_SHOVEL;
 	}
 

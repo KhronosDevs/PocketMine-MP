@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -32,7 +34,7 @@ class SnowLayer extends Flowable{
 
 	protected $id = self::SNOW_LAYER;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -40,15 +42,15 @@ class SnowLayer extends Flowable{
 		return "Snow Layer";
 	}
 
-	public function canBeReplaced(){
+	public function canBeReplaced() : bool {
 		return true;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.1;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_SHOVEL;
 	}
 

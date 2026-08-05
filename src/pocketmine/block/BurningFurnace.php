@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 class BurningFurnace extends Furnace implements SolidLight{
@@ -31,7 +33,7 @@ class BurningFurnace extends Furnace implements SolidLight{
 		return "Burning Furnace";
 	}
 
-	public function getLightLevel(){
+	public function getLightLevel() : int {
 		return 13;
 	}
 }

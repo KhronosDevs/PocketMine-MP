@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -36,11 +38,11 @@ abstract class Door extends Transparent implements ElectricalAppliance{
 		return true;
 	}
 
-	public function isSolid(){
+	public function isSolid() : bool {
 		return false;
 	}
 
-	public function canPassThrough(){
+	public function canPassThrough() : bool {
 		return true;
 	}
 

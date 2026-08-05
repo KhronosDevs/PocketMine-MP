@@ -21,13 +21,15 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 class TripwireHook extends Solid {
 
 	protected $id = self::TRIPWIRE_HOOK;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -35,11 +37,11 @@ class TripwireHook extends Solid {
 		return "Tripwire Hook";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 0;
 	}
 

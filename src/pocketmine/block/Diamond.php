@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -34,7 +36,7 @@ class Diamond extends Solid{
 
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 5;
 	}
 
@@ -42,7 +44,7 @@ class Diamond extends Solid{
 		return "Diamond Block";
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 

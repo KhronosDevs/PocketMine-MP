@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -38,23 +40,23 @@ class Redstone extends RedstoneSource{
 		return Block::getBoundingBox();
 	}
 
-	public function canBeFlowedInto(){
+	public function canBeFlowedInto() : bool {
 		return false;
 	}
 
-	public function isSolid(){
+	public function isSolid() : bool {
 		return true;
 	}
 
-	public function isActivated(Block $from = null){
+	public function isActivated(Block $from = null) : bool {
 		return true;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 5;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 

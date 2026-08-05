@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\enchantment\enchantment;
@@ -38,7 +40,7 @@ class GlassPane extends Thin{
 		return "Glass Pane";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.3;
 	}
 

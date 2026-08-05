@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\entity\Arrow;
@@ -45,14 +47,14 @@ class Fire extends Flowable{
 	/** @var Vector3 */
 	private $temporalVector = null;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 		if($this->temporalVector === null){
 			$this->temporalVector = new Vector3(0, 0, 0);
 		}
 	}
 
-	public function hasEntityCollision(){
+	public function hasEntityCollision() : bool {
 		return true;
 	}
 
@@ -60,15 +62,15 @@ class Fire extends Flowable{
 		return "Fire Block";
 	}
 
-	public function getLightLevel(){
+	public function getLightLevel() : int {
 		return 15;
 	}
 
-	public function isBreakable(Item $item){
+	public function isBreakable(Item $item) : bool {
 		return false;
 	}
 
-	public function canBeReplaced(){
+	public function canBeReplaced() : bool {
 		return true;
 	}
 

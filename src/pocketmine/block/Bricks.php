@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -34,15 +36,15 @@ class Bricks extends Solid{
 
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 2;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 30;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 

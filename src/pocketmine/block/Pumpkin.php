@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\entity\IronGolem;
@@ -41,15 +43,15 @@ class Pumpkin extends Solid{
 
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 1;
 	}
 
-	public function isHelmet(){
+	public function isHelmet() : bool {
 		return true;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_AXE;
 	}
 

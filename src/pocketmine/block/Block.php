@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 /**
  * All Block classes are in here
  */
@@ -44,29 +46,21 @@ use const E_USER_NOTICE;
 
 class Block extends Position implements BlockIds, Metadatable{
 
-	/** @var \SplFixedArray */
-	public static $list = null;
-	/** @var \SplFixedArray */
-	public static $fullList = null;
+	public static ?\SplFixedArray $list = null;
+	public static ?\SplFixedArray $fullList = null;
 
-	/** @var \SplFixedArray */
-	public static $light = null;
-	/** @var \SplFixedArray */
-	public static $lightFilter = null;
-	/** @var \SplFixedArray */
-	public static $solid = null;
-	/** @var \SplFixedArray */
-	public static $hardness = null;
-	/** @var \SplFixedArray */
-	public static $transparent = null;
+	public static ?\SplFixedArray $light = null;
+	public static ?\SplFixedArray $lightFilter = null;
+	public static ?\SplFixedArray $solid = null;
+	public static ?\SplFixedArray $hardness = null;
+	public static ?\SplFixedArray $transparent = null;
 
 	protected $id;
 	protected $meta = 0;
 
-	/** @var AxisAlignedBB */
-	public $boundingBox = null;
+	public ?AxisAlignedBB $boundingBox = null;
 
-	public static function init(){
+	public static function init() : void{
 		if(self::$list === null){
 			self::$list = new \SplFixedArray(256);
 			self::$fullList = new \SplFixedArray(4096);
@@ -328,7 +322,7 @@ class Block extends Position implements BlockIds, Metadatable{
 	 *
 	 * @return Block
 	 */
-	public static function get($id, $meta = 0, Position $pos = null){
+	public static function get($id, $meta = 0, Position $pos = null) : Block{
 		if($id > 0xff){
 			trigger_error("BlockID cannot be higher than 255, defaulting to 0", E_USER_NOTICE);
 			$id = 0;
@@ -358,9 +352,9 @@ class Block extends Position implements BlockIds, Metadatable{
 	 * @param int $id
 	 * @param int $meta
 	 */
-	public function __construct($id, $meta = 0){
-		$this->id = (int) $id;
-		$this->meta = (int) $meta;
+	public function __construct(int $id, ?int $meta = 0){
+		$this->id = $id;
+		$this->meta = $meta ?? 0;
 	}
 
 	/**
@@ -444,7 +438,7 @@ class Block extends Position implements BlockIds, Metadatable{
 		return 0;
 	}
 
-	public function isTopFacingSurfaceSolid(){
+	public function isTopFacingSurfaceSolid() : bool{
 		if($this->isSolid()){
 			return true;
 		}else{
@@ -459,7 +453,7 @@ class Block extends Position implements BlockIds, Metadatable{
 		return false;
 	}
 
-	public function canNeighborBurn(){
+	public function canNeighborBurn() : bool{
 		for($face = 0; $face < 5; $face++){
 			if($this->getSide($face)->getBurnChance() > 0){
 				return true;
@@ -478,7 +472,7 @@ class Block extends Position implements BlockIds, Metadatable{
 	/**
 	 * @return float
 	 */
-	public function getFrictionFactor(){
+	public function getFrictionFactor() : float{
 		return 0.6;
 	}
 
@@ -498,7 +492,7 @@ class Block extends Position implements BlockIds, Metadatable{
 		return true;
 	}
 
-	public function isPlaceable(){
+	public function isPlaceable() : bool{
 		return $this->canBePlaced();
 	}
 
@@ -565,11 +559,11 @@ class Block extends Position implements BlockIds, Metadatable{
 	/**
 	 * @return int
 	 */
-	final public function getId(){
+	final public function getId() : int{
 		return $this->id;
 	}
 
-	public function addVelocityToEntity(Entity $entity, Vector3 $vector){
+	public function addVelocityToEntity(Entity $entity, Vector3 $vector) : void{
 
 	}
 
@@ -590,7 +584,7 @@ class Block extends Position implements BlockIds, Metadatable{
 	/**
 	 * Sets the block position to a new Position object
 	 */
-	final public function position(Position $v){
+	final public function position(Position $v) : void{
 		$this->x = (int) $v->x;
 		$this->y = (int) $v->y;
 		$this->z = (int) $v->z;
@@ -616,7 +610,7 @@ class Block extends Position implements BlockIds, Metadatable{
 	 *
 	 * @return float
 	 */
-	public function getBreakTime(Item $item){
+	public function getBreakTime(Item $item) : float{
 		$base = $this->getHardness() * 1.5;
 		if($this->canBeBrokenWith($item)){
 			if($this->getToolType() === Tool::TYPE_SHEARS && $item->isShears()){
@@ -655,7 +649,7 @@ class Block extends Position implements BlockIds, Metadatable{
 		return $base;
 	}
 
-	public function canBeBrokenWith(Item $item){
+	public function canBeBrokenWith(Item $item) : bool{
 		return $this->getHardness() !== -1;
 	}
 
@@ -687,7 +681,7 @@ class Block extends Position implements BlockIds, Metadatable{
 	 *
 	 * @return bool
 	 */
-	public function collidesWithBB(AxisAlignedBB $bb){
+	public function collidesWithBB(AxisAlignedBB $bb) : bool{
 		$bb2 = $this->getBoundingBox();
 
 		return $bb2 !== null && $bb->intersectsWith($bb2);
@@ -724,7 +718,7 @@ class Block extends Position implements BlockIds, Metadatable{
 	/**
 	 * @return MovingObjectPosition
 	 */
-	public function calculateIntercept(Vector3 $pos1, Vector3 $pos2){
+	public function calculateIntercept(Vector3 $pos1, Vector3 $pos2) : ?MovingObjectPosition{
 		$bb = $this->getBoundingBox();
 		if($bb === null){
 			return null;

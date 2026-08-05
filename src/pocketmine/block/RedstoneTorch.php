@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -34,11 +36,11 @@ class RedstoneTorch extends RedstoneSource{
 	protected $id = self::REDSTONE_TORCH;
 	protected $ignore = "";
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
-	public function getLightLevel(){
+	public function getLightLevel() : int {
 		return 7;
 	}
 
@@ -263,7 +265,7 @@ class RedstoneTorch extends RedstoneSource{
 		];
 	}
 
-	public function isActivated(Block $from = null){
+	public function isActivated(Block $from = null) : bool {
 		return true;
 	}
 }

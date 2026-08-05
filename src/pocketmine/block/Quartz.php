@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -36,11 +38,11 @@ class Quartz extends Solid{
 
 	protected $id = self::QUARTZ_BLOCK;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.8;
 	}
 
@@ -71,7 +73,7 @@ class Quartz extends Solid{
 		return true;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 

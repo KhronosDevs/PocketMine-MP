@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\entity\Entity;
@@ -36,11 +38,11 @@ class Vine extends Transparent{
 
 	protected $id = self::VINE;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
-	public function isSolid(){
+	public function isSolid() : bool {
 		return false;
 	}
 
@@ -48,15 +50,15 @@ class Vine extends Transparent{
 		return "Vines";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.2;
 	}
 
-	public function canPassThrough(){
+	public function canPassThrough() : bool {
 		return true;
 	}
 
-	public function hasEntityCollision(){
+	public function hasEntityCollision() : bool {
 		return true;
 	}
 
@@ -167,7 +169,7 @@ class Vine extends Transparent{
 		}
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_SHEARS;
 	}
 }

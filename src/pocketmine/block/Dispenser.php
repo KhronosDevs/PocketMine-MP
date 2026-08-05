@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -39,7 +41,7 @@ class Dispenser extends Solid{
 
 	protected $id = self::DISPENSER;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -47,7 +49,7 @@ class Dispenser extends Solid{
 		return true;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 3.5;
 	}
 
@@ -55,7 +57,7 @@ class Dispenser extends Solid{
 		return "Dispenser";
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 

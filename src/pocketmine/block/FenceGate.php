@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -33,7 +35,7 @@ class FenceGate extends Transparent implements ElectricalAppliance{
 
 	protected $id = self::FENCE_GATE;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -41,7 +43,7 @@ class FenceGate extends Transparent implements ElectricalAppliance{
 		return "Oak Fence Gate";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 2;
 	}
 
@@ -49,7 +51,7 @@ class FenceGate extends Transparent implements ElectricalAppliance{
 		return true;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_AXE;
 	}
 

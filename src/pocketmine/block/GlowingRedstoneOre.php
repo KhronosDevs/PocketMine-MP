@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -34,7 +36,7 @@ class GlowingRedstoneOre extends RedstoneOre implements SolidLight{
 		return "Glowing Redstone Ore";
 	}
 
-	public function getLightLevel(){
+	public function getLightLevel() : int {
 		return 9;
 	}
 

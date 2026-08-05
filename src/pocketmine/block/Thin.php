@@ -21,13 +21,15 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\math\AxisAlignedBB;
 
 abstract class Thin extends Transparent{
 
-	public function isSolid(){
+	public function isSolid() : bool {
 		return false;
 	}
 

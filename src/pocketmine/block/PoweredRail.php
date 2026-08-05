@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -36,7 +38,7 @@ class PoweredRail extends Rail{
 	/** @var Vector3 [] */
 	protected $connected = [];
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;//0,1,2,3,4,5
 	}
 
@@ -182,11 +184,11 @@ class PoweredRail extends Rail{
 		return true;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.7;
 	}
 
-	public function canPassThrough(){
+	public function canPassThrough() : bool {
 		return true;
 	}
 }

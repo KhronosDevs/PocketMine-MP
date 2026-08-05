@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\entity\Entity;
@@ -50,7 +52,7 @@ class TNT extends Solid implements ElectricalAppliance{
 		return "TNT";
 	}
 
-	public function getHardness(){
+	public function getHardness() : int|float {
 		return 0;
 	}
 

@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -31,7 +33,7 @@ class BrownMushroom extends Flowable{
 
 	protected $id = self::BROWN_MUSHROOM;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -39,7 +41,7 @@ class BrownMushroom extends Flowable{
 		return "Brown Mushroom";
 	}
 
-	public function getLightLevel(){
+	public function getLightLevel() : int {
 		return 1;
 	}
 

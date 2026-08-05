@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -38,7 +40,7 @@ use pocketmine\tile\Tile;
 class TrappedChest extends RedstoneSource{
 	protected $id = self::TRAPPED_CHEST;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -49,11 +51,11 @@ class TrappedChest extends RedstoneSource{
 		return $this->boundingBox;
 	}
 
-	public function isSolid(){
+	public function isSolid() : bool {
 		return true;
 	}
 
-	public function canBeFlowedInto(){
+	public function canBeFlowedInto() : bool {
 		return false;
 	}
 
@@ -61,11 +63,11 @@ class TrappedChest extends RedstoneSource{
 		return true;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 2.5;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int|float{
 		return $this->getHardness() * 5;
 	}
 
@@ -73,7 +75,7 @@ class TrappedChest extends RedstoneSource{
 		return "Trapped Chest";
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_AXE;
 	}
 

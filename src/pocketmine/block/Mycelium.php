@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\event\block\BlockSpreadEvent;
@@ -44,11 +46,11 @@ class Mycelium extends Solid{
 		return "Mycelium";
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_SHOVEL;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.6;
 	}
 

@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\entity\IronGolem;
@@ -37,15 +39,15 @@ class LitPumpkin extends Solid implements SolidLight{
 
 	protected $id = self::LIT_PUMPKIN;
 
-	public function getLightLevel(){
+	public function getLightLevel() : int {
 		return 15;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 1;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_AXE;
 	}
 
@@ -53,7 +55,7 @@ class LitPumpkin extends Solid implements SolidLight{
 		return "Jack o'Lantern";
 	}
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 

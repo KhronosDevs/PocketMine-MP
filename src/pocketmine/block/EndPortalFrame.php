@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -30,11 +32,11 @@ class EndPortalFrame extends Solid implements SolidLight{
 
 	protected $id = self::END_PORTAL_FRAME;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
-	public function getLightLevel(){
+	public function getLightLevel() : int {
 		return 1;
 	}
 
@@ -42,15 +44,15 @@ class EndPortalFrame extends Solid implements SolidLight{
 		return "End Portal Frame";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return -1;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 18000000;
 	}
 
-	public function isBreakable(Item $item){
+	public function isBreakable(Item $item) : bool {
 		return false;
 	}
 

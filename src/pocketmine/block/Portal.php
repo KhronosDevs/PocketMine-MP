@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -45,23 +47,23 @@ class Portal extends Transparent{
 		return "Portal";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return -1;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 0;
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 
-	public function canPassThrough(){
+	public function canPassThrough() : bool {
 		return true;
 	}
 
-	public function hasEntityCollision(){
+	public function hasEntityCollision() : bool {
 		return true;
 	}
 

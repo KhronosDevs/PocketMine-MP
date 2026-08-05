@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 class IronTrapdoor extends Trapdoor {
@@ -30,11 +32,11 @@ class IronTrapdoor extends Trapdoor {
 		return "Iron Trapdoor";
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 5;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 25;
 	}
 

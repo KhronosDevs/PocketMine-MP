@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\inventory\AnvilInventory;
@@ -36,11 +38,11 @@ class Anvil extends Fallable{
 
 	protected $id = self::ANVIL;
 
-	public function isSolid(){
+	public function isSolid() : bool {
 		return false;
 	}
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -48,11 +50,11 @@ class Anvil extends Fallable{
 		return true;
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 5;
 	}
 
-	public function getResistance(){
+	public function getResistance() : int {
 		return 6000;
 	}
 
@@ -66,7 +68,7 @@ class Anvil extends Fallable{
 		return $names[$this->meta & 0x0c];
 	}
 
-	public function getToolType(){
+	public function getToolType() : int {
 		return Tool::TYPE_PICKAXE;
 	}
 

@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\entity\Entity;
@@ -34,11 +36,11 @@ class PressurePlate extends RedstoneSource{
 	protected $activateTime = 0;
 	protected $canActivate = true;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
-	public function hasEntityCollision(){
+	public function hasEntityCollision() : bool {
 		return true;
 	}
 
@@ -113,11 +115,11 @@ class PressurePlate extends RedstoneSource{
 		$this->getLevel()->setBlock($this, new Air(), true);
 	}
 
-	public function getHardness() {
+	public function getHardness() : int|float {
 		return 0.5;
 	}
 
-	public function getResistance(){
+	public function getResistance() : float{
 		return 2.5;
 	}
 }

@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 use pocketmine\item\Item;
@@ -36,7 +38,7 @@ class UnpoweredRepeater extends PoweredRepeater{
 		return 0;
 	}
 
-	public function isActivated(Block $from = null){
+	public function isActivated(Block $from = null) : bool {
 		return false;
 	}
 

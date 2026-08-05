@@ -21,16 +21,18 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 class UnlitRedstoneTorch extends RedstoneTorch{
 	protected $id = self::UNLIT_REDSTONE_TORCH;
 
-	public function getLightLevel(){
+	public function getLightLevel() : int {
 		return 0;
 	}
 
-	public function isActivated(Block $from = null){
+	public function isActivated(Block $from = null) : bool {
 		return false;
 	}
 }

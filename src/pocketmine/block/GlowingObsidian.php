@@ -21,13 +21,15 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\block;
 
 class GlowingObsidian extends Solid implements SolidLight{
 
 	protected $id = self::GLOWING_OBSIDIAN;
 
-	public function __construct($meta = 0){
+	public function __construct(?int $meta = 0){
 		$this->meta = $meta;
 	}
 
@@ -35,7 +37,7 @@ class GlowingObsidian extends Solid implements SolidLight{
 		return "Glowing Obsidian";
 	}
 
-	public function getLightLevel(){
+	public function getLightLevel() : int {
 		return 12;
 	}
 
