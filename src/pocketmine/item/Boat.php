@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 use pocketmine\block\Block;
@@ -34,7 +36,7 @@ use pocketmine\nbt\tag\ListTag;
 use pocketmine\Player;
 
 class Boat extends Item{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::BOAT, $meta, $count, "Boat");
 	}
 
@@ -42,7 +44,7 @@ class Boat extends Item{
 		return true;
 	}
 
-	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz){
+	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz) : bool{
 		$realPos = $block->getSide($face);
 
 		$boat = new BoatEntity($player->getLevel()->getChunk($realPos->getX() >> 4, $realPos->getZ() >> 4), new CompoundTag("", [

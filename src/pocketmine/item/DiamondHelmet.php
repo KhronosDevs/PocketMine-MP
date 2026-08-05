@@ -21,30 +21,32 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 class DiamondHelmet extends Armor{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::DIAMOND_HELMET, $meta, $count, "Diamond Helmet");
 	}
 
-	public function getArmorTier(){
+	public function getArmorTier() : int {
 		return Armor::TIER_DIAMOND;
 	}
 
-	public function getArmorType(){
+	public function getArmorType() : int {
 		return Armor::TYPE_HELMET;
 	}
 
-	public function getMaxDurability(){
+	public function getMaxDurability() : int {
 		return 364;
 	}
 
-	public function getArmorValue(){
+	public function getArmorValue() : int {
 		return 3;
 	}
 
-	public function isHelmet(){
+	public function isHelmet() : bool {
 		return true;
 	}
 }

@@ -21,30 +21,32 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 class ChainHelmet extends Armor{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::CHAIN_HELMET, $meta, $count, "Chainmail Helmet");
 	}
 
-	public function getArmorTier(){
+	public function getArmorTier() : int {
 		return Armor::TIER_CHAIN;
 	}
 
-	public function getArmorType(){
+	public function getArmorType() : int {
 		return Armor::TYPE_HELMET;
 	}
 
-	public function getMaxDurability(){
+	public function getMaxDurability() : int {
 		return 166;
 	}
 
-	public function getArmorValue(){
+	public function getArmorValue() : int {
 		return 1;
 	}
 
-	public function isHelmet(){
+	public function isHelmet() : bool {
 		return true;
 	}
 }

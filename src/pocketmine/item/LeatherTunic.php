@@ -21,30 +21,32 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 class LeatherTunic extends Armor{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::LEATHER_TUNIC, $meta, $count, "Leather Tunic");
 	}
 
-	public function getArmorTier(){
+	public function getArmorTier() : int {
 		return Armor::TIER_LEATHER;
 	}
 
-	public function getArmorType(){
+	public function getArmorType() : int {
 		return Armor::TYPE_CHESTPLATE;
 	}
 
-	public function getMaxDurability(){
+	public function getMaxDurability() : int {
 		return 81;
 	}
 
-	public function getArmorValue(){
+	public function getArmorValue() : int {
 		return 3;
 	}
 
-	public function isChestplate(){
+	public function isChestplate() : bool {
 		return true;
 	}
 }

@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 use pocketmine\block\Block;
@@ -42,7 +44,7 @@ abstract class Tool extends Item{
 	const TYPE_AXE = 4;
 	const TYPE_SHEARS = 5;
 
-	public function __construct($id, $meta = 0, $count = 1, $name = "Unknown"){
+	public function __construct(int $id, ?int $meta = 0, int $count = 1, string $name = "Unknown"){
 		parent::__construct($id, $meta, $count, $name);
 	}
 
@@ -58,7 +60,7 @@ abstract class Tool extends Item{
 	 *
 	 * @return bool
 	 */
-	public function useOn($object, $type = 1){
+	public function useOn($object, int $type = 1) : bool{
 		if($this->isUnbreakable()){
 			return true;
 		}
@@ -111,7 +113,7 @@ abstract class Tool extends Item{
 	 *
 	 * @return int|bool
 	 */
-	public function getMaxDurability(){
+	public function getMaxDurability() : int|bool{
 
 		$levels = [
 			Tool::TIER_GOLD => 33,
@@ -136,39 +138,37 @@ abstract class Tool extends Item{
 			}
 		}
 
-		return $levels[$type];
+		return $levels[$type] ?? false;
 	}
 
-	public function isUnbreakable(){
+	public function isUnbreakable() : bool{
 		$tag = $this->getNamedTagEntry("Unbreakable");
 		return $tag !== null && $tag->getValue() > 0;
-	}
-
-	public function isPickaxe(){
+	}	public function isPickaxe() : int|bool{
 		return false;
 	}
 
-	public function isAxe(){
+	public function isAxe() : int|bool{
 		return false;
 	}
 
-	public function isSword(){
+	public function isSword() : int|bool{
 		return false;
 	}
 
-	public function isShovel(){
+	public function isShovel() : int|bool{
 		return false;
 	}
 
-	public function isHoe(){
+	public function isHoe() : int|bool{
 		return false;
 	}
 
-	public function isShears(){
+	public function isShears() : bool{
 		return ($this->id === self::SHEARS);
 	}
 
-	public function isTool(){
+	public function isTool() : bool{
 		return ($this->id === self::FLINT_STEEL || $this->id === self::SHEARS || $this->id === self::BOW || $this->isPickaxe() !== false || $this->isAxe() !== false || $this->isShovel() !== false || $this->isSword() !== false || $this->isHoe() !== false);
 	}
 }

@@ -21,7 +21,9 @@
  *
  */
 
- namespace pocketmine\item;
+ declare(strict_types=1);
+
+namespace pocketmine\item;
 
  abstract class Door extends Item{
 	public function getMaxStackSize() : int {

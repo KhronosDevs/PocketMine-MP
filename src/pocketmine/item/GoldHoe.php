@@ -21,14 +21,16 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 class GoldHoe extends Tool{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::GOLD_HOE, $meta, $count, "Gold Hoe");
 	}
 
-	public function isHoe(){
+	public function isHoe() : int {
 		return Tool::TIER_GOLD;
 	}
 }

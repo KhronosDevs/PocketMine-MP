@@ -21,21 +21,20 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\item\enchantment;
 
 class EnchantmentList{
 
 	/** @var EnchantmentEntry[] */
-	private $enchantments;
+	private \SplFixedArray $enchantments;
 
-	public function __construct($size){
+	public function __construct(int $size){
 		$this->enchantments = new \SplFixedArray($size);
 	}
 
-	/**
-	 * @param $slot
-	 */
-	public function setSlot($slot, EnchantmentEntry $entry){
+	public function setSlot(int $slot, EnchantmentEntry $entry) : void{
 		$this->enchantments[$slot] = $entry;
 	}
 
@@ -43,11 +42,11 @@ class EnchantmentList{
 	 * @param $slot
 	 * @return EnchantmentEntry
 	 */
-	public function getSlot($slot){
+	public function getSlot(int $slot) : EnchantmentEntry{
 		return $this->enchantments[$slot];
 	}
 
-	public function getSize(){
+	public function getSize() : int{
 		return $this->enchantments->getSize();
 	}
 

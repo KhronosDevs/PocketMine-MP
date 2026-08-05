@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 use pocketmine\block\Block;
@@ -36,7 +38,7 @@ use pocketmine\Player;
 use function lcg_value;
 
 class SpawnEgg extends Item{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::SPAWN_EGG, $meta, $count, "Spawn Egg");
 	}
 
@@ -44,7 +46,7 @@ class SpawnEgg extends Item{
 		return true;
 	}
 
-	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz){
+	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz) : bool{
 		if($target->getId() == Block::MONSTER_SPAWNER){
 			return true;
 		}else{

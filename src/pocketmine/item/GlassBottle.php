@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 use pocketmine\block\Block;
@@ -29,7 +31,7 @@ use pocketmine\level\Level;
 use pocketmine\Player;
 
 class GlassBottle extends Item{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::GLASS_BOTTLE, $meta, $count, "Glass Bottle");
 	}
 
@@ -37,7 +39,7 @@ class GlassBottle extends Item{
 		return true;
 	}
 
-	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz){
+	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz) : bool{
 		if($player === null || $player->isSurvival() !== true){
 			return false;
 		}

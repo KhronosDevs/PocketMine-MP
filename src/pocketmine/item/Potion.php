@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 use pocketmine\entity\Effect;
@@ -30,6 +32,7 @@ use pocketmine\event\entity\EntityDrinkPotionEvent;
 use pocketmine\network\protocol\EntityEventPacket;
 use pocketmine\Player;
 use pocketmine\Server;
+use pocketmine\utils\Color;
 use function count;
 
 class Potion extends Item{
@@ -128,11 +131,11 @@ class Potion extends Item{
 		self::WEAKNESS_T => [Effect::WEAKNESS, (240 * 20), 0]
 	];
 
-	public function __construct($meta = 0, $count = 1){
-		parent::__construct(self::POTION, $meta, $count, self::getNameByMeta($meta));
+	public function __construct(?int $meta = 0, int $count = 1){
+		parent::__construct(self::POTION, $meta, $count, self::getNameByMeta($meta ?? 0));
 	}
 
-	public static function getColor(int $meta){
+	public static function getColor(int $meta) : Color{
 		return Effect::getEffect(self::getEffectId($meta))->getColor();
 	}
 
@@ -162,7 +165,7 @@ class Potion extends Item{
 		return [];
 	}
 
-	public function onConsume(Entity $human){
+	public function onConsume(Entity $human) : void{
 		$pk = new EntityEventPacket();
 		$pk->eid = $human->getId();
 		$pk->event = EntityEventPacket::USE_ITEM;

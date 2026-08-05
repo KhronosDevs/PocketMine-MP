@@ -21,13 +21,15 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 class Coal extends Item{
 	const NORMAL = 0;
 	const CHARCOAL = 1;
 
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::COAL, $meta, $count, "Coal");
 		if($this->meta === 1){
 			$this->name = "Charcoal";

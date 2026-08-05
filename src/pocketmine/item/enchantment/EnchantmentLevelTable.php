@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\item\enchantment;
 
 use pocketmine\item\Item;
@@ -29,9 +31,9 @@ use function array_keys;
 
 class EnchantmentLevelTable{
 
-	private static $map = [];
+	private static array $map = [];
 
-	public static function init(){
+	public static function init() : void{
 		self::$map = [
 			Enchantment::TYPE_ARMOR_PROTECTION => [
 				new Range(1, 21),
@@ -189,7 +191,7 @@ class EnchantmentLevelTable{
 	/**
 	 * @return Enchantment[]
 	 */
-	public static function getPossibleEnchantments(Item $item, int $modifiedLevel){
+	public static function getPossibleEnchantments(Item $item, int $modifiedLevel) : array{
 		$result = [];
 
 		$enchantmentIds = [];

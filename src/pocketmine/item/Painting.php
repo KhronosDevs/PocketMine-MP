@@ -7,6 +7,8 @@
  * @link https://github.com/Nukkit/Nukkit
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 use pocketmine\block\Block;
@@ -23,7 +25,7 @@ use function count;
 use function mt_rand;
 
 class Painting extends Item{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::PAINTING, 0, $count, "Painting");
 	}
 
@@ -31,7 +33,7 @@ class Painting extends Item{
 		return true;
 	}
 
-	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz){
+	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz) : bool{
 		if($target->isTransparent() === false && $face > 1 && $block->isSolid() === false){
 			$faces = [
 				2 => 1,
@@ -126,7 +128,7 @@ class Painting extends Item{
 				$count = $item->getCount();
 				if(--$count <= 0){
 					$player->getInventory()->setItemInHand(Item::get(Item::AIR));
-					return;
+					return false;
 				}
 
 				$item->setCount($count);

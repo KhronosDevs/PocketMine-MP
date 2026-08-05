@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 use pocketmine\entity\Entity;
@@ -38,7 +40,7 @@ abstract class Food extends Item implements FoodSource{
 		return $entity instanceof Player && ($entity->getFood() < $entity->getMaxFood()) && $this->canBeConsumed();
 	}
 
-	public function getResidue(){
+	public function getResidue() : Item{
 		if($this->getCount() === 1){
 			return Item::get(0);
 		}else{
@@ -52,7 +54,7 @@ abstract class Food extends Item implements FoodSource{
 		return [];
 	}
 
-	public function onConsume(Entity $human){
+	public function onConsume(Entity $human) : void{
 		$pk = new EntityEventPacket();
 		$pk->eid = $human->getId();
 		$pk->event = EntityEventPacket::USE_ITEM;

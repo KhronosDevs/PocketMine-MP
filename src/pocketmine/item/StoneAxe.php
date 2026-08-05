@@ -21,18 +21,20 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 class StoneAxe extends Tool{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::STONE_AXE, $meta, $count, "Stone Axe");
 	}
 
-	public function isAxe(){
+	public function isAxe() : int {
 		return Tool::TIER_STONE;
 	}
 
-	public function getAttackDamage(){
+	public function getAttackDamage() : int {
 		return 5;
 	}
 }

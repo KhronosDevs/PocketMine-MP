@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 use pocketmine\entity\Effect;
@@ -34,7 +36,7 @@ class Fish extends Food{
 	const FISH_CLOWNFISH = 2;
 	const FISH_PUFFERFISH = 3;
 
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		$name = "Raw Fish";
 		if($this->meta === self::FISH_SALMON){
 			$name = "Raw Salmon";
@@ -54,7 +56,7 @@ class Fish extends Food{
 		}elseif($this->meta === self::FISH_CLOWNFISH){
 			return 1;
 		}elseif($this->meta === self::FISH_PUFFERFISH){
-			return 1.2;
+			return (int) 1.2;
 		}
 		return 0;
 	}

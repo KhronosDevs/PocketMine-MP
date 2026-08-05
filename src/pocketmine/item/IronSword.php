@@ -21,18 +21,20 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 class IronSword extends Tool{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::IRON_SWORD, $meta, $count, "Iron Sword");
 	}
 
-	public function isSword(){
+	public function isSword() : int {
 		return Tool::TIER_IRON;
 	}
 
-	public function getAttackDamage(){
+	public function getAttackDamage() : int {
 		return 7;
 	}
 }

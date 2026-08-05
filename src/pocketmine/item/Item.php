@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 /**
  * All the Item classes
  */
@@ -45,6 +47,7 @@ use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\ShortTag;
 use pocketmine\nbt\tag\StringTag;
+use pocketmine\nbt\tag\Tag;
 use pocketmine\Player;
 use pocketmine\Server;
 use pocketmine\utils\Config;
@@ -59,8 +62,7 @@ use function strtoupper;
 use function trim;
 
 class Item implements ItemIds{
-	/** @var NBT */
-	private static $cachedParser = null;
+	private static ?NBT $cachedParser = null;
 
 	private static function parseCompoundTag(string $tag) : CompoundTag{
 		if(self::$cachedParser === null){
@@ -80,22 +82,21 @@ class Item implements ItemIds{
 		return self::$cachedParser->write();
 	}
 
-	/** @var \SplFixedArray */
-	public static $list = null;
-	protected $block;
-	protected $id;
-	protected $meta;
-	private $tags = "";
-	private $cachedNBT = null;
-	public $count;
-	protected $durability = 0;
-	protected $name;
+	public static ?\SplFixedArray $list = null;
+	protected ?Block $block = null;
+	protected int $id;
+	protected ?int $meta = null;
+	private string $tags = "";
+	private ?CompoundTag $cachedNBT = null;
+	public int $count;
+	protected int $durability = 0;
+	protected string $name;
 
 	public function canBeActivated() : bool{
 		return false;
 	}
 
-	public static function init($readFromJson = false){
+	public static function init(bool $readFromJson = false) : void{
 		if(self::$list === null){
 			//TODO: Sort this mess into some kind of order
 			self::$list = new \SplFixedArray(65536);
@@ -264,7 +265,7 @@ class Item implements ItemIds{
 
 	private static $creative = [];
 
-	private static function initCreativeItems($readFromJson = false){
+	private static function initCreativeItems(bool $readFromJson = false) : void{
 		self::clearCreativeItems();
 		if(!$readFromJson){
 			foreach(CreativeItems::ITEMS as $category){
@@ -291,7 +292,7 @@ class Item implements ItemIds{
 
 	}
 
-	public static function clearCreativeItems(){
+	public static function clearCreativeItems() : void{
 		Item::$creative = [];
 	}
 
@@ -299,12 +300,12 @@ class Item implements ItemIds{
 		return Item::$creative;
 	}
 
-	public static function addCreativeItem(Item $item){
+	public static function addCreativeItem(Item $item) : void{
 		//Doing it this way allows adding enchanted items to inventory, like enchanted books
 		Item::$creative[] = $item;
 	}
 
-	public static function removeCreativeItem(Item $item){
+	public static function removeCreativeItem(Item $item) : void{
 		$index = self::getCreativeItemIndex($item);
 		if($index !== -1){
 			unset(Item::$creative[$index]);
@@ -323,9 +324,9 @@ class Item implements ItemIds{
 
 	/**
 	 * @param $index
-	 * @return Item
+	 * @return Item|null
 	 */
-	public static function getCreativeItem(int $index){
+	public static function getCreativeItem(int $index) : ?Item{
 		return isset(Item::$creative[$index]) ? Item::$creative[$index] : null;
 	}
 
@@ -408,7 +409,7 @@ class Item implements ItemIds{
 		}
 	}
 
-	public function setCompoundTag($tags){
+	public function setCompoundTag($tags) : Item{
 		if($tags instanceof CompoundTag){
 			$this->setNamedTag($tags);
 		}else{
@@ -440,7 +441,7 @@ class Item implements ItemIds{
 		return false;
 	}
 
-	public function clearCustomBlockData(){
+	public function clearCustomBlockData() : Item{
 		if(!$this->hasCompoundTag()){
 			return $this;
 		}
@@ -454,7 +455,7 @@ class Item implements ItemIds{
 		return $this;
 	}
 
-	public function setCustomBlockData(CompoundTag $compound){
+	public function setCustomBlockData(CompoundTag $compound) : Item{
 		$tags = clone $compound;
 		$tags->setName("BlockEntityTag");
 
@@ -470,7 +471,7 @@ class Item implements ItemIds{
 		return $this;
 	}
 
-	public function getCustomBlockData(){
+	public function getCustomBlockData() : ?CompoundTag{
 		if(!$this->hasCompoundTag()){
 			return null;
 		}
@@ -503,7 +504,7 @@ class Item implements ItemIds{
 	 * @param $id
 	 * @return Enchantment|null
 	 */
-	public function getEnchantment(int $id){
+	public function getEnchantment(int $id) : ?Enchantment{
 		if(!$this->hasEnchantments()){
 			return null;
 		}
@@ -540,7 +541,7 @@ class Item implements ItemIds{
 	 * @param $id
 	 * @return Int level|0(for null)
 	 */
-	public function getEnchantmentLevel(int $id){
+	public function getEnchantmentLevel(int $id) : int{
 		if(!$this->hasEnchantments()){
 			return 0;
 		}
@@ -557,7 +558,7 @@ class Item implements ItemIds{
 		return 0;
 	}
 
-	public function addEnchantment(Enchantment $ench){
+	public function addEnchantment(Enchantment $ench) : void{
 		if(!$this->hasCompoundTag()){
 			$tag = new CompoundTag("", []);
 		}else{
@@ -649,7 +650,7 @@ class Item implements ItemIds{
 		return 1;
 	}
 
-	public function setRepairCost(int $cost){
+	public function setRepairCost(int $cost) : Item{
 		if($cost === 1){
 			$this->clearRepairCost();
 		}
@@ -669,7 +670,7 @@ class Item implements ItemIds{
 		return $this;
 	}
 
-	public function clearRepairCost(){
+	public function clearRepairCost() : Item{
 		if(!$this->hasCompoundTag()){
 			return $this;
 		}
@@ -707,7 +708,7 @@ class Item implements ItemIds{
 		return $this->getNamedTag()->getCompoundTag('display')->getString('Name', '');
 	}
 
-	public function setCustomName(string $name){
+	public function setCustomName(string $name) : Item{
 		if($name === ""){
 			$this->clearCustomName();
 		}
@@ -735,7 +736,7 @@ class Item implements ItemIds{
 		return $this;
 	}
 
-	public function clearCustomName(){
+	public function clearCustomName() : Item{
 		if(!$this->hasCompoundTag()){
 			return $this;
 		}
@@ -753,7 +754,7 @@ class Item implements ItemIds{
 		return $this;
 	}
 
-	public function getNamedTagEntry($name){
+	public function getNamedTagEntry(string $name) : ?Tag{
 		$tag = $this->getNamedTag();
 		if($tag !== null){
 			return isset($tag->{$name}) ? $tag->{$name} : null;
@@ -765,7 +766,7 @@ class Item implements ItemIds{
 	/**
 	 * @return CompoundTag|null
 	 */
-	public function getNamedTag(){
+	public function getNamedTag() : ?CompoundTag{
 		if(!$this->hasCompoundTag()){
 			return null;
 		}elseif($this->cachedNBT !== null){
@@ -774,7 +775,7 @@ class Item implements ItemIds{
 		return $this->cachedNBT = self::parseCompoundTag($this->tags);
 	}
 
-	public function setNamedTag(CompoundTag $tag){
+	public function setNamedTag(CompoundTag $tag) : Item{
 		if($tag->getCount() === 0){
 			return $this->clearNamedTag();
 		}
@@ -785,7 +786,7 @@ class Item implements ItemIds{
 		return $this;
 	}
 
-	public function clearNamedTag(){
+	public function clearNamedTag() : Item{
 		return $this->setCompoundTag("");
 	}
 
@@ -793,7 +794,7 @@ class Item implements ItemIds{
 		return $this->count;
 	}
 
-	public function setCount(int $count){
+	public function setCount(int $count) : void{
 		$this->count = $count;
 	}
 
@@ -817,7 +818,7 @@ class Item implements ItemIds{
 		return $this->canBeConsumed();
 	}
 
-	public function onConsume(Entity $entity){
+	public function onConsume(Entity $entity) : void{
 	}
 
 	public function getBlock() : Block{
@@ -836,7 +837,7 @@ class Item implements ItemIds{
 		return $this->meta;
 	}
 
-	public function setDamage(int $meta){
+	public function setDamage(?int $meta) : void{
 		$this->meta = $meta !== -1 ? $meta & 0xFFFF : -1;
 	}
 
@@ -848,7 +849,7 @@ class Item implements ItemIds{
 		return 64;
 	}
 
-	final public function getFuelTime(){
+	final public function getFuelTime() : ?int{
 		if(!isset(Fuel::$duration[$this->id])){
 			return null;
 		}
@@ -864,77 +865,77 @@ class Item implements ItemIds{
 	 *
 	 * @return bool
 	 */
-	public function useOn($object){
+	public function useOn($object) : bool{
 		return false;
 	}
 
 	/**
 	 * @return bool
 	 */
-	public function isTool(){
+	public function isTool() : bool{
 		return false;
 	}
 
 	/**
 	 * @return int|bool
 	 */
-	public function getMaxDurability(){
+	public function getMaxDurability() : int|bool{
 		return false;
 	}
 
-	public function isPickaxe(){
+	public function isPickaxe() : int|bool{
 		return false;
 	}
 
-	public function isAxe(){
+	public function isAxe() : int|bool{
 		return false;
 	}
 
-	public function isSword(){
+	public function isSword() : int|bool{
 		return false;
 	}
 
-	public function isShovel(){
+	public function isShovel() : int|bool{
 		return false;
 	}
 
-	public function isHoe(){
+	public function isHoe() : int|bool{
 		return false;
 	}
 
-	public function isShears(){
+	public function isShears() : bool{
 		return false;
 	}
 
-	public function isArmor(){
+	public function isArmor() : bool{
 		return false;
 	}
 
-	public function getArmorValue(){
+	public function getArmorValue() : int|bool{
 		return false;
 	}
 
-	public function isBoots(){
+	public function isBoots() : int|bool{
 		return false;
 	}
 
-	public function isHelmet(){
+	public function isHelmet() : int|bool{
 		return false;
 	}
 
-	public function isLeggings(){
+	public function isLeggings() : int|bool{
 		return false;
 	}
 
-	public function isChestplate(){
+	public function isChestplate() : int|bool{
 		return false;
 	}
 
-	public function getAttackDamage(){
+	public function getAttackDamage() : int{
 		return 1;
 	}
 
-	public function getModifyAttackDamage(Entity $target){
+	public function getModifyAttackDamage(Entity $target) : int|float{
 		$rec = $this->getAttackDamage();
 		$sharpL = $this->getEnchantmentLevel(Enchantment::TYPE_WEAPON_SHARPNESS);
 		if($sharpL > 0){
@@ -959,11 +960,11 @@ class Item implements ItemIds{
 		return "Item " . $this->name . " (" . $this->id . ":" . ($this->meta === null ? "?" : $this->meta) . ")x" . $this->count . ($this->hasCompoundTag() ? " tags:0x" . bin2hex($this->getCompoundTag()) : "");
 	}
 
-	public function getDestroySpeed(Block $block, Player $player){
+	public function getDestroySpeed(Block $block, Player $player) : int{
 		return 1;
 	}
 
-	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz){
+	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz) : bool{
 		return false;
 	}
 

@@ -21,18 +21,20 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 class WoodenPickaxe extends Tool{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::WOODEN_PICKAXE, $meta, $count, "Wooden Pickaxe");
 	}
 
-	public function isPickaxe(){
+	public function isPickaxe() : int {
 		return Tool::TIER_WOODEN;
 	}
 
-	public function getAttackDamage(){
+	public function getAttackDamage() : int {
 		return 3;
 	}
 }

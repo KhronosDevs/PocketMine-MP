@@ -21,6 +21,8 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 use pocketmine\block\Air;
@@ -32,7 +34,7 @@ use pocketmine\level\Level;
 use pocketmine\Player;
 
 class Bucket extends Item{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::BUCKET, $meta, $count, "Bucket");
 	}
 
@@ -44,7 +46,7 @@ class Bucket extends Item{
 		return true;
 	}
 
-	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz){
+	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz) : bool{
 		$targetBlock = Block::get($this->meta);
 
 		if($targetBlock instanceof Air){

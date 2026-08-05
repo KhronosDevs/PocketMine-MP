@@ -21,6 +21,8 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 use pocketmine\block\Block;
@@ -33,7 +35,7 @@ use pocketmine\nbt\tag\ListTag;
 use pocketmine\Player;
 
 class Minecart extends Item{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::MINECART, $meta, $count, "Minecart");
 	}
 
@@ -41,7 +43,7 @@ class Minecart extends Item{
 		return true;
 	}
 
-	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz){
+	public function onActivate(Level $level, Player $player, Block $block, Block $target, $face, $fx, $fy, $fz) : bool{
 		$minecart = new MinecartEntity($player->getLevel()->getChunk($block->getX() >> 4, $block->getZ() >> 4), new CompoundTag("", [
 			"Pos" => new ListTag("Pos", [
 				new DoubleTag("", $block->getX()),

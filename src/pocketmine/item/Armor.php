@@ -21,11 +21,14 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 use pocketmine\item\enchantment\enchantment;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\Tag;
 use pocketmine\utils\Color;
 use function mt_rand;
 
@@ -45,7 +48,7 @@ abstract class Armor extends Item{
 		return 1;
 	}
 
-	public function isArmor(){
+	public function isArmor() : bool{
 		return true;
 	}
 
@@ -54,7 +57,7 @@ abstract class Armor extends Item{
 	 *
 	 * @return bool
 	 */
-	public function useOn($object, int $cost = 1){
+	public function useOn($object, int $cost = 1) : bool{
 		if($this->isUnbreakable()){
 			return true;
 		}
@@ -75,12 +78,12 @@ abstract class Armor extends Item{
 		return true;
 	}
 
-	public function isUnbreakable(){
+	public function isUnbreakable() : bool{
 		$tag = $this->getNamedTagEntry("Unbreakable");
 		return $tag !== null && $tag->getValue() > 0;
 	}
 
-	public function setCustomColor(Color $color){
+	public function setCustomColor(Color $color) : void{
 		if(($hasTag = $this->hasCompoundTag())){
 			$tag = $this->getNamedTag();
 		}else{
@@ -90,7 +93,7 @@ abstract class Armor extends Item{
 		$this->setCompoundTag($tag);
 	}
 
-	public function getCustomColor(){
+	public function getCustomColor() : ?Tag{
 		if(!$this->hasCompoundTag()) return null;
 		$tag = $this->getNamedTag();
 		if(isset($tag->customColor)){
@@ -99,7 +102,7 @@ abstract class Armor extends Item{
 		return null;
 	}
 
-	public function clearCustomColor(){
+	public function clearCustomColor() : void{
 		if(!$this->hasCompoundTag()) return;
 		$tag = $this->getNamedTag();
 		if(isset($tag->customColor)){
@@ -108,35 +111,35 @@ abstract class Armor extends Item{
 		$this->setCompoundTag($tag);
 	}
 
-	public function getArmorTier(){
+	public function getArmorTier() : int|bool{
 		return false;
 	}
 
-	public function getArmorType(){
+	public function getArmorType() : int|bool{
 		return false;
 	}
 
-	public function getMaxDurability(){
+	public function getMaxDurability() : int|bool{
 		return false;
 	}
 
-	public function getArmorValue(){
+	public function getArmorValue() : int|bool{
 		return false;
 	}
 
-	public function isHelmet(){
+	public function isHelmet() : int|bool{
 		return false;
 	}
 
-	public function isChestplate(){
+	public function isChestplate() : int|bool{
 		return false;
 	}
 
-	public function isLeggings(){
+	public function isLeggings() : int|bool{
 		return false;
 	}
 
-	public function isBoots(){
+	public function isBoots() : int|bool{
 		return false;
 	}
 }

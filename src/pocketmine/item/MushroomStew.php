@@ -21,10 +21,12 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 class MushroomStew extends Food{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::MUSHROOM_STEW, 0, $count, "Mushroom Stew");
 	}
 
@@ -40,7 +42,7 @@ class MushroomStew extends Food{
 		return 7.2;
 	}
 
-	public function getResidue(){
+	public function getResidue() : Item {
 		return Item::get(Item::BOWL);
 	}
 }

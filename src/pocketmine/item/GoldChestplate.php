@@ -21,30 +21,32 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\item;
 
 class GoldChestplate extends Armor{
-	public function __construct($meta = 0, $count = 1){
+	public function __construct(?int $meta = 0, int $count = 1){
 		parent::__construct(self::GOLD_CHESTPLATE, $meta, $count, "Gold Chestplate");
 	}
 
-	public function getArmorTier(){
+	public function getArmorTier() : int {
 		return Armor::TIER_GOLD;
 	}
 
-	public function getArmorType(){
+	public function getArmorType() : int {
 		return Armor::TYPE_CHESTPLATE;
 	}
 
-	public function getMaxDurability(){
+	public function getMaxDurability() : int {
 		return 113;
 	}
 
-	public function getArmorValue(){
+	public function getArmorValue() : int {
 		return 5;
 	}
 
-	public function isChestplate(){
+	public function isChestplate() : bool {
 		return true;
 	}
 }
