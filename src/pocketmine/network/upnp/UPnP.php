@@ -24,7 +24,11 @@
 /**
  * UPnP port forwarding support. Only for Windows
  */
+declare(strict_types=1);
+
 namespace pocketmine\network\upnp;
+
+
 
 use pocketmine\utils\Utils;
 use function class_exists;
@@ -33,7 +37,7 @@ use function is_object;
 use function trim;
 
 abstract class UPnP{
-	public static function PortForward($port){
+	public static function PortForward(int $port) : bool{
 		if(Utils::$online === false){
 			return false;
 		}
@@ -55,7 +59,7 @@ abstract class UPnP{
 		return true;
 	}
 
-	public static function RemovePortForward($port){
+	public static function RemovePortForward(int $port) : bool{
 		if(Utils::$online === false){
 			return false;
 		}

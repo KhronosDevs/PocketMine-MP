@@ -21,9 +21,11 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class MovePlayerPacket extends DataPacket{
 	const NETWORK_ID = Info::MOVE_PLAYER_PACKET;
@@ -32,22 +34,22 @@ class MovePlayerPacket extends DataPacket{
 	const MODE_RESET = 1;
 	const MODE_ROTATION = 2;
 
-	public $eid;
-	public $x;
-	public $y;
-	public $z;
-	public $yaw;
-	public $bodyYaw;
-	public $pitch;
-	public $mode = self::MODE_NORMAL;
-	public $onGround;
+	public int $eid = 0;
+	public float $x = 0.0;
+	public float $y = 0.0;
+	public float $z = 0.0;
+	public float $yaw = 0.0;
+	public float $bodyYaw = 0.0;
+	public float $pitch = 0.0;
+	public int $mode = self::MODE_NORMAL;
+	public bool $onGround = true;
 
-	public function clean(){
+	public function clean() : static{
 		$this->teleport = false;
 		return parent::clean();
 	}
 
-	public function decode(){
+	public function decode() : void{
 		$this->eid = $this->getLong();
 		$this->x = $this->getFloat();
 		$this->y = $this->getFloat();
@@ -59,7 +61,7 @@ class MovePlayerPacket extends DataPacket{
 		$this->onGround = $this->getByte() > 0;
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putLong($this->eid);
 		$this->putFloat($this->x);
@@ -69,7 +71,7 @@ class MovePlayerPacket extends DataPacket{
 		$this->putFloat($this->bodyYaw); //TODO
 		$this->putFloat($this->pitch);
 		$this->putByte($this->mode);
-		$this->putByte($this->onGround > 0);
+		$this->putByte($this->onGround ? 1 : 0);
 	}
 
 }

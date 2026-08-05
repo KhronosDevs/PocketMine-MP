@@ -21,31 +21,33 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class StartGamePacket extends DataPacket{
 	const NETWORK_ID = Info::START_GAME_PACKET;
 
-	public $seed;
-	public $dimension;
-	public $generator;
-	public $gamemode;
-	public $eid;
-	public $spawnX;
-	public $spawnY;
-	public $spawnZ;
-	public $x;
-	public $y;
-	public $z;
-	public $unknown;
+	public int $seed = 0;
+	public int $dimension = 0;
+	public int $generator = 0;
+	public int $gamemode = 0;
+	public int $eid = 0;
+	public int $spawnX = 0;
+	public int $spawnY = 0;
+	public int $spawnZ = 0;
+	public float $x = 0.0;
+	public float $y = 0.0;
+	public float $z = 0.0;
+	public string $unknown = "";
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putInt($this->seed);
 		$this->putByte($this->dimension);

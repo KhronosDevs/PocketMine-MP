@@ -15,21 +15,23 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace raklib\protocol;
 
-#include <rules/RakLibPacket.h>
+
 
 use raklib\RakLib;
 
 class OPEN_CONNECTION_REQUEST_2 extends Packet{
 	public static $ID = 0x07;
 
-	public $clientID;
-	public $serverAddress;
-	public $serverPort;
-	public $mtuSize;
+	public int $clientID = 0;
+	public string $serverAddress = "";
+	public int $serverPort = 0;
+	public int $mtuSize = 0;
 
-	public function encode(){
+	public function encode() : void{
 		parent::encode();
 		$this->put(RakLib::MAGIC);
 		$this->putAddress($this->serverAddress, $this->serverPort, 4);
@@ -37,7 +39,7 @@ class OPEN_CONNECTION_REQUEST_2 extends Packet{
 		$this->putLong($this->clientID);
 	}
 
-	public function decode(){
+	public function decode() : void{
 		parent::decode();
 		$this->offset += 16; //Magic
 		$this->getAddress($this->serverAddress, $this->serverPort);

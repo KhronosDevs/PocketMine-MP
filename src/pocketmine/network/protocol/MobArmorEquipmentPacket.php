@@ -21,17 +21,20 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class MobArmorEquipmentPacket extends DataPacket{
 	const NETWORK_ID = Info::MOB_ARMOR_EQUIPMENT_PACKET;
 
-	public $eid;
-	public $slots = [];
+	public int $eid = 0;
+	/** @var \pocketmine\item\Item[] */
+	public array $slots = [];
 
-	public function decode(){
+	public function decode() : void{
 		$this->eid = $this->getLong();
 		$this->slots[0] = $this->getSlot();
 		$this->slots[1] = $this->getSlot();
@@ -39,7 +42,7 @@ class MobArmorEquipmentPacket extends DataPacket{
 		$this->slots[3] = $this->getSlot();
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putLong($this->eid);
 		$this->putSlot($this->slots[0]);

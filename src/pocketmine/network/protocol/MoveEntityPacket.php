@@ -21,22 +21,24 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class MoveEntityPacket extends DataPacket{
 	const NETWORK_ID = Info::MOVE_ENTITY_PACKET;
 
-	public $eid;
-	public $x;
-	public $y;
-	public $z;
-	public $yaw;
-	public $headYaw;
-	public $pitch;
+	public int $eid = 0;
+	public float $x = 0.0;
+	public float $y = 0.0;
+	public float $z = 0.0;
+	public float $yaw = 0.0;
+	public float $headYaw = 0.0;
+	public float $pitch = 0.0;
 
-	public function decode(){
+	public function decode() : void{
 		$this->eid = $this->getLong();
 		$this->x = $this->getFloat();
 		$this->y = $this->getFloat();
@@ -46,14 +48,14 @@ class MoveEntityPacket extends DataPacket{
 		$this->headYaw = $this->getByte() * (360.0 / 256);
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putLong($this->eid);
 		$this->putFloat($this->x);
 		$this->putFloat($this->y);
 		$this->putFloat($this->z);
-		$this->putByte($this->pitch / (360.0 / 256));
-		$this->putByte($this->yaw / (360.0 / 256));
-		$this->putByte($this->headYaw / (360.0 / 256));
+		$this->putByte((int) ($this->pitch / (360.0 / 256)));
+		$this->putByte((int) ($this->yaw / (360.0 / 256)));
+		$this->putByte((int) ($this->headYaw / (360.0 / 256)));
 	}
 }

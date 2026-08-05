@@ -21,26 +21,30 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
+
+use pocketmine\item\Item;
 
 class MobEquipmentPacket extends DataPacket{
 	const NETWORK_ID = Info::MOB_EQUIPMENT_PACKET;
 
-	public $eid;
-	public $item;
-	public $slot;
-	public $selectedSlot;
+	public int $eid = 0;
+	public Item $item;
+	public int $slot = 0;
+	public int $selectedSlot = 0;
 
-	public function decode(){
+	public function decode() : void{
 		$this->eid = $this->getLong();
 		$this->item = $this->getSlot();
 		$this->slot = $this->getByte();
 		$this->selectedSlot = $this->getByte();
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putLong($this->eid);
 		$this->putSlot($this->item);

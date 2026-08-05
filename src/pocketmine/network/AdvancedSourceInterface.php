@@ -24,23 +24,18 @@
 /**
  * Network-related classes
  */
+declare(strict_types=1);
+
 namespace pocketmine\network;
+
+
 
 interface AdvancedSourceInterface extends SourceInterface{
 
-	/**
-	 * @param string $address
-	 * @param int    $timeout Seconds
-	 */
-	public function blockAddress($address, $timeout = 300);
+	public function blockAddress(string $address, int $timeout = 300) : void;
 
-	public function setNetwork(Network $network);
+	public function setNetwork(Network $network) : void;
 
-	/**
-	 * @param string $address
-	 * @param int    $port
-	 * @param string $payload
-	 */
-	public function sendRawPacket($address, $port, $payload);
+	public function sendRawPacket(string $address, int $port, string $payload) : void;
 
 }

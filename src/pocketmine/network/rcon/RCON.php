@@ -28,7 +28,11 @@
  * Implementation of the GeniRCON Protocol to allow full remote console access
  * Source: https://github.com/iTXTech/GeniRCON
  */
+declare(strict_types=1);
+
 namespace pocketmine\network\rcon;
+
+
 
 use pocketmine\command\RemoteConsoleCommandSender;
 use pocketmine\event\server\RemoteServerCommandEvent;
@@ -54,17 +58,19 @@ class RCON{
 	const PROTOCOL_VERSION = 3;
 
 	/** @var Server */
-	private $server;
+	private Server $server;
+	/** @var \Socket|null */
 	private $socket;
-	private $password;
+	private string $password = "";
 	/** @var RCONInstance[] */
-	private $workers = [];
-	private $clientsPerThread;
+	private array $workers = [];
+	private int $clientsPerThread = 50;
+	private int $threads = 0;
 
-	public function __construct(Server $server, $password, $port = 19132, $interface = "0.0.0.0", $threads = 1, $clientsPerThread = 50){
+	public function __construct(Server $server, string $password, int $port = 19132, string $interface = "0.0.0.0", int $threads = 1, int $clientsPerThread = 50){
 		$this->server = $server;
 		$this->workers = [];
-		$this->password = (string) $password;
+		$this->password = $password;
 		$this->server->getLogger()->info("Starting remote control listener");
 		if($this->password === ""){
 			$this->server->getLogger()->critical("RCON can't be started: Empty password");
@@ -74,7 +80,7 @@ class RCON{
 		$this->threads = (int) max(1, $threads);
 		$this->clientsPerThread = (int) max(1, $clientsPerThread);
 		$this->socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
-		if($this->socket === false || !socket_bind($this->socket, $interface, (int) $port) || !socket_listen($this->socket)){
+		if($this->socket === false || !socket_bind($this->socket, $interface, $port) || !socket_listen($this->socket)){
 			$this->server->getLogger()->critical("RCON can't be started: " . socket_strerror(socket_last_error()));
 			$this->threads = 0;
 			return;
@@ -88,7 +94,7 @@ class RCON{
 		$this->server->getLogger()->info("RCON running on $addr:$port");
 	}
 
-	public function stop(){
+	public function stop() : void{
 		for($n = 0; $n < $this->threads; ++$n){
 			$this->workers[$n]->close();
 			Server::microSleep(50000);
@@ -99,7 +105,7 @@ class RCON{
 		$this->threads = 0;
 	}
 
-	public function check(){
+	public function check() : void{
 		$d = Utils::getRealMemoryUsage();
 
 		$u = Utils::getMemoryUsage(true);
@@ -118,7 +124,7 @@ class RCON{
 				$this->workers[$n]->serverStatus = $serverStatus;
 			}
 			if($this->workers[$n]->isTerminated() === true){
-				$this->workers[$n] = new RCONInstance($this->socket, $this->password, $this->clientsPerThread);
+				$this->workers[$n] = new RCONInstance($this->server->getLogger(), $this->socket, $this->password, $this->clientsPerThread);
 			}elseif($this->workers[$n]->isWaiting()){
 				if($this->workers[$n]->response !== ""){
 					$this->server->getLogger()->info($this->workers[$n]->response);

@@ -25,7 +25,11 @@
  * Implementation of the UT3 Query Protocol (GameSpot)
  * Source: http://wiki.unrealadmin.org/UT3_query_protocol
  */
+declare(strict_types=1);
+
 namespace pocketmine\network\query;
+
+
 
 use pocketmine\Server;
 use pocketmine\utils\Binary;
@@ -38,7 +42,12 @@ use function strlen;
 use function substr;
 
 class QueryHandler{
-	private $server, $lastToken, $token, $longData, $shortData, $timeout;
+	private Server $server;
+	private string $lastToken;
+	private string $token = ""; // regenerated in constructor; default prevents read-before-init in regenerateToken()
+	private string $longData;
+	private string $shortData;
+	private float $timeout;
 
 	const HANDSHAKE = 9;
 	const STATISTICS = 0;
@@ -64,23 +73,23 @@ class QueryHandler{
 		$this->server->getLogger()->info($this->server->getLanguage()->translateString("pocketmine.server.query.running", [$addr, $port]));
 	}
 
-	public function regenerateInfo(){
+	public function regenerateInfo() : void{
 		$ev = $this->server->getQueryInformation();
 		$this->longData = $ev->getLongQuery();
 		$this->shortData = $ev->getShortQuery();
 		$this->timeout = microtime(true) + $ev->getTimeout();
 	}
 
-	public function regenerateToken(){
+	public function regenerateToken() : void{
 		$this->lastToken = $this->token;
 		$this->token = random_bytes(16);
 	}
 
-	public static function getTokenString($token, $salt){
+	public static function getTokenString(string $token, string $salt) : int{
 		return Binary::readInt(substr(hash("sha512", $salt . ":" . $token, true), 7, 4));
 	}
 
-	public function handle($address, $port, $packet){
+	public function handle(string $address, int $port, string $packet) : void{
 		$offset = 2;
 		$packetType = ord($packet[$offset++]);
 		$sessionID = Binary::readInt(substr($packet, $offset, 4));

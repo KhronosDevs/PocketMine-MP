@@ -24,7 +24,11 @@
 /**
  * Network-related classes
  */
+declare(strict_types=1);
+
 namespace pocketmine\network;
+
+
 
 use pocketmine\network\protocol\AddEntityPacket;
 use pocketmine\network\protocol\AddItemEntityPacket;
@@ -97,24 +101,28 @@ use function zlib_decode;
 
 class Network {
 
+	/** Plugin-tunable: minimum payload size (bytes) that triggers batching of packets to players. */
 	public static $BATCH_THRESHOLD = 512;
 
-	/** @var \SplFixedArray */
-	private $packetPool;
+	/** @var \SplFixedArray|DataPacket[] */
+	private \SplFixedArray $packetPool;
 
 	/** @var Server */
-	private $server;
+	private Server $server;
 
 	/** @var SourceInterface[] */
-	private $interfaces = [];
+	private array $interfaces = [];
 
 	/** @var AdvancedSourceInterface[] */
-	private $advancedInterfaces = [];
+	private array $advancedInterfaces = [];
 
-	private $upload = 0;
-	private $download = 0;
+	private float $upload = 0;
+	private float $download = 0;
 
-	private $name;
+	private string $name = "";
+
+	/** @var QueryHandler|null Always null in this build; query routing happens via Server::getQueryHandler() */
+	private ?QueryHandler $queryHandler = null;
 
 	public function __construct(Server $server) {
 
@@ -123,20 +131,20 @@ class Network {
 		$this->server = $server;
 	}
 
-	public function addStatistics($upload, $download) {
+	public function addStatistics(float $upload, float $download) : void {
 		$this->upload += $upload;
 		$this->download += $download;
 	}
 
-	public function getUpload() {
+	public function getUpload() : float {
 		return $this->upload;
 	}
 
-	public function getDownload() {
+	public function getDownload() : float {
 		return $this->download;
 	}
 
-	public function resetStatistics() {
+	public function resetStatistics() : void {
 		$this->upload = 0;
 		$this->download = 0;
 	}
@@ -144,11 +152,11 @@ class Network {
 	/**
 	 * @return SourceInterface[]
 	 */
-	public function getInterfaces() {
+	public function getInterfaces() : array {
 		return $this->interfaces;
 	}
 
-	public function processInterfaces() {
+	public function processInterfaces() : void {
 		foreach ($this->interfaces as $interface) {
 			try {
 				$interface->process();
@@ -167,7 +175,7 @@ class Network {
 		}
 	}
 
-	public function registerInterface(SourceInterface $interface) {
+	public function registerInterface(SourceInterface $interface) : void {
 		$this->interfaces[$hash = spl_object_hash($interface)] = $interface;
 		if ($interface instanceof AdvancedSourceInterface) {
 			$this->advancedInterfaces[$hash] = $interface;
@@ -176,46 +184,43 @@ class Network {
 		$interface->setName($this->name);
 	}
 
-	public function unregisterInterface(SourceInterface $interface) {
+	public function unregisterInterface(SourceInterface $interface) : void {
 		unset($this->interfaces[$hash = spl_object_hash($interface)],
 			$this->advancedInterfaces[$hash]);
 	}
 
 	/**
 	 * Sets the server name shown on each interface Query
-	 *
-	 * @param string $name
 	 */
-	public function setName($name) {
-		$this->name = (string) $name;
+	public function setName(string $name) : void {
+		$this->name = $name;
 		foreach ($this->interfaces as $interface) {
 			$interface->setName($this->name);
 		}
 	}
 
-	public function getName() {
+	public function getName() : string {
 		return $this->name;
 	}
 
-	public function updateName() {
+	public function updateName() : void {
 		foreach ($this->interfaces as $interface) {
 			$interface->setName($this->name);
 		}
 	}
 
 	/**
-	 * @param int        $id    0-255
-	 * @param DataPacket $class
+	 * @param string $class
 	 */
-	public function registerPacket($id, $class) {
+	public function registerPacket(int $id, string $class) : void {
 		$this->packetPool[$id] = new $class;
 	}
 
-	public function getServer() {
+	public function getServer() : Server {
 		return $this->server;
 	}
 
-	public function processBatch(BatchPacket $packet, Player $p) {
+	public function processBatch(BatchPacket $packet, Player $p) : void {
 		$str = zlib_decode($packet->payload, 1024 * 1024 * 64); //Max 64MB
 		$len = strlen($str);
 		$offset = 0;
@@ -257,7 +262,7 @@ class Network {
 		}
 	}
 
-	public function handlePacket(string $address, int $port, string $payload){
+	public function handlePacket(string $address, int $port, string $payload) : void{
 		try{
 			if(strlen($payload) > 2 && substr($payload, 0, 2) === "\xfe\xfd" && $this->queryHandler instanceof QueryHandler){
 				$this->server->getQueryHandler()->handle($address, $port, $payload);
@@ -275,12 +280,10 @@ class Network {
 	}
 
 	/**
-	 * @param $id
-	 *
-	 * @return DataPacket
+	 * @return DataPacket|null
 	 */
-	public function getPacket($id) {
-		/** @var DataPacket $class */
+	public function getPacket(int $id) : ?DataPacket {
+		/** @var DataPacket|null $class */
 		$class = $this->packetPool[$id];
 		if ($class !== null) {
 			return clone $class;
@@ -288,12 +291,7 @@ class Network {
 		return null;
 	}
 
-	/**
-	 * @param string $address
-	 * @param int    $port
-	 * @param string $payload
-	 */
-	public function sendPacket($address, $port, $payload) {
+	public function sendPacket(string $address, int $port, string $payload) : void {
 		foreach ($this->advancedInterfaces as $interface) {
 			$interface->sendRawPacket($address, $port, $payload);
 		}
@@ -301,11 +299,8 @@ class Network {
 
 	/**
 	 * Blocks an IP address from the main interface. Setting timeout to -1 will block it forever
-	 *
-	 * @param string $address
-	 * @param int    $timeout
 	 */
-	public function blockAddress($address, $timeout = 300) {
+	public function blockAddress(string $address, int $timeout = 300) : void {
 		foreach ($this->advancedInterfaces as $interface) {
 			$interface->blockAddress($address, $timeout);
 		}
@@ -313,16 +308,14 @@ class Network {
 
 	/**
 	 * Unblocks an IP address from the main interface.
-	 *
-	 * @param string $address
 	 */
-	public function unblockAddress($address) {
+	public function unblockAddress(string $address) : void {
 		foreach ($this->advancedInterfaces as $interface) {
 			$interface->unblockAddress($address);
 		}
 	}
 
-	private function registerPackets() {
+	private function registerPackets() : void {
 		$this->packetPool = new \SplFixedArray(256);
 
 		$this->registerPacket(ProtocolInfo::LOGIN_PACKET, LoginPacket::class);

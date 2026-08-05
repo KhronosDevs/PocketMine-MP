@@ -21,27 +21,31 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
+
+use pocketmine\item\Item;
 
 class UseItemPacket extends DataPacket{
 	const NETWORK_ID = Info::USE_ITEM_PACKET;
 
-	public $x;
-	public $y;
-	public $z;
-	public $face;
-	public $item;
-	public $fx;
-	public $fy;
-	public $fz;
-	public $posX;
-	public $posY;
-	public $posZ;
-	public $slot;
+	public int $x = 0;
+	public int $y = 0;
+	public int $z = 0;
+	public int $face = 0;
+	public Item $item;
+	public float $fx = 0.0;
+	public float $fy = 0.0;
+	public float $fz = 0.0;
+	public float $posX = 0.0;
+	public float $posY = 0.0;
+	public float $posZ = 0.0;
+	public int $slot = 0;
 
-	public function decode(){
+	public function decode() : void{
 		$this->x = $this->getInt();
 		$this->y = $this->getInt();
 		$this->z = $this->getInt();
@@ -56,7 +60,7 @@ class UseItemPacket extends DataPacket{
 		$this->item = $this->getSlot();
 	}
 
-	public function encode(){
+	public function encode() : void{
 
 	}
 }

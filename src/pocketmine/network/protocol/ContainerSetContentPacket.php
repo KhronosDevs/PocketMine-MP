@@ -21,11 +21,13 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-use function count;
 
-#include <rules/DataPacket.h>
+
+use function count;
 
 class ContainerSetContentPacket extends DataPacket{
 	const NETWORK_ID = Info::CONTAINER_SET_CONTENT_PACKET;
@@ -35,17 +37,19 @@ class ContainerSetContentPacket extends DataPacket{
 	const SPECIAL_CREATIVE = 0x79;
 	const SPECIAL_HOTBAR = 0x7a;
 
-	public $windowid;
-	public $slots = [];
-	public $hotbar = [];
+	public int $windowid = 0;
+	/** @var \pocketmine\item\Item[] */
+	public array $slots = [];
+	/** @var int[] */
+	public array $hotbar = [];
 
-	public function clean(){
+	public function clean() : static{
 		$this->slots = [];
 		$this->hotbar = [];
 		return parent::clean();
 	}
 
-	public function decode(){
+	public function decode() : void{
 		$this->windowid = $this->getByte();
 		$count = $this->getShort();
 		for($s = 0; $s < $count && !$this->feof(); ++$s){
@@ -59,7 +63,7 @@ class ContainerSetContentPacket extends DataPacket{
 		}
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putByte($this->windowid);
 		$this->putShort(count($this->slots));

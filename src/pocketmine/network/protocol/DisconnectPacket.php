@@ -21,20 +21,22 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class DisconnectPacket extends DataPacket{
 	const NETWORK_ID = Info::DISCONNECT_PACKET;
 
-	public $message;
+	public string $message = "";
 
-	public function decode(){
+	public function decode() : void{
 		$this->message = $this->getString();
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putString($this->message);
 	}

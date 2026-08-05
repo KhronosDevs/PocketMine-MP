@@ -21,26 +21,28 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class ContainerOpenPacket extends DataPacket{
 	const NETWORK_ID = Info::CONTAINER_OPEN_PACKET;
 
-	public $windowid;
-	public $type;
-	public $slots;
-	public $x;
-	public $y;
-	public $z;
-	public $entityId = -1;
+	public int $windowid = 0;
+	public int $type = 0;
+	public int $slots = 0;
+	public int $x = 0;
+	public int $y = 0;
+	public int $z = 0;
+	public int $entityId = -1;
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putByte($this->windowid);
 		$this->putByte($this->type);

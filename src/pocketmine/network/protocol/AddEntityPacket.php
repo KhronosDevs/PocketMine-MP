@@ -21,38 +21,39 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
 
-#ifndef COMPILE
+
 use pocketmine\utils\Binary;
 use function count;
-
-#endif
 
 class AddEntityPacket extends DataPacket{
 	const NETWORK_ID = Info::ADD_ENTITY_PACKET;
 
-	public $eid;
-	public $type;
-	public $x;
-	public $y;
-	public $z;
-	public $speedX;
-	public $speedY;
-	public $speedZ;
-	public $yaw;
-	public $pitch;
-	public $modifiers;
+	public int $eid = 0;
+	public int $type = 0;
+	public float $x = 0.0;
+	public float $y = 0.0;
+	public float $z = 0.0;
+	public float $speedX = 0.0;
+	public float $speedY = 0.0;
+	public float $speedZ = 0.0;
+	public float $yaw = 0.0;
+	public float $pitch = 0.0;
+	public int $modifiers = 0;
+	/** @var array */
 	public $metadata = [];
-	public $links = [];
+	/** @var array[] */
+	public array $links = [];
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putLong($this->eid);
 		$this->putInt($this->type);

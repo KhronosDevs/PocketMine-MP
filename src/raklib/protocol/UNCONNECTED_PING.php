@@ -15,24 +15,26 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace raklib\protocol;
 
-#include <rules/RakLibPacket.h>
+
 
 use raklib\RakLib;
 
 class UNCONNECTED_PING extends Packet{
 	public static $ID = 0x01;
 
-	public $pingID;
+	public int $pingID = 0;
 
-	public function encode(){
+	public function encode() : void{
 		parent::encode();
 		$this->putLong($this->pingID);
 		$this->put(RakLib::MAGIC);
 	}
 
-	public function decode(){
+	public function decode() : void{
 		parent::decode();
 		$this->pingID = $this->getLong();
 		//magic

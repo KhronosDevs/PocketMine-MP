@@ -21,7 +21,11 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network;
+
+
 
 use pocketmine\scheduler\AsyncTask;
 use pocketmine\Server;
@@ -32,18 +36,18 @@ use const ZLIB_ENCODING_DEFLATE;
 
 class CompressBatchedTask extends AsyncTask{
 
-	public $level = 7;
-	public $data;
-	public $final;
-	public $targets;
+	public int $level = 7;
+	public ?string $data;
+	public ?string $final = null;
+	public string $targets;
 
-	public function __construct($data, array $targets, $level = 7){
+	public function __construct(string $data, array $targets, int $level = 7){
 		$this->data = $data;
 		$this->targets = serialize($targets);
 		$this->level = $level;
 	}
 
-	public function onRun(){
+	public function onRun() : void{
 		try{
 			$this->final = zlib_encode($this->data, ZLIB_ENCODING_DEFLATE, $this->level);
 			$this->data = null;
@@ -52,7 +56,7 @@ class CompressBatchedTask extends AsyncTask{
 		}
 	}
 
-	public function onCompletion(Server $server){
+	public function onCompletion(Server $server) : void{
 		$server->broadcastPacketsCallback($this->final, unserialize($this->targets));
 	}
 }

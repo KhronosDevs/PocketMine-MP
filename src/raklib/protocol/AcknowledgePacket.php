@@ -15,23 +15,22 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace raklib\protocol;
 
-#ifndef COMPILE
+
+
 use raklib\Binary;
 use function count;
 use function sort;
 use const SORT_NUMERIC;
 
-#endif
-
-#include <rules/RakLibPacket.h>
-
 abstract class AcknowledgePacket extends Packet{
 	/** @var int[] */
-	public $packets = [];
+	public array $packets = [];
 
-	public function encode(){
+	public function encode() : void{
 		parent::encode();
 		$payload = "";
 		sort($this->packets, SORT_NUMERIC);
@@ -51,12 +50,12 @@ abstract class AcknowledgePacket extends Packet{
 				}elseif($diff > 1){ //Forget about duplicated packets (bad queues?)
 					if($start === $last){
 						$payload .= "\x01";
-						$payload .= Binary::writeLTriad($start);
+						$payload .= Binary::writeLTriad($start ?? 0); //?? 0: null seq numbers encode as 0 like original weak mode
 						$start = $last = $current;
 					}else{
 						$payload .= "\x00";
-						$payload .= Binary::writeLTriad($start);
-						$payload .= Binary::writeLTriad($last);
+						$payload .= Binary::writeLTriad($start ?? 0);
+						$payload .= Binary::writeLTriad($last ?? 0);
 						$start = $last = $current;
 					}
 					++$records;
@@ -65,11 +64,11 @@ abstract class AcknowledgePacket extends Packet{
 
 			if($start === $last){
 				$payload .= "\x01";
-				$payload .= Binary::writeLTriad($start);
+				$payload .= Binary::writeLTriad($start ?? 0);
 			}else{
 				$payload .= "\x00";
-				$payload .= Binary::writeLTriad($start);
-				$payload .= Binary::writeLTriad($last);
+				$payload .= Binary::writeLTriad($start ?? 0);
+				$payload .= Binary::writeLTriad($last ?? 0);
 			}
 			++$records;
 		}
@@ -78,7 +77,7 @@ abstract class AcknowledgePacket extends Packet{
 		$this->buffer .= $payload;
 	}
 
-	public function decode(){
+	public function decode() : void{
 		parent::decode();
 		$count = $this->getShort();
 		$this->packets = [];
@@ -99,7 +98,7 @@ abstract class AcknowledgePacket extends Packet{
 		}
 	}
 
-	public function clean(){
+	public function clean() : static{
 		$this->packets = [];
 		return parent::clean();
 	}

@@ -24,7 +24,11 @@
 /**
  * Network-related classes
  */
+declare(strict_types=1);
+
 namespace pocketmine\network;
+
+
 
 use pocketmine\network\protocol\DataPacket;
 use pocketmine\Player;
@@ -36,33 +40,20 @@ interface SourceInterface{
 
 	/**
 	 * Sends a DataPacket to the interface, returns an unique identifier for the packet if $needACK is true
-	 *
-	 * @param bool $needACK
-	 * @param bool $immediate
-	 *
-	 * @return int
 	 */
-	public function putPacket(Player $player, DataPacket $packet, $needACK = false, $immediate = true);
+	public function putPacket(Player $player, DataPacket $packet, bool $needACK = false, bool $immediate = true) : ?int;
 
 	/**
 	 * Terminates the connection
-	 *
-	 * @param string $reason
 	 */
-	public function close(Player $player, $reason = "unknown reason");
+	public function close(Player $player, string $reason = "unknown reason") : void;
 
-	/**
-	 * @param string $name
-	 */
-	public function setName($name);
+	public function setName(string $name) : void;
 
-	/**
-	 * @return bool
-	 */
-	public function process();
+	public function process() : bool;
 
-	public function shutdown();
+	public function shutdown() : void;
 
-	public function emergencyShutdown();
+	public function emergencyShutdown() : void;
 
 }

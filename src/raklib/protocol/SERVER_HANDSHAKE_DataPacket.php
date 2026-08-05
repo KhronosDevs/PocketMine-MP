@@ -21,16 +21,18 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace raklib\protocol;
 
-#include <rules/RakLibPacket.h>
+
 
 class SERVER_HANDSHAKE_DataPacket extends Packet{
 	public static $ID = 0x10;
 
-	public $address;
-	public $port;
-	public $systemAddresses = [
+	public string $address = "";
+	public int $port = 0;
+	public array $systemAddresses = [
 		["127.0.0.1", 0, 4],
 		["0.0.0.0", 0, 4],
 		["0.0.0.0", 0, 4],
@@ -43,10 +45,10 @@ class SERVER_HANDSHAKE_DataPacket extends Packet{
 		["0.0.0.0", 0, 4]
 	];
 
-	public $sendPing;
-	public $sendPong;
+	public int $sendPing = 0;
+	public int $sendPong = 0;
 
-	public function encode(){
+	public function encode() : void{
 		parent::encode();
 		$this->putAddress($this->address, $this->port, 4);
 		$this->putShort(0);
@@ -58,7 +60,7 @@ class SERVER_HANDSHAKE_DataPacket extends Packet{
 		$this->putLong($this->sendPong);
 	}
 
-	public function decode(){
+	public function decode() : void{
 		parent::decode();
 		//TODO, not needed yet
 	}

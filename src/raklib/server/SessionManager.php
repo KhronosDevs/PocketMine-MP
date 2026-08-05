@@ -2,7 +2,11 @@
 
 
 
+declare(strict_types=1);
+
 namespace raklib\server;
+
+
 
 use InvalidArgumentException;
 use Phar;
@@ -56,37 +60,40 @@ use const PHP_INT_MAX;
 
 class SessionManager{
 
-	private $rakLibTps;
-	private $rakLibTimePerTick;
+	private int $rakLibTps;
+	private float $rakLibTimePerTick;
 
-	protected $packetPool = [];
+	/** @var \SplFixedArray|Packet[] */
+	protected \SplFixedArray $packetPool;
 
 	/** @var RakLibServer */
-	protected $server;
+	protected RakLibServer $server;
 
-	protected $socket;
+	protected UDPServerSocket $socket;
 
-	protected $receiveBytes = 0;
-	protected $sendBytes = 0;
+	protected int $receiveBytes = 0;
+	protected int $sendBytes = 0;
 
 	/** @var Session[] */
-	protected $sessions = [];
+	protected array $sessions = [];
 
-	protected $name = "";
+	protected string $name = "";
 
-	protected $packetLimit = 250;
+	protected int $packetLimit = 250;
 
-	protected $shutdown = false;
+	protected bool $shutdown = false;
 
-	protected $ticks = 0;
-	protected $lastMeasure;
+	protected int $ticks = 0;
+	protected float $lastMeasure;
 
-	protected $block = [];
-	protected $ipSec = [];
+	/** @var int[] */
+	protected array $block = [];
+	/** @var int[] */
+	protected array $ipSec = [];
 
-	public $serverId;
+	public int $serverId;
 
-	public $portChecking;
+	public bool $portChecking;
 
 	public function __construct(RakLibServer $server, UDPServerSocket $socket){
 		$this->server = $server;
@@ -94,20 +101,20 @@ class SessionManager{
 		$this->serverId = mt_rand(0, PHP_INT_MAX);
 	}
 
-	public function initialize(string $mainPath) {
-		if (Phar::running(true) !== '') {
+	public function initialize(string $mainPath) : void{
+		if(Phar::running(true) !== ''){
 			$mainPath = dirname(str_replace('phar://', '', $mainPath)) . DIRECTORY_SEPARATOR;
 		}
 
 		$config = new Config($mainPath . 'khronos.yml', Config::YAML);
 
-		if (!$config->exists('pvp-mode')) {
-			throw new InvalidArgumentException('\'pvp-mode\' is not set in khronos.yml');
+		if(!$config->exists('pvp-mode')){
+			throw new InvalidArgumentException("'pvp-mode' is not set in khronos.yml");
 		}
 
 		$pvpMode = $config->get('pvp-mode');
 
-		if ($pvpMode === 'false' || $pvpMode === false) {
+		if($pvpMode === 'false' || $pvpMode === false){
 			$this->rakLibTps = 100;
 			$this->rakLibTimePerTick = 1 / 100;
 			$this->packetLimit = 250;
@@ -121,19 +128,19 @@ class SessionManager{
 		$this->portChecking = true;
 	}
 
-	public function getPort(){
+	public function getPort() : int{
 		return $this->server->getPort();
 	}
 
-	public function getLogger(){
+	public function getLogger() : \ThreadedLogger{
 		return $this->server->getLogger();
 	}
 
-	public function run(){
+	public function run() : void{
 		$this->tickProcessor();
 	}
 
-	private function tickProcessor(){
+	private function tickProcessor() : void{
 		$this->lastMeasure = microtime(true);
 
 		while(!$this->shutdown){
@@ -148,12 +155,12 @@ class SessionManager{
 		}
 	}
 
-	private function tick(){
+	private function tick() : void{
 		$time = microtime(true);
 		foreach($this->sessions as $session){
 			$session->update($time);
 
-			if ($this->ticks % 40 != 0 || !$session instanceof Session) continue;
+			if($this->ticks % 40 != 0 || !$session instanceof Session) continue;
 
 			$this->streamPing($session);
 		}
@@ -188,7 +195,7 @@ class SessionManager{
 		++$this->ticks;
 	}
 
-	protected function streamPing(Session $session){
+	protected function streamPing(Session $session) : void{
 		$identifier = $session->getAddress() . ":" . $session->getPort();
 		$ping = $session->getPing();
 
@@ -196,7 +203,7 @@ class SessionManager{
 		$this->server->pushThreadToMainPacket($buffer);
 	}
 
-	private function receivePacket(){
+	private function receivePacket() : bool{
 		$len = $this->socket->readPacket($buffer, $source, $port);
 		if($buffer !== null){
 			$this->receiveBytes += $len;
@@ -233,7 +240,7 @@ class SessionManager{
 					$packet->buffer = $buffer;
 					$this->getSession($source, $port)->handlePacket($packet);
 				}else{
-					if (substr($buffer, 0, 2) !== '\xfe\xfd') {
+					if(substr($buffer, 0, 2) !== "\xfe\xfd"){
 						return true; //block address?
 					}
 					$this->streamRaw($source, $port, $buffer);
@@ -245,49 +252,49 @@ class SessionManager{
 		return false;
 	}
 
-	public function sendPacket(Packet $packet, $dest, $port){
+	public function sendPacket(Packet $packet, string $dest, int $port) : void{
 		$packet->encode();
 		$this->sendBytes += $this->socket->writePacket($packet->buffer, $dest, $port);
 	}
 
-	public function streamEncapsulated(Session $session, EncapsulatedPacket $packet, $flags = RakLib::PRIORITY_NORMAL){
+	public function streamEncapsulated(Session $session, EncapsulatedPacket $packet, int $flags = RakLib::PRIORITY_NORMAL) : void{
 		$id = $session->getAddress() . ":" . $session->getPort();
 		$buffer = chr(RakLib::PACKET_ENCAPSULATED) . chr(strlen($id)) . $id . chr($flags) . $packet->toBinary(true);
 		$this->server->pushThreadToMainPacket($buffer);
 	}
 
-	public function streamRaw($address, $port, $payload){
+	public function streamRaw(string $address, int $port, string $payload) : void{
 		$buffer = chr(RakLib::PACKET_RAW) . chr(strlen($address)) . $address . Binary::writeShort($port) . $payload;
 		$this->server->pushThreadToMainPacket($buffer);
 	}
 
-	protected function streamClose($identifier, $reason){
+	protected function streamClose(string $identifier, string $reason) : void{
 		$buffer = chr(RakLib::PACKET_CLOSE_SESSION) . chr(strlen($identifier)) . $identifier . chr(strlen($reason)) . $reason;
 		$this->server->pushThreadToMainPacket($buffer);
 	}
 
-	protected function streamInvalid($identifier){
+	protected function streamInvalid(string $identifier) : void{
 		$buffer = chr(RakLib::PACKET_INVALID_SESSION) . chr(strlen($identifier)) . $identifier;
 		$this->server->pushThreadToMainPacket($buffer);
 	}
 
-	protected function streamOpen(Session $session){
+	protected function streamOpen(Session $session) : void{
 		$identifier = $session->getAddress() . ":" . $session->getPort();
 		$buffer = chr(RakLib::PACKET_OPEN_SESSION) . chr(strlen($identifier)) . $identifier . chr(strlen($session->getAddress())) . $session->getAddress() . Binary::writeShort($session->getPort()) . Binary::writeLong($session->getID());
 		$this->server->pushThreadToMainPacket($buffer);
 	}
 
-	protected function streamACK($identifier, $identifierACK){
+	protected function streamACK(string $identifier, int $identifierACK) : void{
 		$buffer = chr(RakLib::PACKET_ACK_NOTIFICATION) . chr(strlen($identifier)) . $identifier . Binary::writeInt($identifierACK);
 		$this->server->pushThreadToMainPacket($buffer);
 	}
 
-	protected function streamOption($name, $value){
+	protected function streamOption(string $name, string $value) : void{
 		$buffer = chr(RakLib::PACKET_SET_OPTION) . chr(strlen($name)) . $name . $value;
 		$this->server->pushThreadToMainPacket($buffer);
 	}
 
-	private function checkSessions(){
+	private function checkSessions() : void{
 		if(count($this->sessions) > 4096){
 			foreach($this->sessions as $i => $s){
 				if($s->isTemporal()){
@@ -300,7 +307,7 @@ class SessionManager{
 		}
 	}
 
-	public function receiveStream(){
+	public function receiveStream() : bool{
 		$packet = $this->server->readMainToThreadPacket();
 
 		if($packet !== null && strlen($packet) > 0){
@@ -385,7 +392,7 @@ class SessionManager{
 		return false;
 	}
 
-	public function blockAddress($address, $timeout = 300){
+	public function blockAddress(string $address, int $timeout = 300) : void{
 		$final = microtime(true) + $timeout;
 		if(!isset($this->block[$address]) || $timeout === -1){
 			if($timeout === -1){
@@ -399,17 +406,11 @@ class SessionManager{
 		}
 	}
 
-	public function unblockAddress($address){
+	public function unblockAddress(string $address) : void{
 		unset($this->block[$address]);
 	}
 
-	/**
-	 * @param string $ip
-	 * @param int    $port
-	 *
-	 * @return Session
-	 */
-	public function getSession($ip, $port){
+	public function getSession(string $ip, int $port) : Session{
 		$id = $ip . ":" . $port;
 		if(!isset($this->sessions[$id])){
 			$this->checkSessions();
@@ -419,7 +420,7 @@ class SessionManager{
 		return $this->sessions[$id];
 	}
 
-	public function removeSession(Session $session, $reason = "unknown"){
+	public function removeSession(Session $session, string $reason = "unknown") : void{
 		$id = $session->getAddress() . ":" . $session->getPort();
 		if(isset($this->sessions[$id])){
 			$this->sessions[$id]->close();
@@ -428,32 +429,27 @@ class SessionManager{
 		}
 	}
 
-	public function openSession(Session $session){
+	public function openSession(Session $session) : void{
 		$this->streamOpen($session);
 	}
 
-	public function notifyACK(Session $session, $identifierACK){
+	public function notifyACK(Session $session, int $identifierACK) : void{
 		$this->streamACK($session->getAddress() . ":" . $session->getPort(), $identifierACK);
 	}
 
-	public function getName(){
+	public function getName() : string{
 		return $this->name;
 	}
 
-	public function getID(){
+	public function getID() : int{
 		return $this->serverId;
 	}
 
-	private function registerPacket($id, $class){
+	private function registerPacket(int $id, string $class) : void{
 		$this->packetPool[$id] = new $class;
 	}
 
-	/**
-	 * @param $id
-	 *
-	 * @return Packet
-	 */
-	public function getPacketFromPool($id){
+	public function getPacketFromPool(int $id) : ?Packet{
 		$pk = $this->packetPool[$id];
 		if($pk !== null){
 			return clone $pk;
@@ -462,7 +458,7 @@ class SessionManager{
 		return null;
 	}
 
-	public function registerPackets(){
+	public function registerPackets() : void{
 		$this->packetPool = new \SplFixedArray(256);
 
 		//$this->registerPacket(UNCONNECTED_PING::$ID, UNCONNECTED_PING::class);

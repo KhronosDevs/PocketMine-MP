@@ -53,9 +53,10 @@ class Binary{
 	const LITTLE_ENDIAN = 0x01;
 
 	/**
-	 * Reads a 3-byte big-endian number
+	 * Reads a 3-byte big-endian number. Returns 0 on truncated input (see readInt guard).
 	 */
 	public static function readTriad(string $str) : int{
+		if(strlen($str) < 3) return 0;
 		return unpack("N", "\x00" . $str)[1];
 	}
 
@@ -67,9 +68,10 @@ class Binary{
 	}
 
 	/**
-	 * Reads a 3-byte little-endian number
+	 * Reads a 3-byte little-endian number. Returns 0 on truncated input (see readInt guard).
 	 */
 	public static function readLTriad(string $str) : int{
+		if(strlen($str) < 3) return 0;
 		return unpack("V", $str . "\x00")[1];
 	}
 
@@ -232,9 +234,10 @@ class Binary{
 	}
 
 	/**
-	 * Reads a 16-bit unsigned big-endian number
+	 * Reads a 16-bit unsigned big-endian number. Returns 0 on truncated input (see readInt guard).
 	 */
 	public static function readShort(string $str) : int{
+		if(strlen($str) < 2) return 0;
 		return unpack("n", $str)[1];
 	}
 
@@ -257,9 +260,10 @@ class Binary{
 	}
 
 	/**
-	 * Reads a 16-bit unsigned little-endian number
+	 * Reads a 16-bit unsigned little-endian number. Returns 0 on truncated input (see readInt guard).
 	 */
 	public static function readLShort(string $str) : int{
+		if(strlen($str) < 2) return 0;
 		return unpack("v", $str)[1];
 	}
 
@@ -306,7 +310,11 @@ class Binary{
 		return pack("V", $value);
 	}
 
+	/**
+	 * Reads a 32-bit float. Returns 0.0 on truncated input (see readInt guard).
+	 */
 	public static function readFloat(string $str) : float{
+		if(strlen($str) < 4) return 0.0;
 		return ENDIANNESS === self::BIG_ENDIAN ? unpack("f", $str)[1] : unpack("f", strrev($str))[1];
 	}
 
@@ -314,7 +322,11 @@ class Binary{
 		return ENDIANNESS === self::BIG_ENDIAN ? pack("f", $value) : strrev(pack("f", $value));
 	}
 
+	/**
+	 * Reads a 32-bit little-endian float. Returns 0.0 on truncated input (see readInt guard).
+	 */
 	public static function readLFloat(string $str) : float{
+		if(strlen($str) < 4) return 0.0;
 		return ENDIANNESS === self::BIG_ENDIAN ? unpack("f", strrev($str))[1] : unpack("f", $str)[1];
 	}
 
@@ -326,7 +338,11 @@ class Binary{
 		return preg_replace("/(\.\d+?)0+$/", "$1", sprintf("%F", $value));
 	}
 
+	/**
+	 * Reads a 64-bit double. Returns 0.0 on truncated input (see readInt guard).
+	 */
 	public static function readDouble(string $str) : float{
+		if(strlen($str) < 8) return 0.0;
 		return ENDIANNESS === self::BIG_ENDIAN ? unpack("d", $str)[1] : unpack("d", strrev($str))[1];
 	}
 
@@ -334,7 +350,11 @@ class Binary{
 		return ENDIANNESS === self::BIG_ENDIAN ? pack("d", $value) : strrev(pack("d", $value));
 	}
 
+	/**
+	 * Reads a 64-bit little-endian double. Returns 0.0 on truncated input (see readInt guard).
+	 */
 	public static function readLDouble(string $str) : float{
+		if(strlen($str) < 8) return 0.0;
 		return ENDIANNESS === self::BIG_ENDIAN ? unpack("d", strrev($str))[1] : unpack("d", $str)[1];
 	}
 
@@ -347,6 +367,7 @@ class Binary{
 	 */
 	public static function readLong(string $x) : int{
 		if(PHP_INT_SIZE === 8){
+			if(strlen($x) < 8) return 0;
 			$int = unpack("N*", $x);
 			return ($int[1] << 32) | $int[2];
 		}else{

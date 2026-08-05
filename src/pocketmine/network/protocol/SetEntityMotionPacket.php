@@ -21,27 +21,29 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class SetEntityMotionPacket extends DataPacket{
 	const NETWORK_ID = Info::SET_ENTITY_MOTION_PACKET;
 
 	// eid, motX, motY, motZ
 	/** @var array[] */
-	public $entities = [];
+	public array $entities = [];
 
-	public function clean(){
+	public function clean() : static{
 		$this->entities = [];
 		return parent::clean();
 	}
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		//$this->putInt(count($this->entities));
 		foreach($this->entities as $d){

@@ -15,7 +15,11 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace raklib\protocol;
+
+
 
 interface PacketReliability{
 

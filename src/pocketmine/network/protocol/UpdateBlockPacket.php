@@ -21,9 +21,11 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class UpdateBlockPacket extends DataPacket{
 	const NETWORK_ID = Info::UPDATE_BLOCK_PACKET;
@@ -37,18 +39,18 @@ class UpdateBlockPacket extends DataPacket{
 	const FLAG_ALL = (self::FLAG_NEIGHBORS | self::FLAG_NETWORK);
 	const FLAG_ALL_PRIORITY = (self::FLAG_ALL | self::FLAG_PRIORITY);
 
-	public $x;
-	public $z;
-	public $y;
-	public $blockId;
-	public $blockData;
-	public $flags;
+	public int $x = 0;
+	public int $z = 0;
+	public int $y = 0;
+	public int $blockId = 0;
+	public int $blockData = 0;
+	public int $flags = 0;
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putInt($this->x);
 		$this->putInt($this->z);

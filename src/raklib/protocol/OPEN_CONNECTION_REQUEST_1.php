@@ -15,9 +15,11 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace raklib\protocol;
 
-#include <rules/RakLibPacket.h>
+
 
 use raklib\RakLib;
 use function str_pad;
@@ -26,22 +28,22 @@ use function strlen;
 class OPEN_CONNECTION_REQUEST_1 extends Packet{
 	public static $ID = 0x05;
 
-	public $protocol = RakLib::PROTOCOL;
-	public $mtuSize;
+	public int $protocol = RakLib::PROTOCOL;
+	public int $mtuSize = 0;
 
-	public function encode(){
+	public function encode() : void{
 		parent::encode();
 		$this->put(RakLib::MAGIC);
 		$this->putByte($this->protocol);
-		$this->buffer = str_pad($this->buffer, "\x00", $this->mtuSize);
-		#$this->put(str_repeat(chr(0x00), $this->mtuSize - 18));
+		$this->buffer = str_pad($this->buffer, $this->mtuSize, "\x00");
+		//$this->put(str_repeat(chr(0x00), $this->mtuSize - 18));
 	}
 
-	public function decode(){
+	public function decode() : void{
 		parent::decode();
 		$this->offset += 16; //Magic
 		$this->protocol = $this->getByte();
 		$this->mtuSize = strlen($this->buffer);
-		#$this->mtuSize = strlen($this->get(true)) + 18;
+		//$this->mtuSize = strlen($this->get(true)) + 18;
 	}
 }

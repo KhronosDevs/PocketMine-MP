@@ -21,23 +21,25 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-use function strlen;
 
-#include <rules/DataPacket.h>
+
+use function strlen;
 
 class BatchPacket extends DataPacket{
 	const NETWORK_ID = Info::BATCH_PACKET;
 
-	public $payload;
+	public string $payload = "";
 
-	public function decode(){
+	public function decode() : void{
 		$size = $this->getInt();
 		$this->payload = $this->get($size);
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putInt(strlen($this->payload));
 		$this->put($this->payload);

@@ -21,9 +21,11 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class PlayStatusPacket extends DataPacket{
 	const NETWORK_ID = Info::PLAY_STATUS_PACKET;
@@ -33,13 +35,13 @@ class PlayStatusPacket extends DataPacket{
 	const LOGIN_FAILED_SERVER = 2;
 	const PLAYER_SPAWN = 3;
 
-	public $status;
+	public int $status = 0;
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putInt($this->status);
 	}

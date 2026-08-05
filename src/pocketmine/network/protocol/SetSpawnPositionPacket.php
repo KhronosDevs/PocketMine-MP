@@ -21,22 +21,24 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class SetSpawnPositionPacket extends DataPacket{
 	const NETWORK_ID = Info::SET_SPAWN_POSITION_PACKET;
 
-	public $x;
-	public $y;
-	public $z;
+	public int $x = 0;
+	public int $y = 0;
+	public int $z = 0;
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putInt($this->x);
 		$this->putInt($this->y);

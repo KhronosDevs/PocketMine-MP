@@ -15,20 +15,22 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace raklib\protocol;
 
-#include <rules/RakLibPacket.h>
+
 
 use raklib\RakLib;
 
 class UNCONNECTED_PONG extends Packet{
 	public static $ID = 0x1c;
 
-	public $pingID;
-	public $serverID;
-	public $serverName;
+	public int $pingID = 0;
+	public int $serverID = 0;
+	public string $serverName = "";
 
-	public function encode(){
+	public function encode() : void{
 		parent::encode();
 		$this->putLong($this->pingID);
 		$this->putLong($this->serverID);
@@ -36,7 +38,7 @@ class UNCONNECTED_PONG extends Packet{
 		$this->putString($this->serverName);
 	}
 
-	public function decode(){
+	public function decode() : void{
 		parent::decode();
 		$this->pingID = $this->getLong();
 		$this->serverID = $this->getLong();

@@ -21,9 +21,11 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class ChangeDimensionPacket extends DataPacket{
 	const NETWORK_ID = Info::CHANGE_DIMENSION_PACKET;
@@ -31,17 +33,17 @@ class ChangeDimensionPacket extends DataPacket{
 	const DIMENSION_NORMAL = 0;
 	const DIMENSION_NETHER = 1;
 
-	public $dimension;
+	public int $dimension = 0;
 
-	public $x;
-	public $y;
-	public $z;
+	public float $x = 0.0;
+	public float $y = 0.0;
+	public float $z = 0.0;
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putByte($this->dimension);
 		$this->putFloat($this->x);

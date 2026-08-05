@@ -21,26 +21,26 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
 
-#ifndef COMPILE
+
 use pocketmine\utils\Binary;
-
-#endif
 
 class SetEntityDataPacket extends DataPacket{
 	const NETWORK_ID = Info::SET_ENTITY_DATA_PACKET;
 
-	public $eid;
-	public $metadata;
+	public int $eid = 0;
+	/** @var array */
+	public $metadata = [];
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putLong($this->eid);
 		$meta = Binary::writeMetadata($this->metadata);

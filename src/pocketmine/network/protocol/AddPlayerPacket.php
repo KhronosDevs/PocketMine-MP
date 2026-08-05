@@ -21,37 +21,39 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
 
-#ifndef COMPILE
+
+use pocketmine\item\Item;
 use pocketmine\utils\Binary;
-
-#endif
+use pocketmine\utils\UUID;
 
 class AddPlayerPacket extends DataPacket{
 	const NETWORK_ID = Info::ADD_PLAYER_PACKET;
 
-	public $uuid;
-	public $username;
-	public $eid;
-	public $x;
-	public $y;
-	public $z;
-	public $speedX;
-	public $speedY;
-	public $speedZ;
-	public $pitch;
-	public $yaw;
-	public $item;
-	public $metadata;
+	public UUID $uuid;
+	public string $username = "";
+	public int $eid = 0;
+	public float $x = 0.0;
+	public float $y = 0.0;
+	public float $z = 0.0;
+	public float $speedX = 0.0;
+	public float $speedY = 0.0;
+	public float $speedZ = 0.0;
+	public float $pitch = 0.0;
+	public float $yaw = 0.0;
+	public Item $item;
+	/** @var array */
+	public $metadata = [];
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putUUID($this->uuid);
 		$this->putString($this->username);

@@ -21,18 +21,22 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
+
+
 
 class PlayerInputPacket extends DataPacket{
 	const NETWORK_ID = Info::PLAYER_INPUT_PACKET;
 
-	public $motX;
-	public $motY;
+	public float $motX = 0.0;
+	public float $motY = 0.0;
 
-	public $jumping;
-	public $sneaking;
+	public bool $jumping = false;
+	public bool $sneaking = false;
 
-	public function decode(){
+	public function decode() : void{
 		$this->motX = $this->getFloat();
 		$this->motY = $this->getFloat();
 		$flags = $this->getByte();
@@ -40,7 +44,7 @@ class PlayerInputPacket extends DataPacket{
 		$this->sneaking = (($flags & 0x40) > 0);
 	}
 
-	public function encode(){
+	public function encode() : void{
 
 	}
 

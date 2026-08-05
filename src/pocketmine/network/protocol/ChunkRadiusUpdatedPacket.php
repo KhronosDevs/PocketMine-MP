@@ -21,18 +21,22 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
+
+
 
 class ChunkRadiusUpdatedPacket extends DataPacket{
 	const NETWORK_ID = Info::CHUNK_RADIUS_UPDATED_PACKET;
 
-	public $radius;
+	public int $radius = 0;
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putInt($this->radius);
 	}

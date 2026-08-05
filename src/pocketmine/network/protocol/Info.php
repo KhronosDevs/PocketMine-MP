@@ -24,7 +24,11 @@
 /**
  * Minecraft: PE multiplayer protocol implementation
  */
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
+
+
 
 interface Info{
 

@@ -21,16 +21,20 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace raklib\protocol;
+
+
 
 class CLIENT_DISCONNECT_DataPacket extends Packet{
 	public static $ID = 0x15;
 
-	public function encode(){
+	public function encode() : void{
 		parent::encode();
 	}
 
-	public function decode(){
+	public function decode() : void{
 		parent::decode();
 	}
 }

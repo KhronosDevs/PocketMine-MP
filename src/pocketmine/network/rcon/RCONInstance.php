@@ -21,7 +21,11 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\rcon;
+
+
 
 use pocketmine\pmmp\thread\Thread;
 use pocketmine\utils\Binary;
@@ -48,13 +52,14 @@ use const SO_KEEPALIVE;
 use const SO_LINGER;
 use const SOL_SOCKET;
 
+#[\AllowDynamicProperties]
 class RCONInstance extends Thread{
 	public $stop;
 	public $cmd;
 	public $response;
 	private $socket;
 	private $password;
-	private $maxClients;
+	private int $maxClients;
 	private $waiting;
 
 	/** @var MainLogger */
@@ -62,18 +67,18 @@ class RCONInstance extends Thread{
 
 	public $serverStatus;
 
-	public function isWaiting(){
+	public function isWaiting() : bool{
 		return $this->waiting === true;
 	}
 
-	public function __construct($logger, $socket, $password, $maxClients = 50){
+	public function __construct($logger, $socket, $password, int $maxClients = 50){
 		$this->logger = $logger;
 		$this->stop = false;
 		$this->cmd = "";
 		$this->response = "";
 		$this->socket = $socket;
 		$this->password = $password;
-		$this->maxClients = (int) $maxClients;
+		$this->maxClients = $maxClients;
 		for($n = 0; $n < $this->maxClients; ++$n){
 			$this->{"client" . $n} = null;
 			$this->{"status" . $n} = 0;
@@ -112,11 +117,11 @@ class RCONInstance extends Thread{
 		return true;
 	}
 
-	public function close(){
+	public function close() : void{
 		$this->stop = true;
 	}
 
-	public function run(){
+	public function run() : void{
 
 		while($this->stop !== true){
 			$this->synchronized(function(){
@@ -178,7 +183,7 @@ class RCONInstance extends Thread{
 									continue;
 								}
 								$res = (array) [
-									"serverStatus" => unserialize($this->serverStatus),
+									"serverStatus" => unserialize($this->serverStatus ?? ""),
 									"logger" => str_replace("\n", "\r\n", trim($this->logger->getMessages()))
 								];
 								$this->writePacket($client, $requestID, 0, serialize($res));
@@ -236,7 +241,7 @@ class RCONInstance extends Thread{
 		exit(0);
 	}
 
-	public function getThreadName(){
+	public function getThreadName() : string{
 		return "RCON";
 	}
 }

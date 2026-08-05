@@ -23,12 +23,6 @@
 
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
-
-#ifndef COMPILE
-
-#endif
-
 use pocketmine\utils\BinaryStream;
 use pocketmine\utils\Utils;
 use function bin2hex;
@@ -37,6 +31,7 @@ use function is_object;
 use function is_string;
 use function method_exists;
 
+#[\AllowDynamicProperties]
 abstract class DataPacket extends BinaryStream{
 
 	const NETWORK_ID = 0;

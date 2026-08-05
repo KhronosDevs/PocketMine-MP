@@ -21,31 +21,34 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-use function count;
 
-#include <rules/DataPacket.h>
+
+use function count;
 
 class ExplodePacket extends DataPacket{
 	const NETWORK_ID = Info::EXPLODE_PACKET;
 
-	public $x;
-	public $y;
-	public $z;
-	public $radius;
-	public $records = [];
+	public float $x = 0.0;
+	public float $y = 0.0;
+	public float $z = 0.0;
+	public float $radius = 0.0;
+	/** @var object[] */
+	public array $records = [];
 
-	public function clean(){
+	public function clean() : static{
 		$this->records = [];
 		return parent::clean();
 	}
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putFloat($this->x);
 		$this->putFloat($this->y);

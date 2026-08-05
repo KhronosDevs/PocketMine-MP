@@ -21,29 +21,32 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace raklib\protocol;
 
-#include <rules/RakLibPacket.h>
+
 
 class CLIENT_HANDSHAKE_DataPacket extends Packet{
 	public static $ID = 0x13;
 
-	public $address;
-	public $port;
+	public string $address = "";
+	public int $port = 0;
 
-	public $systemAddresses = [];
+	/** @var array[] */
+	public array $systemAddresses = [];
 
-	public $sendPing;
-	public $sendPong;
+	public int $sendPing = 0;
+	public int $sendPong = 0;
 
-	public function encode(){
+	public function encode() : void{
 
 	}
 
-	public function decode(){
+	public function decode() : void{
 		parent::decode();
 		$this->getAddress($this->address, $this->port);
-		 for($i = 0; $i < 10; ++$i){
+		for($i = 0; $i < 10; ++$i){
 			$this->getAddress($addr, $port, $version);
 			$this->systemAddresses[$i] = [$addr, $port, $version];
 		}

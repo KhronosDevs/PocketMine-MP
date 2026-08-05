@@ -21,11 +21,13 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-use function count;
 
-#include <rules/DataPacket.h>
+
+use function count;
 
 class TextPacket extends DataPacket{
 	const NETWORK_ID = Info::TEXT_PACKET;
@@ -37,12 +39,13 @@ class TextPacket extends DataPacket{
 	const TYPE_TIP = 4;
 	const TYPE_SYSTEM = 5;
 
-	public $type;
-	public $source;
-	public $message;
-	public $parameters = [];
+	public int $type = 0;
+	public string $source = "";
+	public string $message = "";
+	/** @var string[] */
+	public array $parameters = [];
 
-	public function decode(){
+	public function decode() : void{
 		$this->type = $this->getByte();
 		switch($this->type){
 			case self::TYPE_POPUP:
@@ -63,7 +66,7 @@ class TextPacket extends DataPacket{
 		}
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putByte($this->type);
 		switch($this->type){

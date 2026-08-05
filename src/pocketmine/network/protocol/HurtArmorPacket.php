@@ -21,20 +21,22 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class HurtArmorPacket extends DataPacket{
 	const NETWORK_ID = Info::HURT_ARMOR_PACKET;
 
-	public $health;
+	public int $health = 0;
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putByte($this->health);
 	}

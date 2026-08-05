@@ -21,22 +21,26 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
+
+use pocketmine\item\Item;
 
 class DropItemPacket extends DataPacket{
 	const NETWORK_ID = Info::DROP_ITEM_PACKET;
 
-	public $type;
-	public $item;
+	public int $type = 0;
+	public Item $item;
 
-	public function decode(){
+	public function decode() : void{
 		$this->type = $this->getByte();
 		$this->item = $this->getSlot();
 	}
 
-	public function encode(){
+	public function encode() : void{
 
 	}
 

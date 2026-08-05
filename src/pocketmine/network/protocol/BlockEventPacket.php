@@ -21,24 +21,26 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class BlockEventPacket extends DataPacket{
 	const NETWORK_ID = Info::BLOCK_EVENT_PACKET;
 
-	public $x;
-	public $y;
-	public $z;
-	public $case1;
-	public $case2;
+	public int $x = 0;
+	public int $y = 0;
+	public int $z = 0;
+	public int $case1 = 0;
+	public int $case2 = 0;
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putInt($this->x);
 		$this->putInt($this->y);

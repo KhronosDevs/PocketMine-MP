@@ -21,21 +21,23 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class TakeItemEntityPacket extends DataPacket{
 	const NETWORK_ID = Info::TAKE_ITEM_ENTITY_PACKET;
 
-	public $target;
-	public $eid;
+	public int $target = 0;
+	public int $eid = 0;
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putLong($this->target);
 		$this->putLong($this->eid);

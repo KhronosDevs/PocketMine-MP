@@ -21,26 +21,28 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class BlockEntityDataPacket extends DataPacket{
 	const NETWORK_ID = Info::BLOCK_ENTITY_DATA_PACKET;
 
-	public $x;
-	public $y;
-	public $z;
-	public $namedtag;
+	public int $x = 0;
+	public int $y = 0;
+	public int $z = 0;
+	public string $namedtag = "";
 
-	public function decode(){
+	public function decode() : void{
 		$this->x = $this->getInt();
 		$this->y = $this->getInt();
 		$this->z = $this->getInt();
 		$this->namedtag = $this->get(true);
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putInt($this->x);
 		$this->putInt($this->y);

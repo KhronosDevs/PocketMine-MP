@@ -21,9 +21,11 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class SetEntityLinkPacket extends DataPacket{
 	const NETWORK_ID = Info::SET_ENTITY_LINK_PACKET;
@@ -32,15 +34,15 @@ class SetEntityLinkPacket extends DataPacket{
 	const TYPE_RIDE = 1;
 	const TYPE_PASSENGER = 2;
 
-	public $from;
-	public $to;
-	public $type;
+	public int $from = 0;
+	public int $to = 0;
+	public int $type = 0;
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putLong($this->from);
 		$this->putLong($this->to);

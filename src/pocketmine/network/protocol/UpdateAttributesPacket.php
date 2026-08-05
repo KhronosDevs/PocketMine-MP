@@ -19,19 +19,26 @@
  *
  *
 */
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
+
 use pocketmine\entity\Attribute;
 use function count;
+
 class UpdateAttributesPacket extends DataPacket{
 	const NETWORK_ID = Info::UPDATE_ATTRIBUTES_PACKET;
-	public $entityId;
+
+	public int $entityId = 0;
 	/** @var Attribute[] */
-	public $entries = [];
-	public function decode(){
+	public array $entries = [];
+
+	public function decode() : void{
 	}
-	public function encode(){
+
+	public function encode() : void{
 		$this->reset();
 		$this->putLong($this->entityId);
 		$this->putShort(count($this->entries));

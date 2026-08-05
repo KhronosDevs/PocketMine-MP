@@ -21,26 +21,28 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class RemoveBlockPacket extends DataPacket{
 	const NETWORK_ID = Info::REMOVE_BLOCK_PACKET;
 
-	public $eid;
-	public $x;
-	public $y;
-	public $z;
+	public int $eid = 0;
+	public int $x = 0;
+	public int $y = 0;
+	public int $z = 0;
 
-	public function decode(){
+	public function decode() : void{
 		$this->eid = $this->getLong();
 		$this->x = $this->getInt();
 		$this->z = $this->getInt();
 		$this->y = $this->getByte();
 	}
 
-	public function encode(){
+	public function encode() : void{
 
 	}
 

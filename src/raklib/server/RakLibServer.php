@@ -15,7 +15,11 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace raklib\server;
+
+
 
 use function array_reverse;
 use function class_exists;
@@ -58,35 +62,33 @@ use const E_USER_NOTICE;
 use const E_USER_WARNING;
 use const E_WARNING;
 
-class RakLibServer extends \pmmp\thread\Thread
+class RakLibServer extends Thread
 {
-    protected $port;
-    protected $interface;
+    protected int $port;
+    protected string $interface;
     /** @var \ThreadedLogger */
-    protected $logger;
-    protected $loader;
+    protected \ThreadedLogger $logger;
+    /** @var \ClassLoader */
+    protected \ClassLoader $loader;
 
     protected ThreadSafeArray $loadPaths;
 
-    protected $shutdown;
+    protected bool $shutdown;
 
-    /** @var \pmmp\thread\ThreadSafe */
-    protected $externalQueue;
-    /** @var \pmmp\thread\ThreadSafe */
-    protected $internalQueue;
+    /** @var ThreadSafeArray */
+    protected ThreadSafeArray $externalQueue;
+    /** @var ThreadSafeArray */
+    protected ThreadSafeArray $internalQueue;
 
-    protected $mainPath;
+    protected string $mainPath;
 
     /**
-     * @param int    $port
-     * @param string $interface
-     *
      * @throws \Exception
      */
-    public function __construct(\ThreadedLogger $logger, \ClassLoader $loader, $port, $interface = "0.0.0.0")
+    public function __construct(\ThreadedLogger $logger, \ClassLoader $loader, int $port, string $interface = "0.0.0.0")
     {
-        $this->port = (int) $port;
-        if ($port < 1 || $port > 65536) {
+        $this->port = $port;
+        if($port < 1 || $port > 65536){
             throw new \Exception("Invalid port range");
         }
 
@@ -98,111 +100,102 @@ class RakLibServer extends \pmmp\thread\Thread
         $this->addDependency($loadPaths, new \ReflectionClass($loader));
         $this->loadPaths = new ThreadSafeArray();
 
-        foreach (array_reverse($loadPaths, true) as $name => $path) {
+        foreach(array_reverse($loadPaths, true) as $name => $path){
             $this->loadPaths[$name] = $path;
         }
         $this->shutdown = false;
 
-        $this->externalQueue = new \pmmp\thread\ThreadSafeArray;
-        $this->internalQueue = new \pmmp\thread\ThreadSafeArray;
+        $this->externalQueue = new ThreadSafeArray;
+        $this->internalQueue = new ThreadSafeArray;
 
-        if (\Phar::running(true) !== "") {
+        if(\Phar::running(true) !== ""){
             $this->mainPath = \Phar::running(true);
-        } else {
+        }else{
             $this->mainPath = getcwd() . DIRECTORY_SEPARATOR;
         }
         $this->start(Thread::INHERIT_ALL);
     }
 
-    protected function addDependency(array &$loadPaths, \ReflectionClass $dep)
+    protected function addDependency(array &$loadPaths, \ReflectionClass $dep) : void
     {
-        if ($dep->getFileName() !== false) {
+        if($dep->getFileName() !== false){
             $loadPaths[$dep->getName()] = $dep->getFileName();
         }
 
-        if ($dep->getParentClass() instanceof \ReflectionClass) {
+        if($dep->getParentClass() instanceof \ReflectionClass){
             $this->addDependency($loadPaths, $dep->getParentClass());
         }
 
-        foreach ($dep->getInterfaces() as $interface) {
+        foreach($dep->getInterfaces() as $interface){
             $this->addDependency($loadPaths, $interface);
         }
     }
 
-    public function isShutdown()
+    public function isShutdown() : bool
     {
         return $this->shutdown === true;
     }
 
-    public function shutdown()
+    public function shutdown() : void
     {
         $this->shutdown = true;
     }
 
-    public function getPort()
+    public function getPort() : int
     {
         return $this->port;
     }
 
-    public function getInterface()
+    public function getInterface() : string
     {
         return $this->interface;
     }
 
-    /**
-     * @return \ThreadedLogger
-     */
-    public function getLogger()
+    public function getLogger() : \ThreadedLogger
     {
         return $this->logger;
     }
 
-    /**
-     * @return \pmmp\thread\ThreadSafe
-     */
-    public function getExternalQueue()
+    public function getExternalQueue() : ThreadSafeArray
     {
         return $this->externalQueue;
     }
 
-    /**
-     * @return \pmmp\thread\ThreadSafe
-     */
-    public function getInternalQueue()
+    public function getInternalQueue() : ThreadSafeArray
     {
         return $this->internalQueue;
     }
 
-    public function pushMainToThreadPacket($str)
+    public function pushMainToThreadPacket(string $str) : void
     {
         $this->internalQueue[] = $str;
     }
 
-    public function readMainToThreadPacket()
+    public function readMainToThreadPacket() : ?string
     {
         return $this->internalQueue->shift();
     }
 
-    public function pushThreadToMainPacket($str)
+    public function pushThreadToMainPacket(string $str) : void
     {
         $this->externalQueue[] = $str;
     }
 
-    public function readThreadToMainPacket()
+    public function readThreadToMainPacket() : ?string
     {
         return $this->externalQueue->shift();
     }
 
-    public function shutdownHandler()
+    public function shutdownHandler() : void
     {
-        if ($this->shutdown !== true) {
+        if($this->shutdown !== true){
             $this->getLogger()->emergency("RakLib crashed!");
         }
     }
 
-    public function errorHandler($errno, $errstr, $errfile, $errline, $trace = null)
+    public function errorHandler(int $errno, string $errstr, string $errfile, int $errline, ?array $trace = null) : bool
     {
-        if (error_reporting() === 0) {
+        if(error_reporting() === 0){
             return false;
         }
         $errorConversion = [
@@ -223,7 +216,7 @@ class RakLibServer extends \pmmp\thread\Thread
             E_USER_DEPRECATED => "E_USER_DEPRECATED",
         ];
         $errno = isset($errorConversion[$errno]) ? $errorConversion[$errno] : $errno;
-        if (($pos = strpos($errstr, "\n")) !== false) {
+        if(($pos = strpos($errstr, "\n")) !== false){
             $errstr = substr($errstr, 0, $pos);
         }
 
@@ -231,19 +224,19 @@ class RakLibServer extends \pmmp\thread\Thread
 
         $this->getLogger()->debug("An $errno error happened: \"$errstr\" in \"$errfile\" at line $errline");
 
-        foreach (($trace = $this->getTrace($trace === null ? 3 : 0, $trace)) as $i => $line) {
+        foreach(($trace = $this->getTrace($trace === null ? 3 : 0, $trace)) as $i => $line){
             $this->getLogger()->debug($line);
         }
 
         return true;
     }
 
-    public function getTrace($start = 1, $trace = null)
+    public function getTrace(int $start = 1, ?array $trace = null) : array
     {
-        if ($trace === null) {
-            if (function_exists("xdebug_get_function_stack")) {
+        if($trace === null){
+            if(function_exists("xdebug_get_function_stack")){
                 $trace = array_reverse(xdebug_get_function_stack());
-            } else {
+            }else{
                 $e = new \Exception();
                 $trace = $e->getTrace();
             }
@@ -251,15 +244,15 @@ class RakLibServer extends \pmmp\thread\Thread
 
         $messages = [];
         $j = 0;
-        for ($i = (int) $start; isset($trace[$i]); ++$i, ++$j) {
+        for($i = (int) $start; isset($trace[$i]); ++$i, ++$j){
             $params = "";
-            if (isset($trace[$i]["args"]) || isset($trace[$i]["params"])) {
-                if (isset($trace[$i]["args"])) {
+            if(isset($trace[$i]["args"]) || isset($trace[$i]["params"])){
+                if(isset($trace[$i]["args"])){
                     $args = $trace[$i]["args"];
-                } else {
+                }else{
                     $args = $trace[$i]["params"];
                 }
-                foreach ($args as $name => $value) {
+                foreach($args as $name => $value){
                     $params .= (is_object($value) ? get_class($value) . " " . (method_exists($value, "__toString") ? $value->__toString() : "object") : gettype($value) . " " . @strval($value)) . ", ";
                 }
             }
@@ -269,17 +262,17 @@ class RakLibServer extends \pmmp\thread\Thread
         return $messages;
     }
 
-    public function cleanPath($path)
+    public function cleanPath(string $path) : string
     {
         return rtrim(str_replace(["\\", ".php", "phar://", rtrim(str_replace(["\\", "phar://"], ["/", ""], $this->mainPath), "/")], ["/", "", "", ""], $path), "/");
     }
 
-    public function run(): void
+    public function run() : void
     {
-        try {
+        try{
             //Load removed dependencies, can't use require_once()
-            foreach ($this->loadPaths as $name => $path) {
-                if (!class_exists($name, false) && !interface_exists($name, false)) {
+            foreach($this->loadPaths as $name => $path){
+                if(!class_exists($name, false) && !interface_exists($name, false)){
                     require($path);
                 }
             }
@@ -298,7 +291,7 @@ class RakLibServer extends \pmmp\thread\Thread
             $sessionManager->registerPackets();
             $sessionManager->initialize($this->mainPath);
             $sessionManager->run();
-        } catch (\Throwable $e) {
+        }catch(\Throwable $e){
             $this->logger->logException($e);
         }
     }

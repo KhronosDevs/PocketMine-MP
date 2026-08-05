@@ -15,8 +15,12 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace raklib\protocol;
 
+
+
 class DATA_PACKET_D extends DataPacket{
-	public static $ID = 0x8D;
+	public static $ID = 141;
 }

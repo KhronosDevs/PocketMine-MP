@@ -21,22 +21,24 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class AdventureSettingsPacket extends DataPacket{
 	const NETWORK_ID = Info::ADVENTURE_SETTINGS_PACKET;
 
-	public $flags;
-	public $userPermission;
-	public $globalPermission;
+	public int $flags = 0;
+	public int $userPermission = 0;
+	public int $globalPermission = 0;
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putInt($this->flags);
 		$this->putInt($this->userPermission);

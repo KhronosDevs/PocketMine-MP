@@ -21,11 +21,13 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-use function count;
 
-#include <rules/DataPacket.h>
+
+use function count;
 
 class PlayerListPacket extends DataPacket{
 	const NETWORK_ID = Info::PLAYER_LIST_PACKET;
@@ -35,19 +37,19 @@ class PlayerListPacket extends DataPacket{
 
 	//REMOVE: UUID, ADD: UUID, entity id, name, isSlim, skin
 	/** @var array[] */
-	public $entries = [];
-	public $type;
+	public array $entries = [];
+	public int $type = 0;
 
-	public function clean(){
+	public function clean() : static{
 		$this->entries = [];
 		return parent::clean();
 	}
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putByte($this->type);
 		$this->putInt(count($this->entries));

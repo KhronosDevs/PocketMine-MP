@@ -21,9 +21,11 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class PlayerActionPacket extends DataPacket{
 	const NETWORK_ID = Info::PLAYER_ACTION_PACKET;
@@ -43,14 +45,14 @@ class PlayerActionPacket extends DataPacket{
 	const ACTION_SPAWN_OVERWORLD = 13;
 	const ACTION_SPAWN_NETHER = 14;
 
-	public $eid;
-	public $action;
-	public $x;
-	public $y;
-	public $z;
-	public $face;
+	public int $eid = 0;
+	public int $action = 0;
+	public int $x = 0;
+	public int $y = 0;
+	public int $z = 0;
+	public int $face = 0;
 
-	public function decode(){
+	public function decode() : void{
 		$this->eid = $this->getLong();
 		$this->action = $this->getInt();
 		$this->x = $this->getInt();
@@ -59,7 +61,7 @@ class PlayerActionPacket extends DataPacket{
 		$this->face = $this->getInt();
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putLong($this->eid);
 		$this->putInt($this->action);

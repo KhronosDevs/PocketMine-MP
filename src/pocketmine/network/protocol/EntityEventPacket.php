@@ -21,9 +21,11 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 class EntityEventPacket extends DataPacket{
 	const NETWORK_ID = Info::ENTITY_EVENT_PACKET;
@@ -46,15 +48,15 @@ class EntityEventPacket extends DataPacket{
 
 	//TODO add new events
 
-	public $eid;
-	public $event;
+	public int $eid = 0;
+	public int $event = 0;
 
-	public function decode(){
+	public function decode() : void{
 		$this->eid = $this->getLong();
 		$this->event = $this->getByte();
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putLong($this->eid);
 		$this->putByte($this->event);

@@ -21,24 +21,30 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
+
+
+
+use pocketmine\item\Item;
 
 class ItemFrameDropItemPacket extends DataPacket{
 
 	const NETWORK_ID = Info::ITEM_FRAME_DROP_ITEM_PACKET;
 
-	public $x;
-	public $y;
-	public $z;
-	public $dropItem;
+	public int $x = 0;
+	public int $y = 0;
+	public int $z = 0;
+	public Item $dropItem;
 
-	public function decode(){
+	public function decode() : void{
 		$this->z = $this->getInt();
 		$this->y = $this->getInt();
 		$this->x = $this->getInt();
 		$this->dropItem = $this->getSlot();
 	}
 
-	public function encode(){
+	public function encode() : void{
 	}
 }

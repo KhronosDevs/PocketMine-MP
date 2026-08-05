@@ -21,11 +21,13 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-use function strlen;
 
-#include <rules/DataPacket.h>
+
+use function strlen;
 
 class FullChunkDataPacket extends DataPacket{
 	const NETWORK_ID = Info::FULL_CHUNK_DATA_PACKET;
@@ -33,16 +35,16 @@ class FullChunkDataPacket extends DataPacket{
 	const ORDER_COLUMNS = 0;
 	const ORDER_LAYERED = 1;
 
-	public $chunkX;
-	public $chunkZ;
-	public $order = self::ORDER_COLUMNS;
-	public $data;
+	public int $chunkX = 0;
+	public int $chunkZ = 0;
+	public int $order = self::ORDER_COLUMNS;
+	public string $data = "";
 
-	public function decode(){
+	public function decode() : void{
 
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putInt($this->chunkX);
 		$this->putInt($this->chunkZ);

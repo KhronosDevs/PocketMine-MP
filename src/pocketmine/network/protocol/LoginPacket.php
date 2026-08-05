@@ -21,7 +21,11 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
+
+
 
 use function base64_decode;
 use function chr;
@@ -38,30 +42,33 @@ use function time;
 use function wordwrap;
 use function zlib_decode;
 
-#include <rules/DataPacket.h>
-
 class LoginPacket extends DataPacket{
 	const NETWORK_ID = Info::LOGIN_PACKET;
 
 	const MOJANG_PUBKEY = "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE8ELkixyLcwlZryUQcu1TvPOmI2B7vX83ndnWRUaXm74wFfa5f/lwQNTfrLVHa2PmenpGI6JhIMUJaWZrjmMj90NoKNFSNBuKdm8rYiXsfaz3K36x/1U26HpG0ZxK/V1V";
 
-	public $username;
-	public $protocol;
+	public string $username = "";
+	public int $protocol = 0;
 
-	public $clientUUID;
-	public $clientId;
-	public $identityPublicKey;
-	public $serverAddress;
+	public string $clientUUID = "";
+	public int $clientId = 0;
+	public ?string $identityPublicKey = null;
+	public string $serverAddress = "";
 
+	/** @var string|null */
 	public $skinId = null;
+	/** @var string|null (base64_decode() can also return false for invalid data) */
 	public $skin = null;
 
-	public function decode(){
+	public function decode() : void{
 		$this->protocol = $this->getInt();
 		if(!in_array($this->protocol, Info::ACCEPTED_PROTOCOLS, true)){
 			return; //Do not attempt to decode for non-accepted protocols
 		}
 		$str = zlib_decode($this->get($this->getInt()), 1024 * 1024 * 64);
+		if($str === false){
+			return; //Corrupt payload
+		}
 		$this->setBuffer($str, 0);
 
 		$time = time();
@@ -116,11 +123,11 @@ class LoginPacket extends DataPacket{
 		}
 	}
 
-	public function encode(){
+	public function encode() : void{
 
 	}
 
-	public function decodeToken($token, $key){
+	public function decodeToken(string $token, ?string $key) : array{
 		$tokens = explode(".", $token);
 		list($headB64, $payloadB64, $sigB64) = $tokens;
 

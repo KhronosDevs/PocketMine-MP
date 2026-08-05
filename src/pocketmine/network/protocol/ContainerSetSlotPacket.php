@@ -21,29 +21,30 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
 
 use pocketmine\item\Item;
 
 class ContainerSetSlotPacket extends DataPacket{
 	const NETWORK_ID = Info::CONTAINER_SET_SLOT_PACKET;
 
-	public $windowid;
-	public $slot;
-	/** @var Item */
-	public $item;
-	public $hotbarSlot;
+	public int $windowid = 0;
+	public int $slot = 0;
+	public Item $item;
+	public int $hotbarSlot = 0;
 
-	public function decode(){
+	public function decode() : void{
 		$this->windowid = $this->getByte();
 		$this->slot = $this->getShort();
 		$this->hotbarSlot = $this->getShort();
 		$this->item = $this->getSlot();
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->reset();
 		$this->putByte($this->windowid);
 		$this->putShort($this->slot);

@@ -21,26 +21,32 @@
  *
 */
 
+declare(strict_types=1);
+
 namespace pocketmine\network\protocol;
 
-#include <rules/DataPacket.h>
+
+
+use pocketmine\utils\UUID;
 
 class CraftingEventPacket extends DataPacket{
 	const NETWORK_ID = Info::CRAFTING_EVENT_PACKET;
 
-	public $windowId;
-	public $type;
-	public $id;
-	public $input = [];
-	public $output = [];
+	public int $windowId = 0;
+	public int $type = 0;
+	public UUID $id;
+	/** @var \pocketmine\item\Item[] */
+	public array $input = [];
+	/** @var \pocketmine\item\Item[] */
+	public array $output = [];
 
-	public function clean(){
+	public function clean() : static{
 		$this->input = [];
 		$this->output = [];
 		return parent::clean();
 	}
 
-	public function decode(){
+	public function decode() : void{
 		$this->windowId = $this->getByte();
 		$this->type = $this->getInt();
 		$this->id = $this->getUUID();
@@ -56,7 +62,7 @@ class CraftingEventPacket extends DataPacket{
 		}
 	}
 
-	public function encode(){
+	public function encode() : void{
 
 	}
 

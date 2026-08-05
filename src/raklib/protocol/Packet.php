@@ -15,9 +15,12 @@
  *
  */
 
+declare(strict_types=1);
+
 namespace raklib\protocol;
 
-#ifndef COMPILE
+
+
 use raklib\Binary;
 use function chr;
 use function explode;
@@ -25,18 +28,18 @@ use function ord;
 use function strlen;
 use function substr;
 
-#endif
-
-#include <rules/RakLibPacket.h>
-
 abstract class Packet{
 	public static $ID = -1;
 
-	protected $offset = 0;
-	public $buffer;
-	public $sendTime;
+	protected int $offset = 0;
 
-	protected function get($len){
+	public ?string $buffer = null;
+
+	public ?float $sendTime = null;
+
+	protected function get(int|bool|null $len) : string{
+		//note: null length (from a truncated getShort()) reproduces the original weak-mode behavior of
+		//reading to the end of the buffer
 		if($len < 0){
 			$this->offset = strlen($this->buffer) - 1;
 
@@ -48,35 +51,35 @@ abstract class Packet{
 		return $len === 1 ? $this->buffer[$this->offset++] : substr($this->buffer, ($this->offset += $len) - $len, $len);
 	}
 
-	protected function getLong($signed = true){
+	protected function getLong(bool $signed = true) : int{
 		return Binary::readLong($this->get(8), $signed);
 	}
 
-	protected function getInt(){
+	protected function getInt() : int{
 		return Binary::readInt($this->get(4));
 	}
 
-	protected function getShort($signed = true){
+	protected function getShort(bool $signed = true) : ?int{
 		return $signed ? Binary::readSignedShort($this->get(2)) : Binary::readShort($this->get(2));
 	}
 
-	protected function getTriad(){
+	protected function getTriad() : ?int{
 		return Binary::readTriad($this->get(3));
 	}
 
-	protected function getLTriad(){
+	protected function getLTriad() : ?int{
 		return Binary::readLTriad($this->get(3));
 	}
 
-	protected function getByte(){
+	protected function getByte() : int{
 		return ord($this->buffer[$this->offset++]);
 	}
 
-	protected function getString(){
+	protected function getString() : string{
 		return $this->get($this->getShort());
 	}
 
-	protected function getAddress(&$addr, &$port, &$version = null){
+	protected function getAddress(&$addr, &$port, &$version = null) : void{
 		$version = $this->getByte();
 		if($version === 4){
 			$addr = ((~$this->getByte()) & 0xff) . "." . ((~$this->getByte()) & 0xff) . "." . ((~$this->getByte()) & 0xff) . "." . ((~$this->getByte()) & 0xff);
@@ -86,44 +89,44 @@ abstract class Packet{
 		}
 	}
 
-	protected function feof(){
+	protected function feof() : bool{
 		return !isset($this->buffer[$this->offset]);
 	}
 
-	protected function put($str){
+	protected function put(string $str) : void{
 		$this->buffer .= $str;
 	}
 
-	protected function putLong($v){
+	protected function putLong(int $v) : void{
 		$this->buffer .= Binary::writeLong($v);
 	}
 
-	protected function putInt($v){
+	protected function putInt(int $v) : void{
 		$this->buffer .= Binary::writeInt($v);
 	}
 
-	protected function putShort($v){
+	protected function putShort(int $v) : void{
 		$this->buffer .= Binary::writeShort($v);
 	}
 
-	protected function putTriad($v){
+	protected function putTriad(int $v) : void{
 		$this->buffer .= Binary::writeTriad($v);
 	}
 
-	protected function putLTriad($v){
+	protected function putLTriad(int $v) : void{
 		$this->buffer .= Binary::writeLTriad($v);
 	}
 
-	protected function putByte($v){
+	protected function putByte(int $v) : void{
 		$this->buffer .= chr($v);
 	}
 
-	protected function putString($v){
+	protected function putString(string $v) : void{
 		$this->putShort(strlen($v));
 		$this->put($v);
 	}
 
-	protected function putAddress($addr, $port, $version = 4){
+	protected function putAddress(string $addr, int $port, int $version = 4) : void{
 		$this->putByte($version);
 		if($version === 4){
 			foreach(explode(".", $addr) as $b){
@@ -135,15 +138,15 @@ abstract class Packet{
 		}
 	}
 
-	public function encode(){
+	public function encode() : void{
 		$this->buffer = chr(static::$ID);
 	}
 
-	public function decode(){
+	public function decode() : void{
 		$this->offset = 1;
 	}
 
-	public function clean(){
+	public function clean() : static{
 		$this->buffer = null;
 		$this->offset = 0;
 		$this->sendTime = null;
