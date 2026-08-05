@@ -40,8 +40,7 @@ $filePath = substr($currentWorkingDirectory, 0, 7) === "phar://" ? $currentWorki
 $filePath = rtrim(str_replace("\\", "/", $filePath), "/") . "/";
 foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($filePath . "src")) as $file) {
     $path = ltrim(str_replace(["\\", $filePath], ["/", ""], $file), "/");
-    if ($path{
-    0} === "." or strpos($path, "/.") !== false or substr($path, 0, 4) !== "src/") {
+    if ($path[0] === "." or strpos($path, "/.") !== false or substr($path, 0, 4) !== "src/") {
         continue;
     }
     $phar->addFile($file, $path);
@@ -53,7 +52,6 @@ foreach ($phar as $file => $fileInfo) {
     if ($fileInfo->getSize() > (1024 * 512)) {
         $fileInfo->compress(\Phar::GZ);
     }
-
 }
 
 $phar->stopBuffering();
