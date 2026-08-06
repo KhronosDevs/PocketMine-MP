@@ -57,10 +57,10 @@
 | Step | Task | Status | Commit | Notes |
 |------|------|--------|--------|-------|
 | 2.0 | Create branch `adapter-implementation` with rollback anchor | ✅ | 2798a89 | `git checkout -b adapter-implementation && git commit --allow-empty -m "chore: rollback anchor for adapter-implementation"` |
-| 2.1 | `adapter-network-protocol84` — Protocol84NetworkAdapter wired to legacy Network.php | ✅ | 7525a1d | Packet I/O, PlayerRef mapping, frozen boundary |
-| 2.2 | `adapter-storage-anvil` — AnvilStorageAdapter, LevelDBStorageAdapter | ✅ | 7525a1d | Chunk/entity/tile persistence via existing format |
-| 2.3 | `adapter-worldgen-parallel` — ParallelGeneratorAdapter via ThreadingPort | ✅ | 7525a1d | Chunk gen/populate/light on worker threads |
-| 2.4 | `adapter-thread-pool` — PmmpThreadPool tuning, work-stealing | ✅ | 7525a1d | Future/promise patterns, worker affinity, round-robin, parallelMap |
+| 2.1 | `adapter-network-protocol84` — **NEW** Protocol84NetworkAdapter (direct RakLib UDP, protocol 84) | ✅ | 6036942 | Own network thread, packet encode/decode, PlayerRef mapping |
+| 2.2 | `adapter-storage-anvil` — **NEW** AnvilStorageAdapter (direct .mca I/O) | ✅ | 6036942 | Region files, chunk serialization, level.dat |
+| 2.3 | `adapter-worldgen-parallel` — **NEW** ParallelGeneratorAdapter | ✅ | 6036942 | Chunk gen, populate, light calculation |
+| 2.4 | `adapter-thread-pool` — PmmpThreadPool (round-robin, parallelMap) | ✅ | 6036942 | Work distribution patterns |
 | 2.5 | Update PROGRESS.md | 🔄 | — | Track progress |
 
 ---
@@ -85,7 +85,7 @@
 |--------|-------------|----------------|------|--------|
 | foundation-bootstrap | eb32941 | ac5b861 | #18 | ✅ Merged |
 | ecs-components-basic | ac5b861 | 378400c | #19 | ✅ Merged |
-| adapter-implementation | 3b66cf1 | 7525a1d | #20 | 🔄 Active (PR opened) |
+| adapter-implementation | 3b66cf1 | 6036942 | #20 | 🔄 Active (PR updated) |
 
 ---
 
@@ -94,8 +94,8 @@
 1. ✅ Phase 0 & 1 complete (PRs #18, #19 merged)
 2. ✅ PLAN.md updated: Phase 4 = New Plugin API (breaking), removed Legacy Strangler Fig
 3. ✅ Create `adapter-implementation` branch with rollback anchor
-4. ✅ Implement Protocol84NetworkAdapter → legacy Network.php
-5. ✅ Implement AnvilStorageAdapter, LevelDBStorageAdapter
-6. ✅ Implement ParallelGeneratorAdapter via ThreadingPort
-7. ✅ Implement PmmpThreadPool tuning (round-robin, parallelMap)
-8. ✅ Update docs, commit, push, open PR #20
+4. ✅ Implement **NEW** Protocol84NetworkAdapter (direct RakLib UDP, protocol 84)
+5. ✅ Implement **NEW** AnvilStorageAdapter (direct .mca I/O)
+6. ✅ Implement **NEW** ParallelGeneratorAdapter (chunk gen, populate, light)
+7. ✅ Implement PmmpThreadPool improvements (round-robin, parallelMap)
+8. ✅ Update docs, commit, push, PR #20 updated
