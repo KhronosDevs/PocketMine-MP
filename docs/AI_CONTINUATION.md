@@ -6,7 +6,7 @@
 > revertible checkpoints, the **exact validation procedure** that has caught real
 > regressions, and the **step-by-step path to completion**.
 >
-> Last updated: after Module 7 (Level/World) — commit `cef654f`.
+> Last updated: after Module 8 (Inventory) — commit `c1b82d6`.
 
 ---
 
@@ -17,8 +17,8 @@
 - **Branch:** `php-update` · **Runtime:** custom PHP `bin/php7/bin/php` = **PHP 8.2.32 (ZTS)**.
 - **Goal:** modernize to clean, maintainable PHP 8.2 **without changing behavior**,
   plugin compatibility, network protocols, packet formats, or serialization formats.
-- **Progress: 7 of 12 modules done.** Each committed as its own revertible checkpoint.
-- **Next module:** **Module 8 — Inventory** (`src/pocketmine/inventory/`, 36 files, 0/36 strict).
+- **Progress: 8 of 12 modules done.** Each committed as its own revertible checkpoint.
+- **Next module:** **Module 9 — Player** (`src/pocketmine/Player.php` + offline player) — the highest-coupling module (overrides many Entity methods).
 
 ---
 
@@ -69,8 +69,8 @@ The owner's task, reproduced in full. **Every instruction here is binding.**
 > 5. Blocks              ✅
 > 6. Entities            ✅
 > 7. Level / World       ✅
-> 8. Inventory           ⏭️ NEXT
-> 9. Player
+> 8. Inventory           ✅
+> 9. Player              ⏭️ NEXT
 > 10. Commands
 > 11. Plugins
 > 12. Remaining systems
@@ -286,8 +286,9 @@ Each module is an independent commit. **`git revert <hash>` cleanly undoes any o
 | 5 | Blocks | `f6e1956` | block/ (196) | Block backbone, int\|float coercion fix, harness zero-diff |
 | 6 | Entities | `7753051` | entity/ (70) + Player.php | Effect duration null-fix, **cross-module Potion::getColor fix**, booted-probe-verified |
 | 7 | Level/World | `cef654f` | level/ (159) + cross-module fixes | static-keyword restore, strict-mode float coercion parity, booted-probe-verified |
+| 8 | Inventory | `c1b82d6` | inventory/ (36) | strict_types all, ~70 safe return types, DoubleChestInventory/BaseTransaction variance fatals fixed (latent in ORIG), booted-probe-verified |
 
-Module reports: `docs/MODULE_1_REPORT.md` … `docs/MODULE_7_REPORT.md`.
+Module reports: `docs/MODULE_1_REPORT.md` … `docs/MODULE_8_REPORT.md`.
 Dependency map & plan: `docs/DEPENDENCY_MAP.md`.
 
 ---
@@ -296,19 +297,20 @@ Dependency map & plan: `docs/DEPENDENCY_MAP.md`.
 
 | Module | Path | Files | strict so far |
 |---|---|---|---|
-| 8. Inventory | `src/pocketmine/inventory/` | 36 | 0/36 ⏭️ |
-| 9. Player | `src/pocketmine/Player.php` (+ offline player) | 2–3 | partially (Player.php touched in mod 6/7) |
+| 8. Inventory | `src/pocketmine/inventory/` | 36 | 36/36 ✅ |
+| 9. Player | `src/pocketmine/Player.php` (+ offline player) | 2–3 | partially (Player.php touched in mod 6/7) ⏭️ |
 | 10. Commands | `src/pocketmine/command/` | 65 | 0/65 |
 | 11. Plugins | `src/pocketmine/plugin/` | 13 | 0/13 |
 | 12. Remaining systems | `tile/` (18), `metadata/` (7), `scheduler/` (12), `event/`, `permission/`, `network/` leftovers, `pocketmine/` root classes (Server, PocketMine, CrashDump, etc.) | — | 0 |
 
 ### Suggested order & rationale (from the brief + observed coupling)
 
-1. **Module 8 — Inventory (NEXT):** depends on typed Item (mod 4), Block (mod 5),
-   Player. Includes `EnchantInventory` (already got a float-coercion cast in mod 7).
-2. **Module 9 — Player:** the biggest remaining single class; overrides many
+1. **Module 8 — Inventory ✅ (done, commit `c1b82d6`).**
+2. **Module 9 — Player (NEXT):** the biggest remaining single class; overrides many
    Entity methods — **variance hazard**: return types must match Entity exactly
-   (see §6.2). Mod 6 already typed 12 Player overrides to match Entity.
+   (see §6.2). Mod 6 already typed 12 Player overrides to match Entity. Player is
+   also an `InventoryHolder` and `CommandSender` — mod 8 typed `PlayerInventory::
+   getHolder(): Human|Player` and interfaces stay untyped, so impls must match.
 3. **Module 10 — Commands:** depends on Player/Server APIs.
 4. **Module 11 — Plugins:** depends on command/Player; PluginLogger etc.
 5. **Module 12 — Remaining systems:** tile (NBT roundtrips!), metadata,
@@ -478,6 +480,13 @@ anonymous/named `PluginTask` subclass carrying its own level reference.
 4. **`todo` file** — 2 pre-existing TODOs (newer chunk system; Player::setImmobile).
 5. Deferred deliberately during modules: `Level::getSeed()` (`int|string`),
    metadata interface methods, movement packet senders, `setLinked` deprecation.
+6. **`DropItemTransaction::TRANSACTION_TYPE` const is dead code** — the
+   constructor never sets `$this->transactionType`, so `getTransactionType()`
+   returns `TYPE_NORMAL` (0) instead of `TYPE_DROP_ITEM`. Identical in ORIG;
+   harness asserts the quirk. One-line fix candidate for the final audit.
+7. **`DoubleChestInventory::getContents($withAir)` ignores the param** — semantics
+   differ from `ChestInventory`'s withAir handling. Intentional (matches ORIG
+   PHP-7 extra-arg behavior; the class couldn't even load under 8.2).
 
 ---
 
@@ -501,8 +510,7 @@ anonymous/named `PluginTask` subclass carrying its own level reference.
 
 ## 9. Completion checklist (end of project)
 
-- [ ] Modules 1–7 (done, commits in §3)
-- [ ] Module 8 — Inventory
+- [x] Modules 1–8 (done, commits in §3)
 - [ ] Module 9 — Player
 - [ ] Module 10 — Commands
 - [ ] Module 11 — Plugins
