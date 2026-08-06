@@ -2,9 +2,9 @@
 
 **Plan Version:** docs/PLAN.md
 **Last Updated:** 2026-08-06
-**Current Phase:** 0 (Foundation)
-**Current Branch:** foundation-bootstrap (not created yet)
-**Base Commit:** HEAD of main
+**Current Phase:** 1 (ECS Components)
+**Current Branch:** ecs-components-basic
+**Base Commit:** ac5b861 (master after PR #18 merge)
 
 ---
 
@@ -12,8 +12,8 @@
 
 | Phase | Status | Branch | PR | Notes |
 |-------|--------|--------|-----|-------|
-| 0: Foundation | 🔄 In Progress | foundation-bootstrap | — | Bootstrap, ports, ECS core, threading port |
-| 1: ECS Components | ⏳ Pending | — | — | Position, Velocity, Health, tags, EntityRef, basic systems |
+| 0: Foundation | ✅ Done | foundation-bootstrap | #18 | Bootstrap, ports, ECS core, threading port |
+| 1: ECS Components | 🔄 In Progress | ecs-components-basic | — | Rotation, Collision, Effect, Attribute, Inventory, AIState, Path, EntityRef |
 | 2: Adapters | ⏳ Pending | — | — | Network (protocol 84), storage, worldgen, plugin |
 | 3: App Services | ⏳ Pending | — | — | Player, chunk, block, entity, inventory services |
 | 4: Legacy Strangler | ⏳ Pending | — | — | Entity, Level, Server wrappers; plugin compat |
@@ -32,9 +32,22 @@
 | 0.2 | Port interfaces in `src/pocketmine/port/` | ✅ | — | NetworkPort, StoragePort, WorldGenPort, ThreadingPort, CommandPort, EventPort, PluginPort + DTOs |
 | 0.3 | ECS core in `src/pocketmine/domain/ecs/` | ✅ | — | Component, Resource, System, World, Query, Archetype, ComponentRegistry, ResourceRegistry, SystemScheduler, Entity, EntityBuilder |
 | 0.4 | ThreadingPort + PmmpThreadPool adapter | ✅ | — | WorkerThread, ThreadedTask, FutureImpl, PmmpThreadPool implementing ThreadingPort |
-| 0.5 | Establish tick-profiling baseline | 🔄 | — | Added to Kernel::run(); measure_baseline.php script created |
+| 0.5 | Establish tick-profiling baseline | ✅ | — | Added to Kernel::run(); measure_baseline.php script created |
 | 0.6 | PHPStan config (level 5) for new code only | ✅ | — | `phpstan.neon` with paths: domain/, adapter/, port/ |
 | 0.7 | Update PROGRESS.md, DECISIONS.md | ✅ | — | Record decisions from clarifying questions |
+
+---
+
+## Phase 1: ECS Components — Detailed Steps
+
+| Step | Task | Status | Commit | Notes |
+|------|------|--------|--------|-------|
+| 1.0 | Create branch `ecs-components-basic` with rollback anchor | ✅ | 55d0fee | `git checkout -b ecs-components-basic && git commit --allow-empty -m "chore: rollback anchor for ecs-components-basic"` |
+| 1.1 | Additional components: RotationComponent, CollisionComponent, EffectComponent, AttributeComponent, InventoryComponent, AIStateComponent, PathComponent | 🔄 | — | Core gameplay components |
+| 1.2 | EntityRef opaque handle for plugin API | ⏳ | — | Stable reference across threads/migrations |
+| 1.3 | Register all components in Kernel::registerBuiltinComponents() | ⏳ | — | Ensure all components are known to registry |
+| 1.4 | Component serialization helpers (for storage/network) | ⏳ | — | toArray/fromArray for snapshots |
+| 1.5 | Update PROGRESS.md | ⏳ | — | Track progress |
 
 ---
 
@@ -55,17 +68,16 @@
 
 | Branch | Base Commit | Current Commit | PR # | Status |
 |--------|-------------|----------------|------|--------|
-| foundation-bootstrap | eb32941 | 5ee8125 | #18 | 🔄 Active (PR opened) |
+| foundation-bootstrap | eb32941 | ac5b861 | #18 | ✅ Merged |
+| ecs-components-basic | ac5b861 | 55d0fee | — | 🔄 Active |
 
 ---
 
 ## Next Actions
 
-1. ✅ Create `foundation-bootstrap` branch with rollback anchor commit
-2. ✅ Implement `bootstrap.php`, `Kernel.php`, manual DI container
-3. ✅ Define all Port interfaces
-4. ✅ Implement ECS core types
-5. ✅ Implement ThreadingPort + PmmpThreadPool
-6. 🔄 Run baseline measurement script to establish tick profiling baseline
-7. ✅ Configure PHPStan level 5
-8. ✅ Update docs, commit, push, open PR
+1. ✅ Create `ecs-components-basic` branch with rollback anchor commit
+2. 🔄 Implement additional components (Rotation, Collision, Effect, Attribute, Inventory, AIState, Path)
+3. ⏳ Implement EntityRef opaque handle
+3. ⏳ Register all components in Kernel
+4. ⏳ Add component serialization helpers
+5. ⏳ Update docs, commit, push, open PR

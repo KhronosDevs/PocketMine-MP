@@ -240,9 +240,16 @@ function createPluginPort(CommandPort $commandPort, EventPort $eventPort): Plugi
 
 function registerBuiltinComponents(ComponentRegistry $registry): void {
     $registry->register(\pocketmine\domain\component\PositionComponent::class);
+    $registry->register(\pocketmine\domain\component\RotationComponent::class);
     $registry->register(\pocketmine\domain\component\VelocityComponent::class);
+    $registry->register(\pocketmine\domain\component\CollisionComponent::class);
     $registry->register(\pocketmine\domain\component\HealthComponent::class);
     $registry->register(\pocketmine\domain\component\MetadataComponent::class);
+    $registry->register(\pocketmine\domain\component\EffectComponent::class);
+    $registry->register(\pocketmine\domain\component\AttributeComponent::class);
+    $registry->register(\pocketmine\domain\component\InventoryComponent::class);
+    $registry->register(\pocketmine\domain\component\AIStateComponent::class);
+    $registry->register(\pocketmine\domain\component\PathComponent::class);
     $registry->register(\pocketmine\domain\component\tags\PlayerTag::class);
     $registry->register(\pocketmine\domain\component\tags\MonsterTag::class);
     $registry->register(\pocketmine\domain\component\tags\OnGroundTag::class);
@@ -260,6 +267,8 @@ function registerBuiltinResources(ResourceRegistry $registry): void {
 function registerBuiltinSystems(SystemScheduler $scheduler): void {
     $scheduler->register(new \pocketmine\domain\system\PhysicsSystem(), \pocketmine\domain\ecs\SystemPhase::SEQUENTIAL);
     $scheduler->register(new \pocketmine\domain\system\MovementSystem(), \pocketmine\domain\ecs\SystemPhase::PARALLEL);
+    $scheduler->register(new \pocketmine\domain\system\EffectSystem(), \pocketmine\domain\ecs\SystemPhase::PARALLEL);
+    $scheduler->register(new \pocketmine\domain\system\AISystem(), \pocketmine\domain\ecs\SystemPhase::SEQUENTIAL);
 }
 
 function bootstrap(): Kernel {
