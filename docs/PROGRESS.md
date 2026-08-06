@@ -2,9 +2,9 @@
 
 **Plan Version:** docs/PLAN.md
 **Last Updated:** 2026-08-07
-**Current Phase:** 3 (Core Gameplay Services)
-**Current Branch:** service-core-gameplay
-**Base Commit:** 49cf545 (master after PR #20 merge)
+**Current Phase:** 4 (New Plugin API)
+**Current Branch:** api-ecs-plugin
+**Base Commit:** 8f3a171 (master after PR #21 merge)
 
 ---
 
@@ -15,8 +15,8 @@
 | 0: Foundation | ✅ Done | foundation-bootstrap | #18 | Bootstrap, ports, ECS core, threading port |
 | 1: ECS Components | ✅ Done | ecs-components-basic | #19 | 17 components, EntityRef, 4 systems |
 | 2: Infrastructure Adapters | ✅ Done | adapter-implementation | #20 | Network, storage, worldgen, thread pool (NEW) |
-| 3: Core Gameplay Services | 🔄 In Progress | service-core-gameplay | — | Player, chunk, block, entity, combat, inventory |
-| 4: **New Plugin API** | ⏳ Pending | — | — | **BREAKING** — EntityRef, Query, System, Event, Command, Scheduler |
+| 3: Core Gameplay Services | ✅ Done | service-core-gameplay | #21 | Player, chunk, block, entity, combat, inventory |
+| 4: **New Plugin API** | 🔄 In Progress | api-ecs-plugin | — | **BREAKING** — EntityRef, Query, System, Event, Command, Scheduler |
 | 5: Archetype Parallelism | ⏳ Pending | — | — | Chunk gen, block updates, pathfinding, AI, system scheduler |
 | 6: Region-Based | ⏳ Pending | — | — | RegionWorld, RegionThread, coordination, network threads |
 | 7: Polish & Optimize | ⏳ Pending | — | — | Storage, queries, memory, network batching, benchmarks |
@@ -76,7 +76,22 @@
 | 3.4 | `service-entity-management` — EntitySpawnService, EntityDespawnService, EntityInteractionService | ✅ | 7ce67ce | EntityRef, EntityBuilder, QueryBuilder |
 | 3.5 | `service-combat` — CombatService, DamageService, KnockbackService | ✅ | 7ce67ce | AttributeComponent, HealthComponent, VelocityComponent |
 | 3.6 | `service-inventory` — InventoryService, CraftingService, ContainerService | ✅ | 7ce67ce | InventoryComponent, ItemStack |
-| 3.7 | Update PROGRESS.md | 🔄 | — | Track progress |
+| 3.7 | Update PROGRESS.md | ✅ | — | Track progress |
+
+---
+
+## Phase 4: New Plugin API — Detailed Steps
+
+| Step | Task | Status | Commit | Notes |
+|------|------|--------|--------|-------|
+| 4.0 | Create branch `api-ecs-plugin` with rollback anchor | ✅ | 0723b5c | `git checkout -b api-ecs-plugin && git commit --allow-empty -m "chore: rollback anchor for api-ecs-plugin"` |
+| 4.1 | `api-ecs-plugin` — Plugin base class using EntityRef, QueryBuilder, System registration | 🔄 | — | Kernel access, service access, ECS integration |
+| 4.2 | `api-event-system` — Typed event bus (not string-based), priority via PHP attributes | ⏳ | — | Event classes, listener registration, async dispatch |
+| 4.3 | `api-command-system` — Command registration via attributes, typed arguments, tab completion | ⏳ | — | Command classes, argument parsing, permission checks |
+| 4.4 | `api-scheduler` — Task scheduling via System registration or async Task submission | ⏳ | — | Repeating/delayed tasks, async task submission |
+| 4.5 | `api-permissions` — Permission system integrated with EntityRef metadata | ⏳ | — | Permission checks on EntityRef, default permissions |
+| 4.6 | `api-world-access` — Chunk/Block/Entity access via Query, not Level/Entity getters | ⏳ | — | QueryBuilder, chunk iteration, block/entity access |
+| 4.7 | Update PROGRESS.md | ⏳ | — | Track progress |
 
 ---
 
@@ -101,18 +116,19 @@
 | foundation-bootstrap | eb32941 | ac5b861 | #18 | ✅ Merged |
 | ecs-components-basic | ac5b861 | 378400c | #19 | ✅ Merged |
 | adapter-implementation | 3b66cf1 | 63a1b02 | #20 | ✅ Merged |
-| service-core-gameplay | 49cf545 | 7ce67ce | #21 | 🔄 Active (PR opened) |
+| service-core-gameplay | 49cf545 | 7ce67ce | #21 | ✅ Merged |
+| api-ecs-plugin | 8f3a171 | 0723b5c | — | 🔄 Active |
 
 ---
 
 ## Next Actions
 
-1. ✅ Phase 0, 1, 2 complete (PRs #18, #19, #20 merged)
-2. ✅ Create `service-core-gameplay` branch with rollback anchor
-3. ✅ Implement PlayerJoinService, PlayerLeaveService, PlayerRespawnService
-4. ✅ Implement ChunkLoadService, ChunkUnloadService, ChunkSendService
-5. ✅ Implement BlockBreakService, BlockPlaceService, BlockUpdateService
-6. ✅ Implement EntitySpawnService, EntityDespawnService, EntityInteractionService
-7. ✅ Implement CombatService, DamageService, KnockbackService
-8. ✅ Implement InventoryService, CraftingService, ContainerService
-9. ✅ Update docs, commit, push, open PR #21
+1. ✅ Phase 0, 1, 2, 3 complete (PRs #18, #19, #20, #21 merged)
+2. ✅ Create `api-ecs-plugin` branch with rollback anchor
+3. 🔄 Implement Plugin base class with EntityRef, QueryBuilder, System registration
+4. ⏳ Implement Typed event bus with PHP attributes
+5. ⏳ Implement Command system with attributes
+6. ⏳ Implement Scheduler integration
+7. ⏳ Implement Permission system
+8. ⏳ Implement World access via Query
+9. ⏳ Update docs, commit, push, open PR
