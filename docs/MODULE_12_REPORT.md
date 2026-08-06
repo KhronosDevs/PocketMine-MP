@@ -65,5 +65,5 @@ The final core module covering all remaining untyped subsystems:
 ## How to revert
 
 ```bash
-git revert <module-12-commit>   # after commit, or reset --hard before committing
+git revert a874da8   # after commit, or reset --hard before committing
 ```
