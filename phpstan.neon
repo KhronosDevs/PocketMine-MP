@@ -1,0 +1,65 @@
+parameters:
+    level: 5
+    paths:
+        - src/pocketmine/domain
+        - src/pocketmine/adapter
+        - src/pocketmine/port
+    excludes_analyse:
+        - src/pocketmine/legacy/*
+        - src/pocketmine/entity/*
+        - src/pocketmine/level/*
+        - src/pocketmine/network/protocol/*
+        - src/pocketmine/block/*
+        - src/pocketmine/item/*
+        - src/pocketmine/tile/*
+        - src/pocketmine/command/*
+        - src/pocketmine/inventory/*
+        - src/pocketmine/metadata/*
+        - src/pocketmine/nbt/*
+        - src/pocketmine/utils/*
+        - src/pocketmine/snooze/*
+        - src/pocketmine/wizard/*
+        - src/pocketmine/plugin/EventExecutor.php
+        - src/pocketmine/plugin/FolderPluginLoader.php
+        - src/pocketmine/plugin/MethodEventExecutor.php
+        - src/pocketmine/plugin/PharPluginLoader.php
+        - src/pocketmine/plugin/PluginBase.php
+        - src/pocketmine/plugin/PluginDescription.php
+        - src/pocketmine/plugin/PluginLoadOrder.php
+        - src/pocketmine/plugin/PluginLogger.php
+        - src/pocketmine/plugin/PluginManager.php
+        - src/pocketmine/plugin/Plugin.php
+        - src/pocketmine/plugin/RegisteredListener.php
+        - src/pocketmine/plugin/ScriptPluginLoader.php
+        - src/pocketmine/scheduler/AsyncPool.php
+        - src/pocketmine/scheduler/AsyncTask.php
+        - src/pocketmine/scheduler/AsyncWorker.php
+        - src/pocketmine/scheduler/CallbackTask.php
+        - src/pocketmine/scheduler/DServerTask.php
+        - src/pocketmine/scheduler/FileWriteTask.php
+        - src/pocketmine/scheduler/GarbageCollectionTask.php
+        - src/pocketmine/scheduler/PluginTask.php
+        - src/pocketmine/scheduler/SendUsageTask.php
+        - src/pocketmine/scheduler/ServerScheduler.php
+        - src/pocketmine/scheduler/TaskHandler.php
+        - src/pocketmine/scheduler/Task.php
+        - src/pocketmine/Server.php
+        - src/pocketmine/PocketMine.php
+        - src/pocketmine/Thread.php
+        - src/pocketmine/ThreadManager.php
+        - src/pocketmine/Worker.php
+        - src/pocketmine/MemoryManager.php
+        - src/pocketmine/CrashDump.php
+        - src/pocketmine/CompatibleClassLoader.php
+        - src/pocketmine/IPlayer.php
+        - src/pocketmine/OfflinePlayer.php
+        - src/pocketmine/Player.php
+        - src/pocketmine/Achievement.php
+    ignoreErrors:
+        - '#^Access to an undefined property#'
+        - '#^Property .* does not exist#'
+        - '#^Method .* not found in#'
+        - '#^Unsafe usage of new static#'
+    checkMissingIterableValueType: false
+    checkGenericClassAsNonGeneric: false
+    phpVersion: 80200
