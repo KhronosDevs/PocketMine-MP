@@ -6,7 +6,7 @@
 > revertible checkpoints, the **exact validation procedure** that has caught real
 > regressions, and the **step-by-step path to completion**.
 >
-> Last updated: after Module 9 (Player) — commit `e89b7af`.
+> Last updated: after Module 10 (Commands) — commit `9851c8c`.
 
 ---
 
@@ -17,8 +17,8 @@
 - **Branch:** `php-update` · **Runtime:** custom PHP `bin/php7/bin/php` = **PHP 8.2.32 (ZTS)**.
 - **Goal:** modernize to clean, maintainable PHP 8.2 **without changing behavior**,
   plugin compatibility, network protocols, packet formats, or serialization formats.
-- **Progress: 9 of 12 modules done.** Each committed as its own revertible checkpoint.
-- **Next module:** **Module 10 — Commands** (`src/pocketmine/command/`, 65 files) — depends on the now-typed Player/Server APIs.
+- **Progress: 10 of 12 modules done.** Each committed as its own revertible checkpoint.
+- **Next module:** **Module 11 — Plugins** (`src/pocketmine/plugin/`, 13 files) — depends on the now-typed command/Player/Server APIs.
 
 ---
 
@@ -71,8 +71,8 @@ The owner's task, reproduced in full. **Every instruction here is binding.**
 > 7. Level / World       ✅
 > 8. Inventory           ✅
 > 9. Player              ✅
-> 10. Commands           ⏭️ NEXT
-> 11. Plugins
+> 10. Commands           ✅
+> 11. Plugins            ⏭️ NEXT
 > 12. Remaining systems
 >
 > For every module:
@@ -288,8 +288,9 @@ Each module is an independent commit. **`git revert <hash>` cleanly undoes any o
 | 7 | Level/World | `cef654f` | level/ (159) + cross-module fixes | static-keyword restore, strict-mode float coercion parity, booted-probe-verified |
 | 8 | Inventory | `c1b82d6` | inventory/ (36) | strict_types all, ~70 safe return types, DoubleChestInventory/BaseTransaction variance fatals fixed (latent in ORIG), booted-probe-verified |
 | 9 | Player | `e89b7af` | Player.php (4331), OfflinePlayer, IPlayer, Achievement + Human.php fix | strict_types all 4 + ~60 return types, `getProtocol(): ?int` fix (probe-caught), `Human::getFloatingInventory(): ?FloatingInventory` latent fix, variance-verified vs typed Entity/Human/Living, booted-probe ALL-PASS |
+| 10 | Commands | `9851c8c` | command/ (65) | strict_types all, Command backbone fully typed, execute() + interfaces deliberately untyped (plugin API), protected props left untyped (§6.2), signature-diff + HARNESS-IDENTICAL + booted-probe ALL-PASS (28 checks) |
 
-Module reports: `docs/MODULE_1_REPORT.md` … `docs/MODULE_9_REPORT.md`.
+Module reports: `docs/MODULE_1_REPORT.md` … `docs/MODULE_10_REPORT.md`.
 Dependency map & plan: `docs/DEPENDENCY_MAP.md`.
 
 ---
@@ -300,8 +301,8 @@ Dependency map & plan: `docs/DEPENDENCY_MAP.md`.
 |---|---|---|---|
 | 8. Inventory | `src/pocketmine/inventory/` | 36 | 36/36 ✅ |
 | 9. Player | `src/pocketmine/Player.php` (+ offline player) | 2–3 | 4/4 ✅ |
-| 10. Commands | `src/pocketmine/command/` | 65 | 0/65 ⏭️ |
-| 11. Plugins | `src/pocketmine/plugin/` | 13 | 0/13 |
+| 10. Commands | `src/pocketmine/command/` | 65 | 65/65 ✅ |
+| 11. Plugins | `src/pocketmine/plugin/` | 13 | 0/13 ⏭️ |
 | 12. Remaining systems | `tile/` (18), `metadata/` (7), `scheduler/` (12), `event/`, `permission/`, `network/` leftovers, `pocketmine/` root classes (Server, PocketMine, CrashDump, etc.) | — | 0 |
 
 ### Suggested order & rationale (from the brief + observed coupling)
@@ -310,10 +311,16 @@ Dependency map & plan: `docs/DEPENDENCY_MAP.md`.
 2. **Module 9 — Player ✅ (done, commit `e89b7af`).** See `docs/MODULE_9_REPORT.md`
    for the two real fixes (`getProtocol(): ?int`, `Human::getFloatingInventory(): ?FloatingInventory`)
    and the variance strategy used (leave null-returning getters untyped or nullable).
-3. **Module 10 — Commands (NEXT):** depends on Player/Server APIs (now typed). 65
-   files, mostly small leaf command classes — same leaf-first strict_types +
-   safe-return-type approach as mod 4/5. Watch for `Command::execute` override
-   variance and the `getPlugin()->getServer()` patterns.
+3. **Module 10 — Commands ✅ (done, commit `9851c8c`).** See `docs/MODULE_10_REPORT.md`.
+   Key decisions to keep for Module 11: `execute()` and plugin-facing interfaces stay
+   untyped (plugin API); `protected` properties stay untyped (§6.2 invariance); type
+   only `private` props + safe returns. Signature diff vs ORIG verified pure-type-additions.
+4. **Module 11 — Plugins (NEXT):** Plugin/PluginBase/PluginLogger/PluginManager
+   (13 files) — the heart of the plugin ecosystem. PluginBase extends
+   CommandExecutor/Listener and is extended by EVERY plugin; keep public APIs
+   untyped where plugins override (onEnable/onLoad/onDisable, onCommand).
+   PluginManager is the biggest file; watch `loadPlugin`/`getPlugin` returns and
+   the description loading paths.
 4. **Module 11 — Plugins:** depends on command/Player; PluginLogger etc.
 5. **Module 12 — Remaining systems:** tile (NBT roundtrips!), metadata,
    scheduler, event, permission, and the top-level bootstrap classes.
@@ -517,9 +524,7 @@ anonymous/named `PluginTask` subclass carrying its own level reference.
 
 ## 9. Completion checklist (end of project)
 
-- [x] Modules 1–9 (done, commits in §3)
-- [ ] Module 10 — Commands
-- [ ] Module 11 — Plugins
+- [x] Modules 1–10 (done, commits in §3)
 - [ ] Module 11 — Plugins
 - [ ] Module 12 — Remaining systems (tile, metadata, scheduler, event, permission, bootstrap)
 - [ ] Final complete audit (§1.11): PHP 8.2 compat, runtime stability, memory,
