@@ -798,6 +798,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
         $this->exp = 0;
         $this->expLevel = 0;
         $this->food = 20;
+        $this->id = Entity::$entityCount++;
         Entity::setHealth(20);
     }
 
