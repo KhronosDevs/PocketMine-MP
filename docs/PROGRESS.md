@@ -43,11 +43,12 @@
 | Step | Task | Status | Commit | Notes |
 |------|------|--------|--------|-------|
 | 1.0 | Create branch `ecs-components-basic` with rollback anchor | ✅ | 55d0fee | `git checkout -b ecs-components-basic && git commit --allow-empty -m "chore: rollback anchor for ecs-components-basic"` |
-| 1.1 | Additional components: RotationComponent, CollisionComponent, EffectComponent, AttributeComponent, InventoryComponent, AIStateComponent, PathComponent | 🔄 | — | Core gameplay components |
-| 1.2 | EntityRef opaque handle for plugin API | ⏳ | — | Stable reference across threads/migrations |
-| 1.3 | Register all components in Kernel::registerBuiltinComponents() | ⏳ | — | Ensure all components are known to registry |
-| 1.4 | Component serialization helpers (for storage/network) | ⏳ | — | toArray/fromArray for snapshots |
-| 1.5 | Update PROGRESS.md | ⏳ | — | Track progress |
+| 1.1 | Additional components: RotationComponent, CollisionComponent, EffectComponent, AttributeComponent, InventoryComponent, AIStateComponent, PathComponent | ✅ | 002c485 | Core gameplay components |
+| 1.2 | EntityRef opaque handle for plugin API | ✅ | 002c485 | Stable reference across threads/migrations |
+| 1.3 | Register all components in Kernel::registerBuiltinComponents() | ✅ | 002c485 | All 17 components registered |
+| 1.4 | Component serialization helpers (for storage/network) | ✅ | 002c485 | ComponentSerializer with serialize/deserialize |
+| 1.5 | New systems: EffectSystem, AISystem | ✅ | 002c485 | Parallel effect ticking, sequential AI |
+| 1.6 | Update PROGRESS.md | 🔄 | — | Track progress |
 
 ---
 
@@ -69,15 +70,16 @@
 | Branch | Base Commit | Current Commit | PR # | Status |
 |--------|-------------|----------------|------|--------|
 | foundation-bootstrap | eb32941 | ac5b861 | #18 | ✅ Merged |
-| ecs-components-basic | ac5b861 | 55d0fee | — | 🔄 Active |
+| ecs-components-basic | ac5b861 | 002c485 | — | 🔄 Active (pushed) |
 
 ---
 
 ## Next Actions
 
 1. ✅ Create `ecs-components-basic` branch with rollback anchor commit
-2. 🔄 Implement additional components (Rotation, Collision, Effect, Attribute, Inventory, AIState, Path)
-3. ⏳ Implement EntityRef opaque handle
-3. ⏳ Register all components in Kernel
-4. ⏳ Add component serialization helpers
-5. ⏳ Update docs, commit, push, open PR
+2. ✅ Implement additional components (Rotation, Collision, Effect, Attribute, Inventory, AIState, Path)
+3. ✅ Implement EntityRef opaque handle
+4. ✅ Register all components in Kernel
+5. ✅ Add component serialization helpers
+6. ✅ Add EffectSystem and AISystem
+7. 🔄 Create PR for ecs-components-basic
