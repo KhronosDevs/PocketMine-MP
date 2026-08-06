@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -26,6 +28,6 @@
  */
 namespace pocketmine\level\generator\object;
 
-abstract class Object{
+abstract class ObjectBase{
 
 }

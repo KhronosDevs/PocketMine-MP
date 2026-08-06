@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -55,7 +57,7 @@ class Flat extends Generator{
 	private $populators = [];
 	private $structure, $chunks, $options, $floorLevel, $preset;
 
-	public function getSettings(){
+	public function getSettings() : array {
 		return $this->options;
 	}
 

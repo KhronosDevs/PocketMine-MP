@@ -1558,7 +1558,7 @@ abstract class Entity extends Location implements Metadatable
                     for ($y = $minY; $y <= $maxY; ++$y) {
                         $block = $this->level->getBlock($this->temporalVector->setComponents($x, $y, $z));
                         if ($block->hasEntityCollision()) {
-                            $this->blocksAround[Level::blockHash($block->x, $block->y, $block->z)] = $block;
+                            $this->blocksAround[Level::blockHash((int) $block->x, (int) $block->y, (int) $block->z)] = $block;
                         }
                     }
                 }
@@ -1576,7 +1576,7 @@ abstract class Entity extends Location implements Metadatable
             $block->onEntityCollide($this);
             if ($this->getLevel()->getServer()->redstoneEnabled && !$this->isPlayer) {
                 if ($block instanceof PressurePlate) {
-                    $this->activatedPressurePlates[Level::blockHash($block->x, $block->y, $block->z)] = $block;
+                    $this->activatedPressurePlates[Level::blockHash((int) $block->x, (int) $block->y, (int) $block->z)] = $block;
                 }
             }
             $block->addVelocityToEntity($this, $vector);

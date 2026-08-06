@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -35,23 +37,23 @@ abstract class Noise{
 	protected $persistence;
 	protected $expansion;
 
-	public static function floor($x){
+	public static function floor($x) : int {
 		return $x >= 0 ? (int) $x : (int) ($x - 1);
 	}
 
-	public static function fade($x){
+	public static function fade($x) : float {
 		return $x * $x * $x * ($x * ($x * 6 - 15) + 10);
 	}
 
-	public static function lerp($x, $y, $z){
+	public static function lerp($x, $y, $z) : float {
 		return $y + $x * ($z - $y);
 	}
 
-	public static function linearLerp($x, $x1, $x2, $q0, $q1){
+	public static function linearLerp($x, $x1, $x2, $q0, $q1) : float {
 		return (($x2 - $x) / ($x2 - $x1)) * $q0 + (($x - $x1) / ($x2 - $x1)) * $q1;
 	}
 
-	public static function bilinearLerp($x, $y, $q00, $q01, $q10, $q11, $x1, $x2, $y1, $y2){
+	public static function bilinearLerp($x, $y, $q00, $q01, $q10, $q11, $x1, $x2, $y1, $y2) : float {
 		$dx1 = (($x2 - $x) / ($x2 - $x1));
 		$dx2 = (($x - $x1) / ($x2 - $x1));
 
@@ -62,7 +64,7 @@ abstract class Noise{
 		);
 	}
 
-	public static function trilinearLerp($x, $y, $z, $q000, $q001, $q010, $q011, $q100, $q101, $q110, $q111, $x1, $x2, $y1, $y2, $z1, $z2) {
+	public static function trilinearLerp($x, $y, $z, $q000, $q001, $q010, $q011, $q100, $q101, $q110, $q111, $x1, $x2, $y1, $y2, $z1, $z2) : float {
 		$dx1 = (($x2 - $x) / ($x2 - $x1));
 		$dx2 = (($x - $x1) / ($x2 - $x1));
 		$dy1 = (($y2 - $y) / ($y2 - $y1));
@@ -83,7 +85,7 @@ abstract class Noise{
 		);
 	}
 
-	public static function grad($hash, $x, $y, $z){
+	public static function grad($hash, $x, $y, $z) : float {
 		$hash &= 15;
 		$u = $hash < 8 ? $x : $y;
 		$v = $hash < 4 ? $y : (($hash === 12 || $hash === 14) ? $x : $z);
@@ -95,7 +97,7 @@ abstract class Noise{
 
 	abstract public function getNoise3D($x, $y, $z);
 
-	public function noise2D($x, $z, $normalized = false){
+	public function noise2D($x, $z, $normalized = false) : float {
 		$result = 0;
 		$amp = 1;
 		$freq = 1;
@@ -118,7 +120,7 @@ abstract class Noise{
 		return $result;
 	}
 
-	public function noise3D($x, $y, $z, $normalized = false){
+	public function noise3D($x, $y, $z, $normalized = false) : float {
 		$result = 0;
 		$amp = 1;
 		$freq = 1;
@@ -142,7 +144,7 @@ abstract class Noise{
 		return $result;
 	}
 
-	public function setOffset($x, $y, $z){
+	public function setOffset($x, $y, $z) : void {
 		$this->offsetX = $x;
 		$this->offsetY = $y;
 		$this->offsetZ = $z;

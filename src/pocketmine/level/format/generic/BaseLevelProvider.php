@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -70,15 +72,15 @@ abstract class BaseLevelProvider implements LevelProvider{
 		}
 	}
 
-	public function getPath(){
+	public function getPath() : string {
 		return $this->path;
 	}
 
-	public function getServer(){
+	public function getServer() : Server {
 		return $this->level->getServer();
 	}
 
-	public function getLevel(){
+	public function getLevel() : Level {
 		return $this->level;
 	}
 
@@ -86,27 +88,27 @@ abstract class BaseLevelProvider implements LevelProvider{
 		return $this->levelData["LevelName"];
 	}
 
-	public function getTime(){
+	public function getTime() : int|string {
 		return $this->levelData["Time"];
 	}
 
-	public function setTime($value){
+	public function setTime($value) : void {
 		$this->levelData->Time = new IntTag("Time", (int) $value);
 	}
 
-	public function getSeed(){
+	public function getSeed() : int|string {
 		return $this->levelData["RandomSeed"];
 	}
 
-	public function setSeed($value){
+	public function setSeed($value) : void {
 		$this->levelData->RandomSeed = new LongTag("RandomSeed", (int) $value);
 	}
 
-	public function getSpawn(){
+	public function getSpawn() : Vector3 {
 		return new Vector3((float) $this->levelData["SpawnX"] + 0.5, (float) $this->levelData["SpawnY"], (float) $this->levelData["SpawnZ"] + 0.5);
 	}
 
-	public function setSpawn(Vector3 $pos){
+	public function setSpawn(Vector3 $pos) : void {
 		$this->levelData->SpawnX = new IntTag("SpawnX", (int) $pos->x);
 		$this->levelData->SpawnY = new IntTag("SpawnY", (int) $pos->y);
 		$this->levelData->SpawnZ = new IntTag("SpawnZ", (int) $pos->z);
@@ -119,11 +121,11 @@ abstract class BaseLevelProvider implements LevelProvider{
 	/**
 	 * @return CompoundTag
 	 */
-	public function getLevelData(){
+	public function getLevelData() : array {
 		return $this->levelData;
 	}
 
-	public function saveLevelData(){
+	public function saveLevelData() : void {
 		$nbt = new NBT(NBT::BIG_ENDIAN);
 		$nbt->setData(new CompoundTag("", [
 			"Data" => $this->levelData

@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -121,11 +123,11 @@ class Chunk extends BaseChunk{
 		unset($this->nbt->Sections, $this->nbt->ExtraData);
 	}
 
-	public function isLightPopulated(){
+	public function isLightPopulated() : bool {
 		return $this->nbt["LightPopulated"] > 0;
 	}
 
-	public function setLightPopulated($value = 1){
+	public function setLightPopulated($value = 1) : void {
 		$this->nbt->LightPopulated = new ByteTag("LightPopulated", $value);
 		$this->hasChanged = true;
 	}
@@ -133,14 +135,14 @@ class Chunk extends BaseChunk{
 	/**
 	 * @return bool
 	 */
-	public function isPopulated(){
+	public function isPopulated() : bool {
 		return $this->nbt["TerrainPopulated"] > 0;
 	}
 
 	/**
 	 * @param int $value
 	 */
-	public function setPopulated($value = 1){
+	public function setPopulated($value = 1) : void {
 		$this->nbt->TerrainPopulated = new ByteTag("TerrainPopulated", $value);
 		$this->hasChanged = true;
 	}
@@ -148,14 +150,14 @@ class Chunk extends BaseChunk{
 	/**
 	 * @return bool
 	 */
-	public function isGenerated(){
+	public function isGenerated() : bool {
 		return $this->nbt["TerrainPopulated"] > 0 || (isset($this->nbt->TerrainGenerated) && $this->nbt["TerrainGenerated"] > 0);
 	}
 
 	/**
 	 * @param int $value
 	 */
-	public function setGenerated($value = 1){
+	public function setGenerated($value = 1) : void {
 		$this->nbt->TerrainGenerated = new ByteTag("TerrainGenerated", $value);
 		$this->hasChanged = true;
 	}
@@ -163,7 +165,7 @@ class Chunk extends BaseChunk{
 	/**
 	 * @return CompoundTag
 	 */
-	public function getNBT(){
+	public function getNBT() : CompoundTag {
 		return $this->nbt;
 	}
 

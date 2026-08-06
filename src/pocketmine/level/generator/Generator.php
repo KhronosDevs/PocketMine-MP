@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -38,7 +40,7 @@ use function strtolower;
 abstract class Generator{
 	private static $list = [];
 
-	public static function addGenerator($object, $name){
+	public static function addGenerator($object, $name) : bool {
 		if(is_subclass_of($object, Generator::class) && !isset(Generator::$list[$name = strtolower($name)])){
 			Generator::$list[$name] = $object;
 
@@ -51,7 +53,7 @@ abstract class Generator{
 	/**
 	 * @return string[]
 	 */
-	public static function getGeneratorList(){
+	public static function getGeneratorList() : array {
 		return array_keys(Generator::$list);
 	}
 
@@ -60,7 +62,7 @@ abstract class Generator{
 	 *
 	 * @return Generator
 	 */
-	public static function getGenerator($name){
+	public static function getGenerator($name) : string {
 		if(isset(Generator::$list[$name = strtolower($name)])){
 			return Generator::$list[$name];
 		}
@@ -68,7 +70,7 @@ abstract class Generator{
 		return Normal::class;
 	}
 
-	public static function getGeneratorName($class){
+	public static function getGeneratorName($class) : string {
 		foreach(Generator::$list as $name => $c){
 			if($c === $class){
 				return $name;

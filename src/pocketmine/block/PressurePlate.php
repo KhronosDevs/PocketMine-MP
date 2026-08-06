@@ -95,7 +95,7 @@ class PressurePlate extends RedstoneSource{
 	/*public function isCollided(){
 		foreach($this->getLevel()->getEntities() as $p){
 			$blocks = $p->getBlocksAround();
-			if(isset($blocks[Level::blockHash($this->x, $this->y, $this->z)])) return true;
+			if(isset($blocks[Level::blockHash((int) $this->x, (int) $this->y, (int) $this->z)])) return true;
 		}
 		return false;
 	}*/

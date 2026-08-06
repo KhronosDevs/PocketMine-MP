@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -59,7 +61,7 @@ class Perlin extends Noise{
 
 	}
 
-	public function getNoise3D($x, $y, $z){
+	public function getNoise3D($x, $y, $z) : float {
 		$x += $this->offsetX;
 		$y += $this->offsetY;
 		$z += $this->offsetZ;
@@ -143,7 +145,7 @@ class Perlin extends Noise{
 		*/
 	}
 
-	public function getNoise2D($x, $y){
+	public function getNoise2D($x, $y) : float {
 		return $this->getNoise3D($x, $y, 0);
 	}
 }

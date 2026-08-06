@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -43,19 +45,19 @@ class ChunkSection implements \pocketmine\level\format\ChunkSection{
 		$this->skyLight = (string) $nbt["SkyLight"];
 	}
 
-	public function getY(){
+	public function getY() : int {
 		return $this->y;
 	}
 
-	public function getBlockId($x, $y, $z){
+	public function getBlockId($x, $y, $z) : int {
 		return ord($this->blocks[($y << 8) + ($z << 4) + $x]);
 	}
 
-	public function setBlockId($x, $y, $z, $id){
+	public function setBlockId($x, $y, $z, $id) : void {
 		$this->blocks[($y << 8) + ($z << 4) + $x] = chr($id);
 	}
 
-	public function getBlockData($x, $y, $z){
+	public function getBlockData($x, $y, $z) : int {
 		$m = ord($this->data[($y << 7) + ($z << 3) + ($x >> 1)]);
 		if(($x & 1) === 0){
 			return $m & 0x0F;
@@ -64,7 +66,7 @@ class ChunkSection implements \pocketmine\level\format\ChunkSection{
 		}
 	}
 
-	public function setBlockData($x, $y, $z, $data){
+	public function setBlockData($x, $y, $z, $data) : void {
 		$i = ($y << 7) + ($z << 3) + ($x >> 1);
 		$old_m = ord($this->data[$i]);
 		if(($x & 1) === 0){
@@ -80,7 +82,7 @@ class ChunkSection implements \pocketmine\level\format\ChunkSection{
 		$meta = $full & 0x0f;
 	}
 
-	public function getFullBlock($x, $y, $z){
+	public function getFullBlock($x, $y, $z) : int {
 		$i = ($y << 8) + ($z << 4) + $x;
 		if(($x & 1) === 0){
 			return (ord($this->blocks[$i]) << 4) | (ord($this->data[$i >> 1]) & 0x0F);
@@ -121,7 +123,7 @@ class ChunkSection implements \pocketmine\level\format\ChunkSection{
 		return $changed;
 	}
 
-	public function getBlockSkyLight($x, $y, $z){
+	public function getBlockSkyLight($x, $y, $z) : int {
 		$sl = ord($this->skyLight[($y << 7) + ($z << 3) + ($x >> 1)]);
 		if(($x & 1) === 0){
 			return $sl & 0x0F;
@@ -130,7 +132,7 @@ class ChunkSection implements \pocketmine\level\format\ChunkSection{
 		}
 	}
 
-	public function setBlockSkyLight($x, $y, $z, $level){
+	public function setBlockSkyLight($x, $y, $z, $level) : void {
 		$i = ($y << 7) + ($z << 3) + ($x >> 1);
 		$old_sl = ord($this->skyLight[$i]);
 		if(($x & 1) === 0){
@@ -140,7 +142,7 @@ class ChunkSection implements \pocketmine\level\format\ChunkSection{
 		}
 	}
 
-	public function getBlockLight($x, $y, $z){
+	public function getBlockLight($x, $y, $z) : int {
 		$l = ord($this->blockLight[($y << 7) + ($z << 3) + ($x >> 1)]);
 		if(($x & 1) === 0){
 			return $l & 0x0F;
@@ -149,7 +151,7 @@ class ChunkSection implements \pocketmine\level\format\ChunkSection{
 		}
 	}
 
-	public function setBlockLight($x, $y, $z, $level){
+	public function setBlockLight($x, $y, $z, $level) : void {
 		$i = ($y << 7) + ($z << 3) + ($x >> 1);
 		$old_l = ord($this->blockLight[$i]);
 		if(($x & 1) === 0){
@@ -159,7 +161,7 @@ class ChunkSection implements \pocketmine\level\format\ChunkSection{
 		}
 	}
 
-	public function getBlockIdColumn($x, $z){
+	public function getBlockIdColumn($x, $z) : string {
 		$i = ($z << 4) + $x;
 		$column = "";
 		for($y = 0; $y < 16; ++$y){
@@ -169,7 +171,7 @@ class ChunkSection implements \pocketmine\level\format\ChunkSection{
 		return $column;
 	}
 
-	public function getBlockDataColumn($x, $z){
+	public function getBlockDataColumn($x, $z) : string {
 		$i = ($z << 3) + ($x >> 1);
 		$column = "";
 		if(($x & 1) === 0){
@@ -185,7 +187,7 @@ class ChunkSection implements \pocketmine\level\format\ChunkSection{
 		return $column;
 	}
 
-	public function getBlockSkyLightColumn($x, $z){
+	public function getBlockSkyLightColumn($x, $z) : string {
 		$i = ($z << 3) + ($x >> 1);
 		$column = "";
 		if(($x & 1) === 0){
@@ -201,7 +203,7 @@ class ChunkSection implements \pocketmine\level\format\ChunkSection{
 		return $column;
 	}
 
-	public function getBlockLightColumn($x, $z){
+	public function getBlockLightColumn($x, $z) : string {
 		$i = ($z << 3) + ($x >> 1);
 		$column = "";
 		if(($x & 1) === 0){
@@ -217,19 +219,19 @@ class ChunkSection implements \pocketmine\level\format\ChunkSection{
 		return $column;
 	}
 
-	public function getIdArray(){
+	public function getIdArray() : string {
 		return $this->blocks;
 	}
 
-	public function getDataArray(){
+	public function getDataArray() : string {
 		return $this->data;
 	}
 
-	public function getSkyLightArray(){
+	public function getSkyLightArray() : string {
 		return $this->skyLight;
 	}
 
-	public function getLightArray(){
+	public function getLightArray() : string {
 		return $this->blockLight;
 	}
 

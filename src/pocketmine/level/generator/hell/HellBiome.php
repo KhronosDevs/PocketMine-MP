@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -31,7 +33,7 @@ class HellBiome extends Biome{
 		return "Hell";
 	}
 
-	public function getColor(){
+	public function getColor() : int {
 		return 0;
 	}
 }

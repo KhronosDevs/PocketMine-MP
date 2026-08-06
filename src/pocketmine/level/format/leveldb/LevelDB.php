@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -145,7 +147,7 @@ class LevelDB extends BaseLevelProvider{
 		$db->close();
 	}
 
-	public function saveLevelData(){
+	public function saveLevelData() : void {
 		$nbt = new NBT(NBT::LITTLE_ENDIAN);
 		$nbt->setData($this->levelData);
 		$buffer = $nbt->write();

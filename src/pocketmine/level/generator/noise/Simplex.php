@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -94,7 +96,7 @@ class Simplex extends Perlin{
 		return $g[0] * $x + $g[1] * $y + $g[2] * $z + $g[3] * $w;
 	}
 
-	public function getNoise3D($x, $y, $z){
+	public function getNoise3D($x, $y, $z) : float {
 		$x += $this->offsetX;
 		$y += $this->offsetY;
 		$z += $this->offsetZ;
@@ -218,7 +220,7 @@ class Simplex extends Perlin{
 		return 32.0 * $n;
 	}
 
-	public function getNoise2D($x, $y){
+	public function getNoise2D($x, $y) : float {
 		$x += $this->offsetX;
 		$y += $this->offsetY;
 

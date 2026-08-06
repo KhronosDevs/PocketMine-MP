@@ -213,8 +213,8 @@ abstract class Creature extends Living{
 	}
 
 	public function whatBlock(Level $level, $v3) : string{  //boybook的y轴判断法 核心 什么方块？
-		$id = $level->getBlockIdAt($v3->x, $v3->y, $v3->z);
-		$damage = $level->getBlockDataAt($v3->x, $v3->y, $v3->z);
+		$id = $level->getBlockIdAt((int) $v3->x, (int) $v3->y, (int) $v3->z);
+		$damage = $level->getBlockDataAt((int) $v3->x, (int) $v3->y, (int) $v3->z);
 		switch($id){
 			case 0:
 			case 6:

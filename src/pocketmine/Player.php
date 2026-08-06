@@ -1614,7 +1614,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
             $block->onEntityCollide($this);
             if ($this->getServer()->redstoneEnabled) {
                 if ($block instanceof PressurePlate) {
-                    $this->activatedPressurePlates[Level::blockHash($block->x, $block->y, $block->z)] = $block;
+                    $this->activatedPressurePlates[Level::blockHash((int) $block->x, (int) $block->y, (int) $block->z)] = $block;
                 }
             }
         }

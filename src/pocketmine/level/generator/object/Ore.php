@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -42,7 +44,7 @@ class Ore{
 		return $this->type;
 	}
 
-	public function canPlaceObject(ChunkManager $level, $x, $y, $z){
+	public function canPlaceObject(ChunkManager $level, $x, $y, $z) : bool {
 		return (($level->getBlockIdAt($x, $y, $z) === 1) || ($level->getBlockIdAt($x, $y, $z) === 87));
 	}
 

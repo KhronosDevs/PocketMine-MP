@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -43,10 +45,10 @@ class TallGrass{
 		for($c = 0; $c < $count; ++$c){
 			$x = $random->nextRange($pos->x - $radius, $pos->x + $radius);
 			$z = $random->nextRange($pos->z - $radius, $pos->z + $radius);
-			if($level->getBlockIdAt($x, $pos->y + 1, $z) === Block::AIR && $level->getBlockIdAt($x, $pos->y, $z) === Block::GRASS){
+			if($level->getBlockIdAt($x, (int) ($pos->y + 1), $z) === Block::AIR && $level->getBlockIdAt($x, $pos->y, $z) === Block::GRASS){
 				$t = $arr[$random->nextRange(0, $arrC)];
-				$level->setBlockIdAt($x, $pos->y + 1, $z, $t[0]);
-				$level->setBlockDataAt($x, $pos->y + 1, $z, $t[1]);
+				$level->setBlockIdAt($x, (int) ($pos->y + 1), $z, $t[0]);
+				$level->setBlockDataAt($x, (int) ($pos->y + 1), $z, $t[1]);
 			}
 		}
 	}

@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -37,7 +39,7 @@ class Pond{
 		$this->random = $random;
 	}
 
-	public function canPlaceObject(ChunkManager $level, Vector3 $pos){
+	public function canPlaceObject(ChunkManager $level, Vector3 $pos) : bool {
 	}
 
 	public function placeObject(ChunkManager $level, Vector3 $pos){

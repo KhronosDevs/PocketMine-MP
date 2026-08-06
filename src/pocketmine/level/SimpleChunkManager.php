@@ -1,5 +1,7 @@
 <?php
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -61,7 +63,7 @@ class SimpleChunkManager implements ChunkManager{
 	 *
 	 * @param int $id 0-255
 	 */
-	public function setBlockIdAt(int $x, int $y, int $z, int $id){
+	public function setBlockIdAt(int $x, int $y, int $z, int $id) : void {
 		if($chunk = $this->getChunk($x >> 4, $z >> 4)){
 			$chunk->setBlockId($x & 0xf, $y & 0x7f, $z & 0xf, $id);
 		}
@@ -84,7 +86,7 @@ class SimpleChunkManager implements ChunkManager{
 	 *
 	 * @param int $data 0-15
 	 */
-	public function setBlockDataAt(int $x, int $y, int $z, int $data){
+	public function setBlockDataAt(int $x, int $y, int $z, int $data) : void {
 		if($chunk = $this->getChunk($x >> 4, $z >> 4)){
 			$chunk->setBlockData($x & 0xf, $y & 0x7f, $z & 0xf, $data);
 		}
@@ -107,7 +109,7 @@ class SimpleChunkManager implements ChunkManager{
 	 *
 	 * @param int $level 0-15
 	 */
-	public function setBlockLightAt(int $x, int $y, int $z, int $level){
+	public function setBlockLightAt(int $x, int $y, int $z, int $level) : void {
 		if($chunk = $this->getChunk($x >> 4, $z >> 4)){
 			$chunk->setBlockLight($x & 0x0f, $y & 0x7f, $z & 0x0f, $level & 0x0f);
 		}
@@ -120,7 +122,7 @@ class SimpleChunkManager implements ChunkManager{
 	 * @param $y
 	 * @param $z
 	 */
-	public function updateBlockLight(int $x, int $y, int $z){
+	public function updateBlockLight(int $x, int $y, int $z) : void {
 		$lightPropagationQueue = new \SplQueue();
 		$lightRemovalQueue = new \SplQueue();
 		$visited = [];
@@ -159,7 +161,7 @@ class SimpleChunkManager implements ChunkManager{
 			/** @var Vector3 $node */
 			$node = $lightPropagationQueue->dequeue();
 
-			$lightLevel = $this->getBlockLightAt($node->x, $node->y, $node->z) - (int) Block::$lightFilter[$this->getBlockIdAt($node->x, $node->y, $node->z)];
+			$lightLevel = $this->getBlockLightAt((int) $node->x, (int) $node->y, (int) $node->z) - (int) Block::$lightFilter[$this->getBlockIdAt((int) $node->x, (int) $node->y, (int) $node->z)];
 
 			if($lightLevel >= 1){
 				$this->computeSpreadBlockLight($node->x - 1, $node->y, $node->z, $lightLevel, $lightPropagationQueue, $visited);
@@ -217,7 +219,7 @@ class SimpleChunkManager implements ChunkManager{
 	/**
 	 * @param FullChunk $chunk
 	 */
-	public function setChunk(int $chunkX, int $chunkZ, FullChunk $chunk = null){
+	public function setChunk(int $chunkX, int $chunkZ, FullChunk $chunk = null) : void {
 		if($chunk === null){
 			unset($this->chunks[Level::chunkHash($chunkX, $chunkZ)]);
 			return;
@@ -225,7 +227,7 @@ class SimpleChunkManager implements ChunkManager{
 		$this->chunks[Level::chunkHash($chunkX, $chunkZ)] = $chunk;
 	}
 
-	public function cleanChunks(){
+	public function cleanChunks() : void {
 		$this->chunks = [];
 	}
 
@@ -234,7 +236,7 @@ class SimpleChunkManager implements ChunkManager{
 	 *
 	 * @return int|string
 	 */
-	public function getSeed(){
+	public function getSeed() : int|string {
 		return $this->seed;
 	}
 }

@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -37,7 +39,7 @@ class GenericSound extends Sound{
 	protected $pitch = 0;
 	protected $id;
 
-	public function getPitch(){
+	public function getPitch() : float {
 		return $this->pitch / 1000;
 	}
 

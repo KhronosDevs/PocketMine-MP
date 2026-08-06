@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  _                       _           _ __  __ _
@@ -115,7 +117,7 @@ class Normal extends Generator
         return $this->waterHeight;
     }
 
-    public function getSettings()
+    public function getSettings() : array
     {
         return [];
     }

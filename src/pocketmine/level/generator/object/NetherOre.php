@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -42,7 +44,7 @@ class NetherOre{
 		return $this->type;
 	}
 
-	public function canPlaceObject(ChunkManager $level, $x, $y, $z){
+	public function canPlaceObject(ChunkManager $level, $x, $y, $z) : bool {
 		return ($level->getBlockIdAt($x, $y, $z) === 87);
 	}
 

@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -32,12 +34,12 @@ class WeatherManager{
 	/** @var Level[] */
 	public static $registeredLevel = [];
 
-	public static function registerLevel(Level $level){
+	public static function registerLevel(Level $level) : bool {
 		self::$registeredLevel[$level->getName()] = $level;
 		return true;
 	}
 
-	public static function unregisterLevel(Level $level){
+	public static function unregisterLevel(Level $level) : bool {
 		if(isset(self::$registeredLevel[$level->getName()])) {
 			unset(self::$registeredLevel[$level->getName()]);
 			return true;
@@ -45,13 +47,13 @@ class WeatherManager{
 		return false;
 	}
 
-	public static function updateWeather(){
+	public static function updateWeather() : void {
 		foreach(self::$registeredLevel as $level) {
 			$level->getWeather()->calcWeather($level->getServer()->getTick());
 		}
 	}
 
-	public static function isRegistered(Level $level){
+	public static function isRegistered(Level $level) : bool {
 		if(isset(self::$registeredLevel[$level->getName()])) return true;
 		return false;
 	}

@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -40,11 +42,11 @@ class EmptyGenerator extends Generator{
 	/** @var FullChunk */
 	private $emptyChunk = null;
 
-	public function getSettings(){
+	public function getSettings() : array {
 		return [];
 	}
 
-	public function getName(){
+	public function getName() : string {
 		return "EmptyGenerator";
 	}
 

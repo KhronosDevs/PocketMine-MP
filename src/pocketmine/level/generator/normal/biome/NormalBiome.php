@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -27,7 +29,7 @@ use pocketmine\level\generator\biome\Biome;
 
 abstract class NormalBiome extends Biome{
 
-	public function getColor(){
+	public function getColor() : int {
 		return $this->grassColor;
 	}
 }

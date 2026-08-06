@@ -256,7 +256,7 @@ class EnchantInventory extends TemporaryInventory{
 			$offsets = [[2, 0], [-2, 0], [0, 2], [0, -2], [2, 1], [2, -1], [-2, 1], [-2, 1], [1, 2], [-1, 2], [1, -2], [-1, -2]];
 			for($i = 0; $i < 3; $i++){
 				foreach($offsets as $offset){
-					if($pos->getLevel()->getBlockIdAt($pos->x + $offset[0], $pos->y + $i, $pos->z + $offset[1]) == Block::BOOKSHELF){
+					if($pos->getLevel()->getBlockIdAt((int) ($pos->x + $offset[0]), (int) ($pos->y + $i), (int) ($pos->z + $offset[1])) == Block::BOOKSHELF){
 						$count++;
 					}
 					if($count >= 15){

@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  _____   _____   __   _   _   _____  __    __  _____
@@ -71,11 +73,11 @@ class Weather{
 		return $this->canCalculate;
 	}
 
-	public function setCanCalculate(bool $canCalc){
+	public function setCanCalculate(bool $canCalc) : void {
 		$this->canCalculate = $canCalc;
 	}
 
-	public function calcWeather($currentTick){
+	public function calcWeather($currentTick) : void {
 		if($this->canCalculate()){
 			$tickDiff = $currentTick - $this->lastUpdate;
 			$this->duration -= $tickDiff;
@@ -107,7 +109,7 @@ class Weather{
 		$this->lastUpdate = $currentTick;
 	}
 
-	public function setWeather(int $wea, int $duration = 12000){
+	public function setWeather(int $wea, int $duration = 12000) : void {
 		$this->level->getServer()->getPluginManager()->callEvent($ev = new WeatherChangeEvent($this->level, $wea, $duration));
 		if(!$ev->isCancelled()){
 			$this->weatherNow = $ev->getWeather();
@@ -122,7 +124,7 @@ class Weather{
 		return $this->randomWeatherData;
 	}
 
-	public function setRandomWeatherData(array $randomWeatherData){
+	public function setRandomWeatherData(array $randomWeatherData) : void {
 		$this->randomWeatherData = $randomWeatherData;
 	}
 
@@ -130,7 +132,7 @@ class Weather{
 		return $this->weatherNow;
 	}
 
-	public static function getWeatherFromString($weather){
+	public static function getWeatherFromString($weather) : int {
 		if(is_int($weather)){
 			if($weather <= 3){
 				return $weather;
@@ -176,7 +178,7 @@ class Weather{
 		return [$this->strength1, $this->strength2];
 	}
 
-	public function sendWeather(Player $p){
+	public function sendWeather(Player $p) : void {
 		$pks = [
 			new LevelEventPacket(),
 			new LevelEventPacket()
@@ -213,7 +215,7 @@ class Weather{
 		$p->weatherData = [$this->weatherNow, $this->strength1, $this->strength2];
 	}
 
-	public function sendWeatherToAll(){
+	public function sendWeatherToAll() : void {
 		foreach($this->level->getPlayers() as $player){
 			$this->sendWeather($player);
 		}

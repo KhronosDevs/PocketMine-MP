@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -53,7 +55,7 @@ class SwampBiome extends GrassyBiome{
 		return "Swamp";
 	}
 
-	public function getColor(){
+	public function getColor() : int {
 		return 0x6a7039;
 	}
 }

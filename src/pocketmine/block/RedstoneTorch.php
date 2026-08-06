@@ -130,7 +130,7 @@ class RedstoneTorch extends RedstoneSource{
 			foreach($sides as $side){
 				if(!in_array($side, $ignore, true)){
 					$block = $this->getSide($side);
-					if(!in_array($hash = Level::blockHash($block->x, $block->y, $block->z), $notCheck, true)){
+					if(!in_array($hash = Level::blockHash((int) $block->x, (int) $block->y, (int) $block->z), $notCheck, true)){
 						$this->activateBlock($block);
 					}
 				}
@@ -157,7 +157,7 @@ class RedstoneTorch extends RedstoneSource{
 			foreach($sides as $side){
 				if(!in_array($side, $ignore, true)){
 					$block = $this->getSide($side);
-					if(!in_array($hash = Level::blockHash($block->x, $block->y, $block->z), $notCheck, true)){
+					if(!in_array($hash = Level::blockHash((int) $block->x, (int) $block->y, (int) $block->z), $notCheck, true)){
 						$this->deactivateBlock($block);
 					}
 				}
@@ -165,7 +165,7 @@ class RedstoneTorch extends RedstoneSource{
 
 			if(!in_array(Vector3::SIDE_DOWN, $ignore, true)){
 				$block = $this->getSide(Vector3::SIDE_DOWN);
-				if(!in_array($hash = Level::blockHash($block->x, $block->y, $block->z), $notCheck, true)){
+				if(!in_array($hash = Level::blockHash((int) $block->x, (int) $block->y, (int) $block->z), $notCheck, true)){
 					if(!$this->checkPower($block)){
 						/** @var $block ActiveRedstoneLamp */
 						if($block->getId() == Block::ACTIVE_REDSTONE_LAMP) $block->turnOff();

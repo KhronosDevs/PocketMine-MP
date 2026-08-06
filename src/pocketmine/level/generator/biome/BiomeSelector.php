@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -51,7 +53,7 @@ class BiomeSelector{
 		$this->rainfall = new Simplex($random, 2, 1 / 16, 1 / 512);
 	}
 
-	public function recalculate(){
+	public function recalculate() : void {
 		$this->map = new \SplFixedArray(64 * 64);
 
 		for($i = 0; $i < 64; ++$i){
@@ -61,15 +63,15 @@ class BiomeSelector{
 		}
 	}
 
-	public function addBiome(Biome $biome){
+	public function addBiome(Biome $biome) : void {
 		$this->biomes[$biome->getId()] = $biome;
 	}
 
-	public function getTemperature($x, $z){
+	public function getTemperature($x, $z) : float {
 		return ($this->temperature->noise2D($x, $z, true) + 1) / 2;
 	}
 
-	public function getRainfall($x, $z){
+	public function getRainfall($x, $z) : float {
 		return ($this->rainfall->noise2D($x, $z, true) + 1) / 2;
 	}
 
@@ -79,7 +81,7 @@ class BiomeSelector{
 	 *
 	 * @return Biome
 	 */
-	public function pickBiome($x, $z){
+	public function pickBiome($x, $z) : Biome {
 		$temperature = (int) ($this->getTemperature($x, $z) * 63);
 		$rainfall = (int) ($this->getRainfall($x, $z) * 63);
 

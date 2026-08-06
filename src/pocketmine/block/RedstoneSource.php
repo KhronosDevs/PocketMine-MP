@@ -220,7 +220,7 @@ class RedstoneSource extends Flowable{
 					];
 					if($block->getSide($faces[$block->meta])->equals($pos)){
 						$ignoreBlock = $this->getSide($this->getOppositeSide($faces[$block->meta]));
-						$block->turnOff(Level::blockHash($ignoreBlock->x, $ignoreBlock->y, $ignoreBlock->z));
+						$block->turnOff(Level::blockHash((int) $ignoreBlock->x, (int) $ignoreBlock->y, (int) $ignoreBlock->z));
 					}
 				}
 			}
@@ -245,7 +245,7 @@ class RedstoneSource extends Flowable{
 					];
 					if($block->getSide($faces[$block->meta])->equals($pos)){
 						$ignoreBlock = $this->getSide($this->getOppositeSide($faces[$block->meta]));
-						$block->turnOn(Level::blockHash($ignoreBlock->x, $ignoreBlock->y, $ignoreBlock->z));
+						$block->turnOn(Level::blockHash((int) $ignoreBlock->x, (int) $ignoreBlock->y, (int) $ignoreBlock->z));
 					}
 				}
 			}

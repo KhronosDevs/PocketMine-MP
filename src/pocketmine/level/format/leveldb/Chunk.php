@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -74,16 +76,16 @@ class Chunk extends BaseFullChunk{
 		parent::__construct($level, $chunkX, $chunkZ, $blocks, $data, $skyLight, $blockLight, $biomeColors, $heightMap, $entityData === null ? [] : $entityData, $tileData === null ? [] : $tileData);
 	}
 
-	public function getBlockId($x, $y, $z){
+	public function getBlockId($x, $y, $z) : int {
 		return ord($this->blocks[($x << 11) | ($z << 7) | $y]);
 	}
 
-	public function setBlockId($x, $y, $z, $id){
+	public function setBlockId($x, $y, $z, $id) : void {
 		$this->blocks[($x << 11) | ($z << 7) | $y] = chr($id);
 		$this->hasChanged = true;
 	}
 
-	public function getBlockData($x, $y, $z){
+	public function getBlockData($x, $y, $z) : int {
 		$m = ord($this->data[($x << 10) | ($z << 6) | ($y >> 1)]);
 		if(($y & 1) === 0){
 			return $m & 0x0F;
@@ -92,7 +94,7 @@ class Chunk extends BaseFullChunk{
 		}
 	}
 
-	public function setBlockData($x, $y, $z, $data){
+	public function setBlockData($x, $y, $z, $data) : void {
 		$i = ($x << 10) | ($z << 6) | ($y >> 1);
 		$old_m = ord($this->data[$i]);
 		if(($y & 1) === 0){
@@ -103,7 +105,7 @@ class Chunk extends BaseFullChunk{
 		$this->hasChanged = true;
 	}
 
-	public function getFullBlock($x, $y, $z){
+	public function getFullBlock($x, $y, $z) : int {
 		$i = ($x << 11) | ($z << 7) | $y;
 		if(($y & 1) === 0){
 			return (ord($this->blocks[$i]) << 4) | (ord($this->data[$i >> 1]) & 0x0F);
@@ -148,7 +150,7 @@ class Chunk extends BaseFullChunk{
 		return $changed;
 	}
 
-	public function getBlockSkyLight($x, $y, $z){
+	public function getBlockSkyLight($x, $y, $z) : int {
 		$sl = ord($this->skyLight[($x << 10) | ($z << 6) | ($y >> 1)]);
 		if(($y & 1) === 0){
 			return $sl & 0x0F;
@@ -157,7 +159,7 @@ class Chunk extends BaseFullChunk{
 		}
 	}
 
-	public function setBlockSkyLight($x, $y, $z, $level){
+	public function setBlockSkyLight($x, $y, $z, $level) : void {
 		$i = ($x << 10) | ($z << 6) | ($y >> 1);
 		$old_sl = ord($this->skyLight[$i]);
 		if(($y & 1) === 0){
@@ -168,7 +170,7 @@ class Chunk extends BaseFullChunk{
 		$this->hasChanged = true;
 	}
 
-	public function getBlockLight($x, $y, $z){
+	public function getBlockLight($x, $y, $z) : int {
 		$l = ord($this->blockLight[($x << 10) | ($z << 6) | ($y >> 1)]);
 		if(($y & 1) === 0){
 			return $l & 0x0F;
@@ -177,7 +179,7 @@ class Chunk extends BaseFullChunk{
 		}
 	}
 
-	public function setBlockLight($x, $y, $z, $level){
+	public function setBlockLight($x, $y, $z, $level) : void {
 		$i = ($x << 10) | ($z << 6) | ($y >> 1);
 		$old_l = ord($this->blockLight[$i]);
 		if(($y & 1) === 0){
@@ -188,61 +190,61 @@ class Chunk extends BaseFullChunk{
 		$this->hasChanged = true;
 	}
 
-	public function getBlockIdColumn($x, $z){
+	public function getBlockIdColumn($x, $z) : string {
 		return substr($this->blocks, ($x << 11) + ($z << 7), 128);
 	}
 
-	public function getBlockDataColumn($x, $z){
+	public function getBlockDataColumn($x, $z) : string {
 		return substr($this->data, ($x << 10) + ($z << 6), 64);
 	}
 
-	public function getBlockSkyLightColumn($x, $z){
+	public function getBlockSkyLightColumn($x, $z) : string {
 		return substr($this->skyLight, ($x << 10) + ($z << 6), 64);
 	}
 
-	public function getBlockLightColumn($x, $z){
+	public function getBlockLightColumn($x, $z) : string {
 		return substr($this->blockLight, ($x << 10) + ($z << 6), 64);
 	}
 
 	/**
 	 * @return bool
 	 */
-	public function isLightPopulated(){
+	public function isLightPopulated() : bool {
 		return $this->isLightPopulated;
 	}
 
 	/**
 	 * @param int $value
 	 */
-	public function setLightPopulated($value = 1){
+	public function setLightPopulated($value = 1) : void {
 		$this->isLightPopulated = (bool) $value;
 	}
 
 	/**
 	 * @return bool
 	 */
-	public function isPopulated(){
+	public function isPopulated() : bool {
 		return $this->isPopulated;
 	}
 
 	/**
 	 * @param int $value
 	 */
-	public function setPopulated($value = 1){
+	public function setPopulated($value = 1) : void {
 		$this->isPopulated = (bool) $value;
 	}
 
 	/**
 	 * @return bool
 	 */
-	public function isGenerated(){
+	public function isGenerated() : bool {
 		return $this->isGenerated;
 	}
 
 	/**
 	 * @param int $value
 	 */
-	public function setGenerated($value = 1){
+	public function setGenerated($value = 1) : void {
 		$this->isGenerated = (bool) $value;
 	}
 

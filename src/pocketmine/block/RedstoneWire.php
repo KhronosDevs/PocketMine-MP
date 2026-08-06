@@ -252,7 +252,7 @@ class RedstoneWire extends RedstoneSource{
 			Vector3::SIDE_NORTH => false,
 			Vector3::SIDE_SOUTH => false
 		];
-		$hash = Level::blockHash($wire->x, $wire->y, $wire->z);
+		$hash = Level::blockHash((int) $wire->x, (int) $wire->y, (int) $wire->z);
 		if(!isset($hasUpdated[$hash])) $hasUpdated[$hash] = true;
 		else return [$powers, $hasUpdated];
 
@@ -315,7 +315,7 @@ class RedstoneWire extends RedstoneSource{
 
 	public function calcSignal($strength = 15, $type = self::ON, array $hasUpdated = []){
 		//This algorithm is provided by Stary and written by PeratX
-		$hash = Level::blockHash($this->x, $this->y, $this->z);
+		$hash = Level::blockHash((int) $this->x, (int) $this->y, (int) $this->z);
 		if(!in_array($hash, $hasUpdated, true)){
 			$hasUpdated[] = $hash;
 			if($type == self::DESTROY || $type == self::OFF){
@@ -346,7 +346,7 @@ class RedstoneWire extends RedstoneSource{
 
 					foreach($hasChecked as $side => $bool){
 						$needUpdate = $this->getSide($side);
-						if(!in_array(Level::blockHash($needUpdate->x, $needUpdate->y, $needUpdate->z), $hasUpdated, true)){
+						if(!in_array(Level::blockHash((int) $needUpdate->x, (int) $needUpdate->y, (int) $needUpdate->z), $hasUpdated, true)){
 							$result = $this->updateNormalWire($needUpdate, $strength - 1, $type, $hasUpdated);
 							if(count($result) != count($hasUpdated)){
 								$hasUpdated = $result;
@@ -359,7 +359,7 @@ class RedstoneWire extends RedstoneSource{
 					foreach($hasChecked as $side => $bool){
 						if(!$bool){
 							$needUpdate = $this->getLevel()->getBlock($baseBlock->getSide($side));
-							if(!in_array(Level::blockHash($needUpdate->x, $needUpdate->y, $needUpdate->z), $hasUpdated, true)){
+							if(!in_array(Level::blockHash((int) $needUpdate->x, (int) $needUpdate->y, (int) $needUpdate->z), $hasUpdated, true)){
 								$result = $this->updateNormalWire($needUpdate, $strength - 1, $type, $hasUpdated);
 								if(count($result) != count($hasUpdated)){
 									$hasUpdated = $result;
@@ -373,7 +373,7 @@ class RedstoneWire extends RedstoneSource{
 					foreach($hasChecked as $side => $bool){
 						if(!$bool){
 							$needUpdate = $this->getLevel()->getBlock($baseBlock->getSide($side));
-							if(!in_array(Level::blockHash($needUpdate->x, $needUpdate->y, $needUpdate->z), $hasUpdated, true)){
+							if(!in_array(Level::blockHash((int) $needUpdate->x, (int) $needUpdate->y, (int) $needUpdate->z), $hasUpdated, true)){
 								$result = $this->updateNormalWire($needUpdate, $strength - 1, $type, $hasUpdated);
 								if(count($result) != count($hasUpdated)){
 									$hasUpdated = $result;

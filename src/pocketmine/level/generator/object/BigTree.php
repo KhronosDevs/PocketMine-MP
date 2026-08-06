@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -51,7 +53,7 @@ class BigTree extends Tree{
 	private $totalHeight;
 	private $baseHeight = 5;
 
-	public function canPlaceObject(ChunkManager $level, $x, $y, $z, Random $random){
+	public function canPlaceObject(ChunkManager $level, $x, $y, $z, Random $random) : bool {
 		if(!parent::canPlaceObject($level, $x, $y, $z, $random) || $level->getBlockIdAt($x, $y, $z) == Block::WATER || $level->getBlockIdAt($x, $y, $z) == Block::STILL_WATER){
 			return false;
 		}
@@ -85,7 +87,7 @@ class BigTree extends Tree{
 		while($trunk->valid()){
 			$trunk->next();
 			$pos = $trunk->current();
-			$level->setBlockIdAt($pos->x, $pos->y, $pos->z, Block::LOG);
+			$level->setBlockIdAt((int) $pos->x, (int) $pos->y, (int) $pos->z, Block::LOG);
 		}
 		$this->generateBranches($level, $x, $y, $z, $leaves);
 	}
@@ -195,7 +197,7 @@ class BigTree extends Tree{
 		while($iter->valid()){
 			$iter->next();
 			$pos = $iter->current();
-			if(!isset($this->overridable[$level->getBlockIdAt($pos->x, $pos->y, $pos->z)])){
+			if(!isset($this->overridable[$level->getBlockIdAt((int) $pos->x, (int) $pos->y, (int) $pos->z)])){
 				return $count;
 			}
 			$count++;

@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -103,7 +105,7 @@ class Nether extends Generator{
 		return $this->waterHeight;
 	}
 
-	public function getSettings(){
+	public function getSettings() : array {
 		return [];
 	}
 

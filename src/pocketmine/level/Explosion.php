@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -104,7 +106,7 @@ class Explosion{
 							if($block->getId() !== 0){
 								$blastForce -= ($block->getResistance() / 5 + 0.3) * $this->stepLen;
 								if($blastForce > 0){
-									if(!isset($this->affectedBlocks[$index = Level::blockHash($block->x, $block->y, $block->z)])){
+									if(!isset($this->affectedBlocks[$index = Level::blockHash((int) $block->x, (int) $block->y, (int) $block->z)])){
 										$this->affectedBlocks[$index] = $block;
 									}
 								}
@@ -203,13 +205,13 @@ class Explosion{
 				}
 			}
 
-			$this->level->setBlockIdAt($block->x, $block->y, $block->z, 0);
+			$this->level->setBlockIdAt((int) $block->x, (int) $block->y, (int) $block->z, 0);
 
 			$pos = new Vector3($block->x, $block->y, $block->z);
 
 			for($side = 0; $side < 5; $side++){
 				$sideBlock = $pos->getSide($side);
-				if(!isset($this->affectedBlocks[$index = Level::blockHash($sideBlock->x, $sideBlock->y, $sideBlock->z)]) && !isset($updateBlocks[$index])){
+				if(!isset($this->affectedBlocks[$index = Level::blockHash((int) $sideBlock->x, (int) $sideBlock->y, (int) $sideBlock->z)]) && !isset($updateBlocks[$index])){
 					$this->level->getServer()->getPluginManager()->callEvent($ev = new BlockUpdateEvent($this->level->getBlock($sideBlock)));
 					if(!$ev->isCancelled()){
 						$ev->getBlock()->onUpdate(Level::BLOCK_UPDATE_NORMAL);

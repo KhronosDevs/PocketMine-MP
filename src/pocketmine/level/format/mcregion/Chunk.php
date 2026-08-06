@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -129,17 +131,17 @@ class Chunk extends BaseFullChunk{
 		unset($this->nbt->Biomes);
 	}
 
-	public function getBlockId($x, $y, $z){
+	public function getBlockId($x, $y, $z) : int {
 		if(isset($this->blocks[($x << 11) | ($z << 7) | $y])) return ord($this->blocks[($x << 11) | ($z << 7) | $y]);
 		else return 0;
 	}
 
-	public function setBlockId($x, $y, $z, $id){
+	public function setBlockId($x, $y, $z, $id) : void {
 		$this->blocks[($x << 11) | ($z << 7) | $y] = chr($id);
 		$this->hasChanged = true;
 	}
 
-	public function getBlockData($x, $y, $z){
+	public function getBlockData($x, $y, $z) : int {
 		$m = ord($this->data[($x << 10) | ($z << 6) | ($y >> 1)]);
 		if(($y & 1) === 0){
 			return $m & 0x0F;
@@ -148,7 +150,7 @@ class Chunk extends BaseFullChunk{
 		}
 	}
 
-	public function setBlockData($x, $y, $z, $data){
+	public function setBlockData($x, $y, $z, $data) : void {
 		$i = ($x << 10) | ($z << 6) | ($y >> 1);
 		$old_m = ord($this->data[$i]);
 		if(($y & 1) === 0){
@@ -159,7 +161,7 @@ class Chunk extends BaseFullChunk{
 		$this->hasChanged = true;
 	}
 
-	public function getFullBlock($x, $y, $z){
+	public function getFullBlock($x, $y, $z) : int {
 		$i = ($x << 11) | ($z << 7) | $y;
 		if(($y & 1) === 0){
 			return (ord($this->blocks[$i]) << 4) | (ord($this->data[$i >> 1]) & 0x0F);
@@ -204,7 +206,7 @@ class Chunk extends BaseFullChunk{
 		return $changed;
 	}
 
-	public function getBlockSkyLight($x, $y, $z){
+	public function getBlockSkyLight($x, $y, $z) : int {
 		$sl = ord($this->skyLight[($x << 10) | ($z << 6) | ($y >> 1)]);
 		if(($y & 1) === 0){
 			return $sl & 0x0F;
@@ -213,7 +215,7 @@ class Chunk extends BaseFullChunk{
 		}
 	}
 
-	public function setBlockSkyLight($x, $y, $z, $level){
+	public function setBlockSkyLight($x, $y, $z, $level) : void {
 		$i = ($x << 10) | ($z << 6) | ($y >> 1);
 		$old_sl = ord($this->skyLight[$i]);
 		if(($y & 1) === 0){
@@ -224,7 +226,7 @@ class Chunk extends BaseFullChunk{
 		$this->hasChanged = true;
 	}
 
-	public function getBlockLight($x, $y, $z){
+	public function getBlockLight($x, $y, $z) : int {
 		$l = ord($this->blockLight[($x << 10) | ($z << 6) | ($y >> 1)]);
 		if(($y & 1) === 0){
 			return $l & 0x0F;
@@ -233,7 +235,7 @@ class Chunk extends BaseFullChunk{
 		}
 	}
 
-	public function setBlockLight($x, $y, $z, $level){
+	public function setBlockLight($x, $y, $z, $level) : void {
 		$i = ($x << 10) | ($z << 6) | ($y >> 1);
 		$old_l = ord($this->blockLight[$i]);
 		if(($y & 1) === 0){
@@ -244,27 +246,27 @@ class Chunk extends BaseFullChunk{
 		$this->hasChanged = true;
 	}
 
-	public function getBlockIdColumn($x, $z){
+	public function getBlockIdColumn($x, $z) : string {
 		return substr($this->blocks, ($x << 11) + ($z << 7), 128);
 	}
 
-	public function getBlockDataColumn($x, $z){
+	public function getBlockDataColumn($x, $z) : string {
 		return substr($this->data, ($x << 10) + ($z << 6), 64);
 	}
 
-	public function getBlockSkyLightColumn($x, $z){
+	public function getBlockSkyLightColumn($x, $z) : string {
 		return substr($this->skyLight, ($x << 10) + ($z << 6), 64);
 	}
 
-	public function getBlockLightColumn($x, $z){
+	public function getBlockLightColumn($x, $z) : string {
 		return substr($this->blockLight, ($x << 10) + ($z << 6), 64);
 	}
 
-	public function isLightPopulated(){
+	public function isLightPopulated() : bool {
 		return $this->nbt["LightPopulated"] > 0;
 	}
 
-	public function setLightPopulated($value = 1){
+	public function setLightPopulated($value = 1) : void {
 		$this->nbt->LightPopulated = new ByteTag("LightPopulated", $value ? 1 : 0);
 		$this->hasChanged = true;
 	}
@@ -272,14 +274,14 @@ class Chunk extends BaseFullChunk{
 	/**
 	 * @return bool
 	 */
-	public function isPopulated(){
+	public function isPopulated() : bool {
 		return isset($this->nbt->TerrainPopulated) && $this->nbt->TerrainPopulated->getValue() > 0;
 	}
 
 	/**
 	 * @param int $value
 	 */
-	public function setPopulated($value = 1){
+	public function setPopulated($value = 1) : void {
 		$this->nbt->TerrainPopulated = new ByteTag("TerrainPopulated", $value ? 1 : 0);
 		$this->hasChanged = true;
 	}
@@ -287,7 +289,7 @@ class Chunk extends BaseFullChunk{
 	/**
 	 * @return bool
 	 */
-	public function isGenerated(){
+	public function isGenerated() : bool {
 		if(isset($this->nbt->TerrainGenerated)){
 			return $this->nbt->TerrainGenerated->getValue() > 0;
 		}elseif(isset($this->nbt->TerrainPopulated)){
@@ -299,7 +301,7 @@ class Chunk extends BaseFullChunk{
 	/**
 	 * @param int $value
 	 */
-	public function setGenerated($value = 1){
+	public function setGenerated($value = 1) : void {
 		$this->nbt->TerrainGenerated = new ByteTag("TerrainGenerated", (int) $value);
 		$this->hasChanged = true;
 	}
@@ -435,7 +437,7 @@ class Chunk extends BaseFullChunk{
 	/**
 	 * @return CompoundTag
 	 */
-	public function getNBT(){
+	public function getNBT() : CompoundTag {
 		return $this->nbt;
 	}
 

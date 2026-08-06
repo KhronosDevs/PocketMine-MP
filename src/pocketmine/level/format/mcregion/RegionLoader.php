@@ -2,6 +2,8 @@
 
 
 
+
+declare(strict_types=1);
 /*
  *
  *  ____            _        _   __  __ _                  __  __ ____
@@ -337,11 +339,11 @@ class RegionLoader{
 		fwrite($this->filePointer, $table, 4096 * 2);
 	}
 
-	public function getX(){
+	public function getX() : int {
 		return $this->x;
 	}
 
-	public function getZ(){
+	public function getZ() : int {
 		return $this->z;
 	}
 
