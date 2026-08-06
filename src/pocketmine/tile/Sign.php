@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -47,7 +49,7 @@ class Sign extends Spawnable{
 		parent::__construct($chunk, $nbt);
 	}
 
-	public function saveNBT(){
+	public function saveNBT() : void{
 		parent::saveNBT();
 		unset($this->namedtag->Creator);
 	}

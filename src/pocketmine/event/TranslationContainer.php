@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -28,7 +30,7 @@ use function count;
 class TranslationContainer extends TextContainer{
 
 	/** @var string[] $params */
-	protected $params = [];
+	protected array $params = [];
 
 	/**
 	 * @param string   $text

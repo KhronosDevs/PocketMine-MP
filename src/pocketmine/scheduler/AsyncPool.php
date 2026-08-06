@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -46,7 +48,7 @@ class AsyncPool
     private $workerTasks = [];
 
     /** @var AsyncWorker[] */
-    private $workers = [];
+    private array $workers = [];
     /** @var int[] */
     private $workerUsage = [];
 
@@ -75,12 +77,12 @@ class AsyncPool
         }
     }
 
-    public function getSize()
+    public function getSize() : int
     {
         return $this->size;
     }
 
-    public function submitTaskToWorker(AsyncTask $task, $worker)
+    public function submitTaskToWorker(AsyncTask $task, int $worker) : void
     {
         if (isset($this->tasks[$task->getTaskId()]) || $task->isGarbage()) {
             return;
@@ -101,7 +103,7 @@ class AsyncPool
         $this->workerTasks[$worker][$task->getTaskId()] = $task;
     }
 
-    public function submitTask(AsyncTask $task)
+    public function submitTask(AsyncTask $task) : void
     {
         if (isset($this->tasks[$task->getTaskId()]) || $task->isGarbage()) {
             return;
@@ -138,7 +140,7 @@ class AsyncPool
         $task->cleanObject();
     }
 
-    public function removeTasks()
+    public function removeTasks() : void
     {
         do {
             foreach ($this->tasks as $task) {
@@ -167,7 +169,7 @@ class AsyncPool
         }
     }
 
-    public function collectTasks()
+    public function collectTasks() : void
     {
         Timings::$schedulerAsyncTimer->startTiming();
 

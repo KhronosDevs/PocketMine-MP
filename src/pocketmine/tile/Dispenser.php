@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -49,7 +51,7 @@ use function mt_rand;
 class Dispenser extends Spawnable implements InventoryHolder, Container, Nameable{
 
 	/** @var DispenserInventory */
-	protected $inventory;
+	protected \pocketmine\inventory\DispenserInventory $inventory;
 
 	public function __construct(FullChunk $chunk, CompoundTag $nbt){
 		parent::__construct($chunk, $nbt);
@@ -67,7 +69,7 @@ class Dispenser extends Spawnable implements InventoryHolder, Container, Nameabl
 		$this->scheduleUpdate();
 	}
 
-	public function close(){
+	public function close() : void{
 		if($this->closed === false){
 			foreach($this->getInventory()->getViewers() as $player){
 				$player->removeWindow($this->getInventory());
@@ -80,7 +82,7 @@ class Dispenser extends Spawnable implements InventoryHolder, Container, Nameabl
 		}
 	}
 
-	public function saveNBT(){
+	public function saveNBT() : void{
 		$this->namedtag->Items = new ListTag("Items", []);
 		$this->namedtag->Items->setTagType(NBT::TAG_Compound);
 		for($index = 0; $index < $this->getSize(); ++$index){
@@ -91,7 +93,7 @@ class Dispenser extends Spawnable implements InventoryHolder, Container, Nameabl
 	/**
 	 * @return int
 	 */
-	public function getSize(){
+	public function getSize() : int{
 		return 9;
 	}
 
@@ -117,7 +119,7 @@ class Dispenser extends Spawnable implements InventoryHolder, Container, Nameabl
 	 *
 	 * @return Item
 	 */
-	public function getItem($index){
+	public function getItem(int $index) : \pocketmine\item\Item{
 		$i = $this->getSlotIndex($index);
 		if($i < 0){
 			return Item::get(Item::AIR, 0, 0);
@@ -133,7 +135,7 @@ class Dispenser extends Spawnable implements InventoryHolder, Container, Nameabl
 	 *
 	 * @return bool
 	 */
-	public function setItem($index, Item $item){
+	public function setItem(int $index, \pocketmine\item\Item $item) : bool{
 		$i = $this->getSlotIndex($index);
 
 		$d = NBT::putItemHelper($item, $index);
@@ -159,7 +161,7 @@ class Dispenser extends Spawnable implements InventoryHolder, Container, Nameabl
 	/**
 	 * @return DispenserInventory
 	 */
-	public function getInventory(){
+	public function getInventory() : \pocketmine\inventory\DispenserInventory{
 		return $this->inventory;
 	}
 
@@ -171,7 +173,7 @@ class Dispenser extends Spawnable implements InventoryHolder, Container, Nameabl
 		return isset($this->namedtag->CustomName);
 	}
 
-	public function setName($str){
+	public function setName(string $str) : void{
 		if($str === ""){
 			unset($this->namedtag->CustomName);
 			return;

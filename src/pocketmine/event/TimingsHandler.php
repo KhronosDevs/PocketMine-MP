@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -39,13 +41,13 @@ class TimingsHandler{
 	/** @var TimingsHandler[] */
 	private static $HANDLERS = [];
 
-	private $name;
+	private string $name;
 	/** @var TimingsHandler */
 	private $parent = null;
 
-	private $count = 0;
+	private int $count = 0;
 	private $curCount = 0;
-	private $start = 0;
+	private int $start = 0;
 	private $timingDepth = 0;
 	private $totalTime = 0;
 	private $curTickTotal = 0;
@@ -130,7 +132,7 @@ class TimingsHandler{
 		}
 	}
 
-	public function startTiming(){
+	public function startTiming() : void{
 		if(PluginManager::$useTimings && ++$this->timingDepth === 1){
 			$this->start = microtime(true);
 			if($this->parent !== null && ++$this->parent->timingDepth === 1){
@@ -139,7 +141,7 @@ class TimingsHandler{
 		}
 	}
 
-	public function stopTiming(){
+	public function stopTiming() : void{
 		if(PluginManager::$useTimings){
 			if(--$this->timingDepth !== 0 || $this->start === 0){
 				return;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -46,7 +48,7 @@ class FlowerPot extends Spawnable{
 		}
 	}
 
-	public function getFlowerPotItem(){
+	public function getFlowerPotItem() : int{
 		return $this->namedtag["item"];
 	}
 

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -39,13 +41,13 @@ use function ceil;
 
 class Hopper extends Spawnable implements InventoryHolder, Container, Nameable{
 	/** @var HopperInventory */
-	protected $inventory;
+	protected \pocketmine\inventory\HopperInventory $inventory;
 
 	/** @var bool */
-	protected $isLocked = false;
+	protected bool $isLocked = false;
 
 	/** @var bool */
-	protected $isPowered = false;
+	protected bool $isPowered = false;
 
 	public function __construct(FullChunk $chunk, CompoundTag $nbt){
 		parent::__construct($chunk, $nbt);
@@ -64,7 +66,7 @@ class Hopper extends Spawnable implements InventoryHolder, Container, Nameable{
 		$this->scheduleUpdate();
 	}
 
-	public function close(){
+	public function close() : void{
 		if($this->closed === false){
 			foreach($this->getInventory()->getViewers() as $player){
 				$player->removeWindow($this->getInventory());
@@ -93,7 +95,7 @@ class Hopper extends Spawnable implements InventoryHolder, Container, Nameable{
 		$this->namedtag->TransferCooldown->setValue(8);
 	}
 
-	public function onUpdate(){
+	public function onUpdate() : bool{
 		if(!($this->getBlock() instanceof HopperBlock)){
 			return false;
 		}
@@ -178,14 +180,14 @@ class Hopper extends Spawnable implements InventoryHolder, Container, Nameable{
 	/**
 	 * @return HopperInventory
 	 */
-	public function getInventory(){
+	public function getInventory() : \pocketmine\inventory\HopperInventory{
 		return $this->inventory;
 	}
 
 	/**
 	 * @return int
 	 */
-	public function getSize(){
+	public function getSize() : int{
 		return 5;
 	}
 
@@ -196,7 +198,7 @@ class Hopper extends Spawnable implements InventoryHolder, Container, Nameable{
 	 *
 	 * @return Item
 	 */
-	public function getItem($index){
+	public function getItem(int $index) : \pocketmine\item\Item{
 		$i = $this->getSlotIndex($index);
 		if($i < 0){
 			return Item::get(Item::AIR, 0, 0);
@@ -212,7 +214,7 @@ class Hopper extends Spawnable implements InventoryHolder, Container, Nameable{
 	 *
 	 * @return bool
 	 */
-	public function setItem($index, Item $item){
+	public function setItem(int $index, \pocketmine\item\Item $item) : bool{
 		$i = $this->getSlotIndex($index);
 
 		$d = NBT::putItemHelper($item, $index);
@@ -250,7 +252,7 @@ class Hopper extends Spawnable implements InventoryHolder, Container, Nameable{
 		return -1;
 	}
 
-	public function saveNBT(){
+	public function saveNBT() : void{
 		$this->namedtag->Items = new ListTag("Items", []);
 		$this->namedtag->Items->setTagType(NBT::TAG_Compound);
 		for($index = 0; $index < $this->getSize(); ++$index){
@@ -266,7 +268,7 @@ class Hopper extends Spawnable implements InventoryHolder, Container, Nameable{
 		return isset($this->namedtag->CustomName);
 	}
 
-	public function setName($str){
+	public function setName(string $str) : void{
 		if($str === ""){
 			unset($this->namedtag->CustomName);
 			return;

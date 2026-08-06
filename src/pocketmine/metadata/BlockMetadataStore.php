@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -35,7 +37,7 @@ class BlockMetadataStore extends MetadataStore{
 		$this->owningLevel = $owningLevel;
 	}
 
-	public function disambiguate(Metadatable $block, $metadataKey){
+	public function disambiguate(Metadatable $block, string $metadataKey) : string{
 		if(!($block instanceof Block)){
 			throw new \InvalidArgumentException("Argument must be a Block instance");
 		}
@@ -43,7 +45,7 @@ class BlockMetadataStore extends MetadataStore{
 		return $block->x . ":" . $block->y . ":" . $block->z . ":" . $metadataKey;
 	}
 
-	public function getMetadata($block, $metadataKey){
+	public function getMetadata($block, string $metadataKey) : array{
 		if(!($block instanceof Block)){
 			throw new \InvalidArgumentException("Object must be a Block");
 		}
@@ -54,7 +56,7 @@ class BlockMetadataStore extends MetadataStore{
 		}
 	}
 
-	public function hasMetadata($block, $metadataKey){
+	public function hasMetadata($block, string $metadataKey) : bool{
 		if(!($block instanceof Block)){
 			throw new \InvalidArgumentException("Object must be a Block");
 		}
@@ -65,7 +67,7 @@ class BlockMetadataStore extends MetadataStore{
 		}
 	}
 
-	public function removeMetadata($block, $metadataKey, Plugin $owningPlugin){
+	public function removeMetadata($block, string $metadataKey, Plugin $owningPlugin) : void{
 		if(!($block instanceof Block)){
 			throw new \InvalidArgumentException("Object must be a Block");
 		}
@@ -76,7 +78,7 @@ class BlockMetadataStore extends MetadataStore{
 		}
 	}
 
-	public function setMetadata($block, $metadataKey, MetadataValue $newMetadatavalue){
+	public function setMetadata($block, string $metadataKey, MetadataValue $newMetadataValue) : void{
 		if(!($block instanceof Block)){
 			throw new \InvalidArgumentException("Object must be a Block");
 		}

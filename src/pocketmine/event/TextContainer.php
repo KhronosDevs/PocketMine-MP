@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -26,20 +28,20 @@ namespace pocketmine\event;
 class TextContainer{
 
 	/** @var string $text */
-	protected $text;
+	protected string $text = "";
 
-	public function __construct($text){
+	public function __construct(string $text){
 		$this->text = $text;
 	}
 
-	public function setText($text){
+	public function setText(string $text) : void{
 		$this->text = $text;
 	}
 
 	/**
 	 * @return string
 	 */
-	public function getText(){
+	public function getText() : string{
 		return $this->text;
 	}
 

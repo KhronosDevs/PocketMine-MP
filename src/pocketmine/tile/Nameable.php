@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -33,7 +35,7 @@ interface Nameable{
 	/**
 	 * @param void $str
 	 */
-	public function setName($str);
+	public function setName(string $str) : void;
 
 	/**
 	 * @return bool

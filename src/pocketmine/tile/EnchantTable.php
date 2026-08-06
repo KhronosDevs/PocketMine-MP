@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -38,11 +40,11 @@ class EnchantTable extends Spawnable implements Nameable{
 		return $this->hasName() ? $this->namedtag->CustomName->getValue() : "Enchanting Table";
 	}
 
-	public function hasName(){
+	public function hasName() : bool{
 		return isset($this->namedtag->CustomName);
 	}
 
-	public function setName($str){
+	public function setName(string $str) : void{
 		if($str === ""){
 			unset($this->namedtag->CustomName);
 			return;

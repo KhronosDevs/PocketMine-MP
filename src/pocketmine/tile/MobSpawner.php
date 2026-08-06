@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -142,7 +144,7 @@ class MobSpawner extends Spawnable{
 		return false;
 	}
 
-	public function onUpdate(){
+	public function onUpdate() : bool{
 		if($this->closed === true){
 			return false;
 		}

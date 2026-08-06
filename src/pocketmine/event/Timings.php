@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -221,7 +223,7 @@ abstract class Timings{
 	/**
 	 * @return TimingsHandler
 	 */
-	public static function getTileEntityTimings(Tile $tile){
+	public static function getTileEntityTimings(\pocketmine\tile\Tile $tile) : TimingsHandler{
 		$tileType = (new \ReflectionClass($tile))->getShortName();
 		if(!isset(self::$tileEntityTypeTimingMap[$tileType])){
 			self::$tileEntityTypeTimingMap[$tileType] = new TimingsHandler("** tickTileEntity - " . $tileType, self::$tickTileEntityTimer);

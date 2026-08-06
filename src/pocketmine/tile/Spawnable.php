@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -31,7 +33,7 @@ use pocketmine\Player;
 
 abstract class Spawnable extends Tile{
 
-	public function spawnTo(Player $player){
+	public function spawnTo(Player $player) : bool{
 		if($this->closed){
 			return false;
 		}

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -31,7 +33,7 @@ use pocketmine\utils\PluginException;
 
 abstract class MetadataStore{
 	/** @var \WeakMap[] */
-	private $metadataMap;
+	private array $metadataMap = [];
 
 	/**
 	 * Adds a metadata value to an object.
@@ -41,7 +43,7 @@ abstract class MetadataStore{
 	 *
 	 * @throws \Exception
 	 */
-	public function setMetadata($subject, $metadataKey, MetadataValue $newMetadataValue){
+	public function setMetadata($subject, string $metadataKey, MetadataValue $newMetadataValue) : void{
 		$owningPlugin = $newMetadataValue->getOwningPlugin();
 		if($owningPlugin === null){
 			throw new PluginException("Plugin cannot be null");
@@ -68,7 +70,7 @@ abstract class MetadataStore{
 	 *
 	 * @throws \Exception
 	 */
-	public function getMetadata($subject, $metadataKey){
+	public function getMetadata($subject, string $metadataKey) : array{
 		$key = $this->disambiguate($subject, $metadataKey);
 		if(isset($this->metadataMap[$key])){
 			return $this->metadataMap[$key];
@@ -87,7 +89,7 @@ abstract class MetadataStore{
 	 *
 	 * @throws \Exception
 	 */
-	public function hasMetadata($subject, $metadataKey){
+	public function hasMetadata($subject, string $metadataKey) : bool{
 		return isset($this->metadataMap[$this->disambiguate($subject, $metadataKey)]);
 	}
 
@@ -99,7 +101,7 @@ abstract class MetadataStore{
 	 *
 	 * @throws \Exception
 	 */
-	public function removeMetadata($subject, $metadataKey, Plugin $owningPlugin){
+	public function removeMetadata($subject, string $metadataKey, Plugin $owningPlugin) : void{
 		$key = $this->disambiguate($subject, $metadataKey);
 		if(isset($this->metadataMap[$key])){
 			unset($this->metadataMap[$key][$owningPlugin]);
@@ -114,7 +116,7 @@ abstract class MetadataStore{
 	 * given plugin. Doing this will force each invalidated metadata item to
 	 * be recalculated the next time it is accessed.
 	 */
-	public function invalidateAll(Plugin $owningPlugin){
+	public function invalidateAll(Plugin $owningPlugin) : void{
 		/** @var $values MetadataValue[] */
 		foreach($this->metadataMap as $values){
 			if(isset($values[$owningPlugin])){
@@ -133,5 +135,5 @@ abstract class MetadataStore{
 	 *
 	 * @throws \InvalidArgumentException
 	 */
-	public abstract function disambiguate(Metadatable $subject, $metadataKey);
+	public abstract function disambiguate(Metadatable $subject, string $metadataKey) : string;
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -32,15 +34,17 @@ interface Container{
 	 *
 	 * @return Item
 	 */
-	public function getItem($index);
+	public function getItem(int $index) : \pocketmine\item\Item;
 
 	/**
 	 * @param int $index
+	 *
+	 * @return bool
 	 */
-	public function setItem($index, Item $item);
+	public function setItem(int $index, \pocketmine\item\Item $item) : bool;
 
 	/**
 	 * @return int
 	 */
-	public function getSize();
+	public function getSize() : int;
 }

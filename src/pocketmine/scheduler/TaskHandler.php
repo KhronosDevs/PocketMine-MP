@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -47,7 +49,7 @@ class TaskHandler{
 	protected $cancelled = false;
 
 	/** @var \pocketmine\event\TimingsHandler */
-	public $timings;
+	public \pocketmine\event\TimingsHandler $timings;
 
 	public $timingName = null;
 
@@ -70,14 +72,14 @@ class TaskHandler{
 	/**
 	 * @return bool
 	 */
-	public function isCancelled(){
+	public function isCancelled() : bool{
 		return $this->cancelled === true;
 	}
 
 	/**
 	 * @return int
 	 */
-	public function getNextRun(){
+	public function getNextRun() : int{
 		return $this->nextRun;
 	}
 
@@ -91,42 +93,42 @@ class TaskHandler{
 	/**
 	 * @return int
 	 */
-	public function getTaskId(){
+	public function getTaskId() : int{
 		return $this->taskId;
 	}
 
 	/**
 	 * @return Task
 	 */
-	public function getTask(){
+	public function getTask() : \pocketmine\scheduler\Task{
 		return $this->task;
 	}
 
 	/**
 	 * @return int
 	 */
-	public function getDelay(){
+	public function getDelay() : int{
 		return $this->delay;
 	}
 
 	/**
 	 * @return bool
 	 */
-	public function isDelayed(){
+	public function isDelayed() : bool{
 		return $this->delay > 0;
 	}
 
 	/**
 	 * @return bool
 	 */
-	public function isRepeating(){
+	public function isRepeating() : bool{
 		return $this->period > 0;
 	}
 
 	/**
 	 * @return int
 	 */
-	public function getPeriod(){
+	public function getPeriod() : int{
 		return $this->period;
 	}
 
@@ -134,14 +136,14 @@ class TaskHandler{
 	 * WARNING: Do not use this, it's only for internal use.
 	 * Changes to this function won't be recorded on the version.
 	 */
-	public function cancel(){
+	public function cancel() : void{
 		if(!$this->isCancelled()){
 			$this->task->onCancel();
 		}
 		$this->remove();
 	}
 
-	public function remove(){
+	public function remove() : void{
 		$this->cancelled = true;
 		$this->task->setHandler(null);
 	}
@@ -149,14 +151,14 @@ class TaskHandler{
 	/**
 	 * @param int $currentTick
 	 */
-	public function run($currentTick){
+	public function run(int $currentTick) : void{
 		$this->task->onRun($currentTick);
 	}
 
 	/**
 	 * @return string
 	 */
-	public function getTaskName(){
+	public function getTaskName() : string{
 		if($this->timingName !== null){
 			return $this->timingName;
 		}

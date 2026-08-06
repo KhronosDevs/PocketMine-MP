@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace pocketmine\scheduler;
 
 use pmmp\thread\Runnable;
@@ -124,13 +126,13 @@ abstract class AsyncTask extends Runnable
     }
 
 
-    public function setTaskId($taskId)
+    public function setTaskId(int $taskId) : void
     {
         $this->taskId = $taskId;
     }
 
 
-    public function getTaskId()
+    public function getTaskId() : int
     {
         return $this->taskId;
     }
@@ -163,7 +165,7 @@ abstract class AsyncTask extends Runnable
     /**
      * Ejecutado en el thread secundario.
      */
-    abstract public function onRun();
+    abstract public function onRun() : void;
 
 
     /**

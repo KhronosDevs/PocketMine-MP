@@ -6,7 +6,7 @@
 > revertible checkpoints, the **exact validation procedure** that has caught real
 > regressions, and the **step-by-step path to completion**.
 >
-> Last updated: after Module 11 (Plugins) — commit `d888ba2`.
+> Last updated: after Module 12 (Remaining Systems) — commit `<module-12-commit`.
 
 ---
 
@@ -17,7 +17,7 @@
 - **Branch:** `php-update` · **Runtime:** custom PHP `bin/php7/bin/php` = **PHP 8.2.32 (ZTS)**.
 - **Goal:** modernize to clean, maintainable PHP 8.2 **without changing behavior**,
   plugin compatibility, network protocols, packet formats, or serialization formats.
-- **Progress: 11 of 12 modules done.** Each committed as its own revertible checkpoint.
+- **Progress: 12 of 12 modules done.** Each committed as its own revertible checkpoint.
 - **Next module:** **Module 12 — Server & remaining files** (final core module; Server, utils, etc.).
 
 ---
@@ -73,7 +73,7 @@ The owner's task, reproduced in full. **Every instruction here is binding.**
 > 9. Player              ✅
 > 10. Commands           ✅
 > 11. Plugins            ✅
-> 12. Remaining systems
+> 12. Remaining systems            ✅
 >
 > For every module:
 > - Analyze the current implementation first.
@@ -304,7 +304,7 @@ Dependency map & plan: `docs/DEPENDENCY_MAP.md`.
 | 9. Player | `src/pocketmine/Player.php` (+ offline player) | 2–3 | 4/4 ✅ |
 | 10. Commands | `src/pocketmine/command/` | 65 | 65/65 ✅ |
 | 11. Plugins | `src/pocketmine/plugin/` | 13 | 13/13 ✅ |
-| 12. Remaining systems | `tile/` (18), `metadata/` (7), `scheduler/` (12), `event/`, `permission/`, `network/` leftovers, `pocketmine/` root classes (Server, PocketMine, CrashDump, etc.) | — | 0 |
+| 12. Remaining systems | `tile/` (18), `metadata/` (7), `scheduler/` (12), `event/`, `permission/`, `network/` leftovers, `pocketmine/` root classes (Server, PocketMine, CrashDump, etc.) | `<module-12-commit` | 80+ | strict_types all, Metadatable+Permissible interfaces untyped for variance, Permissible return types widened, AsyncTask subclasses :void, PermissionAttachmentInfo nullable, boot-verified |
 
 ### Suggested order & rationale (from the brief + observed coupling)
 
@@ -321,9 +321,9 @@ Dependency map & plan: `docs/DEPENDENCY_MAP.md`.
    onCommand, EventExecutor::execute, PluginLoader methods); `protected` props untyped
    (§6.2); `getPluginFilters(): string` (regex, not array — harness caught the wrong
    `: array`); dead WeakRef code after `return` removed; geniapi `strval()` latent fix.
-5. **Module 12 — Remaining systems (NEXT):** Server (biggest), utils, tile (NBT roundtrips!),
+5. **Module 12 — Remaining systems ✅ (done, commit `<module-12-commit`):** Server (biggest), utils, tile (NBT roundtrips!),
    metadata, scheduler, event, permission, and the top-level bootstrap classes.
-6. **Final audit + README.md** (per §1.11). Include the known pre-existing debt
+6. **Final audit + README.md** (per §1.11). Include the known pre-existing debt listed in §7. (per §1.11). Include the known pre-existing debt
    listed in §7.
 
 ---
@@ -524,7 +524,7 @@ anonymous/named `PluginTask` subclass carrying its own level reference.
 ## 9. Completion checklist (end of project)
 
 - [x] Modules 1–11 (done, commits in §3)
-- [ ] Module 12 — Remaining systems (tile, metadata, scheduler, event, permission, bootstrap)
+- [x] Module 12 — Remaining systems (tile, metadata, scheduler, event, permission, bootstrap)
 - [ ] Final complete audit (§1.11): PHP 8.2 compat, runtime stability, memory,
       perf bottlenecks, architecture quality, plugin-compat risks, hidden bugs
 - [ ] Generate final `README.md` with: modernization summary, PHP version

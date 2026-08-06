@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -78,7 +80,7 @@ class LevelTimings{
 	/** @var TimingsHandler */
 	public $syncChunkLoadPostTimer;
 
-	public function __construct(Level $level){
+	public function __construct(\pocketmine\level\Level $level){
 		$name = $level->getFolderName() . " - ";
 
 		$this->mobSpawn = new TimingsHandler("** " . $name . "mobSpawn");

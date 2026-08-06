@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -37,21 +39,21 @@ use function is_array;
 use function is_object;
 
 class ServerScheduler{
-	public static $WORKERS = 2;
+	public static int $WORKERS = 2;
 	/** @var ReversePriorityQueue<Task> */
-	protected $queue;
+	protected \pocketmine\utils\ReversePriorityQueue $queue;
 
 	/** @var TaskHandler[] */
-	protected $tasks = [];
+	protected array $tasks = [];
 
 	/** @var AsyncPool */
-	protected $asyncPool;
+	protected AsyncPool $asyncPool;
 
 	/** @var int */
-	private $ids = 1;
+	private int $ids = 1;
 
 	/** @var int */
-	protected $currentTick = 0;
+	protected int $currentTick = 0;
 
 	public function __construct(){
 		$this->queue = new ReversePriorityQueue();
@@ -61,7 +63,7 @@ class ServerScheduler{
 	/**
 	 * @return null|TaskHandler
 	 */
-	public function scheduleTask(Task $task){
+	public function scheduleTask(Task $task) : ?TaskHandler{
 		return $this->addTask($task, -1, -1);
 	}
 
@@ -70,7 +72,7 @@ class ServerScheduler{
 	 *
 	 * @return void
 	 */
-	public function scheduleAsyncTask(AsyncTask $task){
+	public function scheduleAsyncTask(AsyncTask $task) : void{
 		$id = $this->nextId();
 		$task->setTaskId($id);
 		$this->asyncPool->submitTask($task);
@@ -83,7 +85,7 @@ class ServerScheduler{
 	 *
 	 * @return void
 	 */
-	public function scheduleAsyncTaskToWorker(AsyncTask $task, $worker){
+	public function scheduleAsyncTaskToWorker(AsyncTask $task, int $worker) : void{
 		$id = $this->nextId();
 		$task->setTaskId($id);
 		$this->asyncPool->submitTaskToWorker($task, $worker);
@@ -93,7 +95,7 @@ class ServerScheduler{
 		return $this->asyncPool;
 	}
 
-	public function getAsyncTaskPoolSize(){
+	public function getAsyncTaskPoolSize() : int{
 		return $this->asyncPool->getSize();
 	}
 
@@ -102,7 +104,7 @@ class ServerScheduler{
 	 *
 	 * @return null|TaskHandler
 	 */
-	public function scheduleDelayedTask(Task $task, $delay){
+	public function scheduleDelayedTask(Task $task, int $delay) : ?TaskHandler{
 		return $this->addTask($task, (int) $delay, -1);
 	}
 
@@ -111,7 +113,7 @@ class ServerScheduler{
 	 *
 	 * @return null|TaskHandler
 	 */
-	public function scheduleRepeatingTask(Task $task, $period){
+	public function scheduleRepeatingTask(Task $task, int $period) : ?TaskHandler{
 		return $this->addTask($task, -1, (int) $period);
 	}
 
@@ -121,21 +123,21 @@ class ServerScheduler{
 	 *
 	 * @return null|TaskHandler
 	 */
-	public function scheduleDelayedRepeatingTask(Task $task, $delay, $period){
+	public function scheduleDelayedRepeatingTask(Task $task, int $delay, int $period) : ?TaskHandler{
 		return $this->addTask($task, (int) $delay, (int) $period);
 	}
 
 	/**
 	 * @param int $taskId
 	 */
-	public function cancelTask($taskId){
+	public function cancelTask(int $taskId) : void{
 		if($taskId !== null && isset($this->tasks[$taskId])){
 			$this->tasks[$taskId]->cancel();
 			unset($this->tasks[$taskId]);
 		}
 	}
 
-	public function cancelTasks(Plugin $plugin){
+	public function cancelTasks(\pocketmine\plugin\Plugin $plugin) : void{
 		foreach($this->tasks as $taskId => $task){
 			$ptask = $task->getTask();
 			if($ptask instanceof PluginTask && $ptask->getOwner() === $plugin){
@@ -145,7 +147,7 @@ class ServerScheduler{
 		}
 	}
 
-	public function cancelAllTasks(){
+	public function cancelAllTasks() : void{
 		foreach($this->tasks as $task){
 			$task->cancel();
 		}
@@ -162,7 +164,7 @@ class ServerScheduler{
 	 *
 	 * @return bool
 	 */
-	public function isQueued($taskId){
+	public function isQueued(int $taskId) : bool{
 		return isset($this->tasks[$taskId]);
 	}
 
@@ -174,7 +176,7 @@ class ServerScheduler{
 	 *
 	 * @throws PluginException
 	 */
-	private function addTask(Task $task, $delay, $period){
+	private function addTask(Task $task, int $delay, int $period) : ?TaskHandler{
 		if($task instanceof PluginTask){
 			if(!($task->getOwner() instanceof Plugin)){
 				throw new PluginException("Invalid owner of PluginTask " . get_class($task));
@@ -208,7 +210,7 @@ class ServerScheduler{
 		return $this->handle(new TaskHandler(get_class($task), $task, $this->nextId(), $delay, $period));
 	}
 
-	private function handle(TaskHandler $handler){
+	private function handle(TaskHandler $handler) : TaskHandler{
 		if($handler->isDelayed()){
 			$nextRun = $this->currentTick + $handler->getDelay();
 		}else{
@@ -225,7 +227,7 @@ class ServerScheduler{
 	/**
 	 * @param int $currentTick
 	 */
-	public function mainThreadHeartbeat($currentTick){
+	public function mainThreadHeartbeat(int $currentTick) : void{
 		$this->currentTick = $currentTick;
 		while($this->isReady($this->currentTick)){
 			/** @var TaskHandler $task */
@@ -258,14 +260,14 @@ class ServerScheduler{
 		$this->asyncPool->collectTasks();
 	}
 
-	private function isReady($currentTicks){
+	private function isReady(int $currentTicks) : bool{
 		return count($this->tasks) > 0 && $this->queue->current()->getNextRun() <= $currentTicks;
 	}
 
 	/**
 	 * @return int
 	 */
-	private function nextId(){
+	private function nextId() : int{
 		return $this->ids++;
 	}
 

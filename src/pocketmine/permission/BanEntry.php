@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -33,7 +35,7 @@ use function trim;
 class BanEntry{
 	public static $format = "Y-m-d H:i:s O";
 
-	private $name;
+	private string $name;
 	/** @var \DateTime */
 	private $creationDate = null;
 	private $source = "(Unknown)";
@@ -50,7 +52,7 @@ class BanEntry{
 		return $this->name;
 	}
 
-	public function getCreated(){
+	public function getCreated() : ?int{
 		return $this->creationDate;
 	}
 
@@ -58,7 +60,7 @@ class BanEntry{
 		$this->creationDate = $date;
 	}
 
-	public function getSource(){
+	public function getSource() : ?string{
 		return $this->source;
 	}
 
@@ -66,7 +68,7 @@ class BanEntry{
 		$this->source = $source;
 	}
 
-	public function getExpires(){
+	public function getExpires() : ?int{
 		return $this->expirationDate;
 	}
 
@@ -83,7 +85,7 @@ class BanEntry{
 		return $this->expirationDate === null ? false : $this->expirationDate < $now;
 	}
 
-	public function getReason(){
+	public function getReason() : ?string{
 		return $this->reason;
 	}
 

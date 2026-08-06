@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -34,7 +36,7 @@ interface Permissible extends ServerOperator{
 	 *
 	 * @return boolean
 	 */
-	public function isPermissionSet($name);
+	public function isPermissionSet(string $name) : bool;
 
 	/**
 	 * Returns the permission value if overridden, or the default value if not
@@ -43,7 +45,7 @@ interface Permissible extends ServerOperator{
 	 *
 	 * @return mixed
 	 */
-	public function hasPermission($name);
+	public function hasPermission(string $name) : bool;
 
 	/**
 	 * @param string $name
@@ -51,17 +53,17 @@ interface Permissible extends ServerOperator{
 	 *
 	 * @return PermissionAttachment
 	 */
-	public function addAttachment(Plugin $plugin, $name = null, $value = null);
+	public function addAttachment(\pocketmine\plugin\Plugin $plugin, ?string $name = null, ?bool $value = null) : \pocketmine\permission\PermissionAttachment|false;
 
 	/**
 	 * @return void
 	 */
-	public function removeAttachment(PermissionAttachment $attachment);
+	public function removeAttachment(\pocketmine\permission\PermissionAttachment $attachment) : bool;
 
 	/**
 	 * @return void
 	 */
-	public function recalculatePermissions();
+	public function recalculatePermissions() : void;
 
 	/**
 	 * @return Permission[]

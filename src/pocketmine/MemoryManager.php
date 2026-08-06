@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -60,7 +62,7 @@ use const JSON_UNESCAPED_SLASHES;
 class MemoryManager{
 
 	/** @var Server */
-	private $server;
+	private \pocketmine\Server $server;
 
 	private $memoryLimit;
 	private $globalMemoryLimit;
@@ -92,7 +94,7 @@ class MemoryManager{
 
 	private $leakSeed = 0;
 
-	public function __construct(Server $server){
+	public function __construct(\pocketmine\Server $server){
 		$this->server = $server;
 
 		$this->init();
@@ -190,7 +192,7 @@ class MemoryManager{
 		$this->server->getLogger()->debug("[Memory Manager] Freed " . round(($ev->getMemoryFreed() / 1024) / 1024, 2) . "MB, $cycles cycles");
 	}
 
-	public function check(){
+	public function check() : void{
 		Timings::$memoryManagerTimer->startTiming();
 
 		if(($this->memoryLimit > 0 || $this->globalMemoryLimit > 0) && ++$this->checkTicker >= $this->checkRate){

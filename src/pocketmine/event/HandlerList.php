@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -80,7 +82,7 @@ class HandlerList{
 	/**
 	 * @throws \Throwable
 	 */
-	public function register(RegisteredListener $listener){
+	public function register(RegisteredListener $listener) : void{
 		if($listener->getPriority() < EventPriority::MONITOR || $listener->getPriority() > EventPriority::LOWEST){
 			return;
 		}

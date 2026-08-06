@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -8,7 +10,7 @@
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
  * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
- * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
+ * |_|   \___/ \___/|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -54,27 +56,26 @@ abstract class Tile extends Position{
 	const CAULDRON = "Cauldron";
 	const HOPPER = "Hopper";
 
-	public static $tileCount = 1;
+	public static int $tileCount = 1;
 
-	private static $knownTiles = [];
-	private static $shortNames = [];
+	private static array $knownTiles = [];
+	private static array $shortNames = [];
 
-	/** @var Chunk */
-	public $chunk;
-	public $name;
-	public $id;
+	//** @var Chunk */\n    public ?Chunk $chunk = null;
+    public string $name = "";
+    public int $id = 0;
 	public $attach;
 	public $metadata;
-	public $closed = false;
-	public $namedtag;
-	protected $lastUpdate;
-	protected $server;
-	protected $timings;
+    public bool $closed = false;
+    public ?CompoundTag $namedtag = null;
+    protected float $lastUpdate = 0.0;
+    protected Server $server;
+    protected TimingsHandler $timings;
 
 	/** @var \pocketmine\event\TimingsHandler */
-	public $tickTimer;
+    public TimingsHandler $tickTimer;
 
-	public static function init(){
+	public static function init() : void{
 		Tile::registerTile(BrewingStand::class);
 		Tile::registerTile(Cauldron::class);
 		Tile::registerTile(Chest::class);
@@ -97,7 +98,7 @@ abstract class Tile extends Position{
 	 *
 	 * @return Tile
 	 */
-	public static function createTile($type, FullChunk $chunk, CompoundTag $nbt, ...$args){
+	public static function createTile(string $type, FullChunk $chunk, CompoundTag $nbt, ...$args) : ?Tile{
 		if(isset(self::$knownTiles[$type])){
 			$class = self::$knownTiles[$type];
 			return new $class($chunk, $nbt, ...$args);
@@ -111,7 +112,7 @@ abstract class Tile extends Position{
 	 *
 	 * @return bool
 	 */
-	public static function registerTile($className){
+	public static function registerTile(string $className) : bool{
 		$class = new \ReflectionClass($className);
 		if(is_a($className, Tile::class, true) && !$class->isAbstract()){
 			self::$knownTiles[$class->getShortName()] = $className;
@@ -127,7 +128,7 @@ abstract class Tile extends Position{
 	 *
 	 * @return string
 	 */
-	public function getSaveId(){
+	public function getSaveId() : string{
 		return self::$shortNames[static::class];
 	}
 
@@ -154,11 +155,11 @@ abstract class Tile extends Position{
 		$this->tickTimer = Timings::getTileEntityTimings($this);
 	}
 
-	public function getId(){
+	public function getId() : int{
 		return $this->id;
 	}
 
-	public function saveNBT(){
+	public function saveNBT() : void{
 		$this->namedtag->id = new StringTag("id", $this->getSaveId());
 		$this->namedtag->x = new IntTag("x", $this->x);
 		$this->namedtag->y = new IntTag("y", $this->y);
@@ -172,11 +173,11 @@ abstract class Tile extends Position{
 		return $this->level->getBlock($this);
 	}
 
-	public function onUpdate(){
+	public function onUpdate() : bool{
 		return false;
 	}
 
-	public final function scheduleUpdate(){
+	public final function scheduleUpdate() : void{
 		$this->level->updateTiles[$this->id] = $this;
 	}
 
@@ -184,7 +185,7 @@ abstract class Tile extends Position{
 		$this->close();
 	}
 
-	public function close(){
+	public function close() : void{
 		if(!$this->closed){
 			$this->closed = true;
 			unset($this->level->updateTiles[$this->id]);

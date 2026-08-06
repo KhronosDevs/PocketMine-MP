@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -39,7 +41,7 @@ use function time;
 class BanList{
 
 	/** @var BanEntry[] */
-	private $list = [];
+	private array $list = [];
 
 	/** @var string */
 	private $file;
@@ -82,7 +84,7 @@ class BanList{
 	 *
 	 * @return bool
 	 */
-	public function isBanned($name){
+	public function isBanned(string $name) : bool{
 		if (!is_string($name)) {
 			$name = strval($name);
 		}
@@ -126,7 +128,7 @@ class BanList{
 	/**
 	 * @param string $name
 	 */
-	public function remove($name){
+	public function remove(string $name) : bool{
 		if (!is_string($name)) {
 			$name = strval($name);
 		}

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -81,13 +83,13 @@ class Permission{
 	}
 
 	/** @var string */
-	private $name;
+	private string $name;
 
 	/** @var string */
 	private $description;
 
 	/** @var string[] */
-	private $children = [];
+	private array $children = [];
 
 	/** @var string */
 	private $defaultValue;
@@ -123,7 +125,7 @@ class Permission{
 	/**
 	 * @return string
 	 */
-	public function getDefault(){
+	public function getDefault() : int|string{
 		return $this->defaultValue;
 	}
 
@@ -140,7 +142,7 @@ class Permission{
 	/**
 	 * @return string
 	 */
-	public function getDescription(){
+	public function getDescription() : string{
 		return $this->description;
 	}
 
@@ -154,11 +156,11 @@ class Permission{
 	/**
 	 * @return Permissible[]
 	 */
-	public function getPermissibles(){
+	public function getPermissibles() : array{
 		return Server::getInstance()->getPluginManager()->getPermissionSubscriptions($this->name);
 	}
 
-	public function recalculatePermissibles(){
+	public function recalculatePermissibles() : void{
 		$perms = $this->getPermissibles();
 
 		Server::getInstance()->getPluginManager()->recalculatePermissionDefaults($this);

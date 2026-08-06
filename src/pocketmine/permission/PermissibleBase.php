@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -38,10 +40,10 @@ class PermissibleBase implements Permissible{
 	private $parent = null;
 
 	/** @var PermissionAttachment[] */
-	private $attachments = [];
+	private array $attachments = [];
 
 	/** @var PermissionAttachmentInfo[] */
-	private $permissions = [];
+	private array $permissions = [];
 
 	public function __construct(ServerOperator $opable){
 		$this->opable = $opable;
@@ -84,7 +86,7 @@ class PermissibleBase implements Permissible{
 	 *
 	 * @return bool
 	 */
-	public function isPermissionSet($name){
+	public function isPermissionSet(string $name) : bool{
 		return isset($this->permissions[$name instanceof Permission ? $name->getName() : $name]);
 	}
 
@@ -93,7 +95,7 @@ class PermissibleBase implements Permissible{
 	 *
 	 * @return bool
 	 */
-	public function hasPermission($name){
+	public function hasPermission(string $name) : bool{
 		if($name instanceof Permission){
 			$name = $name->getName();
 		}
@@ -122,7 +124,7 @@ class PermissibleBase implements Permissible{
 	 *
 	 * @throws PluginException
 	 */
-	public function addAttachment(Plugin $plugin, $name = null, $value = null){
+	public function addAttachment(\pocketmine\plugin\Plugin $plugin, ?string $name = null, ?bool $value = null) : \pocketmine\permission\PermissionAttachment{
 		if($plugin === null){
 			throw new PluginException("Plugin cannot be null");
 		}elseif(!$plugin->isEnabled()){
@@ -143,7 +145,7 @@ class PermissibleBase implements Permissible{
 	/**
 	 * @throws \Throwable
 	 */
-	public function removeAttachment(PermissionAttachment $attachment){
+	public function removeAttachment(\pocketmine\permission\PermissionAttachment $attachment) : bool{
 		if($attachment === null){
 			throw new \InvalidStateException("Attachment cannot be null");
 		}
@@ -160,7 +162,7 @@ class PermissibleBase implements Permissible{
 
 	}
 
-	public function recalculatePermissions(){
+	public function recalculatePermissions() : void{
 		Timings::$permissibleCalculationTimer->startTiming();
 
 		$this->clearPermissions();

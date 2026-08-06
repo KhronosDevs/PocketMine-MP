@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -49,7 +51,7 @@ use function mt_rand;
 class Dropper extends Spawnable implements InventoryHolder, Container, Nameable{
 
 	/** @var DropperInventory */
-	protected $inventory;
+	protected \pocketmine\inventory\DropperInventory $inventory;
 
 	protected $nextUpdate = 0;
 
@@ -69,7 +71,7 @@ class Dropper extends Spawnable implements InventoryHolder, Container, Nameable{
 		$this->scheduleUpdate();
 	}
 
-	public function close(){
+	public function close() : void{
 		if($this->closed === false){
 			foreach($this->getInventory()->getViewers() as $player){
 				$player->removeWindow($this->getInventory());
@@ -82,7 +84,7 @@ class Dropper extends Spawnable implements InventoryHolder, Container, Nameable{
 		}
 	}
 
-	public function saveNBT(){
+	public function saveNBT() : void{
 		$this->namedtag->Items = new ListTag("Items", []);
 		$this->namedtag->Items->setTagType(NBT::TAG_Compound);
 		for($index = 0; $index < $this->getSize(); ++$index){
@@ -93,7 +95,7 @@ class Dropper extends Spawnable implements InventoryHolder, Container, Nameable{
 	/**
 	 * @return int
 	 */
-	public function getSize(){
+	public function getSize() : int{
 		return 9;
 	}
 
@@ -119,7 +121,7 @@ class Dropper extends Spawnable implements InventoryHolder, Container, Nameable{
 	 *
 	 * @return Item
 	 */
-	public function getItem($index){
+	public function getItem(int $index) : \pocketmine\item\Item{
 		$i = $this->getSlotIndex($index);
 		if($i < 0){
 			return Item::get(Item::AIR, 0, 0);
@@ -135,7 +137,7 @@ class Dropper extends Spawnable implements InventoryHolder, Container, Nameable{
 	 *
 	 * @return bool
 	 */
-	public function setItem($index, Item $item){
+	public function setItem(int $index, \pocketmine\item\Item $item) : bool{
 		$i = $this->getSlotIndex($index);
 
 		$d = NBT::putItemHelper($item, $index);
@@ -161,7 +163,7 @@ class Dropper extends Spawnable implements InventoryHolder, Container, Nameable{
 	/**
 	 * @return DropperInventory
 	 */
-	public function getInventory(){
+	public function getInventory() : \pocketmine\inventory\DropperInventory{
 		return $this->inventory;
 	}
 
@@ -173,7 +175,7 @@ class Dropper extends Spawnable implements InventoryHolder, Container, Nameable{
 		return isset($this->namedtag->CustomName);
 	}
 
-	public function setName($str){
+	public function setName(string $str) : void{
 		if($str === ""){
 			unset($this->namedtag->CustomName);
 			return;

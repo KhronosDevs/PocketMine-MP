@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -37,7 +39,7 @@ class FileWriteTask extends AsyncTask{
 		$this->flags = (int) $flags;
 	}
 
-	public function onRun(){
+	public function onRun() : void{
 		try{
 			file_put_contents($this->path, $this->contents, (int) $this->flags);
 		}catch (\Throwable $e){

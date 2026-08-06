@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -73,7 +75,7 @@ class RakLibInterface implements ServerInstance, AdvancedSourceInterface{
 	/** @var ServerHandler */
 	private ServerHandler $interface;
 
-	public function __construct(Server $server){
+	public function __construct(\pocketmine\Server $server){
 
 		$this->server = $server;
 		$this->identifiers = [];

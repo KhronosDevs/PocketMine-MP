@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -28,13 +30,13 @@ class PermissionAttachmentInfo{
 	private $permissible;
 
 	/** @var string */
-	private $permission;
+	private string $permission;
 
 	/** @var PermissionAttachment */
-	private $attachment;
+	private ?\pocketmine\permission\PermissionAttachment $attachment;
 
 	/** @var bool */
-	private $value;
+	private bool $value;
 
 	/**
 	 * @param string               $permission
@@ -64,21 +66,21 @@ class PermissionAttachmentInfo{
 	/**
 	 * @return string
 	 */
-	public function getPermission(){
+	public function getPermission() : string{
 		return $this->permission;
 	}
 
 	/**
 	 * @return PermissionAttachment
 	 */
-	public function getAttachment(){
+	public function getAttachment() : \pocketmine\permission\PermissionAttachment{
 		return $this->attachment;
 	}
 
 	/**
 	 * @return bool
 	 */
-	public function getValue(){
+	public function getValue() : bool{
 		return $this->value;
 	}
 }

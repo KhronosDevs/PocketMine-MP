@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -31,9 +33,9 @@ use pocketmine\plugin\Plugin;
 abstract class PluginTask extends Task{
 
 	/** @var Plugin */
-	protected $owner;
+	protected \pocketmine\plugin\Plugin $owner;
 
-	public function __construct(Plugin $owner){
+	public function __construct(\pocketmine\plugin\Plugin $owner){
 		$this->owner = $owner;
 	}
 

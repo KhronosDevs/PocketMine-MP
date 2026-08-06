@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -33,7 +35,7 @@ abstract class Event{
 	/**
 	 * Any callable event must declare the static variable
 	 *
-	 * public static $handlerList = null;
+	 * public static ?\pocketmine\event\HandlerList $handlerList = null;
 	 * public static $eventPool = [];
 	 * public static $nextEvent = 0;
 	 *
@@ -55,7 +57,7 @@ abstract class Event{
 	 *
 	 * @throws \BadMethodCallException
 	 */
-	public function isCancelled(){
+	public function isCancelled() : bool{
 		if(!($this instanceof Cancellable)){
 			throw new \BadMethodCallException("Event is not Cancellable");
 		}
@@ -83,7 +85,7 @@ abstract class Event{
 	/**
 	 * @return HandlerList
 	 */
-	public function getHandlers(){
+	public function getHandlers() : \pocketmine\event\HandlerList{
 		if(static::$handlerList === null){
 			static::$handlerList = new HandlerList();
 		}

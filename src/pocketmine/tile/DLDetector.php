@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -32,14 +34,14 @@ use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\StringTag;
 
 class DLDetector extends Spawnable{
-	private $lastType = 0;
+	private int $lastType = 0;
 
 	public function __construct(FullChunk $chunk, CompoundTag $nbt){
 		parent::__construct($chunk, $nbt);
 		$this->scheduleUpdate();
 	}
 
-	public function getLightByTime(){
+	public function getLightByTime() : int{
 		/*	$strength = 1;
 			$time = $this->getLevel()->getTime();
 			if(WeatherManager::isRegistered($this->getLevel())) $weather = $this->getLevel()->getWeather()->getWeather();
@@ -99,7 +101,7 @@ class DLDetector extends Spawnable{
 		return $this->getBlock()->getId();
 	}
 
-	public function onUpdate(){
+	public function onUpdate() : bool{
 		if(($this->getLevel()->getServer()->getTick() % 3) == 0){ //Update per 3 ticks
 			if($this->getType() != $this->lastType){ //Update when changed
 				/** @var DaylightDetector $block */

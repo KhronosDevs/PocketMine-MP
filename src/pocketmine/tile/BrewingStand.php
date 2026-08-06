@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -41,9 +43,9 @@ use function microtime;
 class BrewingStand extends Spawnable implements InventoryHolder, Container, Nameable{
 	const MAX_BREW_TIME = 400;
 	/** @var BrewingInventory */
-	protected $inventory;
+	protected \pocketmine\inventory\BrewingInventory $inventory;
 
-	public static $ingredients = [
+	public static array $ingredients = [
 		Item::NETHER_WART => 0,
 		Item::GLOWSTONE_DUST => 0,
 		Item::REDSTONE => 0,
@@ -93,7 +95,7 @@ class BrewingStand extends Spawnable implements InventoryHolder, Container, Name
 		return isset($this->namedtag->CustomName);
 	}
 
-	public function setName($str){
+	public function setName(string $str) : void{
 		if($str === ""){
 			unset($this->namedtag->CustomName);
 			return;
@@ -102,7 +104,7 @@ class BrewingStand extends Spawnable implements InventoryHolder, Container, Name
 		$this->namedtag->CustomName = new StringTag("CustomName", $str);
 	}
 
-	public function close(){
+	public function close() : void{
 		if($this->closed === false){
 			foreach($this->getInventory()->getViewers() as $player){
 				$player->removeWindow($this->getInventory());
@@ -111,7 +113,7 @@ class BrewingStand extends Spawnable implements InventoryHolder, Container, Name
 		}
 	}
 
-	public function saveNBT(){
+	public function saveNBT() : void{
 		$this->namedtag->Items = new ListTag("Items", []);
 		$this->namedtag->Items->setTagType(NBT::TAG_Compound);
 		for($index = 0; $index < $this->getSize(); ++$index){
@@ -122,7 +124,7 @@ class BrewingStand extends Spawnable implements InventoryHolder, Container, Name
 	/**
 	 * @return int
 	 */
-	public function getSize(){
+	public function getSize() : int{
 		return 4;
 	}
 
@@ -148,7 +150,7 @@ class BrewingStand extends Spawnable implements InventoryHolder, Container, Name
 	 *
 	 * @return Item
 	 */
-	public function getItem($index){
+	public function getItem(int $index) : \pocketmine\item\Item{
 		$i = $this->getSlotIndex($index);
 		if($i < 0){
 			return Item::get(Item::AIR, 0, 0);
@@ -164,7 +166,7 @@ class BrewingStand extends Spawnable implements InventoryHolder, Container, Name
 	 *
 	 * @return bool
 	 */
-	public function setItem($index, Item $item){
+	public function setItem(int $index, \pocketmine\item\Item $item) : bool{
 		$i = $this->getSlotIndex($index);
 
 		$d = NBT::putItemHelper($item, $index);
@@ -190,7 +192,7 @@ class BrewingStand extends Spawnable implements InventoryHolder, Container, Name
 	/**
 	 * @return BrewingInventory
 	 */
-	public function getInventory(){
+	public function getInventory() : \pocketmine\inventory\BrewingInventory{
 		return $this->inventory;
 	}
 
@@ -212,7 +214,7 @@ class BrewingStand extends Spawnable implements InventoryHolder, Container, Name
 		}
 	}
 
-	public function onUpdate(){
+	public function onUpdate() : bool{
 		if($this->closed === true){
 			return false;
 		}

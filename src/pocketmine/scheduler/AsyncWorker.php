@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -34,7 +36,7 @@ class AsyncWorker extends Worker
     /** @var SleeperNotifier */
     private $notifier = null;
     private $logger;
-    private $id;
+    private int $id;
 
     public function __construct(\ThreadedLogger $logger, $id, SleeperNotifier $notifier)
     {
@@ -43,7 +45,7 @@ class AsyncWorker extends Worker
         $this->notifier = $notifier;
     }
 
-    public function run(): void
+    public function run() : void
     {
         $this->registerClassLoader();
         gc_enable();

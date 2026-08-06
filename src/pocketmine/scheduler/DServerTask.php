@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 /*
  * DServerTask 2.0
@@ -32,7 +34,7 @@ class DServerTask extends AsyncTask{
 		$this->autotimes = $autotimes;
 	}
 
-	public function onRun(){
+	public function onRun() : void{
 		$re = [0, 0];
 		foreach($this->data as $d){
 			$data = $this->getInfo($d);

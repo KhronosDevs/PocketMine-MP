@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -31,13 +33,13 @@ class PermissionAttachment{
 	private $removed = null;
 
 	/** @var bool[] */
-	private $permissions = [];
+	private array $permissions = [];
 
 	/** @var Permissible */
 	private $permissible;
 
 	/** @var Plugin */
-	private $plugin;
+	private \pocketmine\plugin\Plugin $plugin;
 
 	/**
 	 * @throws PluginException
@@ -54,7 +56,7 @@ class PermissionAttachment{
 	/**
 	 * @return Plugin
 	 */
-	public function getPlugin(){
+	public function getPlugin() : \pocketmine\plugin\Plugin{
 		return $this->plugin;
 	}
 
@@ -79,7 +81,7 @@ class PermissionAttachment{
 	/**
 	 * @return bool[]
 	 */
-	public function getPermissions(){
+	public function getPermissions() : array{
 		return $this->permissions;
 	}
 
@@ -115,7 +117,7 @@ class PermissionAttachment{
 	 * @param string|Permission $name
 	 * @param bool              $value
 	 */
-	public function setPermission($name, $value){
+	public function setPermission(string $name, bool $value) : void{
 		$name = $name instanceof Permission ? $name->getName() : $name;
 		if(isset($this->permissions[$name])){
 			if($this->permissions[$name] === $value){
@@ -130,7 +132,7 @@ class PermissionAttachment{
 	/**
 	 * @param string|Permission $name
 	 */
-	public function unsetPermission($name){
+	public function unsetPermission(string $name) : void{
 		$name = $name instanceof Permission ? $name->getName() : $name;
 		if(isset($this->permissions[$name])){
 			unset($this->permissions[$name]);
@@ -141,7 +143,7 @@ class PermissionAttachment{
 	/**
 	 * @return void
 	 */
-	public function remove(){
+	public function remove() : void{
 		$this->permissible->removeAttachment($this);
 	}
 }
