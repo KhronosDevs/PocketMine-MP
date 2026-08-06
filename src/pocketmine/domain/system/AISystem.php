@@ -8,48 +8,54 @@ use pocketmine\domain\component\AIStateComponent;
 use pocketmine\domain\component\PathComponent;
 use pocketmine\domain\component\PositionComponent;
 use pocketmine\domain\component\VelocityComponent;
-use pocketmine\domain\ecs\System;
+use pocketmine\domain\ecs\Archetype;
+use pocketmine\domain\ecs\ParallelSystem;
 use pocketmine\domain\ecs\World;
-use pocketmine\domain\resource\SpatialIndex;
 
-final class AISystem implements System {
+final class AISystem implements ParallelSystem {
     public function run(World $world, float $deltaTime): void {
-        $spatialIndex = $world->getResourceRegistry()->get(SpatialIndex::class);
+        // Not used - ParallelSystem uses runParallel
+    }
 
-        $query = $world->query()
-            ->with(AIStateComponent::class, PositionComponent::class, VelocityComponent::class)
-            ->build();
+    public function runParallel(Archetype $archetype, float $deltaTime): void {
+        $aiStates = $archetype->getComponentArray(AIStateComponent::class);
+        $positions = $archetype->getComponentArray(PositionComponent::class);
+        $velocities = $archetype->getComponentArray(VelocityComponent::class);
 
-        foreach ($query as $entity) {
-            $ai = $entity->get(AIStateComponent::class);
-            $position = $entity->get(PositionComponent::class);
-            $velocity = $entity->get(VelocityComponent::class);
+        if (empty($aiStates) || empty($positions) || empty($velocities)) {
+            return;
+        }
 
-            if (!$ai->canNavigate) {
+        foreach ($aiStates as $entityId => $ai) {
+            $position = $positions[$entityId] ?? null;
+            $velocity = $velocities[$entityId] ?? null;
+
+            if (!$position || !$velocity || !$ai->canNavigate) {
                 continue;
             }
 
+            // Use pending components for parallel writes
             switch ($ai->state) {
                 case 0: // Idle
-                    $this->handleIdle($entity, $ai, $position);
+                    $this->handleIdle($ai, $position);
                     break;
                 case 1: // Wandering
-                    $this->handleWandering($entity, $ai, $position, $velocity);
+                    $this->handleWandering($ai, $position, $velocity);
                     break;
                 case 2: // Pathfinding to position
-                    $this->handlePathfinding($entity, $ai, $position, $velocity);
+                    $this->handlePathfinding($ai, $position, $velocity);
                     break;
                 case 3: // Attacking/following entity
-                    $this->handleAttacking($entity, $ai, $position, $velocity, $world);
+                    $this->handleAttacking($archetype, $ai, $position, $velocity);
                     break;
                 case 4: // Fleeing
-                    $this->handleFleeing($entity, $ai, $position, $velocity);
+                    $this->handleFleeing($archetype, $ai, $position, $velocity);
                     break;
             }
         }
     }
 
-    private function handleIdle(Entity $entity, AIStateComponent $ai, PositionComponent $position): void {
+    private function handleIdle(AIStateComponent $ai, PositionComponent $position): void {
         $ai->updateCounter++;
         if ($ai->updateCounter >= 200) { // ~10 seconds
             $ai->updateCounter = 0;
@@ -65,7 +71,7 @@ final class AISystem implements System {
         }
     }
 
-    private function handleWandering(Entity $entity, AIStateComponent $ai, PositionComponent $position, VelocityComponent $velocity): void {
+    private function handleWandering(AIStateComponent $ai, PositionComponent $position, VelocityComponent $velocity): void {
         $dx = $ai->targetX - $position->x;
         $dz = $ai->targetZ - $position->z;
         $distSq = $dx * $dx + $dz * $dz;
@@ -75,14 +81,13 @@ final class AISystem implements System {
             return;
         }
 
-        // Simple movement toward target
+        // Simple movement toward target - write to pending velocity
         $dist = sqrt($distSq);
         $speed = 0.2 * $ai->speedModifier;
-        $velocity->x = ($dx / $dist) * $speed;
-        $velocity->z = ($dz / $dist) * $speed;
+        $velocity->setPending(($dx / $dist) * $speed, $velocity->y, ($dz / $dist) * $speed);
     }
 
-    private function handlePathfinding(Entity $entity, AIStateComponent $ai, PositionComponent $position, VelocityComponent $velocity): void {
+    private function handlePathfinding(AIStateComponent $ai, PositionComponent $position, VelocityComponent $velocity): void {
         if ($ai->hasPath()) {
             $next = $ai->getNextPathPoint();
             if ($next) {
@@ -97,9 +102,7 @@ final class AISystem implements System {
                 }
 
                 $speed = 0.3 * $ai->speedModifier;
-                $velocity->x = ($dx / $dist) * $speed;
-                $velocity->y = ($dy / $dist) * $speed * 0.5;
-                $velocity->z = ($dz / $dist) * $speed;
+                $velocity->setPending(($dx / $dist) * $speed, ($dy / $dist) * $speed * 0.5, ($dz / $dist) * $speed);
             }
         } else {
             // Path complete or no path
@@ -107,62 +110,63 @@ final class AISystem implements System {
         }
     }
 
-    private function handleAttacking(Entity $entity, AIStateComponent $ai, PositionComponent $position, VelocityComponent $velocity, World $world): void {
+    private function handleAttacking(Archetype $archetype, AIStateComponent $ai, PositionComponent $position, VelocityComponent $velocity): void {
         if ($ai->targetEntity === null) {
             $ai->state = 0;
             return;
         }
 
-        $target = $world->getEntity($ai->targetEntity);
-        if (!$target) {
-            $ai->clearTarget();
-            return;
-        }
+        // Target entity lookup would need to be done carefully in parallel
+        // For now, simplified - just move toward target position
+        if ($ai->targetEntity !== null) {
+            $targetPos = $archetype->getComponentArray(PositionComponent::class)[$ai->targetEntity] ?? null;
+            if (!$targetPos) {
+                $ai->clearTarget();
+                return;
+            }
 
-        $targetPos = $target->get(PositionComponent::class);
-        if (!$targetPos) {
-            $ai->clearTarget();
-            return;
-        }
+            $dx = $targetPos->x - $position->x;
+            $dy = $targetPos->y - $position->y;
+            $dz = $targetPos->z - $position->z;
+            $distSq = $dx * $dx + $dy * $dy + $dz * $dz;
+            $attackRangeSq = $ai->attackRange * $ai->attackRange;
 
-        $dx = $targetPos->x - $position->x;
-        $dy = $targetPos->y - $position->y;
-        $dz = $targetPos->z - $position->z;
-        $distSq = $dx * $dx + $dy * $dy + $dz * $dz;
-        $attackRangeSq = $ai->attackRange * $ai->attackRange;
-
-        if ($distSq <= $attackRangeSq) {
-            // In attack range - stop and attack
-            $velocity->x = 0;
-            $velocity->z = 0;
-            // TODO: Trigger attack logic
-        } else {
-            // Move toward target
-            $dist = sqrt($distSq);
-            $speed = 0.35 * $ai->speedModifier;
-            $velocity->x = ($dx / $dist) * $speed;
-            $velocity->z = ($dz / $dist) * $speed;
+            if ($distSq <= $attackRangeSq) {
+                // In attack range - stop and attack
+                $velocity->setPending(0, $velocity->y, 0);
+                // TODO: Trigger attack logic
+            } else {
+                // Move toward target
+                $dist = sqrt($distSq);
+                $speed = 0.35 * $ai->speedModifier;
+                $velocity->setPending(($dx / $dist) * $speed, $velocity->y, ($dz / $dist) * $speed);
+            }
         }
     }
 
-    private function handleFleeing(Entity $entity, AIStateComponent $ai, PositionComponent $position, VelocityComponent $velocity): void {
+    private function handleFleeing(Archetype $archetype, AIStateComponent $ai, PositionComponent $position, VelocityComponent $velocity): void {
         // Move away from target
         if ($ai->targetEntity !== null) {
-            $target = $world->getEntity($ai->targetEntity);
-            if ($target) {
-                $targetPos = $target->get(PositionComponent::class);
-                if ($targetPos) {
-                    $dx = $position->x - $targetPos->x;
-                    $dz = $position->z - $targetPos->z;
-                    $dist = sqrt($dx * $dx + $dz * $dz);
+            $targetPos = $archetype->getComponentArray(PositionComponent::class)[$ai->targetEntity] ?? null;
+            if ($targetPos) {
+                $dx = $position->x - $targetPos->x;
+                $dz = $position->z - $targetPos->z;
+                $dist = sqrt($dx * $dx + $dz * $dz);
 
-                    if ($dist > 0) {
-                        $speed = 0.4 * $ai->speedModifier;
-                        $velocity->x = ($dx / $dist) * $speed;
-                        $velocity->z = ($dz / $dist) * $speed;
-                    }
+                if ($dist > 0) {
+                    $speed = 0.4 * $ai->speedModifier;
+                    $velocity->setPending(($dx / $dist) * $speed, $velocity->y, ($dz / $dist) * $speed);
                 }
             }
         }
+    }
+
+    public function getTargetArchetypes(World $world): iterable {
+        $query = $world->query()
+            ->with(\pocketmine\domain\component\AIStateComponent::class, \pocketmine\domain\component\PositionComponent::class, \pocketmine\domain\component\VelocityComponent::class)
+            ->build();
+
+        $registry = $world->getComponentRegistry();
+        return $query->archetypes($registry);
     }
 }
