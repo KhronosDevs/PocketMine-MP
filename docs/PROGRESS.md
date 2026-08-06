@@ -100,13 +100,13 @@
 | Step | Task | Status | Commit | Notes |
 |------|------|--------|--------|-------|
 | 5.0 | Create branch `multithread-archetype-parallelism` with rollback anchor | ✅ | ca5ca63 | `git checkout -b multithread-archetype-parallelism && git commit --allow-empty -m "chore: rollback anchor for multithread-archetype-parallelism"` |
-| 5.1 | `multithread-movement` — PositionComponent + VelocityComponent parallel updates | 🔄 | — | Double-buffered PositionComponent for parallel writes |
-| 5.2 | `multithread-effects` — EffectComponent parallel tick | 🔄 | — | Already PARALLEL, optimize archetype iteration |
-| 5.3 | `multithread-physics` — PhysicsSystem parallel broad-phase collision | 🔄 | — | SpatialIndex per archetype, double-buffered VelocityComponent |
-| 5.4 | `multithread-ai` — AISystem parallel per archetype | 🔄 | — | Pathfinding via ThreadingPort, double-buffered AIState |
-| 5.5 | `multithread-chunk` — ChunkParallelSystem for block updates | 🔄 | — | Per-chunk parallel block updates |
-| 5.6 | `multithread-scheduler` — SystemScheduler parallel execution via ThreadingPort | 🔄 | — | AwaitAll on parallel systems |
-| 5.7 | Update PROGRESS.md | ⏳ | — | Track progress |
+| 5.1 | `multithread-movement` — PositionComponent + VelocityComponent parallel updates | ✅ | 3f35600 | Double-buffered PositionComponent for parallel writes |
+| 5.2 | `multithread-effects` — EffectComponent parallel tick | ✅ | 3f35600 | Already PARALLEL, optimize archetype iteration |
+| 5.3 | `multithread-physics` — PhysicsSystem parallel broad-phase collision | ✅ | 3f35600 | SpatialIndex per archetype, double-buffered VelocityComponent |
+| 5.4 | `multithread-ai` — AISystem parallel per archetype | ✅ | 3f35600 | Pathfinding via ThreadingPort, double-buffered AIState |
+| 5.5 | `multithread-chunk` — ChunkParallelSystem for block updates | ✅ | 3f35600 | Per-chunk parallel block updates |
+| 5.6 | `multithread-scheduler` — SystemScheduler parallel execution via ThreadingPort | ✅ | 3f35600 | AwaitAll on parallel systems |
+| 5.7 | Update PROGRESS.md | 🔄 | — | Track progress |
 
 ---
 
@@ -134,7 +134,7 @@
 | adapter-implementation | 3b66cf1 | 63a1b02 | #20 | ✅ Merged |
 | service-core-gameplay | 49cf545 | 7ce67ce | #21 | ✅ Merged |
 | api-ecs-plugin | 8f3a171 | fc1c65d | #22 | ✅ Merged |
-| multithread-archetype-parallelism | 43996ce | ca5ca63 | — | 🔄 Active |
+| multithread-archetype-parallelism | 43996ce | 3f35600 | #23 | 🔄 Active (PR opened) |
 
 ---
 
@@ -142,11 +142,11 @@
 
 1. ✅ Phase 0, 1, 2, 3, 4 complete (PRs #18, #19, #20, #21, #22 merged)
 2. ✅ Create `multithread-archetype-parallelism` branch with rollback anchor
-3. 🔄 Implement double-buffered PositionComponent + VelocityComponent
-3. 🔄 Implement MovementSystem parallel archetype execution
-4. 🔄 Implement PhysicsSystem parallel broad-phase collision
-5. 🔄 Implement EffectSystem parallel optimization
-6. 🔄 Implement AISystem parallel per archetype
-7. 🔄 Implement ChunkParallelSystem for block updates
-8. 🔄 Implement SystemScheduler parallel execution via ThreadingPort
-9. ⏳ Update docs, commit, push, open PR
+3. ✅ Implement double-buffered PositionComponent + VelocityComponent
+4. ✅ Implement MovementSystem parallel archetype execution
+5. ✅ Implement PhysicsSystem parallel broad-phase collision
+6. ✅ Implement EffectSystem parallel optimization
+7. ✅ Implement AISystem parallel per archetype
+8. ✅ Implement ChunkParallelSystem for block updates
+9. ✅ Implement SystemScheduler parallel execution via ThreadingPort
+9. ✅ Update docs, commit, push, open PR #23
