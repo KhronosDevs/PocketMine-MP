@@ -6,7 +6,7 @@
 > revertible checkpoints, the **exact validation procedure** that has caught real
 > regressions, and the **step-by-step path to completion**.
 >
-> Last updated: after Module 10 (Commands) — commit `9851c8c`.
+> Last updated: after Module 11 (Plugins) — commit `d888ba2`.
 
 ---
 
@@ -17,8 +17,8 @@
 - **Branch:** `php-update` · **Runtime:** custom PHP `bin/php7/bin/php` = **PHP 8.2.32 (ZTS)**.
 - **Goal:** modernize to clean, maintainable PHP 8.2 **without changing behavior**,
   plugin compatibility, network protocols, packet formats, or serialization formats.
-- **Progress: 10 of 12 modules done.** Each committed as its own revertible checkpoint.
-- **Next module:** **Module 11 — Plugins** (`src/pocketmine/plugin/`, 13 files) — depends on the now-typed command/Player/Server APIs.
+- **Progress: 11 of 12 modules done.** Each committed as its own revertible checkpoint.
+- **Next module:** **Module 12 — Server & remaining files** (final core module; Server, utils, etc.).
 
 ---
 
@@ -72,7 +72,7 @@ The owner's task, reproduced in full. **Every instruction here is binding.**
 > 8. Inventory           ✅
 > 9. Player              ✅
 > 10. Commands           ✅
-> 11. Plugins            ⏭️ NEXT
+> 11. Plugins            ✅
 > 12. Remaining systems
 >
 > For every module:
@@ -289,8 +289,9 @@ Each module is an independent commit. **`git revert <hash>` cleanly undoes any o
 | 8 | Inventory | `c1b82d6` | inventory/ (36) | strict_types all, ~70 safe return types, DoubleChestInventory/BaseTransaction variance fatals fixed (latent in ORIG), booted-probe-verified |
 | 9 | Player | `e89b7af` | Player.php (4331), OfflinePlayer, IPlayer, Achievement + Human.php fix | strict_types all 4 + ~60 return types, `getProtocol(): ?int` fix (probe-caught), `Human::getFloatingInventory(): ?FloatingInventory` latent fix, variance-verified vs typed Entity/Human/Living, booted-probe ALL-PASS |
 | 10 | Commands | `9851c8c` | command/ (65) | strict_types all, Command backbone fully typed, execute() + interfaces deliberately untyped (plugin API), protected props left untyped (§6.2), signature-diff + HARNESS-IDENTICAL + booted-probe ALL-PASS (28 checks) |
+| 11 | Plugins | `d888ba2` | plugin/ (13) | strict_types all, plugin-facing lifecycle/interface methods deliberately untyped, protected props untyped (§6.2), getPluginFilters():string fix (harness-caught), dead WeakRef code removed, geniapi strval() latent fix, HARNESS-IDENTICAL + booted-probe ALL-PASS + mod-4..10 regressions |
 
-Module reports: `docs/MODULE_1_REPORT.md` … `docs/MODULE_10_REPORT.md`.
+Module reports: `docs/MODULE_1_REPORT.md` … `docs/MODULE_11_REPORT.md`.
 Dependency map & plan: `docs/DEPENDENCY_MAP.md`.
 
 ---
@@ -302,7 +303,7 @@ Dependency map & plan: `docs/DEPENDENCY_MAP.md`.
 | 8. Inventory | `src/pocketmine/inventory/` | 36 | 36/36 ✅ |
 | 9. Player | `src/pocketmine/Player.php` (+ offline player) | 2–3 | 4/4 ✅ |
 | 10. Commands | `src/pocketmine/command/` | 65 | 65/65 ✅ |
-| 11. Plugins | `src/pocketmine/plugin/` | 13 | 0/13 ⏭️ |
+| 11. Plugins | `src/pocketmine/plugin/` | 13 | 13/13 ✅ |
 | 12. Remaining systems | `tile/` (18), `metadata/` (7), `scheduler/` (12), `event/`, `permission/`, `network/` leftovers, `pocketmine/` root classes (Server, PocketMine, CrashDump, etc.) | — | 0 |
 
 ### Suggested order & rationale (from the brief + observed coupling)
@@ -315,15 +316,13 @@ Dependency map & plan: `docs/DEPENDENCY_MAP.md`.
    Key decisions to keep for Module 11: `execute()` and plugin-facing interfaces stay
    untyped (plugin API); `protected` properties stay untyped (§6.2 invariance); type
    only `private` props + safe returns. Signature diff vs ORIG verified pure-type-additions.
-4. **Module 11 — Plugins (NEXT):** Plugin/PluginBase/PluginLogger/PluginManager
-   (13 files) — the heart of the plugin ecosystem. PluginBase extends
-   CommandExecutor/Listener and is extended by EVERY plugin; keep public APIs
-   untyped where plugins override (onEnable/onLoad/onDisable, onCommand).
-   PluginManager is the biggest file; watch `loadPlugin`/`getPlugin` returns and
-   the description loading paths.
-4. **Module 11 — Plugins:** depends on command/Player; PluginLogger etc.
-5. **Module 12 — Remaining systems:** tile (NBT roundtrips!), metadata,
-   scheduler, event, permission, and the top-level bootstrap classes.
+4. **Module 11 — Plugins ✅ (done, commit `d888ba2`).** See `docs/MODULE_11_REPORT.md`.
+   Plugin-facing lifecycle/interface methods stayed untyped (onLoad/onEnable/onDisable,
+   onCommand, EventExecutor::execute, PluginLoader methods); `protected` props untyped
+   (§6.2); `getPluginFilters(): string` (regex, not array — harness caught the wrong
+   `: array`); dead WeakRef code after `return` removed; geniapi `strval()` latent fix.
+5. **Module 12 — Remaining systems (NEXT):** Server (biggest), utils, tile (NBT roundtrips!),
+   metadata, scheduler, event, permission, and the top-level bootstrap classes.
 6. **Final audit + README.md** (per §1.11). Include the known pre-existing debt
    listed in §7.
 
@@ -524,8 +523,7 @@ anonymous/named `PluginTask` subclass carrying its own level reference.
 
 ## 9. Completion checklist (end of project)
 
-- [x] Modules 1–10 (done, commits in §3)
-- [ ] Module 11 — Plugins
+- [x] Modules 1–11 (done, commits in §3)
 - [ ] Module 12 — Remaining systems (tile, metadata, scheduler, event, permission, bootstrap)
 - [ ] Final complete audit (§1.11): PHP 8.2 compat, runtime stability, memory,
       perf bottlenecks, architecture quality, plugin-compat risks, hidden bugs

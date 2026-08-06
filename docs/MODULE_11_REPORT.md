@@ -61,5 +61,5 @@ The complete plugin subsystem — 13 root files:
 ## How to revert
 
 ```bash
-git revert <module-11-commit>   # after commit, or reset --hard before committing
+git revert d888ba2   # after commit, or reset --hard before committing
 ```
