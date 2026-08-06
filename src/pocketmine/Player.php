@@ -789,6 +789,9 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
         $this->viewDistance = $this->server->getViewDistance();
         $this->newPosition = new Vector3(0, 0, 0);
         $this->boundingBox = new AxisAlignedBB(0, 0, 0, 0, 0, 0);
+        $this->temporalVector = new Vector3();
+        $this->eyeHeight = 1.62;
+        $this->timings = Timings::getEntityTimings($this);
 
         $this->uuid = null;
         $this->rawUUID = null;
@@ -799,6 +802,7 @@ class Player extends Human implements CommandSender, InventoryHolder, ChunkLoade
         $this->expLevel = 0;
         $this->food = 20;
         $this->id = Entity::$entityCount++;
+        $this->isPlayer = true;
         Entity::setHealth(20);
     }
 
