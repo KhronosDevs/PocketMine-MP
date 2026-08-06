@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -104,7 +106,7 @@ abstract class Achievement{
 
 	];
 
-	public static function broadcast(Player $player, $achievementId){
+	public static function broadcast(Player $player, $achievementId) : bool{
 		if(isset(Achievement::$list[$achievementId])){
 			$translation = new TranslationContainer("chat.type.achievement", [$player->getDisplayName(), TextFormat::GREEN . Achievement::$list[$achievementId]["name"]]);
 			if(Server::getInstance()->getConfigString("announce-player-achievements", true) === true){
@@ -119,7 +121,7 @@ abstract class Achievement{
 		return false;
 	}
 
-	public static function add($achievementId, $achievementName, array $requires = []){
+	public static function add($achievementId, $achievementName, array $requires = []) : bool{
 		if(!isset(Achievement::$list[$achievementId])){
 			Achievement::$list[$achievementId] = [
 				"name" => $achievementName,

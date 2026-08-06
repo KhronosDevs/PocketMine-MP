@@ -407,7 +407,7 @@ class Human extends Creature implements ProjectileSource, InventoryHolder{
 		return $this->inventory;
 	}
 
-	public function getFloatingInventory() : FloatingInventory{
+	public function getFloatingInventory() : ?FloatingInventory{
 		return $this->floatingInventory;
 	}
 
