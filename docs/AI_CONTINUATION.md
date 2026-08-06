@@ -6,7 +6,7 @@
 > revertible checkpoints, the **exact validation procedure** that has caught real
 > regressions, and the **step-by-step path to completion**.
 >
-> Last updated: after Module 8 (Inventory) — commit `c1b82d6`.
+> Last updated: after Module 9 (Player) — commit `e89b7af`.
 
 ---
 
@@ -17,8 +17,8 @@
 - **Branch:** `php-update` · **Runtime:** custom PHP `bin/php7/bin/php` = **PHP 8.2.32 (ZTS)**.
 - **Goal:** modernize to clean, maintainable PHP 8.2 **without changing behavior**,
   plugin compatibility, network protocols, packet formats, or serialization formats.
-- **Progress: 8 of 12 modules done.** Each committed as its own revertible checkpoint.
-- **Next module:** **Module 9 — Player** (`src/pocketmine/Player.php` + offline player) — the highest-coupling module (overrides many Entity methods).
+- **Progress: 9 of 12 modules done.** Each committed as its own revertible checkpoint.
+- **Next module:** **Module 10 — Commands** (`src/pocketmine/command/`, 65 files) — depends on the now-typed Player/Server APIs.
 
 ---
 
@@ -70,8 +70,8 @@ The owner's task, reproduced in full. **Every instruction here is binding.**
 > 6. Entities            ✅
 > 7. Level / World       ✅
 > 8. Inventory           ✅
-> 9. Player              ⏭️ NEXT
-> 10. Commands
+> 9. Player              ✅
+> 10. Commands           ⏭️ NEXT
 > 11. Plugins
 > 12. Remaining systems
 >
@@ -287,8 +287,9 @@ Each module is an independent commit. **`git revert <hash>` cleanly undoes any o
 | 6 | Entities | `7753051` | entity/ (70) + Player.php | Effect duration null-fix, **cross-module Potion::getColor fix**, booted-probe-verified |
 | 7 | Level/World | `cef654f` | level/ (159) + cross-module fixes | static-keyword restore, strict-mode float coercion parity, booted-probe-verified |
 | 8 | Inventory | `c1b82d6` | inventory/ (36) | strict_types all, ~70 safe return types, DoubleChestInventory/BaseTransaction variance fatals fixed (latent in ORIG), booted-probe-verified |
+| 9 | Player | `e89b7af` | Player.php (4331), OfflinePlayer, IPlayer, Achievement + Human.php fix | strict_types all 4 + ~60 return types, `getProtocol(): ?int` fix (probe-caught), `Human::getFloatingInventory(): ?FloatingInventory` latent fix, variance-verified vs typed Entity/Human/Living, booted-probe ALL-PASS |
 
-Module reports: `docs/MODULE_1_REPORT.md` … `docs/MODULE_8_REPORT.md`.
+Module reports: `docs/MODULE_1_REPORT.md` … `docs/MODULE_9_REPORT.md`.
 Dependency map & plan: `docs/DEPENDENCY_MAP.md`.
 
 ---
@@ -298,20 +299,21 @@ Dependency map & plan: `docs/DEPENDENCY_MAP.md`.
 | Module | Path | Files | strict so far |
 |---|---|---|---|
 | 8. Inventory | `src/pocketmine/inventory/` | 36 | 36/36 ✅ |
-| 9. Player | `src/pocketmine/Player.php` (+ offline player) | 2–3 | partially (Player.php touched in mod 6/7) ⏭️ |
-| 10. Commands | `src/pocketmine/command/` | 65 | 0/65 |
+| 9. Player | `src/pocketmine/Player.php` (+ offline player) | 2–3 | 4/4 ✅ |
+| 10. Commands | `src/pocketmine/command/` | 65 | 0/65 ⏭️ |
 | 11. Plugins | `src/pocketmine/plugin/` | 13 | 0/13 |
 | 12. Remaining systems | `tile/` (18), `metadata/` (7), `scheduler/` (12), `event/`, `permission/`, `network/` leftovers, `pocketmine/` root classes (Server, PocketMine, CrashDump, etc.) | — | 0 |
 
 ### Suggested order & rationale (from the brief + observed coupling)
 
 1. **Module 8 — Inventory ✅ (done, commit `c1b82d6`).**
-2. **Module 9 — Player (NEXT):** the biggest remaining single class; overrides many
-   Entity methods — **variance hazard**: return types must match Entity exactly
-   (see §6.2). Mod 6 already typed 12 Player overrides to match Entity. Player is
-   also an `InventoryHolder` and `CommandSender` — mod 8 typed `PlayerInventory::
-   getHolder(): Human|Player` and interfaces stay untyped, so impls must match.
-3. **Module 10 — Commands:** depends on Player/Server APIs.
+2. **Module 9 — Player ✅ (done, commit `e89b7af`).** See `docs/MODULE_9_REPORT.md`
+   for the two real fixes (`getProtocol(): ?int`, `Human::getFloatingInventory(): ?FloatingInventory`)
+   and the variance strategy used (leave null-returning getters untyped or nullable).
+3. **Module 10 — Commands (NEXT):** depends on Player/Server APIs (now typed). 65
+   files, mostly small leaf command classes — same leaf-first strict_types +
+   safe-return-type approach as mod 4/5. Watch for `Command::execute` override
+   variance and the `getPlugin()->getServer()` patterns.
 4. **Module 11 — Plugins:** depends on command/Player; PluginLogger etc.
 5. **Module 12 — Remaining systems:** tile (NBT roundtrips!), metadata,
    scheduler, event, permission, and the top-level bootstrap classes.
@@ -487,6 +489,11 @@ anonymous/named `PluginTask` subclass carrying its own level reference.
 7. **`DoubleChestInventory::getContents($withAir)` ignores the param** — semantics
    differ from `ChestInventory`'s withAir handling. Intentional (matches ORIG
    PHP-7 extra-arg behavior; the class couldn't even load under 8.2).
+8. **Fresh-player paths touch null state** — `getName(): string` fatals on a
+   never-logged-in player (username null; mod-6 typing, real login always sets it),
+   and `getExp()`/attributeMap is null until login init. Probe had to skip
+   `setGamemode`, `isOp`, `hasPermission`, `canInteract` on synthetic players.
+   Identical in ORIG (mod 6). One-line-null-guard candidates for the final audit.
 
 ---
 
@@ -510,9 +517,9 @@ anonymous/named `PluginTask` subclass carrying its own level reference.
 
 ## 9. Completion checklist (end of project)
 
-- [x] Modules 1–8 (done, commits in §3)
-- [ ] Module 9 — Player
+- [x] Modules 1–9 (done, commits in §3)
 - [ ] Module 10 — Commands
+- [ ] Module 11 — Plugins
 - [ ] Module 11 — Plugins
 - [ ] Module 12 — Remaining systems (tile, metadata, scheduler, event, permission, bootstrap)
 - [ ] Final complete audit (§1.11): PHP 8.2 compat, runtime stability, memory,
