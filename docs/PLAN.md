@@ -4,6 +4,8 @@
 **Target:** Minecraft Pocket Edition 0.15.10 (protocol 84) — **PROTOCOL LAYER IS FROZEN**
 **PHP Version:** 8.2
 **Threading Extension:** pmmp/ext-pmmpthread (pthreads fork for PHP 8.1/8.2)
+**Base Branch:** `master` (not `main`)
+**PHP Binary:** `bin/php7/bin/php` (project-specific, see README.md)
 
 ---
 
@@ -997,7 +999,13 @@ docs/
 1. Create branch `foundation-bootstrap` with rollback anchor commit
 2. Implement `bootstrap.php`, `Kernel.php`, DI container setup
 3. Commit incrementally, update `docs/PROGRESS.md`
-4. When ready, rebase on `main` and open PR for review
+4. When ready, rebase on `master` and open PR for review
+
+**Environment Setup:**
+- **Base branch:** `master` (not `main`)
+- **PHP binary:** `bin/php7/bin/php` (project-specific, committed in repo; see README.md)
+- **Run baseline:** `bin/php7/bin/php measure_baseline.php`
+- **Run PHPStan:** `bin/php7/bin/php vendor/bin/phpstan analyse --configuration=phpstan.neon`
 
 **Clarifying Questions Before Proceeding:**
 
