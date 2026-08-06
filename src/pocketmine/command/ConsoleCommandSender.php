@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -34,7 +36,7 @@ use function trim;
 
 class ConsoleCommandSender implements CommandSender{
 
-	private $perm;
+	private PermissibleBase $perm;
 
 	public function __construct(){
 		$this->perm = new PermissibleBase($this);
@@ -45,7 +47,7 @@ class ConsoleCommandSender implements CommandSender{
 	 *
 	 * @return bool
 	 */
-	public function isPermissionSet($name){
+	public function isPermissionSet($name) : bool{
 		return $this->perm->isPermissionSet($name);
 	}
 
@@ -54,7 +56,7 @@ class ConsoleCommandSender implements CommandSender{
 	 *
 	 * @return bool
 	 */
-	public function hasPermission($name){
+	public function hasPermission($name) : bool{
 		return $this->perm->hasPermission($name);
 	}
 
@@ -64,46 +66,46 @@ class ConsoleCommandSender implements CommandSender{
 	 *
 	 * @return \pocketmine\permission\PermissionAttachment
 	 */
-	public function addAttachment(Plugin $plugin, $name = null, $value = null){
+	public function addAttachment(Plugin $plugin, $name = null, $value = null) : ?PermissionAttachment{
 		return $this->perm->addAttachment($plugin, $name, $value);
 	}
 
 	/**
 	 * @return void
 	 */
-	public function removeAttachment(PermissionAttachment $attachment){
+	public function removeAttachment(PermissionAttachment $attachment) : void{
 		$this->perm->removeAttachment($attachment);
 	}
 
-	public function recalculatePermissions(){
+	public function recalculatePermissions() : void{
 		$this->perm->recalculatePermissions();
 	}
 
 	/**
 	 * @return \pocketmine\permission\PermissionAttachmentInfo[]
 	 */
-	public function getEffectivePermissions(){
+	public function getEffectivePermissions() : array{
 		return $this->perm->getEffectivePermissions();
 	}
 
 	/**
 	 * @return bool
 	 */
-	public function isPlayer(){
+	public function isPlayer() : bool{
 		return false;
 	}
 
 	/**
 	 * @return \pocketmine\Server
 	 */
-	public function getServer(){
+	public function getServer() : Server{
 		return Server::getInstance();
 	}
 
 	/**
 	 * @param string $message
 	 */
-	public function sendMessage($message){
+	public function sendMessage($message) : void{
 		if($message instanceof TextContainer){
 			$message = $this->getServer()->getLanguage()->translate($message);
 		}else{
@@ -122,14 +124,14 @@ class ConsoleCommandSender implements CommandSender{
 	/**
 	 * @return bool
 	 */
-	public function isOp(){
+	public function isOp() : bool{
 		return true;
 	}
 
 	/**
 	 * @param bool $value
 	 */
-	public function setOp($value){
+	public function setOp($value) : void{
 
 	}
 

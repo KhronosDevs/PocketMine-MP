@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -29,15 +31,15 @@ use pocketmine\plugin\Plugin;
 class PluginCommand extends Command implements PluginIdentifiableCommand{
 
 	/** @var Plugin */
-	private $owningPlugin;
+	private Plugin $owningPlugin;
 
 	/** @var CommandExecutor */
-	private $executor;
+	private CommandExecutor $executor;
 
 	/**
 	 * @param string $name
 	 */
-	public function __construct($name, Plugin $owner){
+	public function __construct(string $name, Plugin $owner){
 		parent::__construct($name);
 		$this->owningPlugin = $owner;
 		$this->executor = $owner;
@@ -63,18 +65,18 @@ class PluginCommand extends Command implements PluginIdentifiableCommand{
 		return $success;
 	}
 
-	public function getExecutor(){
+	public function getExecutor() : ?CommandExecutor{
 		return $this->executor;
 	}
 
-	public function setExecutor(CommandExecutor $executor){
+	public function setExecutor(?CommandExecutor $executor) : void{
 		$this->executor = ($executor != null) ? $executor : $this->owningPlugin;
 	}
 
 	/**
 	 * @return Plugin
 	 */
-	public function getPlugin(){
+	public function getPlugin() : Plugin{
 		return $this->owningPlugin;
 	}
 }

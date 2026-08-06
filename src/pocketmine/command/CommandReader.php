@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace pocketmine\command;
 
 use pmmp\thread\Thread;
@@ -23,12 +25,12 @@ use function trim;
 class CommandReader extends Thread
 {
 
-    private $readline = false;
+    private bool $readline = false;
 
     /** @var ThreadSafeArray */
-    protected $buffer;
+    protected ThreadSafeArray $buffer;
 
-    private $shutdown = false;
+    private bool $shutdown = false;
 
     public function __construct()
     {
@@ -47,12 +49,12 @@ class CommandReader extends Thread
         $this->start(Thread::INHERIT_ALL);
     }
 
-    public function shutdown()
+    public function shutdown() : void
     {
         $this->shutdown = true;
     }
 
-    private function readline_callback($line)
+    private function readline_callback($line) : void
     {
         if ($line !== "") {
             $this->buffer[] = $line;
@@ -60,7 +62,7 @@ class CommandReader extends Thread
         }
     }
 
-    private function readLine($stdin)
+    private function readLine($stdin) : void
     {
         if (!$this->readline) {
             $line = trim(fgets($stdin));
@@ -78,7 +80,7 @@ class CommandReader extends Thread
      *
      * @return string|null
      */
-    public function getLine()
+    public function getLine() : ?string
     {
         if ($this->buffer->count() !== 0) {
             return $this->buffer->shift();
@@ -87,7 +89,7 @@ class CommandReader extends Thread
         return null;
     }
 
-    public function quit()
+    public function quit() : void
     {
         $this->shutdown = true;
 
@@ -138,7 +140,7 @@ class CommandReader extends Thread
         }
     }
 
-    public function getThreadName()
+    public function getThreadName() : string
     {
         return "Console";
     }

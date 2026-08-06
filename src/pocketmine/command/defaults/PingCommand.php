@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -28,7 +30,7 @@ use pocketmine\utils\TextFormat;
 
 class PingCommand extends VanillaCommand {
 
-	public function __construct($name) {
+	public function __construct(string $name){
 		parent::__construct(
 			$name,
 			"Displays your current ping (latency) in milliseconds.",

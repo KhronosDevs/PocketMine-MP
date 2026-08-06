@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -59,7 +61,7 @@ class TimingsCommand extends VanillaCommand{
 
 	public static $timingStart = 0;
 
-	public function __construct($name){
+	public function __construct(string $name){
 		parent::__construct(
 			$name,
 			"%pocketmine.command.timings.description",

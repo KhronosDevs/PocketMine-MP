@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -100,7 +102,7 @@ class SimpleCommandMap implements CommandMap{
 	protected $commandConfig = [];
 
 	/** @var Server */
-	private $server;
+	private Server $server;
 
 	public function __construct(Server $server){
 		$this->server = $server;
@@ -109,7 +111,7 @@ class SimpleCommandMap implements CommandMap{
 		$this->setDefaultCommands();
 	}
 
-	private function setDefaultCommands(){
+	private function setDefaultCommands() : void{
 		$this->register("pocketmine", new WeatherCommand("weather"));
 
 		$this->register("pocketmine", new BanCidCommand("bancid"));
@@ -170,13 +172,13 @@ class SimpleCommandMap implements CommandMap{
 		}
 	}
 
-	public function registerAll($fallbackPrefix, array $commands){
+	public function registerAll($fallbackPrefix, array $commands) : void{
 		foreach($commands as $command){
 			$this->register($fallbackPrefix, $command);
 		}
 	}
 
-	public function register($fallbackPrefix, Command $command, $label = null, $overrideConfig = false){
+	public function register($fallbackPrefix, Command $command, $label = null, $overrideConfig = false) : bool{
 		if($label === null){
 			$label = $command->getName();
 		}
@@ -207,7 +209,7 @@ class SimpleCommandMap implements CommandMap{
 		return $registered;
 	}
 
-	private function registerAlias(Command $command, $isAlias, $fallbackPrefix, $label){
+	private function registerAlias(Command $command, bool $isAlias, string $fallbackPrefix, string $label) : bool{
 		$this->knownCommands[$fallbackPrefix . ":" . $label] = $command;
 		if(($command instanceof VanillaCommand || $isAlias) && isset($this->knownCommands[$label])){
 			return false;
@@ -226,7 +228,7 @@ class SimpleCommandMap implements CommandMap{
 		return true;
 	}
 
-	private function dispatchAdvanced(CommandSender $sender, Command $command, $label, array $args, $offset = 0){
+	private function dispatchAdvanced(CommandSender $sender, Command $command, $label, array $args, int $offset = 0) : void{
 		if(isset($args[$offset])){
 			$argsTemp = $args;
 			switch($args[$offset]){
@@ -262,7 +264,7 @@ class SimpleCommandMap implements CommandMap{
 		}else $command->execute($sender, $label, $args);
 	}
 
-	public function dispatch(CommandSender $sender, $commandLine){
+	public function dispatch(CommandSender $sender, $commandLine) : bool{
 		$args = explode(" ", $commandLine);
 
 		if(count($args) === 0){
@@ -296,7 +298,7 @@ class SimpleCommandMap implements CommandMap{
 		return true;
 	}
 
-	public function clearCommands(){
+	public function clearCommands() : void{
 		foreach($this->knownCommands as $command){
 			$command->unregister($this);
 		}
@@ -304,7 +306,7 @@ class SimpleCommandMap implements CommandMap{
 		$this->setDefaultCommands();
 	}
 
-	public function getCommand($name){
+	public function getCommand($name) : ?Command{
 		if(isset($this->knownCommands[$name])){
 			return $this->knownCommands[$name];
 		}
@@ -315,14 +317,14 @@ class SimpleCommandMap implements CommandMap{
 	/**
 	 * @return Command[]
 	 */
-	public function getCommands(){
+	public function getCommands() : array{
 		return $this->knownCommands;
 	}
 
 	/**
 	 * @return void
 	 */
-	public function registerServerAliases(){
+	public function registerServerAliases() : void{
 		$values = $this->server->getCommandAliases();
 
 		foreach($values as $alias => $commandStrings){

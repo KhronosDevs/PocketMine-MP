@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
@@ -11,8 +13,7 @@ use pocketmine\utils\TextFormat;
 class TestChunkLoadCommand extends VanillaCommand
 {
 
-    public function __construct($name)
-    {
+    public function __construct(string $name){
         parent::__construct($name, "Test async chunk loading", "/testchunkload <x> <z> [world]");
     }
 

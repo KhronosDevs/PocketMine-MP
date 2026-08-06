@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -33,7 +35,7 @@ use pocketmine\utils\TextFormat;
 use function count;
 
 class ChunkInfoCommand extends VanillaCommand{
-	public function __construct($name){
+	public function __construct(string $name){
 		parent::__construct(
 			$name,
 			"Gets the information of a chunk or regenerate a chunk",
