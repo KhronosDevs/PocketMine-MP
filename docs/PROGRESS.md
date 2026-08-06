@@ -55,7 +55,7 @@
 
 | Branch | Base Commit | Current Commit | PR # | Status |
 |--------|-------------|----------------|------|--------|
-| foundation-bootstrap | eb32941 | eb32941 | — | 🔄 Active |
+| foundation-bootstrap | eb32941 | 5ee8125 | #18 | 🔄 Active (PR opened) |
 
 ---
 
