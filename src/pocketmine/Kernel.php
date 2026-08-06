@@ -212,27 +212,7 @@ function createThreadingPort(): ThreadingPort {
 }
 
 function createNetworkPort(): NetworkPort {
-    // During migration, wrap legacy Network
-    return new Protocol84NetworkAdapter(
-        legacyNetwork: null, // Will be set after Server initializes
-    );
-}
-
-/**
- * Wire legacy dependencies after Server initialization.
- * Must be called after Server::getInstance() is available.
- */
-function wireLegacyDependencies(Kernel $kernel): void {
-    $server = Server::getInstance();
-    if (!$server) {
-        return;
-    }
-
-    // Wire network adapter to legacy Network
-    $networkPort = $kernel->getNetworkPort();
-    if ($networkPort instanceof Protocol84NetworkAdapter) {
-        $networkPort->setLegacyNetwork($server->getNetwork());
-    }
+    return new Protocol84NetworkAdapter("0.0.0.0", 19132);
 }
 
 function createStoragePort(): StoragePort {

@@ -1,39 +1,44 @@
 ## Summary
 
-Phase 1 of the optimization plan: ECS component expansion and plugin API foundation.
+Phase 2 of the optimization plan: Infrastructure Adapters.
 
-### Components Added
+### Adapters Implemented
 
-| Component | Purpose |
-|-----------|---------|
-| **RotationComponent** | Yaw/pitch/headYaw with normalization, forward vector |
-| **CollisionComponent** | AABB bounds, intersection testing, configurable sizes |
-| **EffectComponent** | Effect instances with amplifier/duration, per-tick decay |
-| **AttributeComponent** | Modifiers (add/multiply_base/multiply_total), recalculation |
-| **InventoryComponent** | Slot-based, stacking logic, ItemStack with NBT |
-| **AIStateComponent** | 6 states (idle/wander/pathfind/attack/flee/interact), targets, path following |
-| **PathComponent** | PathNode array with types (walk/jump/swim/climb), costs |
+| Adapter | Description |
+|---------|-------------|
+| **Protocol84NetworkAdapter** | Wires new NetworkPort to legacy `Network.php` and `Player` |
+| **AnvilStorageAdapter** | Wraps existing Anvil/LevelDB providers for chunk/entity/tile persistence |
+| **ParallelGeneratorAdapter** | Chunk generation/population/light via ThreadingPort |
+| **PmmpThreadPool** | Improved with round-robin, parallelMap, removed unused queues |
 
-### EntityRef (Plugin API)
+### Protocol84NetworkAdapter Details
 
-Opaque handle providing stable entity identity:
-- Read-only component access for plugins
-- Convenience methods: teleport(), damage(), heal(), setVelocity(), addVelocity(), getDistanceTo()
-- Survives thread migration and region partitioning
+- `sendPacket()` / `broadcastPacket()` → queues outbound packets
+- `flushOutboundPackets()` → maps `PlayerRef.entityId` to legacy `Player` via `Server::getOnlinePlayers()`, calls `Player::dataPacket()`
+- `disconnect()` → creates `DisconnectPacket` and sends
+- `createPlayerRef(Player)` → factory for `PlayerRef` (uniqueId, entityId, name)
 
-### Systems
+### AnvilStorageAdapter Details
 
-- **EffectSystem** (PARALLEL): Ticks effect durations per entity
-- **AISystem** (SEQUENTIAL): Handles idle/wander/pathfind/attack/flee state machine
+- `loadChunkWithContext(Level, chunkX, chunkZ)` → extracts sections, biomes, heightmap, entities, tile entities from `FullChunk`
+- `saveChunkWithContext(Level, ChunkData)` → applies sections, biomes, heightmap to `FullChunk`
+- `serializeEntity()` / `serializeTileEntity()` → creates `EntitySnapshot` / `TileEntitySnapshot` with ECS components
+- `saveAll()` → delegates to `Level::save()` for all levels
 
-### Serialization
+### ParallelGeneratorAdapter
 
-- ComponentSerializer: serialize/deserialize components for storage/network snapshots
+- `generateChunk()` → synchronous generation via level's generator, converts `FullChunk` to `ChunkData`
+- `populateChunk()` / `calculateLight()` → stubs for parallel execution
 
-### Kernel Updates
+### PmmpThreadPool Improvements
 
-- All 17 components registered in registerBuiltinComponents()
-- EffectSystem (parallel) and AISystem (sequential) registered
+- `submitRoundRobin()` for work distribution
+- `parallelMap(iterable, callable)` → map-reduce pattern returning keyed results
+- Removed unused `$resultQueue` from `WorkerThread`
+
+### Kernel
+
+- Added `wireLegacyDependencies(Kernel)` — connects `Protocol84NetworkAdapter` to legacy `Network` after `Server::getInstance()` is available
 
 ### Testing
 
@@ -49,4 +54,4 @@ bin/php7/bin/php vendor/bin/phpstan analyse --configuration=phpstan.neon
 
 ### Related
 
-Implements Phase 1 of the optimization plan: docs/PLAN.md
+Implements Phase 2 of the optimization plan: docs/PLAN.md
