@@ -870,13 +870,13 @@ final class RegionThread extends Thread {
 | 1.4 | `ecs-components-basic` | #19 | EffectSystem (parallel), AISystem (sequential) |
 | 1.5 | `ecs-components-basic` | #19 | ComponentSerializer, register all 17 components, 4 systems |
 
-### Phase 2: Infrastructure Adapters (Week 3-5)
+### Phase 2: Infrastructure Adapters (Week 3-5) — **NEW IMPLEMENTATIONS, NO LEGACY WRAPPERS**
 | Step | Branch | Description |
 |------|--------|-------------|
-| 2.1 | `adapter-network-protocol84` | Protocol84NetworkAdapter — wraps legacy Network.php for packet I/O (FROZEN boundary) |
-| 2.2 | `adapter-storage-anvil` | AnvilStorageAdapter, LevelDBStorageAdapter — chunk/entity/tile persistence |
-| 2.3 | `adapter-worldgen-parallel` | ParallelGeneratorAdapter — chunk gen/populate/light via ThreadingPort |
-| 2.4 | `adapter-thread-pool` | PmmpThreadPool tuning, work-stealing, future/promise patterns |
+| 2.1 | `adapter-network-protocol84` | **New** Protocol84NetworkAdapter — implements NetworkPort directly; handles RakLib I/O, packet encode/decode, PlayerRef mapping (protocol 84 frozen) |
+| 2.2 | `adapter-storage-anvil` | **New** AnvilStorageAdapter — implements StoragePort directly; reads/writes Anvil format (region files, NBT) for chunks, entities, tile entities |
+| 2.3 | `adapter-worldgen-parallel` | **New** ParallelGeneratorAdapter — implements WorldGenPort directly; chunk generation, population, light calculation via ThreadingPort |
+| 2.4 | `adapter-thread-pool` | PmmpThreadPool — ThreadingPort implementation with work-stealing, round-robin, parallelMap |
 
 ### Phase 3: Core Gameplay Services (Week 4-6)
 | Step | Branch | Description |

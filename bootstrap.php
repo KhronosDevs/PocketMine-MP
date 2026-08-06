@@ -14,4 +14,10 @@ $loader->register(true);
 
 $kernel = bootstrap();
 
+// Start network adapter
+$networkPort = $kernel->getNetworkPort();
+if ($networkPort instanceof \pocketmine\adapter\driven\network\Protocol84NetworkAdapter) {
+    $networkPort->start();
+}
+
 $kernel->run();
