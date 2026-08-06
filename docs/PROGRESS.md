@@ -1,10 +1,10 @@
 # Progress Tracker
 
 **Plan Version:** docs/PLAN.md
-**Last Updated:** 2026-08-06
-**Current Phase:** 1 (ECS Components)
-**Current Branch:** ecs-components-basic
-**Base Commit:** ac5b861 (master after PR #18 merge)
+**Last Updated:** 2026-08-07
+**Current Phase:** 2 (Infrastructure Adapters)
+**Current Branch:** (next: adapter-implementation)
+**Base Commit:** 09efc4d (master after PLAN.md update)
 
 ---
 
@@ -13,10 +13,10 @@
 | Phase | Status | Branch | PR | Notes |
 |-------|--------|--------|-----|-------|
 | 0: Foundation | ✅ Done | foundation-bootstrap | #18 | Bootstrap, ports, ECS core, threading port |
-| 1: ECS Components | 🔄 In Progress | ecs-components-basic | — | Rotation, Collision, Effect, Attribute, Inventory, AIState, Path, EntityRef |
-| 2: Adapters | ⏳ Pending | — | — | Network (protocol 84), storage, worldgen, plugin |
-| 3: App Services | ⏳ Pending | — | — | Player, chunk, block, entity, inventory services |
-| 4: Legacy Strangler | ⏳ Pending | — | — | Entity, Level, Server wrappers; plugin compat |
+| 1: ECS Components | ✅ Done | ecs-components-basic | #19 | 17 components, EntityRef, 4 systems |
+| 2: Infrastructure Adapters | 🔄 Next | adapter-implementation | — | Network (protocol 84), storage, worldgen, thread pool |
+| 3: Core Gameplay Services | ⏳ Pending | — | — | Player, chunk, block, entity, combat, inventory |
+| 4: **New Plugin API** | ⏳ Pending | — | — | **BREAKING** — EntityRef, Query, System, Event, Command, Scheduler |
 | 5: Archetype Parallelism | ⏳ Pending | — | — | Chunk gen, block updates, pathfinding, AI, system scheduler |
 | 6: Region-Based | ⏳ Pending | — | — | RegionWorld, RegionThread, coordination, network threads |
 | 7: Polish & Optimize | ⏳ Pending | — | — | Storage, queries, memory, network batching, benchmarks |
@@ -43,12 +43,25 @@
 | Step | Task | Status | Commit | Notes |
 |------|------|--------|--------|-------|
 | 1.0 | Create branch `ecs-components-basic` with rollback anchor | ✅ | 55d0fee | `git checkout -b ecs-components-basic && git commit --allow-empty -m "chore: rollback anchor for ecs-components-basic"` |
-| 1.1 | Additional components: RotationComponent, CollisionComponent, EffectComponent, AttributeComponent, InventoryComponent, AIStateComponent, PathComponent | ✅ | 002c485 | Core gameplay components |
+| 1.1 | Additional components: Rotation, Collision, Effect, Attribute, Inventory, AIState, Path | ✅ | 002c485 | Core gameplay components |
 | 1.2 | EntityRef opaque handle for plugin API | ✅ | 002c485 | Stable reference across threads/migrations |
 | 1.3 | Register all components in Kernel::registerBuiltinComponents() | ✅ | 002c485 | All 17 components registered |
 | 1.4 | Component serialization helpers (for storage/network) | ✅ | 002c485 | ComponentSerializer with serialize/deserialize |
 | 1.5 | New systems: EffectSystem, AISystem | ✅ | 002c485 | Parallel effect ticking, sequential AI |
-| 1.6 | Update PROGRESS.md | 🔄 | — | Track progress |
+| 1.6 | Update PROGRESS.md | ✅ | — | Track progress |
+
+---
+
+## Phase 2: Infrastructure Adapters — Detailed Steps
+
+| Step | Task | Status | Commit | Notes |
+|------|------|--------|--------|-------|
+| 2.0 | Create branch `adapter-implementation` with rollback anchor | ⏳ | — | `git checkout -b adapter-implementation && git commit --allow-empty -m "chore: rollback anchor for adapter-implementation"` |
+| 2.1 | `adapter-network-protocol84` — Protocol84NetworkAdapter wired to legacy Network.php | ⏳ | — | Packet I/O, PlayerRef mapping, frozen boundary |
+| 2.2 | `adapter-storage-anvil` — AnvilStorageAdapter, LevelDBStorageAdapter | ⏳ | — | Chunk/entity/tile persistence via existing format |
+| 2.3 | `adapter-worldgen-parallel` — ParallelGeneratorAdapter via ThreadingPort | ⏳ | — | Chunk gen/populate/light on worker threads |
+| 2.4 | `adapter-thread-pool` — PmmpThreadPool tuning, work-stealing | ⏳ | — | Future/promise patterns, worker affinity |
+| 2.5 | Update PROGRESS.md | ⏳ | — | Track progress |
 
 ---
 
@@ -62,6 +75,7 @@
 | D004 | pmmpthread v6.3.0 | 2026-08-06 | Confirmed version |
 | D005 | Protocol 84 = frozen boundary, no tests | 2026-08-06 | Must remain untouched |
 | D006 | Establish tick-profiling baseline early | 2026-08-06 | Before any threading work |
+| D007 | **New Plugin API = breaking changes, no legacy compat** | 2026-08-07 | Clean ECS-based API (EntityRef, Query, System) |
 
 ---
 
@@ -70,16 +84,18 @@
 | Branch | Base Commit | Current Commit | PR # | Status |
 |--------|-------------|----------------|------|--------|
 | foundation-bootstrap | eb32941 | ac5b861 | #18 | ✅ Merged |
-| ecs-components-basic | ac5b861 | e7ab5e5 | #19 | 🔄 Active (PR opened) |
+| ecs-components-basic | ac5b861 | 378400c | #19 | ✅ Merged |
+| adapter-implementation | 09efc4d | — | — | 🔄 Next |
 
 ---
 
 ## Next Actions
 
-1. ✅ Create `ecs-components-basic` branch with rollback anchor commit
-2. ✅ Implement additional components (Rotation, Collision, Effect, Attribute, Inventory, AIState, Path)
-3. ✅ Implement EntityRef opaque handle
-4. ✅ Register all components in Kernel
-5. ✅ Add component serialization helpers
-6. ✅ Add EffectSystem and AISystem
-7. ✅ Create PR #19 for ecs-components-basic
+1. ✅ Phase 0 & 1 complete (PRs #18, #19 merged)
+2. ✅ PLAN.md updated: Phase 4 = New Plugin API (breaking), removed Legacy Strangler Fig
+3. 🔄 Create `adapter-implementation` branch with rollback anchor
+4. ⏳ Implement Protocol84NetworkAdapter → legacy Network.php
+5. ⏳ Implement AnvilStorageAdapter, LevelDBStorageAdapter
+6. ⏳ Implement ParallelGeneratorAdapter via ThreadingPort
+7. ⏳ Implement PmmpThreadPool tuning
+8. ⏳ Update docs, commit, push, open PR
