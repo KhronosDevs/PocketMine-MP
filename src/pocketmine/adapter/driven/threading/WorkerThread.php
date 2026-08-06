@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace pocketmine\adapter\driven\threading;
 
 use pocketmine\Worker;
-use pocketmine\port\driven\Future;
 use function gc_enable;
 use function ini_set;
 
 final class WorkerThread extends Worker {
     public function __construct(
         private \ThreadSafe $taskQueue,
-        private \ThreadSafe $resultQueue,
     ) {}
 
     public function run(): void {

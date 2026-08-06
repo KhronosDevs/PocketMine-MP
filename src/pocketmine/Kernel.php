@@ -218,6 +218,23 @@ function createNetworkPort(): NetworkPort {
     );
 }
 
+/**
+ * Wire legacy dependencies after Server initialization.
+ * Must be called after Server::getInstance() is available.
+ */
+function wireLegacyDependencies(Kernel $kernel): void {
+    $server = Server::getInstance();
+    if (!$server) {
+        return;
+    }
+
+    // Wire network adapter to legacy Network
+    $networkPort = $kernel->getNetworkPort();
+    if ($networkPort instanceof Protocol84NetworkAdapter) {
+        $networkPort->setLegacyNetwork($server->getNetwork());
+    }
+}
+
 function createStoragePort(): StoragePort {
     return new AnvilStorageAdapter();
 }
