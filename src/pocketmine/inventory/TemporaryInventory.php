@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /**
@@ -26,9 +28,9 @@ use pocketmine\Player;
 abstract class TemporaryInventory extends ContainerInventory{
 	//TODO
 
-	abstract public function getResultSlotIndex();
+	abstract public function getResultSlotIndex() : int;
 
-	public function onClose(Player $who){
+	public function onClose(Player $who) : void{
 		foreach($this->getContents() as $slot => $item){
 			if($slot === $this->getResultSlotIndex()){
 				//Do not drop the item in the result slot - it is a virtual item and does not actually exist.

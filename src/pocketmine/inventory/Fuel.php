@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -27,7 +29,7 @@ use pocketmine\item\Item;
 
 //TODO: remove this
 abstract class Fuel{
-	public static $duration = [
+	public static array $duration = [
 		Item::COAL => 1600,
 		Item::COAL_BLOCK => 16000,
 		Item::TRUNK => 300,

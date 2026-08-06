@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -33,7 +35,7 @@ class HopperInventory extends ContainerInventory{
 	/**
 	 * @return Hopper
 	 */
-	public function getHolder(){
+	public function getHolder() : Hopper{
 		return $this->holder;
 	}
 }

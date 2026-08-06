@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -40,23 +42,23 @@ class DropItemTransaction extends BaseTransaction{
 		$this->targetItem = $droppedItem;
 	}
 
-	public function setSourceItem(Item $item){
+	public function setSourceItem(Item $item) : void{
 		//Nothing to update
 	}
 
-	public function getInventory(){
+	public function getInventory() : ?Inventory{
 		return null;
 	}
 
-	public function getSlot(){
+	public function getSlot() : ?int{
 		return null;
 	}
 
-	public function sendSlotUpdate(Player $source){
+	public function sendSlotUpdate(Player $source) : void{
 		//Nothing to update
 	}
 
-	public function getChange(){
+	public function getChange() : array{
 		return ["in" => $this->getTargetItem(),
 			"out" => null];
 	}

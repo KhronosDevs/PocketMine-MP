@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -62,23 +64,23 @@ class ShapedRecipeFromJson extends ShapedRecipe{
 		$this->output = clone $result;
 	}
 
-	public function getWidth(){
+	public function getWidth() : int{
 		return count($this->ingredients[0]);
 	}
 
-	public function getHeight(){
+	public function getHeight() : int{
 		return count($this->ingredients);
 	}
 
-	public function getResult(){
+	public function getResult() : Item{
 		return $this->output;
 	}
 
-	public function getId(){
+	public function getId() : ?UUID{
 		return $this->id;
 	}
 
-	public function setId(UUID $id){
+	public function setId(UUID $id) : void{
 		if($this->id !== null){
 			throw new \InvalidStateException("Id is already set");
 		}
@@ -86,7 +88,7 @@ class ShapedRecipeFromJson extends ShapedRecipe{
 		$this->id = $id;
 	}
 
-	public function addIngredient($x, $y, Item $item){
+	public function addIngredient($x, $y, Item $item) : ShapedRecipeFromJson{
 		$this->ingredients[$y][$x] = clone $item;
 		return $this;
 	}
@@ -97,7 +99,7 @@ class ShapedRecipeFromJson extends ShapedRecipe{
 	 * @return $this
 	 * @throws \Exception
 	 */
-	public function setIngredient($key, Item $item){
+	public function setIngredient($key, Item $item) : ShapedRecipeFromJson{
 		if(!array_key_exists($key, $this->shape)){
 			throw new \Exception("Symbol does not appear in the shape: " . $key);
 		}
@@ -107,7 +109,7 @@ class ShapedRecipeFromJson extends ShapedRecipe{
 		return $this;
 	}
 
-	protected function fixRecipe($key, $item){
+	protected function fixRecipe($key, $item) : void{
 		foreach($this->shapeItems[$key] as $entry){
 			$this->ingredients[$entry->y][$entry->x] = clone $item;
 		}
@@ -116,7 +118,7 @@ class ShapedRecipeFromJson extends ShapedRecipe{
 	/**
 	 * @return Item[][]
 	 */
-	public function getIngredientMap(){
+	public function getIngredientMap() : array{
 		$ingredients = [];
 		foreach($this->ingredients as $y => $row){
 			$ingredients[$y] = [];
@@ -137,18 +139,18 @@ class ShapedRecipeFromJson extends ShapedRecipe{
 	 * @param $y
 	 * @return null|Item
 	 */
-	public function getIngredient($x, $y){
+	public function getIngredient($x, $y) : Item{
 		return isset($this->ingredients[$y][$x]) ? $this->ingredients[$y][$x] : Item::get(Item::AIR);
 	}
 
 	/**
 	 * @return string[]
 	 */
-	public function getShape(){
+	public function getShape() : array{
 		return $this->shape;
 	}
 
-	public function registerToCraftingManager(){
+	public function registerToCraftingManager() : void{
 		Server::getInstance()->getCraftingManager()->registerShapedRecipe($this);
 	}
 }

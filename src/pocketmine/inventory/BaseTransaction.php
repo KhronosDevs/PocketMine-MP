@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -63,55 +65,55 @@ class BaseTransaction implements Transaction{
 		$this->achievements = $achievements;
 	}
 
-	public function getCreationTime(){
+	public function getCreationTime() : float{
 		return $this->creationTime;
 	}
 
-	public function getInventory(){
+	public function getInventory() : ?Inventory{
 		return $this->inventory;
 	}
 
-	public function getSlot(){
+	public function getSlot() : ?int{
 		return $this->slot;
 	}
 
-	public function getTargetItem(){
+	public function getTargetItem() : Item{
 		return clone $this->targetItem;
 	}
 
-	public function setTargetItem(Item $item){
+	public function setTargetItem(Item $item) : void{
 		$this->targetItem = clone $item;
 	}
 
-	public function getFailures(){
+	public function getFailures() : int{
 		return $this->failures;
 	}
 
-	public function addFailure(){
+	public function addFailure() : void{
 		$this->failures++;
 	}
 
-	public function succeeded(){
+	public function succeeded() : bool{
 		return $this->wasSuccessful;
 	}
 
-	public function setSuccess($value = true){
+	public function setSuccess($value = true) : void{
 		$this->wasSuccessful = $value;
 	}
 
-	public function getTransactionType(){
+	public function getTransactionType() : int{
 		return $this->transactionType;
 	}
 
-	public function getAchievements(){
+	public function getAchievements() : array{
 		return $this->achievements;
 	}
 
-	public function hasAchievements(){
+	public function hasAchievements() : bool{
 		return count($this->achievements) !== 0;
 	}
 
-	public function addAchievement(string $achievementName){
+	public function addAchievement(string $achievementName) : void{
 		$this->achievements[] = $achievementName;
 	}
 
@@ -122,7 +124,7 @@ class BaseTransaction implements Transaction{
 	 * For successful transactions, update non-source viewers (source does not need updating)
 	 * For failed transactions, update the source (non-source viewers will see nothing anyway)
 	 */
-	public function sendSlotUpdate(Player $source){
+	public function sendSlotUpdate(Player $source) : void{
 		if($this->getInventory() instanceof TemporaryInventory){
 			return;
 		}
@@ -144,7 +146,7 @@ class BaseTransaction implements Transaction{
 	 *				"out" => items removed from the inventory
 	 * ]
 	 */
-	public function getChange(){
+	public function getChange() : ?array{
 		$sourceItem = $this->getInventory()->getItem($this->slot);
 
 		if($sourceItem->deepEquals($this->targetItem, true, true, true)){

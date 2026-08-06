@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -56,11 +58,11 @@ class InventoryType{
 	 *
 	 * @return InventoryType
 	 */
-	public static function get($index){
+	public static function get($index) : ?InventoryType{
 		return isset(static::$default[$index]) ? static::$default[$index] : null;
 	}
 
-	public static function init(){
+	public static function init() : void{
 		if(count(static::$default) > 0){
 			return;
 		}
@@ -95,21 +97,21 @@ class InventoryType{
 	/**
 	 * @return int
 	 */
-	public function getDefaultSize(){
+	public function getDefaultSize() : int{
 		return $this->size;
 	}
 
 	/**
 	 * @return string
 	 */
-	public function getDefaultTitle(){
+	public function getDefaultTitle() : string{
 		return $this->title;
 	}
 
 	/**
 	 * @return int
 	 */
-	public function getNetworkType(){
+	public function getNetworkType() : ?int{
 		return $this->typeId;
 	}
 }

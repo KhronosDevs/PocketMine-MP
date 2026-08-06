@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 /*
  *
@@ -114,7 +116,7 @@ class CraftingManager
 	/**
 	 * Rebuilds the cached CraftingDataPacket.
 	 */
-	public function buildCraftingDataCache(){
+	public function buildCraftingDataCache() : void{
 		Timings::$craftingDataCacheRebuildTimer->startTiming();
 		$pk = new CraftingDataPacket();
 		$pk->cleanRecipes = true;
@@ -796,7 +798,7 @@ class CraftingManager
 		))->setIngredient("X", Item::get(Item::CARROT, 0, 1))->setIngredient("Y", Item::get(Item::GOLD_NUGGET, 0, 8)));
 	}
 
-	public function sort(Item $i1, Item $i2)
+	public function sort(Item $i1, Item $i2) : int
 	{
 		if ($i1->getId() > $i2->getId()) {
 			return 1;
@@ -818,7 +820,7 @@ class CraftingManager
 	/**
 	 * @return Recipe
 	 */
-	public function getRecipe(UUID $id)
+	public function getRecipe(UUID $id) : ?Recipe
 	{
 		$index = $id->toBinary();
 		return $this->recipes[$index] ?? null;
@@ -827,19 +829,19 @@ class CraftingManager
 	/**
 	 * @return Recipe[]
 	 */
-	public function getRecipes()
+	public function getRecipes() : array
 	{
 		return $this->recipes;
 	}
 
-	public function getRecipesByResult(Item $item)
+	public function getRecipesByResult(Item $item) : array
 	{
 		return @array_values($this->recipeLookup[$item->getId() . ":" . $item->getDamage()]) ?? [];
 	}
 	/**
 	 * @return FurnaceRecipe[]
 	 */
-	public function getFurnaceRecipes()
+	public function getFurnaceRecipes() : array
 	{
 		return $this->furnaceRecipes;
 	}
@@ -847,7 +849,7 @@ class CraftingManager
 	/**
 	 * @return FurnaceRecipe
 	 */
-	public function matchFurnaceRecipe(Item $input)
+	public function matchFurnaceRecipe(Item $input) : ?FurnaceRecipe
 	{
 		if (isset($this->furnaceRecipes[$input->getId() . ":" . $input->getDamage()])) {
 			return $this->furnaceRecipes[$input->getId() . ":" . $input->getDamage()];
@@ -860,7 +862,7 @@ class CraftingManager
 	/**
 	 * @return BrewingRecipe
 	 */
-	public function matchBrewingRecipe(Item $input, Item $potion)
+	public function matchBrewingRecipe(Item $input, Item $potion) : ?BrewingRecipe
 	{
 		$subscript = $input->getId() . ":" . ($input->getDamage() === null ? "0" : $input->getDamage()) . ":" . $potion->getId() . ":" . ($potion->getDamage() === null ? "0" : $potion->getDamage());
 		if (isset($this->brewingRecipes[$subscript])) {
@@ -869,7 +871,7 @@ class CraftingManager
 		return null;
 	}
 
-	public function registerShapedRecipe(ShapedRecipe $recipe)
+	public function registerShapedRecipe(ShapedRecipe $recipe) : void
 	{
 		$result = $recipe->getResult();
 		$this->recipes[$recipe->getId()->toBinary()] = $recipe;
@@ -888,7 +890,7 @@ class CraftingManager
 		$this->craftingDataCache = null;
 	}
 
-	public function registerShapelessRecipe(ShapelessRecipe $recipe)
+	public function registerShapelessRecipe(ShapelessRecipe $recipe) : void
 	{
 		$result = $recipe->getResult();
 		$this->recipes[$recipe->getId()->toBinary()] = $recipe;
@@ -902,14 +904,14 @@ class CraftingManager
 		$this->craftingDataCache = null;
 	}
 
-	public function registerFurnaceRecipe(FurnaceRecipe $recipe)
+	public function registerFurnaceRecipe(FurnaceRecipe $recipe) : void
 	{
 		$input = $recipe->getInput();
 		$this->furnaceRecipes[$input->getId() . ":" . ($input->getDamage() === null ? "?" : $input->getDamage())] = $recipe;
 		$this->craftingDataCache = null;
 	}
 
-	public function registerBrewingRecipe(BrewingRecipe $recipe)
+	public function registerBrewingRecipe(BrewingRecipe $recipe) : void
 	{
 		$input = $recipe->getInput();
 		$potion = $recipe->getPotion();
@@ -919,7 +921,7 @@ class CraftingManager
 	/**
 	 * @return bool
 	 */
-	public function matchRecipe(ShapelessRecipe $recipe)
+	public function matchRecipe(ShapelessRecipe $recipe) : bool
 	{
 		if (!isset($this->recipeLookup[$idx = $recipe->getResult()->getId() . ":" . $recipe->getResult()->getDamage()])) {
 			return false;
@@ -968,7 +970,7 @@ class CraftingManager
 		return $hasRecipe !== null;
 	}
 
-	public function registerRecipe(Recipe $recipe)
+	public function registerRecipe(Recipe $recipe) : void
 	{
 		$recipe->setId(UUID::fromData(++self::$RECIPE_COUNT, $recipe->getResult()->getId(), $recipe->getResult()->getDamage(), $recipe->getResult()->getCount(), $recipe->getResult()->getCompoundTag()));
 		if ($recipe instanceof ShapedRecipe) {

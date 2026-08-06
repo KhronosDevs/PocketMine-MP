@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -34,7 +36,7 @@ class FakeBlockMenu extends Position implements InventoryHolder{
 		parent::__construct($pos->x, $pos->y, $pos->z, $pos->level);
 	}
 
-	public function getInventory(){
+	public function getInventory() : Inventory{
 		return $this->inventory;
 	}
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -33,7 +35,7 @@ class DispenserInventory extends ContainerInventory{
 	/**
 	 * @return Dispenser
 	 */
-	public function getHolder(){
+	public function getHolder() : Dispenser{
 		return $this->holder;
 	}
 }

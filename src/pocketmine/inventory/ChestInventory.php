@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -39,11 +41,11 @@ class ChestInventory extends ContainerInventory{
 	/**
 	 * @return Chest
 	 */
-	public function getHolder(){
+	public function getHolder() : Chest{
 		return $this->holder;
 	}
 
-	public function getContents($withAir = false){
+	public function getContents($withAir = false) : array{
 		if($withAir){
 			$contents = [];
 			for($i = 0; $i < $this->getSize(); ++$i){
@@ -55,7 +57,7 @@ class ChestInventory extends ContainerInventory{
 		return parent::getContents();
 	}
 
-	public function onOpen(Player $who){
+	public function onOpen(Player $who) : void{
 		parent::onOpen($who);
 
 		if(count($this->getViewers()) === 1){
@@ -81,7 +83,7 @@ class ChestInventory extends ContainerInventory{
 		}
 	}
 
-	public function onClose(Player $who){
+	public function onClose(Player $who) : void{
 		if($this->getHolder()->getLevel() instanceof Level){
 			/** @var TrappedChest $block */
 			$block = $this->getHolder()->getBlock();

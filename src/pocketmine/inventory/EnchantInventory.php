@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -57,15 +59,15 @@ class EnchantInventory extends TemporaryInventory{
 	/**
 	 * @return EnchantTable
 	 */
-	public function getHolder(){
+	public function getHolder() : FakeBlockMenu{
 		return $this->holder;
 	}
 
-	public function getResultSlotIndex(){
+	public function getResultSlotIndex() : int{
 		return -1; //enchanting tables don't have result slots, they modify the item in the target slot instead
 	}
 
-	public function onOpen(Player $who){
+	public function onOpen(Player $who) : void{
 		parent::onOpen($who);
 		if($this->levels == null){
 			$this->bookshelfAmount = $this->countBookshelf();
@@ -87,11 +89,11 @@ class EnchantInventory extends TemporaryInventory{
 		}
 	}
 
-	private function randomFloat($min = 0, $max = 1){
+	private function randomFloat($min = 0, $max = 1) : float{
 		return $min + mt_rand() / mt_getrandmax() * ($max - $min);
 	}
 
-	public function onSlotChange($index, $before, $send){
+	public function onSlotChange($index, $before, $send) : void{
 		parent::onSlotChange($index, $before, $send);
 
 		if($index === 0){
@@ -185,7 +187,7 @@ class EnchantInventory extends TemporaryInventory{
 		}
 	}
 
-	public function onClose(Player $who){
+	public function onClose(Player $who) : void{
 		parent::onClose($who);
 
 		$level = $this->getHolder()->getLevel();
@@ -207,7 +209,7 @@ class EnchantInventory extends TemporaryInventory{
 	 *
 	 * @return bool
 	 */
-	public function checkEnts(array $ent1, array $ent2){
+	public function checkEnts(array $ent1, array $ent2) : bool{
 		foreach($ent1 as $enchantment){
 			$hasResult = false;
 			foreach($ent2 as $enchantment1){
@@ -223,7 +225,7 @@ class EnchantInventory extends TemporaryInventory{
 		return true;
 	}
 
-	public function onEnchant(Player $who, Item $before, Item $after){
+	public function onEnchant(Player $who, Item $before, Item $after) : void{
 		$result = ($before->getId() === Item::BOOK) ? new EnchantedBook() : $before;
 		if(!$before->hasEnchantments() && $after->hasEnchantments() && $after->getId() == $result->getId() &&
 			$this->levels != null && $this->entries != null
@@ -270,7 +272,7 @@ class EnchantInventory extends TemporaryInventory{
 		}
 	}
 
-	public function sendEnchantmentList(){
+	public function sendEnchantmentList() : void{
 		$pk = new CraftingDataPacket();
 		if($this->entries !== null && $this->levels !== null){
 			$list = new EnchantmentList(count($this->entries));
@@ -287,7 +289,7 @@ class EnchantInventory extends TemporaryInventory{
 	 * @param Enchantment[] $enchantments
 	 * @return Enchantment[]
 	 */
-	public function removeConflictEnchantment(Enchantment $enchantment, array $enchantments){
+	public function removeConflictEnchantment(Enchantment $enchantment, array $enchantments) : array{
 		if(count($enchantments) > 0){
 			foreach($enchantments as $e){
 				$id = $e->getId();

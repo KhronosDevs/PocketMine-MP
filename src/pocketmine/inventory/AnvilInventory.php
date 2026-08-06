@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -40,11 +42,11 @@ class AnvilInventory extends TemporaryInventory{
 	/**
 	 * @return FakeBlockMenu
 	 */
-	public function getHolder(){
+	public function getHolder() : FakeBlockMenu{
 		return $this->holder;
 	}
 
-	public function getResultSlotIndex(){
+	public function getResultSlotIndex() : int{
 		return self::RESULT;
 	}
 
@@ -76,11 +78,11 @@ class AnvilInventory extends TemporaryInventory{
 		return true;
 	}
 
-	public function onSlotChange($index, $before, $send){
+	public function onSlotChange($index, $before, $send) : void{
 		//Do not send anvil slot updates to anyone. This will cause a client crash.
 	}
 
-	public function onClose(Player $who){
+	public function onClose(Player $who) : void{
 		parent::onClose($who);
 
 		$this->getHolder()->getLevel()->dropItem($this->getHolder()->add(0.5, 0.5, 0.5), $this->getItem(0));

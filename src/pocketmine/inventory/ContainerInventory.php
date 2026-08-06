@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -29,7 +31,7 @@ use pocketmine\network\protocol\ContainerOpenPacket;
 use pocketmine\Player;
 
 abstract class ContainerInventory extends BaseInventory{
-	public function onOpen(Player $who){
+	public function onOpen(Player $who) : void{
 		parent::onOpen($who);
 		$pk = new ContainerOpenPacket();
 		$pk->windowid = $who->getWindowId($this);
@@ -49,7 +51,7 @@ abstract class ContainerInventory extends BaseInventory{
 		$this->sendContents($who);
 	}
 
-	public function onClose(Player $who){
+	public function onClose(Player $who) : void{
 		$pk = new ContainerClosePacket();
 		$pk->windowid = $who->getWindowId($this);
 		$who->dataPacket($pk);

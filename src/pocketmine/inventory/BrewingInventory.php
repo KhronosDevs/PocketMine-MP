@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -34,22 +36,22 @@ class BrewingInventory extends ContainerInventory{
 	/**
 	 * @return BrewingStand
 	 */
-	public function getHolder(){
+	public function getHolder() : BrewingStand{
 		return $this->holder;
 	}
 
-	public function setIngredient(Item $item){
+	public function setIngredient(Item $item) : void{
 		$this->setItem(0, $item);
 	}
 
 	/**
 	 * @return Item
 	 */
-	public function getIngredient(){
+	public function getIngredient() : Item{
 		return $this->getItem(0);
 	}
 
-	public function onSlotChange($index, $before, $send){
+	public function onSlotChange($index, $before, $send) : void{
 		parent::onSlotChange($index, $before, $send);
 
 		$this->getHolder()->scheduleUpdate();

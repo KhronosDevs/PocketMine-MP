@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -46,27 +48,27 @@ class DoubleChestInventory extends ChestInventory implements InventoryHolder{
 		BaseInventory::__construct($this, InventoryType::get(InventoryType::DOUBLE_CHEST), $items);
 	}
 
-	public function getInventory(){
+	public function getInventory() : DoubleChestInventory{
 		return $this;
 	}
 
-	public function getHolder(){
+	public function getHolder() : Chest{
 		return $this->left->getHolder();
 	}
 
-	public function getItem($index){
+	public function getItem($index) : Item{
 		return $index < $this->left->getSize() ? $this->left->getItem($index) : $this->right->getItem($index - $this->right->getSize());
 	}
 
-	public function setItem($index, Item $item){
+	public function setItem($index, Item $item, $send = true) : bool{
 		return $index < $this->left->getSize() ? $this->left->setItem($index, $item) : $this->right->setItem($index - $this->right->getSize(), $item);
 	}
 
-	public function clear($index){
+	public function clear($index, $send = true) : bool{
 		return $index < $this->left->getSize() ? $this->left->clear($index) : $this->right->clear($index - $this->right->getSize());
 	}
 
-	public function getContents(){
+	public function getContents($withAir = false) : array{
 		$contents = [];
 		for($i = 0; $i < $this->getSize(); ++$i){
 			$contents[$i] = $this->getItem($i);
@@ -78,7 +80,7 @@ class DoubleChestInventory extends ChestInventory implements InventoryHolder{
 	/**
 	 * @param Item[] $items
 	 */
-	public function setContents(array $items){
+	public function setContents(array $items, $send = true) : void{
 		if(count($items) > $this->size){
 			$items = array_slice($items, 0, $this->size, true);
 		}
@@ -98,7 +100,7 @@ class DoubleChestInventory extends ChestInventory implements InventoryHolder{
 		}
 	}
 
-	public function onOpen(Player $who){
+	public function onOpen(Player $who) : void{
 		parent::onOpen($who);
 
 		if(count($this->getViewers()) === 1){
@@ -114,7 +116,7 @@ class DoubleChestInventory extends ChestInventory implements InventoryHolder{
 		}
 	}
 
-	public function onClose(Player $who){
+	public function onClose(Player $who) : void{
 		if(count($this->getViewers()) === 1){
 			$pk = new BlockEventPacket();
 			$pk->x = $this->right->getHolder()->getX();
@@ -132,14 +134,14 @@ class DoubleChestInventory extends ChestInventory implements InventoryHolder{
 	/**
 	 * @return ChestInventory
 	 */
-	public function getLeftSide(){
+	public function getLeftSide() : ChestInventory{
 		return $this->left;
 	}
 
 	/**
 	 * @return ChestInventory
 	 */
-	public function getRightSide(){
+	public function getRightSide() : ChestInventory{
 		return $this->right;
 	}
 }

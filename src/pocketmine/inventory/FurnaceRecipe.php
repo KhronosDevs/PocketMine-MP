@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -42,11 +44,11 @@ class FurnaceRecipe implements Recipe{
 		$this->ingredient = clone $ingredient;
 	}
 
-	public function getId(){
+	public function getId() : ?UUID{
 		return $this->id;
 	}
 
-	public function setId(UUID $id){
+	public function setId(UUID $id) : void{
 		if($this->id !== null){
 			throw new \InvalidStateException("Id is already set");
 		}
@@ -54,25 +56,25 @@ class FurnaceRecipe implements Recipe{
 		$this->id = $id;
 	}
 
-	public function setInput(Item $item){
+	public function setInput(Item $item) : void{
 		$this->ingredient = clone $item;
 	}
 
 	/**
 	 * @return Item
 	 */
-	public function getInput(){
+	public function getInput() : Item{
 		return clone $this->ingredient;
 	}
 
 	/**
 	 * @return Item
 	 */
-	public function getResult(){
+	public function getResult() : Item{
 		return clone $this->output;
 	}
 
-	public function registerToCraftingManager(){
+	public function registerToCraftingManager() : void{
 		Server::getInstance()->getCraftingManager()->registerFurnaceRecipe($this);
 	}
 }

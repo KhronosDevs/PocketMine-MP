@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -48,11 +50,11 @@ class CraftingInventory extends BaseInventory{
 	/**
 	 * @return Inventory
 	 */
-	public function getResultInventory(){
+	public function getResultInventory() : Inventory{
 		return $this->resultInventory;
 	}
 
-	public function getSize(){
+	public function getSize() : int{
 		return $this->getResultInventory()->getSize() + parent::getSize();
 	}
 }

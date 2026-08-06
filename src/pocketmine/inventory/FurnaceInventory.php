@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -39,53 +41,53 @@ class FurnaceInventory extends ContainerInventory{
 	/**
 	 * @return Furnace
 	 */
-	public function getHolder(){
+	public function getHolder() : Furnace{
 		return $this->holder;
 	}
 
 	/**
 	 * @return Item
 	 */
-	public function getResult(){
+	public function getResult() : Item{
 		return $this->getItem(self::RESULT);
 	}
 
 	/**
 	 * @return Item
 	 */
-	public function getFuel(){
+	public function getFuel() : Item{
 		return $this->getItem(self::FUEL);
 	}
 
 	/**
 	 * @return Item
 	 */
-	public function getSmelting(){
+	public function getSmelting() : Item{
 		return $this->getItem(self::SMELTING);
 	}
 
 	/**
 	 * @return bool
 	 */
-	public function setResult(Item $item){
+	public function setResult(Item $item) : bool{
 		return $this->setItem(self::RESULT, $item);
 	}
 
 	/**
 	 * @return bool
 	 */
-	public function setFuel(Item $item){
+	public function setFuel(Item $item) : bool{
 		return $this->setItem(self::FUEL, $item);
 	}
 
 	/**
 	 * @return bool
 	 */
-	public function setSmelting(Item $item){
+	public function setSmelting(Item $item) : bool{
 		return $this->setItem(self::SMELTING, $item);
 	}
 
-	public function onSlotChange($index, $before, $send){
+	public function onSlotChange($index, $before, $send) : void{
 		parent::onSlotChange($index, $before, $send);
 
 		$this->getHolder()->scheduleUpdate();

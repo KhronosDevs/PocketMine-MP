@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /**
@@ -57,23 +59,23 @@ class SimpleTransactionQueue implements TransactionQueue{
 	/**
 	 * @return Player
 	 */
-	public function getPlayer(){
+	public function getPlayer() : ?Player{
 		return $this->player;
 	}
 
-	public function getInventories(){
+	public function getInventories() : array{
 		return $this->inventories;
 	}
 
-	public function getTransactions(){
+	public function getTransactions() : \SplQueue{
 		return $this->transactionQueue;
 	}
 
-	public function getTransactionCount(){
+	public function getTransactionCount() : int{
 		return $this->transactionCount;
 	}
 
-	public function addTransaction(Transaction $transaction){
+	public function addTransaction(Transaction $transaction) : void{
 		$this->transactionQueue->enqueue($transaction);
 		if($transaction->getInventory() instanceof Inventory){
 			/** For dropping items, the target inventory is open air, a.k.a. null. */
@@ -83,7 +85,7 @@ class SimpleTransactionQueue implements TransactionQueue{
 		$this->transactionCount += 1;
 	}
 
-	public function execute(){
+	public function execute() : void{
 		/** @var Transaction[] */
 		$failed = [];
 

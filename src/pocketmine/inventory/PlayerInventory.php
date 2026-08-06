@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -82,12 +84,12 @@ class PlayerInventory extends BaseInventory
         }
     }
 
-    public function getSize()
+    public function getSize() : int
     {
         return parent::getSize() - 4; //Remove armor slots
     }
 
-    public function setSize($size)
+    public function setSize($size) : void
     {
         parent::setSize($size + 4);
         $this->sendContents($this->getViewers());
@@ -100,7 +102,7 @@ class PlayerInventory extends BaseInventory
      *
      * Returns the index of the inventory slot linked to the specified hotbar slot
      */
-    public function getHotbarSlotIndex($index)
+    public function getHotbarSlotIndex($index) : int
     {
         return ($index >= 0 && $index < $this->getHotbarSize()) ? $this->hotbar[$index] : -1;
     }
@@ -110,7 +112,7 @@ class PlayerInventory extends BaseInventory
      *
      * Changes the linkage of the specified hotbar slot. This should never be done unless it is requested by the client.
      */
-    public function setHotbarSlotIndex($index, $slot)
+    public function setHotbarSlotIndex($index, $slot) : void
     {
         if ($this->getHolder()->getServer()->getProperty("settings.deprecated-verbose") !== false) {
             trigger_error("Do not attempt to change hotbar links in plugins!", E_USER_DEPRECATED);
@@ -122,7 +124,7 @@ class PlayerInventory extends BaseInventory
      *
      * Returns the index of the inventory slot the player is currently holding
      */
-    public function getHeldItemIndex()
+    public function getHeldItemIndex() : int
     {
         return $this->itemInHandIndex;
     }
@@ -137,7 +139,7 @@ class PlayerInventory extends BaseInventory
      * This new implementation is fully compatible with older APIs.
      * NOTE: Slot mapping is the raw slot index sent by MCPE, which will be between 9 and 44.
      */
-    public function setHeldItemIndex($hotbarSlotIndex, $sendToHolder = true, $slotMapping = null)
+    public function setHeldItemIndex($hotbarSlotIndex, $sendToHolder = true, $slotMapping = null) : void
     {
         if ($slotMapping !== null) {
             //Get the index of the slot in the actual inventory
@@ -186,7 +188,7 @@ class PlayerInventory extends BaseInventory
      *
      * Returns the item the player is currently holding
      */
-    public function getItemInHand()
+    public function getItemInHand() : Item
     {
         $item = $this->getItem($this->getHeldItemSlot());
         if ($item instanceof Item) {
@@ -201,7 +203,7 @@ class PlayerInventory extends BaseInventory
      *
      * Sets the item in the inventory slot the player is currently holding.
      */
-    public function setItemInHand(Item $item)
+    public function setItemInHand(Item $item) : bool
     {
         return $this->setItem($this->getHeldItemSlot(), $item);
     }
@@ -211,7 +213,7 @@ class PlayerInventory extends BaseInventory
      *
      * Returns an array of hotbar indices
      */
-    public function getHotbar()
+    public function getHotbar() : array
     {
         return $this->hotbar;
     }
@@ -221,7 +223,7 @@ class PlayerInventory extends BaseInventory
      *
      * Returns the inventory slot index of the currently equipped slot
      */
-    public function getHeldItemSlot()
+    public function getHeldItemSlot() : int
     {
         return $this->getHotbarSlotIndex($this->itemInHandIndex);
     }
@@ -230,12 +232,12 @@ class PlayerInventory extends BaseInventory
      * @deprecated
      * @param int $slot
      */
-    public function setHeldItemSlot($slot) {}
+    public function setHeldItemSlot($slot) : void {}
 
     /**
      * @param Player|Player[] $target
      */
-    public function sendHeldItem($target)
+    public function sendHeldItem($target) : void
     {
         $item = $this->getItemInHand();
 
@@ -261,7 +263,7 @@ class PlayerInventory extends BaseInventory
         }
     }
 
-    public function onSlotChange($index, $before, $send)
+    public function onSlotChange($index, $before, $send) : void
     {
         if ($send) {
             $holder = $this->getHolder();
@@ -282,22 +284,22 @@ class PlayerInventory extends BaseInventory
         }
     }
 
-    public function getHotbarSize()
+    public function getHotbarSize() : int
     {
         return 9;
     }
 
-    public function getArmorItem($index)
+    public function getArmorItem($index) : Item
     {
         return $this->getItem($this->getSize() + $index);
     }
 
-    public function setArmorItem($index, Item $item)
+    public function setArmorItem($index, Item $item) : bool
     {
         return $this->setItem($this->getSize() + $index, $item);
     }
 
-    public function damageArmor($index, $cost)
+    public function damageArmor($index, $cost) : void
     {
         $this->slots[$this->getSize() + $index]->useOn($this->slots[$this->getSize() + $index], $cost);
         if ($this->slots[$this->getSize() + $index]->getDamage() >= $this->slots[$this->getSize() + $index]->getMaxDurability()) {
@@ -306,47 +308,47 @@ class PlayerInventory extends BaseInventory
         $this->sendArmorContents($this->getViewers());
     }
 
-    public function getHelmet()
+    public function getHelmet() : Item
     {
         return $this->getItem($this->getSize());
     }
 
-    public function getChestplate()
+    public function getChestplate() : Item
     {
         return $this->getItem($this->getSize() + 1);
     }
 
-    public function getLeggings()
+    public function getLeggings() : Item
     {
         return $this->getItem($this->getSize() + 2);
     }
 
-    public function getBoots()
+    public function getBoots() : Item
     {
         return $this->getItem($this->getSize() + 3);
     }
 
-    public function setHelmet(Item $helmet)
+    public function setHelmet(Item $helmet) : bool
     {
         return $this->setItem($this->getSize(), $helmet);
     }
 
-    public function setChestplate(Item $chestplate)
+    public function setChestplate(Item $chestplate) : bool
     {
         return $this->setItem($this->getSize() + 1, $chestplate);
     }
 
-    public function setLeggings(Item $leggings)
+    public function setLeggings(Item $leggings) : bool
     {
         return $this->setItem($this->getSize() + 2, $leggings);
     }
 
-    public function setBoots(Item $boots)
+    public function setBoots(Item $boots) : bool
     {
         return $this->setItem($this->getSize() + 3, $boots);
     }
 
-    public function setItem($index, Item $item, $send = true)
+    public function setItem($index, Item $item, $send = true) : bool
     {
         if ($index < 0 || $index >= $this->size) {
             return false;
@@ -377,7 +379,7 @@ class PlayerInventory extends BaseInventory
         return true;
     }
 
-    public function clear($index, $send = true)
+    public function clear($index, $send = true) : bool
     {
         if (isset($this->slots[$index])) {
             $item = Item::get(Item::AIR, 0, 0);
@@ -420,7 +422,7 @@ class PlayerInventory extends BaseInventory
     /**
      * @return Item[]
      */
-    public function getArmorContents()
+    public function getArmorContents() : array
     {
         $armor = [];
 
@@ -431,7 +433,7 @@ class PlayerInventory extends BaseInventory
         return $armor;
     }
 
-    public function clearAll($send = true)
+    public function clearAll($send = true) : void
     {
         $limit = $this->getSize() + 4;
         for ($index = 0; $index < $limit; ++$index) {
@@ -444,7 +446,7 @@ class PlayerInventory extends BaseInventory
     /**
      * @param Player|Player[] $target
      */
-    public function sendArmorContents($target)
+    public function sendArmorContents($target) : void
     {
         if ($target instanceof Player) {
             $target = [$target];
@@ -473,7 +475,7 @@ class PlayerInventory extends BaseInventory
     /**
      * @param Item[] $items
      */
-    public function setArmorContents(array $items)
+    public function setArmorContents(array $items) : void
     {
         for ($i = 0; $i < 4; ++$i) {
             if (!isset($items[$i]) || !($items[$i] instanceof Item)) {
@@ -492,7 +494,7 @@ class PlayerInventory extends BaseInventory
      * @param int             $index
      * @param Player|Player[] $target
      */
-    public function sendArmorSlot($index, $target)
+    public function sendArmorSlot($index, $target) : void
     {
         if ($target instanceof Player) {
             $target = [$target];
@@ -523,7 +525,7 @@ class PlayerInventory extends BaseInventory
     /**
      * @param Player|Player[] $target
      */
-    public function sendContents($target)
+    public function sendContents($target) : void
     {
         if ($target instanceof Player) {
             $target = [$target];
@@ -561,7 +563,7 @@ class PlayerInventory extends BaseInventory
      * @param int             $index
      * @param Player|Player[] $target
      */
-    public function sendSlot($index, $target)
+    public function sendSlot($index, $target) : void
     {
         if ($target instanceof Player) {
             $target = [$target];
@@ -590,7 +592,7 @@ class PlayerInventory extends BaseInventory
     /**
      * @return Human|Player
      */
-    public function getHolder()
+    public function getHolder() : Human|Player
     {
         return parent::getHolder();
     }
