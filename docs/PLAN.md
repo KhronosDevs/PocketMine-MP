@@ -853,49 +853,52 @@ final class RegionThread extends Thread {
 
 ## 5. MIGRATION STEPS (ORDERED)
 
-### Phase 0: Foundation (Week 1-2)
+### Phase 0: Foundation (Week 1-2) ✅ DONE
+| Step | Branch | PR | Description |
+|------|--------|-----|-------------|
+| 0.1 | `foundation-bootstrap` | #18 | Create `bootstrap.php`, manual DI composition root, Kernel.php |
+| 0.2 | `foundation-bootstrap` | #18 | Define all Port interfaces in `src/pocketmine/port/` |
+| 0.3 | `foundation-bootstrap` | #18 | Implement ECS core: Component, Resource, System, World, Query, Archetype, ComponentRegistry, SystemScheduler |
+| 0.4 | `foundation-bootstrap` | #18 | Implement ThreadingPort + PmmpThreadPool adapter |
+
+### Phase 1: ECS Component Migration (Week 2-4) ✅ DONE
+| Step | Branch | PR | Description |
+|------|--------|-----|-------------|
+| 1.1 | `ecs-components-basic` | #19 | Position, Velocity, Health, Metadata, Tags, Rotation, Collision, Effect, Attribute, Inventory, AIState, Path |
+| 1.2 | `ecs-components-basic` | #19 | EntityRef, EntityBuilder, World::spawn/despawn |
+| 1.3 | `ecs-components-basic` | #19 | MovementSystem (parallel), PhysicsSystem (sequential) |
+| 1.4 | `ecs-components-basic` | #19 | EffectSystem (parallel), AISystem (sequential) |
+| 1.5 | `ecs-components-basic` | #19 | ComponentSerializer, register all 17 components, 4 systems |
+
+### Phase 2: Infrastructure Adapters (Week 3-5)
 | Step | Branch | Description |
 |------|--------|-------------|
-| 0.1 | `foundation-bootstrap` | Create `bootstrap.php`, DI container (PHP-DI or manual), Kernel.php |
-| 0.2 | `foundation-port-interfaces` | Define all Port interfaces in `src/pocketmine/port/` |
-| 0.3 | `foundation-ecs-core` | Implement ECS core: Component, Resource, System, World, Query, Archetype, ComponentRegistry, SystemScheduler |
-| 0.4 | `foundation-threading-port` | Implement ThreadingPort + PmmpThreadPool adapter |
+| 2.1 | `adapter-network-protocol84` | Protocol84NetworkAdapter — wraps legacy Network.php for packet I/O (FROZEN boundary) |
+| 2.2 | `adapter-storage-anvil` | AnvilStorageAdapter, LevelDBStorageAdapter — chunk/entity/tile persistence |
+| 2.3 | `adapter-worldgen-parallel` | ParallelGeneratorAdapter — chunk gen/populate/light via ThreadingPort |
+| 2.4 | `adapter-thread-pool` | PmmpThreadPool tuning, work-stealing, future/promise patterns |
 
-### Phase 1: ECS Component Migration (Week 2-4)
+### Phase 3: Core Gameplay Services (Week 4-6)
 | Step | Branch | Description |
 |------|--------|-------------|
-| 1.1 | `ecs-components-basic` | PositionComponent, VelocityComponent, HealthComponent, MetadataComponent, Tag components |
-| 1.2 | `ecs-components-entity` | EntityRef, EntityBuilder, World::spawn/despawn, Entity ID allocation |
-| 1.3 | `ecs-systems-movement` | MovementSystem, PhysicsSystem (gravity, collision broad-phase) |
-| 1.4 | `ecs-systems-combat` | CombatSystem, EffectSystem, AttributeSystem |
-| 1.5 | `ecs-systems-ai` | AISystem, PathfindingSystem (async via ThreadingPort) |
+| 3.1 | `service-player-lifecycle` | PlayerJoinService, PlayerLeaveService, PlayerRespawnService — using EntityRef |
+| 3.2 | `service-chunk-management` | ChunkLoadService, ChunkUnloadService, ChunkSendService — via StoragePort |
+| 3.3 | `service-block-interaction` | BlockBreakService, BlockPlaceService, BlockUpdateService — ECS commands |
+| 3.4 | `service-entity-management` | EntitySpawnService, EntityDespawnService, EntityInteractionService — EntityRef |
+| 3.5 | `service-combat` | CombatService, DamageService, KnockbackService — AttributeComponent, HealthComponent |
+| 3.6 | `service-inventory` | InventoryService, CraftingService, ContainerService — InventoryComponent |
 
-### Phase 2: Adapter Implementation (Week 3-5)
+### Phase 4: **New Plugin API** (Week 6-8) — **BREAKING CHANGES, NO LEGACY COMPAT**
 | Step | Branch | Description |
 |------|--------|-------------|
-| 2.1 | `adapter-network-protocol84` | Protocol84NetworkAdapter (wraps existing Network.php, FROZEN boundary) |
-| 2.2 | `adapter-storage-anvil` | AnvilStorageAdapter, LevelDBStorageAdapter |
-| 2.3 | `adapter-worldgen-parallel` | ParallelGeneratorAdapter (uses ThreadingPort for gen/pop/light) |
-| 2.4 | `adapter-plugin` | PluginManagerAdapter, PluginEventAdapter, PluginCommandAdapter |
+| 4.1 | `api-ecs-plugin` | Plugin base class using EntityRef, QueryBuilder, System registration |
+| 4.2 | `api-event-system` | Typed event bus (not string-based), priority via PHP attributes |
+| 4.3 | `api-command-system` | Command registration via attributes, typed arguments, tab completion |
+| 4.4 | `api-scheduler` | Task scheduling via System registration or async Task submission |
+| 4.5 | `api-permissions` | Permission system integrated with EntityRef metadata |
+| 4.6 | `api-world-access` | Chunk/Block/Entity access via Query, not Level/Entity getters |
 
-### Phase 3: Application Services (Week 4-6)
-| Step | Branch | Description |
-|------|--------|-------------|
-| 3.1 | `service-player-lifecycle` | PlayerJoinService, PlayerLeaveService, PlayerRespawnService |
-| 3.2 | `service-chunk-management` | ChunkLoadService, ChunkUnloadService, ChunkSendService |
-| 3.3 | `service-block-interaction` | BlockBreakService, BlockPlaceService, BlockUpdateService |
-| 3.4 | `service-entity-management` | EntitySpawnService, EntityDespawnService, EntityInteractionService |
-| 3.5 | `service-inventory` | InventoryService, CraftingService, ContainerService |
-
-### Phase 4: Legacy Strangler Fig (Week 5-8)
-| Step | Branch | Description |
-|------|--------|-------------|
-| 4.1 | `legacy-entity-wrapper` | Legacy Entity.php delegates to ECS EntityRef |
-| 4.2 | `legacy-level-wrapper` | Legacy Level.php delegates to ECS World + ChunkManager |
-| 4.3 | `legacy-server-wrapper` | Legacy Server.php delegates to Kernel |
-| 4.4 | `legacy-plugin-compat` | Plugin API compatibility layer over new ports |
-
-### Phase 5: Threading Integration — Archetype Parallelism (Week 6-9)
+### Phase 5: Threading Integration — Archetype Parallelism (Week 8-11)
 | Step | Branch | Description |
 |------|--------|-------------|
 | 5.1 | `multithread-chunk-gen` | Move chunk generation/population/light to worker threads |
@@ -905,7 +908,7 @@ final class RegionThread extends Thread {
 | 5.5 | `multithread-chunk-compression` | Async chunk serialization for network send |
 | 5.6 | `multithread-system-scheduler` | Parallel system execution for independent archetypes (Movement, Effect, TileEntity) |
 
-### Phase 6: Region-Based Architecture (Week 9-12)
+### Phase 6: Region-Based Architecture (Week 11-14)
 | Step | Branch | Description |
 |------|--------|-------------|
 | 6.1 | `region-world-partition` | Partition global World into RegionWorlds by spatial bounds (16x16 chunks) |
@@ -915,7 +918,7 @@ final class RegionThread extends Thread {
 | 6.5 | `region-cross-boundary` | Cross-region entity migration, chunk border physics, global chunk loading |
 | 6.6 | `region-load-balancing` | Dynamic region splitting/merging based on entity density |
 
-### Phase 7: Polish & Optimization (Week 11-14)
+### Phase 7: Polish & Optimization (Week 13-16)
 | Step | Branch | Description |
 |------|--------|-------------|
 | 7.1 | `optimize-archetype-storage` | Compact component arrays, reduce indirection |
@@ -949,7 +952,6 @@ final class RegionThread extends Thread {
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| **ECS migration breaks plugins** | High — plugins expect Entity/Level APIs | Strangler Fig: legacy wrappers maintain 100% API compatibility during transition |
 | **Threading introduces race conditions** | Critical — world corruption | Ownership model + immutable DTOs + double-buffering; no shared mutable state |
 | **Performance regression from abstraction** | Medium — overhead of ECS queries | Archetype iteration = raw array access; benchmark each phase; PHP 8.2 JIT helps |
 | **pmmpthread stability** | Medium — extension bugs | Isolate threading behind ThreadingPort; can swap to sync impl for debugging |
@@ -957,6 +959,7 @@ final class RegionThread extends Thread {
 | **Region partitioning imbalance** | Medium — some regions overloaded | Dynamic region splitting/merging (Phase 6.6); workload-aware partitioning |
 | **Cross-region interaction latency** | Low-Medium — migration overhead | Batch migrations per tick; predictive migration for moving entities |
 | **Plugin event ordering** | Medium — events from multiple regions | Coordination thread sequences events; per-region event buffers |
+| **New Plugin API adoption** | Medium — ecosystem shift | Clear docs (ECS_API.md), examples, migration guide for old plugins |
 
 ---
 
@@ -970,7 +973,7 @@ final class RegionThread extends Thread {
 | **Entity Ticking (500 entities)** | ~15ms | <5ms (parallel archetypes) | <2ms (region-partitioned) | MovementSystem + PhysicsSystem benchmark |
 | **Entity Ticking (5000 entities)** | ~150ms | ~40ms | <15ms | Stress test |
 | **Memory (100 players, 10 worlds)** | ~800MB | <500MB | <400MB | memory_get_usage() |
-| **Plugin API Compatibility** | 100% legacy | 100% legacy + new ECS API | 100% legacy + new ECS API | Plugin test suite |
+| **Plugin API** | Legacy only | New ECS API (v1.0) | New ECS API (v1.0) | Plugin test suite |
 | **Protocol Compliance** | 100% (protocol 84) | 100% (protocol 84) | 100% (protocol 84) | Protocol test suite, no protocol changes |
 | **Scalability (cores)** | 1 core | 4-8 cores (archetype parallelism) | 16+ cores (region partitioning) | Speedup vs core count |
 
@@ -985,19 +988,24 @@ docs/
 ├── DECISIONS.md         # Architectural decisions log with rationale
 ├── ARCHITECTURE.md      # High-level architecture diagram + description
 ├── ECS_API.md           # ECS API reference for plugin developers
+├── PLUGIN_API.md        # New Plugin API (EntityRef, Query, System, Component, Event, Command)
 ├── THREADING_MODEL.md   # Threading design, safety guarantees, usage (Phases 5-6)
 ├── PORT_CONTRACTS.md    # Port interface specifications
-└── MIGRATION_GUIDE.md   # Step-by-step for plugin developers
+└── MIGRATION_GUIDE.md   # Guide for plugin authors migrating to new ECS API
 ```
 
 ---
 
 ## 9. NEXT STEPS
 
-**Awaiting your explicit approval** on this plan before proceeding. Once approved:
+**Phase 0 & 1 Complete** (PRs #18, #19 merged). Proceeding to Phase 2.
 
-1. Create branch `foundation-bootstrap` with rollback anchor commit
-2. Implement `bootstrap.php`, `Kernel.php`, DI container setup
+1. Create branch `adapter-implementation` with rollback anchor commit
+2. Implement Infrastructure Adapters:
+   - `adapter-network-protocol84` — Protocol84NetworkAdapter wired to legacy Network.php
+   - `adapter-storage-anvil` — AnvilStorageAdapter, LevelDBStorageAdapter
+   - `adapter-worldgen-parallel` — ParallelGeneratorAdapter via ThreadingPort
+   - `adapter-thread-pool` — PmmpThreadPool tuning
 3. Commit incrementally, update `docs/PROGRESS.md`
 4. When ready, rebase on `master` and open PR for review
 
@@ -1007,13 +1015,6 @@ docs/
 - **Run baseline:** `bin/php7/bin/php measure_baseline.php`
 - **Run PHPStan:** `bin/php7/bin/php vendor/bin/phpstan analyse --configuration=phpstan.neon`
 
-**Clarifying Questions Before Proceeding:**
+---
 
-1. **DI Container:** Manual factory-based composition root, no external DI library
-2. **PHPStan/Psalm:** No baseline exists — start PHPStan level 5+ fresh for new/refactored code only
-3. **Testing:** No test suite yet
-4. **pmmpthread Version:** v6.3.0
-5. **Protocol 84 Test Vectors:** No conformance tests needed — protocol must simply remain untouched during refactor. Treat as frozen boundary; don't add test infrastructure for it.
-6. **Benchmark Baseline:** No baseline yet — include establishing a tick-profiling baseline (via Blackfire, Xdebug profiler, or manual timing) as an early step before any threading work.
-
-Please confirm the plan or request revisions.
+*Plan approved. No further clarifying questions.*
