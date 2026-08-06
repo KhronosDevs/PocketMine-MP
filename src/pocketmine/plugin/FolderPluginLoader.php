@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 namespace pocketmine\plugin;
@@ -21,7 +23,7 @@ use const E_USER_WARNING;
 class FolderPluginLoader implements PluginLoader{
 
 	/** @var Server */
-	private $server;
+	private Server $server;
 
 	public function __construct(Server $server){
 		$this->server = $server;
@@ -32,9 +34,9 @@ class FolderPluginLoader implements PluginLoader{
 	 *
 	 * @param string $file
 	 *
-	 * @return Plugin
+	 * @return Plugin|null
 	 */
-	public function loadPlugin($file)
+	public function loadPlugin($file) : ?Plugin
 	{
 		if(is_dir($file) && file_exists($file . "/plugin.yml") && file_exists($file . "/src/")){
 			if(($description = $this->getPluginDescription($file)) instanceof PluginDescription){
@@ -70,9 +72,9 @@ class FolderPluginLoader implements PluginLoader{
 	 *
 	 * @param string $file
 	 *
-	 * @return PluginDescription
+	 * @return PluginDescription|null
 	 */
-	public function getPluginDescription($file){
+	public function getPluginDescription($file) : ?PluginDescription{
 		if(is_dir($file) && file_exists($file . "/plugin.yml")){
 			$yaml = @file_get_contents($file . "/plugin.yml");
 			if($yaml != ""){
@@ -88,7 +90,7 @@ class FolderPluginLoader implements PluginLoader{
 	 *
 	 * @return array
 	 */
-	public function getPluginFilters(){
+	public function getPluginFilters() : string{
 		return "/[^\\.]/";
 	}
 
@@ -96,12 +98,12 @@ class FolderPluginLoader implements PluginLoader{
 	 * @param string $dataFolder
 	 * @param string $file
 	 */
-	private function initPlugin(PluginBase $plugin, PluginDescription $description, $dataFolder, $file){
+	private function initPlugin(PluginBase $plugin, PluginDescription $description, string $dataFolder, string $file) : void{
 		$plugin->init($this, $this->server, $description, $dataFolder, $file);
 		$plugin->onLoad();
 	}
 
-	public function enablePlugin(Plugin $plugin){
+	public function enablePlugin(Plugin $plugin) : void{
 		if($plugin instanceof PluginBase && !$plugin->isEnabled()){
 			MainLogger::getLogger()->info("Enabling " . $plugin->getDescription()->getFullName());
 
@@ -111,7 +113,7 @@ class FolderPluginLoader implements PluginLoader{
 		}
 	}
 
-	public function disablePlugin(Plugin $plugin){
+	public function disablePlugin(Plugin $plugin) : void{
 		if($plugin instanceof PluginBase && $plugin->isEnabled()){
 			MainLogger::getLogger()->info("Disabling " . $plugin->getDescription()->getFullName());
 

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -27,6 +29,8 @@
 namespace pocketmine\plugin;
 
 use pocketmine\command\CommandExecutor;
+use pocketmine\Server;
+use pocketmine\utils\Config;
 
 /**
  * It is recommended to use PluginBase for the actual plugin
@@ -43,7 +47,7 @@ interface Plugin extends CommandExecutor{
 	 */
 	public function onEnable();
 
-	public function isEnabled();
+	public function isEnabled() : bool;
 
 	/**
 	 * Called when the plugin is disabled
@@ -51,24 +55,26 @@ interface Plugin extends CommandExecutor{
 	 */
 	public function onDisable();
 
-	public function isDisabled();
+	public function isDisabled() : bool;
 
 	/**
 	 * Gets the plugin's data folder to save files and configuration
 	 */
-	public function getDataFolder();
+	public function getDataFolder() : string;
 
 	/**
 	 * @return PluginDescription
 	 */
-	public function getDescription();
+	public function getDescription() : PluginDescription;
 
 	/**
 	 * Gets an embedded resource in the plugin file.
 	 *
 	 * @param string $filename
+	 *
+	 * @return resource Resource data, or null
 	 */
-	public function getResource($filename);
+	public function getResource(string $filename);
 
 	/**
 	 * Saves an embedded resource to its relative location in the data folder
@@ -76,39 +82,39 @@ interface Plugin extends CommandExecutor{
 	 * @param string $filename
 	 * @param bool   $replace
 	 */
-	public function saveResource($filename, $replace = false);
+	public function saveResource(string $filename, bool $replace = false) : bool;
 
 	/**
 	 * Returns all the resources incrusted in the plugin
 	 */
-	public function getResources();
+	public function getResources() : array;
 
 	/**
 	 * @return \pocketmine\utils\Config
 	 */
-	public function getConfig();
+	public function getConfig() : Config;
 
-	public function saveConfig();
+	public function saveConfig() : void;
 
-	public function saveDefaultConfig();
+	public function saveDefaultConfig() : void;
 
-	public function reloadConfig();
+	public function reloadConfig() : void;
 
 	/**
 	 * @return \pocketmine\Server
 	 */
-	public function getServer();
+	public function getServer() : Server;
 
-	public function getName();
+	public function getName() : string;
 
 	/**
 	 * @return PluginLogger
 	 */
-	public function getLogger();
+	public function getLogger() : PluginLogger;
 
 	/**
 	 * @return PluginLoader
 	 */
-	public function getPluginLoader();
+	public function getPluginLoader() : PluginLoader;
 
 }

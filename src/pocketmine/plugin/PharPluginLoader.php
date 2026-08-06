@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -39,7 +41,7 @@ use const DIRECTORY_SEPARATOR;
 class PharPluginLoader implements PluginLoader{
 
 	/** @var Server */
-	private $server;
+	private Server $server;
 
 	public function __construct(Server $server){
 		$this->server = $server;
@@ -50,11 +52,11 @@ class PharPluginLoader implements PluginLoader{
 	 *
 	 * @param string $file
 	 *
-	 * @return Plugin
+	 * @return Plugin|null
 	 *
 	 * @throws \Throwable
 	 */
-	public function loadPlugin($file){
+	public function loadPlugin($file) : ?Plugin{
 		if(($description = $this->getPluginDescription($file)) instanceof PluginDescription){
 			$this->server->getLogger()->info($this->server->getLanguage()->translateString("pocketmine.plugin.load", [$description->getFullName()]));
 			$dataFolder = dirname($file) . DIRECTORY_SEPARATOR . $description->getName();
@@ -83,9 +85,9 @@ class PharPluginLoader implements PluginLoader{
 	 *
 	 * @param string $file
 	 *
-	 * @return PluginDescription
+	 * @return PluginDescription|null
 	 */
-	public function getPluginDescription($file){
+	public function getPluginDescription($file) : ?PluginDescription{
 		$phar = new \Phar($file);
 		if(isset($phar["plugin.yml"])){
 			$pluginYml = $phar["plugin.yml"];
@@ -102,7 +104,7 @@ class PharPluginLoader implements PluginLoader{
 	 *
 	 * @return array
 	 */
-	public function getPluginFilters(){
+	public function getPluginFilters() : string{
 		return "/\\.phar$/i";
 	}
 
@@ -110,12 +112,12 @@ class PharPluginLoader implements PluginLoader{
 	 * @param string $dataFolder
 	 * @param string $file
 	 */
-	private function initPlugin(PluginBase $plugin, PluginDescription $description, $dataFolder, $file){
+	private function initPlugin(PluginBase $plugin, PluginDescription $description, string $dataFolder, string $file) : void{
 		$plugin->init($this, $this->server, $description, $dataFolder, $file);
 		$plugin->onLoad();
 	}
 
-	public function enablePlugin(Plugin $plugin){
+	public function enablePlugin(Plugin $plugin) : void{
 		if($plugin instanceof PluginBase && !$plugin->isEnabled()){
 			$this->server->getLogger()->info($this->server->getLanguage()->translateString("pocketmine.plugin.enable", [$plugin->getDescription()->getFullName()]));
 
@@ -125,7 +127,7 @@ class PharPluginLoader implements PluginLoader{
 		}
 	}
 
-	public function disablePlugin(Plugin $plugin){
+	public function disablePlugin(Plugin $plugin) : void{
 		if($plugin instanceof PluginBase && $plugin->isEnabled()){
 			$this->server->getLogger()->info($this->server->getLanguage()->translateString("pocketmine.plugin.disable", [$plugin->getDescription()->getFullName()]));
 

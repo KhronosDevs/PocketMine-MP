@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -46,7 +48,7 @@ use const FILE_SKIP_EMPTY_LINES;
 class ScriptPluginLoader implements PluginLoader{
 
 	/** @var Server */
-	private $server;
+	private Server $server;
 
 	public function __construct(Server $server){
 		$this->server = $server;
@@ -57,11 +59,11 @@ class ScriptPluginLoader implements PluginLoader{
 	 *
 	 * @param string $file
 	 *
-	 * @return Plugin
+	 * @return Plugin|null
 	 *
 	 * @throws \Throwable
 	 */
-	public function loadPlugin($file){
+	public function loadPlugin($file) : ?Plugin{
 		if(($description = $this->getPluginDescription($file)) instanceof PluginDescription){
 			$this->server->getLogger()->info($this->server->getLanguage()->translateString("pocketmine.plugin.load", [$description->getFullName()]));
 			$dataFolder = dirname($file) . DIRECTORY_SEPARATOR . $description->getName();
@@ -91,9 +93,9 @@ class ScriptPluginLoader implements PluginLoader{
 	 *
 	 * @param string $file
 	 *
-	 * @return PluginDescription
+	 * @return PluginDescription|null
 	 */
-	public function getPluginDescription($file){
+	public function getPluginDescription($file) : ?PluginDescription{
 		$content = file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 
 		$data = [];
@@ -131,7 +133,7 @@ class ScriptPluginLoader implements PluginLoader{
 	 *
 	 * @return array
 	 */
-	public function getPluginFilters(){
+	public function getPluginFilters() : string{
 		return "/\\.php$/i";
 	}
 
@@ -139,12 +141,12 @@ class ScriptPluginLoader implements PluginLoader{
 	 * @param string $dataFolder
 	 * @param string $file
 	 */
-	private function initPlugin(PluginBase $plugin, PluginDescription $description, $dataFolder, $file){
+	private function initPlugin(PluginBase $plugin, PluginDescription $description, string $dataFolder, string $file) : void{
 		$plugin->init($this, $this->server, $description, $dataFolder, $file);
 		$plugin->onLoad();
 	}
 
-	public function enablePlugin(Plugin $plugin){
+	public function enablePlugin(Plugin $plugin) : void{
 		if($plugin instanceof PluginBase && !$plugin->isEnabled()){
 			$this->server->getLogger()->info($this->server->getLanguage()->translateString("pocketmine.plugin.enable", [$plugin->getDescription()->getFullName()]));
 
@@ -154,7 +156,7 @@ class ScriptPluginLoader implements PluginLoader{
 		}
 	}
 
-	public function disablePlugin(Plugin $plugin){
+	public function disablePlugin(Plugin $plugin) : void{
 		if($plugin instanceof PluginBase && $plugin->isEnabled()){
 			$this->server->getLogger()->info($this->server->getLanguage()->translateString("pocketmine.plugin.disable", [$plugin->getDescription()->getFullName()]));
 

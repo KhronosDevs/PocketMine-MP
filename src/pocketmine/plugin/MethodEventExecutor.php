@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -28,17 +30,17 @@ use pocketmine\event\Listener;
 
 class MethodEventExecutor implements EventExecutor{
 
-	private $method;
+	private string $method;
 
-	public function __construct($method){
+	public function __construct(string $method){
 		$this->method = $method;
 	}
 
-	public function execute(Listener $listener, Event $event){
+	public function execute(Listener $listener, Event $event) : void{
 		$listener->{$this->getMethod()}($event);
 	}
 
-	public function getMethod(){
+	public function getMethod() : string{
 		return $this->method;
 	}
 }

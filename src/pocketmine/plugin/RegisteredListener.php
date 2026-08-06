@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -31,28 +33,28 @@ use pocketmine\event\TimingsHandler;
 class RegisteredListener{
 
 	/** @var Listener */
-	private $listener;
+	private Listener $listener;
 
 	/** @var int */
-	private $priority;
+	private int $priority;
 
 	/** @var Plugin */
-	private $plugin;
+	private Plugin $plugin;
 
 	/** @var EventExecutor */
-	private $executor;
+	private EventExecutor $executor;
 
 	/** @var bool */
-	private $ignoreCancelled;
+	private bool $ignoreCancelled;
 
 	/** @var TimingsHandler */
-	private $timings;
+	private TimingsHandler $timings;
 
 	/**
 	 * @param int     $priority
 	 * @param boolean $ignoreCancelled
 	 */
-	public function __construct(Listener $listener, EventExecutor $executor, $priority, Plugin $plugin, $ignoreCancelled, TimingsHandler $timings){
+	public function __construct(Listener $listener, EventExecutor $executor, int $priority, Plugin $plugin, bool $ignoreCancelled, TimingsHandler $timings){
 		$this->listener = $listener;
 		$this->priority = $priority;
 		$this->plugin = $plugin;
@@ -64,25 +66,25 @@ class RegisteredListener{
 	/**
 	 * @return Listener
 	 */
-	public function getListener(){
+	public function getListener() : Listener{
 		return $this->listener;
 	}
 
 	/**
 	 * @return Plugin
 	 */
-	public function getPlugin(){
+	public function getPlugin() : Plugin{
 		return $this->plugin;
 	}
 
 	/**
 	 * @return int
 	 */
-	public function getPriority(){
+	public function getPriority() : int{
 		return $this->priority;
 	}
 
-	public function callEvent(Event $event){
+	public function callEvent(Event $event) : void{
 		if($event instanceof Cancellable && $event->isCancelled() && $this->isIgnoringCancelled()){
 			return;
 		}
@@ -98,7 +100,7 @@ class RegisteredListener{
 	/**
 	 * @return bool
 	 */
-	public function isIgnoringCancelled(){
+	public function isIgnoringCancelled() : bool{
 		return $this->ignoreCancelled === true;
 	}
 }

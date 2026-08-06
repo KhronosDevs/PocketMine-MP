@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -35,29 +37,29 @@ use function strtoupper;
 use function yaml_parse;
 
 class PluginDescription{
-	private $name;
-	private $main;
-	private $api;
-	private $depend = [];
-	private $softDepend = [];
-	private $loadBefore = [];
+	private string $name;
+	private string $main;
+	private array $api;
+	private array $depend = [];
+	private array $softDepend = [];
+	private array $loadBefore = [];
 	private $version;
-	private $commands = [];
-	private $description = null;
-	private $authors = [];
-	private $website = null;
-	private $prefix = null;
-	private $order = PluginLoadOrder::POSTWORLD;
+	private array $commands = [];
+	private ?string $description = null;
+	private array $authors = [];
+	private ?string $website = null;
+	private ?string $prefix = null;
+	private int $order = PluginLoadOrder::POSTWORLD;
 
-	private $geniapi;
+	private array $geniapi;
 
 	/** @var Permission[] */
-	private $permissions = [];
+	private array $permissions = [];
 
 	/**
 	 * @param string|array $yamlString
 	 */
-	public function __construct($yamlString){
+	public function __construct(string|array $yamlString){
 		$this->loadMap(!is_array($yamlString) ? yaml_parse($yamlString) : $yamlString);
 	}
 
@@ -132,70 +134,70 @@ class PluginDescription{
 	/**
 	 * @return string
 	 */
-	public function getFullName(){
+	public function getFullName() : string{
 		return $this->name . " v" . $this->version;
 	}
 
 	/**
 	 * @return array
 	 */
-	public function getCompatibleApis(){
+	public function getCompatibleApis() : array{
 		return $this->api;
 	}
 
 	/**
 	 * @return array
 	 */
-	public function getCompatibleGeniApis(){
+	public function getCompatibleGeniApis() : array{
 		return $this->geniapi;
 	}
 
 	/**
 	 * @return array
 	 */
-	public function getAuthors(){
+	public function getAuthors() : array{
 		return $this->authors;
 	}
 
 	/**
 	 * @return string
 	 */
-	public function getPrefix(){
+	public function getPrefix() : ?string{
 		return $this->prefix;
 	}
 
 	/**
 	 * @return array
 	 */
-	public function getCommands(){
+	public function getCommands() : array{
 		return $this->commands;
 	}
 
 	/**
 	 * @return array
 	 */
-	public function getDepend(){
+	public function getDepend() : array{
 		return $this->depend;
 	}
 
 	/**
 	 * @return string
 	 */
-	public function getDescription(){
+	public function getDescription() : ?string{
 		return $this->description;
 	}
 
 	/**
 	 * @return array
 	 */
-	public function getLoadBefore(){
+	public function getLoadBefore() : array{
 		return $this->loadBefore;
 	}
 
 	/**
 	 * @return string
 	 */
-	public function getMain(){
+	public function getMain() : string{
 		return $this->main;
 	}
 
@@ -206,21 +208,21 @@ class PluginDescription{
 	/**
 	 * @return int
 	 */
-	public function getOrder(){
+	public function getOrder() : int{
 		return $this->order;
 	}
 
 	/**
 	 * @return Permission[]
 	 */
-	public function getPermissions(){
+	public function getPermissions() : array{
 		return $this->permissions;
 	}
 
 	/**
 	 * @return array
 	 */
-	public function getSoftDepend(){
+	public function getSoftDepend() : array{
 		return $this->softDepend;
 	}
 
@@ -234,7 +236,7 @@ class PluginDescription{
 	/**
 	 * @return string
 	 */
-	public function getWebsite(){
+	public function getWebsite() : ?string{
 		return $this->website;
 	}
 }

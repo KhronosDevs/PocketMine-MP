@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 
 
 /*
@@ -29,24 +31,24 @@ use function spl_object_hash;
 
 class PluginLogger implements \AttachableLogger{
 
-	private $pluginName;
+	private string $pluginName;
 
 	/** @var \LoggerAttachment[] */
-	private $attachments = [];
+	private array $attachments = [];
 
-	public function addAttachment(\LoggerAttachment $attachment){
+	public function addAttachment(\LoggerAttachment $attachment) : void{
 		$this->attachments[spl_object_hash($attachment)] = $attachment;
 	}
 
-	public function removeAttachment(\LoggerAttachment $attachment){
+	public function removeAttachment(\LoggerAttachment $attachment) : void{
 		unset($this->attachments[spl_object_hash($attachment)]);
 	}
 
-	public function removeAttachments(){
+	public function removeAttachments() : void{
 		$this->attachments = [];
 	}
 
-	public function getAttachments(){
+	public function getAttachments() : array{
 		return $this->attachments;
 	}
 
@@ -55,43 +57,43 @@ class PluginLogger implements \AttachableLogger{
 		$this->pluginName = $prefix != null ? "[$prefix] " : "[" . $context->getDescription()->getName() . "] ";
 	}
 
-	public function emergency($message){
+	public function emergency(string $message) : void{
 		$this->log(LogLevel::EMERGENCY, $message);
 	}
 
-	public function alert($message){
+	public function alert(string $message) : void{
 		$this->log(LogLevel::ALERT, $message);
 	}
 
-	public function critical($message){
+	public function critical(string $message) : void{
 		$this->log(LogLevel::CRITICAL, $message);
 	}
 
-	public function error($message){
+	public function error(string $message) : void{
 		$this->log(LogLevel::ERROR, $message);
 	}
 
-	public function warning($message){
+	public function warning(string $message) : void{
 		$this->log(LogLevel::WARNING, $message);
 	}
 
-	public function notice($message){
+	public function notice(string $message) : void{
 		$this->log(LogLevel::NOTICE, $message);
 	}
 
-	public function info($message){
+	public function info(string $message) : void{
 		$this->log(LogLevel::INFO, $message);
 	}
 
-	public function debug($message){
+	public function debug(string $message) : void{
 		$this->log(LogLevel::DEBUG, $message);
 	}
 
-	public function logException(\Throwable $e, $trace = null){
+	public function logException(\Throwable $e, ?array $trace = null) : void{
 		Server::getInstance()->getLogger()->logException($e, $trace);
 	}
 
-	public function log($level, $message){
+	public function log(int|string $level, string $message) : void{
 		Server::getInstance()->getLogger()->log($level, $this->pluginName . $message);
 		foreach($this->attachments as $attachment){
 			$attachment->log($level, $message);
