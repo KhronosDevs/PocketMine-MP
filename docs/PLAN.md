@@ -853,22 +853,22 @@ final class RegionThread extends Thread {
 
 ## 5. MIGRATION STEPS (ORDERED)
 
-### Phase 0: Foundation (Week 1-2)
-| Step | Branch | Description |
-|------|--------|-------------|
-| 0.1 | `foundation-bootstrap` | Create `bootstrap.php`, DI container (PHP-DI or manual), Kernel.php |
-| 0.2 | `foundation-port-interfaces` | Define all Port interfaces in `src/pocketmine/port/` |
-| 0.3 | `foundation-ecs-core` | Implement ECS core: Component, Resource, System, World, Query, Archetype, ComponentRegistry, SystemScheduler |
-| 0.4 | `foundation-threading-port` | Implement ThreadingPort + PmmpThreadPool adapter |
+### Phase 0: Foundation (Week 1-2) ✅ DONE
+| Step | Branch | PR | Description |
+|------|--------|-----|-------------|
+| 0.1 | `foundation-bootstrap` | #18 | Create `bootstrap.php`, manual DI composition root, Kernel.php |
+| 0.2 | `foundation-bootstrap` | #18 | Define all Port interfaces in `src/pocketmine/port/` |
+| 0.3 | `foundation-bootstrap` | #18 | Implement ECS core: Component, Resource, System, World, Query, Archetype, ComponentRegistry, SystemScheduler |
+| 0.4 | `foundation-bootstrap` | #18 | Implement ThreadingPort + PmmpThreadPool adapter |
 
-### Phase 1: ECS Component Migration (Week 2-4)
-| Step | Branch | Description |
-|------|--------|-------------|
-| 1.1 | `ecs-components-basic` | PositionComponent, VelocityComponent, HealthComponent, MetadataComponent, Tag components |
-| 1.2 | `ecs-components-entity` | EntityRef, EntityBuilder, World::spawn/despawn, Entity ID allocation |
-| 1.3 | `ecs-systems-movement` | MovementSystem, PhysicsSystem (gravity, collision broad-phase) |
-| 1.4 | `ecs-systems-combat` | CombatSystem, EffectSystem, AttributeSystem |
-| 1.5 | `ecs-systems-ai` | AISystem, PathfindingSystem (async via ThreadingPort) |
+### Phase 1: ECS Component Migration (Week 2-4) ✅ DONE
+| Step | Branch | PR | Description |
+|------|--------|-----|-------------|
+| 1.1 | `ecs-components-basic` | #19 | Position, Velocity, Health, Metadata, Tags, Rotation, Collision, Effect, Attribute, Inventory, AIState, Path |
+| 1.2 | `ecs-components-basic` | #19 | EntityRef opaque handle, EntityBuilder, World::spawn/despawn |
+| 1.3 | `ecs-components-basic` | #19 | MovementSystem (parallel), PhysicsSystem (sequential) |
+| 1.4 | `ecs-components-basic` | #19 | EffectSystem (parallel), AISystem (sequential) |
+| 1.5 | `ecs-components-basic` | #19 | ComponentSerializer, register all 17 components, 4 systems |
 
 ### Phase 2: Adapter Implementation (Week 3-5)
 | Step | Branch | Description |
