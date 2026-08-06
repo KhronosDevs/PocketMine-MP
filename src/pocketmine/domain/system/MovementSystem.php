@@ -30,9 +30,11 @@ final class MovementSystem implements ParallelSystem {
                 continue;
             }
 
-            $position->x += $velocity->x * $deltaTime;
-            $position->y += $velocity->y * $deltaTime;
-            $position->z += $velocity->z * $deltaTime;
+            // Write to pending (double-buffered) position for parallel safety
+            $newX = $position->x + $velocity->x * $deltaTime;
+            $newY = $position->y + $velocity->y * $deltaTime;
+            $newZ = $position->z + $velocity->z * $deltaTime;
+            $position->setPending($newX, $newY, $newZ, $position->yaw, $position->pitch);
         }
     }
 

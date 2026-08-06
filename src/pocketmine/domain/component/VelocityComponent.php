@@ -25,4 +25,13 @@ final class VelocityComponent {
             $this->pending = null;
         }
     }
+
+    public function setPending(float $x, float $y, float $z): void {
+        if ($this->pending === null) {
+            $this->pending = new VelocityComponent();
+        }
+        $this->pending->x = $x;
+        $this->pending->y = $y;
+        $this->pending->z = $z;
+    }
 }

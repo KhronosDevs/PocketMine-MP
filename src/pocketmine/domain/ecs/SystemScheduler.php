@@ -49,7 +49,8 @@ final class SystemScheduler {
             $futures = [];
             foreach ($this->chunkParallelSystems as $system) {
                 if ($system instanceof ChunkParallelSystem) {
-                    foreach ($system->getTargetChunks($world) as [$chunkX, $chunkZ, $chunkData]) {
+                    foreach ($system->getTargetChunks($world) as $chunkInfo) {
+                        [$chunkX, $chunkZ, $chunkData] = $chunkInfo;
                         $futures[] = $this->threadingPort->submit(
                             fn() => $system->runChunkParallel($chunkX, $chunkZ, $chunkData, $deltaTime)
                         );

@@ -7,38 +7,56 @@ namespace pocketmine\domain\system;
 use pocketmine\domain\component\PositionComponent;
 use pocketmine\domain\component\VelocityComponent;
 use pocketmine\domain\component\tags\OnGroundTag;
-use pocketmine\domain\ecs\System;
+use pocketmine\domain\ecs\Archetype;
+use pocketmine\domain\ecs\ParallelSystem;
 use pocketmine\domain\ecs\World;
 use pocketmine\domain\resource\SpatialIndex;
 
-final class PhysicsSystem implements System {
+final class PhysicsSystem implements ParallelSystem {
     public function run(World $world, float $deltaTime): void {
-        $spatialIndex = $world->getResourceRegistry()->get(SpatialIndex::class);
-        if (!$spatialIndex) {
+        // Not used - ParallelSystem uses runParallel
+    }
+
+    public function runParallel(Archetype $archetype, float $deltaTime): void {
+        $positions = $archetype->getComponentArray(PositionComponent::class);
+        $velocities = $archetype->getComponentArray(VelocityComponent::class);
+
+        if (empty($positions) || empty($velocities)) {
             return;
         }
 
-        $query = $world->query()
-            ->with(PositionComponent::class, VelocityComponent::class)
-            ->build();
-
-        foreach ($query as $entity) {
-            $position = $entity->get(PositionComponent::class);
-            $velocity = $entity->get(VelocityComponent::class);
-
-            // Apply gravity
-            $velocity->y -= 0.08 * $deltaTime; // Gravity constant
-
-            // Simple ground collision
-            if ($position->y <= 0) {
-                $position->y = 0;
-                $velocity->y = 0;
-                $entity->set(OnGroundTag::class, new OnGroundTag());
-            } else {
-                $entity->remove(OnGroundTag::class);
+        foreach ($positions as $entityId => $position) {
+            $velocity = $velocities[$entityId] ?? null;
+            if ($velocity === null) {
+                continue;
             }
 
-            // TODO: Broad-phase collision using SpatialIndex
+            // Apply gravity - write to pending velocity
+            $newVelY = $velocity->y - 0.08 * $deltaTime;
+
+            // Simple ground collision - check pending position
+            $newY = $position->y + $velocity->y * $deltaTime;
+            $newX = $position->x + $velocity->x * $deltaTime;
+            $newZ = $position->z + $velocity->z * $deltaTime;
+
+            if ($newY <= 0) {
+                $newY = 0;
+                $newVelY = 0;
+                // OnGroundTag would be set by a separate system or here
+            }
+
+            // Write to pending components for parallel safety
+            $position->setPending($newX, $newY, $newZ);
+            $velocity->setPending($velocity->x, $newVelY, $velocity->z);
         }
+    }
+
+    public function getTargetArchetypes(World $world): iterable {
+        $query = $world->query()
+            ->with(\pocketmine\domain\component\PositionComponent::class, \pocketmine\domain\component\VelocityComponent::class)
+            ->build();
+
+        $registry = $world->getComponentRegistry();
+        return $query->archetypes($registry);
     }
 }

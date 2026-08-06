@@ -31,6 +31,7 @@ use pocketmine\domain\service\KnockbackService;
 use pocketmine\domain\service\InventoryService;
 use pocketmine\domain\service\CraftingService;
 use pocketmine\domain\service\ContainerService;
+use pocketmine\domain\system\ChunkUpdateSystem;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\ThreadingPort;
@@ -389,10 +390,11 @@ function registerBuiltinResources(ResourceRegistry $registry): void {
 }
 
 function registerBuiltinSystems(SystemScheduler $scheduler): void {
-    $scheduler->register(new \pocketmine\domain\system\PhysicsSystem(), \pocketmine\domain\ecs\SystemPhase::SEQUENTIAL);
+    $scheduler->register(new \pocketmine\domain\system\PhysicsSystem(), \pocketmine\domain\ecs\SystemPhase::PARALLEL);
     $scheduler->register(new \pocketmine\domain\system\MovementSystem(), \pocketmine\domain\ecs\SystemPhase::PARALLEL);
     $scheduler->register(new \pocketmine\domain\system\EffectSystem(), \pocketmine\domain\ecs\SystemPhase::PARALLEL);
-    $scheduler->register(new \pocketmine\domain\system\AISystem(), \pocketmine\domain\ecs\SystemPhase::SEQUENTIAL);
+    $scheduler->register(new \pocketmine\domain\system\AISystem(), \pocketmine\domain\ecs\SystemPhase::PARALLEL);
+    $scheduler->register(new \pocketmine\domain\system\ChunkUpdateSystem(), \pocketmine\domain\ecs\SystemPhase::CHUNK_PARALLEL);
 }
 
 function bootstrap(): Kernel {

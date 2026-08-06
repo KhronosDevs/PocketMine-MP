@@ -2,9 +2,9 @@
 
 **Plan Version:** docs/PLAN.md
 **Last Updated:** 2026-08-07
-**Current Phase:** 4 (New Plugin API)
-**Current Branch:** api-ecs-plugin
-**Base Commit:** 8f3a171 (master after PR #21 merge)
+**Current Phase:** 5 (Archetype Parallelism)
+**Current Branch:** multithread-archetype-parallelism
+**Base Commit:** 43996ce (master after PR #22 merge)
 
 ---
 
@@ -16,8 +16,8 @@
 | 1: ECS Components | ✅ Done | ecs-components-basic | #19 | 17 components, EntityRef, 4 systems |
 | 2: Infrastructure Adapters | ✅ Done | adapter-implementation | #20 | Network, storage, worldgen, thread pool (NEW) |
 | 3: Core Gameplay Services | ✅ Done | service-core-gameplay | #21 | Player, chunk, block, entity, combat, inventory |
-| 4: **New Plugin API** | 🔄 In Progress | api-ecs-plugin | — | **BREAKING** — EntityRef, Query, System, Event, Command, Scheduler |
-| 5: Archetype Parallelism | ⏳ Pending | — | — | Chunk gen, block updates, pathfinding, AI, system scheduler |
+| 4: **New Plugin API** | ✅ Done | api-ecs-plugin | #22 | **BREAKING** — EntityRef, Query, System, Event, Command, Scheduler |
+| 5: Archetype Parallelism | 🔄 In Progress | multithread-archetype-parallelism | — | Movement, Effect, Physics, AI parallel execution |
 | 6: Region-Based | ⏳ Pending | — | — | RegionWorld, RegionThread, coordination, network threads |
 | 7: Polish & Optimize | ⏳ Pending | — | — | Storage, queries, memory, network batching, benchmarks |
 
@@ -91,7 +91,22 @@
 | 4.4 | `api-scheduler` — Task scheduling via System registration or async Task submission | ✅ | b625564 | Repeating/delayed tasks, async task submission |
 | 4.5 | `api-permissions` — Permission system integrated with EntityRef metadata | ✅ | b625564 | Permission checks on EntityRef, default permissions |
 | 4.6 | `api-world-access` — Chunk/Block/Entity access via Query, not Level/Entity getters | ✅ | b625564 | QueryBuilder, chunk iteration, block/entity access |
-| 4.7 | Update PROGRESS.md | 🔄 | — | Track progress |
+| 4.7 | Update PROGRESS.md | ✅ | — | Track progress |
+
+---
+
+## Phase 5: Archetype Parallelism — Detailed Steps
+
+| Step | Task | Status | Commit | Notes |
+|------|------|--------|--------|-------|
+| 5.0 | Create branch `multithread-archetype-parallelism` with rollback anchor | ✅ | ca5ca63 | `git checkout -b multithread-archetype-parallelism && git commit --allow-empty -m "chore: rollback anchor for multithread-archetype-parallelism"` |
+| 5.1 | `multithread-movement` — PositionComponent + VelocityComponent parallel updates | 🔄 | — | Double-buffered PositionComponent for parallel writes |
+| 5.2 | `multithread-effects` — EffectComponent parallel tick | 🔄 | — | Already PARALLEL, optimize archetype iteration |
+| 5.3 | `multithread-physics` — PhysicsSystem parallel broad-phase collision | 🔄 | — | SpatialIndex per archetype, double-buffered VelocityComponent |
+| 5.4 | `multithread-ai` — AISystem parallel per archetype | 🔄 | — | Pathfinding via ThreadingPort, double-buffered AIState |
+| 5.5 | `multithread-chunk` — ChunkParallelSystem for block updates | 🔄 | — | Per-chunk parallel block updates |
+| 5.6 | `multithread-scheduler` — SystemScheduler parallel execution via ThreadingPort | 🔄 | — | AwaitAll on parallel systems |
+| 5.7 | Update PROGRESS.md | ⏳ | — | Track progress |
 
 ---
 
@@ -106,6 +121,7 @@
 | D005 | Protocol 84 = frozen boundary, no tests | 2026-08-06 | Must remain untouched |
 | D006 | Establish tick-profiling baseline early | 2026-08-06 | Before any threading work |
 | D007 | **New Plugin API = breaking changes, no legacy compat** | 2026-08-07 | Clean ECS-based API (EntityRef, Query, System) |
+| D008 | **Double-buffered components for parallel writes** | 2026-08-07 | PositionComponent, VelocityComponent, AIStateComponent |
 
 ---
 
@@ -117,18 +133,20 @@
 | ecs-components-basic | ac5b861 | 378400c | #19 | ✅ Merged |
 | adapter-implementation | 3b66cf1 | 63a1b02 | #20 | ✅ Merged |
 | service-core-gameplay | 49cf545 | 7ce67ce | #21 | ✅ Merged |
-| api-ecs-plugin | 8f3a171 | b625564 | #22 | 🔄 Active (PR opened) |
+| api-ecs-plugin | 8f3a171 | fc1c65d | #22 | ✅ Merged |
+| multithread-archetype-parallelism | 43996ce | ca5ca63 | — | 🔄 Active |
 
 ---
 
 ## Next Actions
 
-1. ✅ Phase 0, 1, 2, 3 complete (PRs #18, #19, #20, #21 merged)
-2. ✅ Create `api-ecs-plugin` branch with rollback anchor
-3. ✅ Implement Plugin base class with EntityRef, QueryBuilder, System registration
-4. ✅ Implement Typed event bus with PHP attributes
-5. ✅ Implement Command system with attributes
-6. ✅ Implement Scheduler integration
-7. ✅ Implement Permission system
-8. ✅ Implement World access via Query
-9. ✅ Update docs, commit, push, open PR #22
+1. ✅ Phase 0, 1, 2, 3, 4 complete (PRs #18, #19, #20, #21, #22 merged)
+2. ✅ Create `multithread-archetype-parallelism` branch with rollback anchor
+3. 🔄 Implement double-buffered PositionComponent + VelocityComponent
+3. 🔄 Implement MovementSystem parallel archetype execution
+4. 🔄 Implement PhysicsSystem parallel broad-phase collision
+5. 🔄 Implement EffectSystem parallel optimization
+6. 🔄 Implement AISystem parallel per archetype
+7. 🔄 Implement ChunkParallelSystem for block updates
+8. 🔄 Implement SystemScheduler parallel execution via ThreadingPort
+9. ⏳ Update docs, commit, push, open PR
