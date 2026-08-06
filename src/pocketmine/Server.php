@@ -198,7 +198,7 @@ class Server
     private $banByIP = null;
 
     /** @var BanList */
-    private $banByCID = \null;
+    private $banByCID = null;
 
     /** @var Config */
     private $operators = null;

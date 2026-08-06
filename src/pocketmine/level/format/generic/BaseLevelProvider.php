@@ -28,6 +28,7 @@ namespace pocketmine\level\format\generic;
 use pocketmine\level\format\LevelProvider;
 use pocketmine\level\generator\Generator;
 use pocketmine\level\Level;
+use pocketmine\Server;
 use pocketmine\math\Vector3;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
@@ -40,98 +41,109 @@ use function file_get_contents;
 use function file_put_contents;
 use function mkdir;
 
-abstract class BaseLevelProvider implements LevelProvider{
-	/** @var Level */
-	protected $level;
-	/** @var string */
-	protected $path;
-	/** @var CompoundTag */
-	protected $levelData;
+abstract class BaseLevelProvider implements LevelProvider
+{
+    /** @var Level */
+    protected $level;
+    /** @var string */
+    protected $path;
+    /** @var CompoundTag */
+    protected $levelData;
 
-	public function __construct(Level $level, $path){
-		$this->level = $level;
-		$this->path = $path;
-		if(!file_exists($this->path)){
-			mkdir($this->path, 0777, true);
-		}
-		$nbt = new NBT(NBT::BIG_ENDIAN);
-		$nbt->readCompressed(file_get_contents($this->getPath() . "level.dat"));
-		$levelData = $nbt->getData();
-		if($levelData->Data instanceof CompoundTag){
-			$this->levelData = $levelData->Data;
-		}else{
-			throw new LevelException("Invalid level.dat");
-		}
+    public function __construct(Level $level, $path)
+    {
+        $this->level = $level;
+        $this->path = $path;
+        if (!file_exists($this->path)) {
+            mkdir($this->path, 0777, true);
+        }
+        $nbt = new NBT(NBT::BIG_ENDIAN);
+        $nbt->readCompressed(file_get_contents($this->getPath() . "level.dat"));
+        $levelData = $nbt->getData();
+        if ($levelData->Data instanceof CompoundTag) {
+            $this->levelData = $levelData->Data;
+        } else {
+            throw new LevelException("Invalid level.dat");
+        }
 
-		if(!isset($this->levelData->generatorName)){
-			$this->levelData->generatorName = new StringTag("generatorName", Generator::getGenerator("DEFAULT"));
-		}
+        if (!isset($this->levelData->generatorName)) {
+            $this->levelData->generatorName = new StringTag("generatorName", Generator::getGenerator("DEFAULT"));
+        }
 
-		if(!isset($this->levelData->generatorOptions)){
-			$this->levelData->generatorOptions = new StringTag("generatorOptions", "");
-		}
-	}
+        if (!isset($this->levelData->generatorOptions)) {
+            $this->levelData->generatorOptions = new StringTag("generatorOptions", "");
+        }
+    }
 
-	public function getPath() : string {
-		return $this->path;
-	}
+    public function getPath(): string
+    {
+        return $this->path;
+    }
 
-	public function getServer() : Server {
-		return $this->level->getServer();
-	}
+    public function getServer(): Server
+    {
+        return $this->level->getServer();
+    }
 
-	public function getLevel() : Level {
-		return $this->level;
-	}
+    public function getLevel(): Level
+    {
+        return $this->level;
+    }
 
-	public function getName() : string{
-		return $this->levelData["LevelName"];
-	}
+    public function getName(): string
+    {
+        return $this->levelData["LevelName"];
+    }
 
-	public function getTime() : int|string {
-		return $this->levelData["Time"];
-	}
+    public function getTime(): int|string
+    {
+        return $this->levelData["Time"];
+    }
 
-	public function setTime($value) : void {
-		$this->levelData->Time = new IntTag("Time", (int) $value);
-	}
+    public function setTime($value): void
+    {
+        $this->levelData->Time = new IntTag("Time", (int) $value);
+    }
 
-	public function getSeed() : int|string {
-		return $this->levelData["RandomSeed"];
-	}
+    public function getSeed(): int|string
+    {
+        return $this->levelData["RandomSeed"];
+    }
 
-	public function setSeed($value) : void {
-		$this->levelData->RandomSeed = new LongTag("RandomSeed", (int) $value);
-	}
+    public function setSeed($value): void
+    {
+        $this->levelData->RandomSeed = new LongTag("RandomSeed", (int) $value);
+    }
 
-	public function getSpawn() : Vector3 {
-		return new Vector3((float) $this->levelData["SpawnX"] + 0.5, (float) $this->levelData["SpawnY"], (float) $this->levelData["SpawnZ"] + 0.5);
-	}
+    public function getSpawn(): Vector3
+    {
+        return new Vector3((float) $this->levelData["SpawnX"] + 0.5, (float) $this->levelData["SpawnY"], (float) $this->levelData["SpawnZ"] + 0.5);
+    }
 
-	public function setSpawn(Vector3 $pos) : void {
-		$this->levelData->SpawnX = new IntTag("SpawnX", (int) $pos->x);
-		$this->levelData->SpawnY = new IntTag("SpawnY", (int) $pos->y);
-		$this->levelData->SpawnZ = new IntTag("SpawnZ", (int) $pos->z);
-	}
+    public function setSpawn(Vector3 $pos): void
+    {
+        $this->levelData->SpawnX = new IntTag("SpawnX", (int) $pos->x);
+        $this->levelData->SpawnY = new IntTag("SpawnY", (int) $pos->y);
+        $this->levelData->SpawnZ = new IntTag("SpawnZ", (int) $pos->z);
+    }
 
-	public function doGarbageCollection(){
+    public function doGarbageCollection() {}
 
-	}
+    /**
+     * @return CompoundTag
+     */
+    public function getLevelData(): array
+    {
+        return $this->levelData;
+    }
 
-	/**
-	 * @return CompoundTag
-	 */
-	public function getLevelData() : array {
-		return $this->levelData;
-	}
-
-	public function saveLevelData() : void {
-		$nbt = new NBT(NBT::BIG_ENDIAN);
-		$nbt->setData(new CompoundTag("", [
-			"Data" => $this->levelData
-		]));
-		$buffer = $nbt->writeCompressed();
-		file_put_contents($this->getPath() . "level.dat", $buffer);
-	}
-
+    public function saveLevelData(): void
+    {
+        $nbt = new NBT(NBT::BIG_ENDIAN);
+        $nbt->setData(new CompoundTag("", [
+            "Data" => $this->levelData
+        ]));
+        $buffer = $nbt->writeCompressed();
+        file_put_contents($this->getPath() . "level.dat", $buffer);
+    }
 }
