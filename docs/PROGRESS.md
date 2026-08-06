@@ -85,13 +85,13 @@
 | Step | Task | Status | Commit | Notes |
 |------|------|--------|--------|-------|
 | 4.0 | Create branch `api-ecs-plugin` with rollback anchor | ✅ | 0723b5c | `git checkout -b api-ecs-plugin && git commit --allow-empty -m "chore: rollback anchor for api-ecs-plugin"` |
-| 4.1 | `api-ecs-plugin` — Plugin base class using EntityRef, QueryBuilder, System registration | 🔄 | — | Kernel access, service access, ECS integration |
-| 4.2 | `api-event-system` — Typed event bus (not string-based), priority via PHP attributes | ⏳ | — | Event classes, listener registration, async dispatch |
-| 4.3 | `api-command-system` — Command registration via attributes, typed arguments, tab completion | ⏳ | — | Command classes, argument parsing, permission checks |
-| 4.4 | `api-scheduler` — Task scheduling via System registration or async Task submission | ⏳ | — | Repeating/delayed tasks, async task submission |
-| 4.5 | `api-permissions` — Permission system integrated with EntityRef metadata | ⏳ | — | Permission checks on EntityRef, default permissions |
-| 4.6 | `api-world-access` — Chunk/Block/Entity access via Query, not Level/Entity getters | ⏳ | — | QueryBuilder, chunk iteration, block/entity access |
-| 4.7 | Update PROGRESS.md | ⏳ | — | Track progress |
+| 4.1 | `api-ecs-plugin` — Plugin base class using EntityRef, QueryBuilder, System registration | ✅ | b625564 | Kernel access, service access, ECS integration |
+| 4.2 | `api-event-system` — Typed event bus (not string-based), priority via PHP attributes | ✅ | b625564 | Event classes, listener registration, async dispatch |
+| 4.3 | `api-command-system` — Command registration via attributes, typed arguments, tab completion | ✅ | b625564 | Command classes, argument parsing, permission checks |
+| 4.4 | `api-scheduler` — Task scheduling via System registration or async Task submission | ✅ | b625564 | Repeating/delayed tasks, async task submission |
+| 4.5 | `api-permissions` — Permission system integrated with EntityRef metadata | ✅ | b625564 | Permission checks on EntityRef, default permissions |
+| 4.6 | `api-world-access` — Chunk/Block/Entity access via Query, not Level/Entity getters | ✅ | b625564 | QueryBuilder, chunk iteration, block/entity access |
+| 4.7 | Update PROGRESS.md | 🔄 | — | Track progress |
 
 ---
 
@@ -117,7 +117,7 @@
 | ecs-components-basic | ac5b861 | 378400c | #19 | ✅ Merged |
 | adapter-implementation | 3b66cf1 | 63a1b02 | #20 | ✅ Merged |
 | service-core-gameplay | 49cf545 | 7ce67ce | #21 | ✅ Merged |
-| api-ecs-plugin | 8f3a171 | 0723b5c | — | 🔄 Active |
+| api-ecs-plugin | 8f3a171 | b625564 | #22 | 🔄 Active (PR opened) |
 
 ---
 
@@ -125,10 +125,10 @@
 
 1. ✅ Phase 0, 1, 2, 3 complete (PRs #18, #19, #20, #21 merged)
 2. ✅ Create `api-ecs-plugin` branch with rollback anchor
-3. 🔄 Implement Plugin base class with EntityRef, QueryBuilder, System registration
-4. ⏳ Implement Typed event bus with PHP attributes
-5. ⏳ Implement Command system with attributes
-6. ⏳ Implement Scheduler integration
-7. ⏳ Implement Permission system
-8. ⏳ Implement World access via Query
-9. ⏳ Update docs, commit, push, open PR
+3. ✅ Implement Plugin base class with EntityRef, QueryBuilder, System registration
+4. ✅ Implement Typed event bus with PHP attributes
+5. ✅ Implement Command system with attributes
+6. ✅ Implement Scheduler integration
+7. ✅ Implement Permission system
+8. ✅ Implement World access via Query
+9. ✅ Update docs, commit, push, open PR #22
