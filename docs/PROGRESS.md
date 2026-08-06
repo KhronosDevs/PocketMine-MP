@@ -70,7 +70,7 @@
 | Branch | Base Commit | Current Commit | PR # | Status |
 |--------|-------------|----------------|------|--------|
 | foundation-bootstrap | eb32941 | ac5b861 | #18 | ✅ Merged |
-| ecs-components-basic | ac5b861 | 002c485 | — | 🔄 Active (pushed) |
+| ecs-components-basic | ac5b861 | e7ab5e5 | #19 | 🔄 Active (PR opened) |
 
 ---
 
@@ -82,4 +82,4 @@
 4. ✅ Register all components in Kernel
 5. ✅ Add component serialization helpers
 6. ✅ Add EffectSystem and AISystem
-7. 🔄 Create PR for ecs-components-basic
+7. ✅ Create PR #19 for ecs-components-basic
