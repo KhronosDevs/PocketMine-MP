@@ -70,13 +70,13 @@
 | Step | Task | Status | Commit | Notes |
 |------|------|--------|--------|-------|
 | 3.0 | Create branch `service-core-gameplay` with rollback anchor | ✅ | d6ac09d | `git checkout -b service-core-gameplay && git commit --allow-empty -m "chore: rollback anchor for service-core-gameplay"` |
-| 3.1 | `service-player-lifecycle` — PlayerJoinService, PlayerLeaveService, PlayerRespawnService | 🔄 | — | EntityRef, PositionComponent, HealthComponent, InventoryComponent |
-| 3.2 | `service-chunk-management` — ChunkLoadService, ChunkUnloadService, ChunkSendService | ⏳ | — | StoragePort, ChunkData, NetworkPort |
-| 3.3 | `service-block-interaction` — BlockBreakService, BlockPlaceService, BlockUpdateService | ⏳ | — | ECS commands, CollisionComponent, InventoryComponent |
-| 3.4 | `service-entity-management` — EntitySpawnService, EntityDespawnService, EntityInteractionService | ⏳ | — | EntityRef, EntityBuilder, QueryBuilder |
-| 3.5 | `service-combat` — CombatService, DamageService, KnockbackService | ⏳ | — | AttributeComponent, HealthComponent, VelocityComponent |
-| 3.6 | `service-inventory` — InventoryService, CraftingService, ContainerService | ⏳ | — | InventoryComponent, ItemStack |
-| 3.7 | Update PROGRESS.md | ⏳ | — | Track progress |
+| 3.1 | `service-player-lifecycle` — PlayerJoinService, PlayerLeaveService, PlayerRespawnService | ✅ | 7ce67ce | EntityRef, PositionComponent, HealthComponent, InventoryComponent |
+| 3.2 | `service-chunk-management` — ChunkLoadService, ChunkUnloadService, ChunkSendService | ✅ | 7ce67ce | StoragePort, ChunkData, NetworkPort |
+| 3.3 | `service-block-interaction` — BlockBreakService, BlockPlaceService, BlockUpdateService | ✅ | 7ce67ce | ECS commands, CollisionComponent, InventoryComponent |
+| 3.4 | `service-entity-management` — EntitySpawnService, EntityDespawnService, EntityInteractionService | ✅ | 7ce67ce | EntityRef, EntityBuilder, QueryBuilder |
+| 3.5 | `service-combat` — CombatService, DamageService, KnockbackService | ✅ | 7ce67ce | AttributeComponent, HealthComponent, VelocityComponent |
+| 3.6 | `service-inventory` — InventoryService, CraftingService, ContainerService | ✅ | 7ce67ce | InventoryComponent, ItemStack |
+| 3.7 | Update PROGRESS.md | 🔄 | — | Track progress |
 
 ---
 
@@ -101,7 +101,7 @@
 | foundation-bootstrap | eb32941 | ac5b861 | #18 | ✅ Merged |
 | ecs-components-basic | ac5b861 | 378400c | #19 | ✅ Merged |
 | adapter-implementation | 3b66cf1 | 63a1b02 | #20 | ✅ Merged |
-| service-core-gameplay | 49cf545 | d6ac09d | — | 🔄 Active |
+| service-core-gameplay | 49cf545 | 7ce67ce | #21 | 🔄 Active (PR opened) |
 
 ---
 
@@ -109,10 +109,10 @@
 
 1. ✅ Phase 0, 1, 2 complete (PRs #18, #19, #20 merged)
 2. ✅ Create `service-core-gameplay` branch with rollback anchor
-3. 🔄 Implement PlayerJoinService, PlayerLeaveService, PlayerRespawnService
-4. ⏳ Implement ChunkLoadService, ChunkUnloadService, ChunkSendService
-5. ⏳ Implement BlockBreakService, BlockPlaceService, BlockUpdateService
-6. ⏳ Implement EntitySpawnService, EntityDespawnService, EntityInteractionService
-7. ⏳ Implement CombatService, DamageService, KnockbackService
-8. ⏳ Implement InventoryService, CraftingService, ContainerService
-9. ⏳ Update docs, commit, push, open PR
+3. ✅ Implement PlayerJoinService, PlayerLeaveService, PlayerRespawnService
+4. ✅ Implement ChunkLoadService, ChunkUnloadService, ChunkSendService
+5. ✅ Implement BlockBreakService, BlockPlaceService, BlockUpdateService
+6. ✅ Implement EntitySpawnService, EntityDespawnService, EntityInteractionService
+7. ✅ Implement CombatService, DamageService, KnockbackService
+8. ✅ Implement InventoryService, CraftingService, ContainerService
+9. ✅ Update docs, commit, push, open PR #21
