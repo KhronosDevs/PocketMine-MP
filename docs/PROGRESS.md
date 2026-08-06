@@ -2,9 +2,9 @@
 
 **Plan Version:** docs/PLAN.md
 **Last Updated:** 2026-08-07
-**Current Phase:** 2 (Infrastructure Adapters)
-**Current Branch:** (next: adapter-implementation)
-**Base Commit:** 09efc4d (master after PLAN.md update)
+**Current Phase:** 3 (Core Gameplay Services)
+**Current Branch:** service-core-gameplay
+**Base Commit:** 49cf545 (master after PR #20 merge)
 
 ---
 
@@ -14,8 +14,8 @@
 |-------|--------|--------|-----|-------|
 | 0: Foundation | ✅ Done | foundation-bootstrap | #18 | Bootstrap, ports, ECS core, threading port |
 | 1: ECS Components | ✅ Done | ecs-components-basic | #19 | 17 components, EntityRef, 4 systems |
-| 2: Infrastructure Adapters | 🔄 Next | adapter-implementation | — | Network (protocol 84), storage, worldgen, thread pool |
-| 3: Core Gameplay Services | ⏳ Pending | — | — | Player, chunk, block, entity, combat, inventory |
+| 2: Infrastructure Adapters | ✅ Done | adapter-implementation | #20 | Network, storage, worldgen, thread pool (NEW) |
+| 3: Core Gameplay Services | 🔄 In Progress | service-core-gameplay | — | Player, chunk, block, entity, combat, inventory |
 | 4: **New Plugin API** | ⏳ Pending | — | — | **BREAKING** — EntityRef, Query, System, Event, Command, Scheduler |
 | 5: Archetype Parallelism | ⏳ Pending | — | — | Chunk gen, block updates, pathfinding, AI, system scheduler |
 | 6: Region-Based | ⏳ Pending | — | — | RegionWorld, RegionThread, coordination, network threads |
@@ -61,7 +61,22 @@
 | 2.2 | `adapter-storage-anvil` — **NEW** AnvilStorageAdapter (direct .mca I/O) | ✅ | 6036942 | Region files, chunk serialization, level.dat |
 | 2.3 | `adapter-worldgen-parallel` — **NEW** ParallelGeneratorAdapter | ✅ | 6036942 | Chunk gen, populate, light calculation |
 | 2.4 | `adapter-thread-pool` — PmmpThreadPool (round-robin, parallelMap) | ✅ | 6036942 | Work distribution patterns |
-| 2.5 | Update PROGRESS.md | 🔄 | — | Track progress |
+| 2.5 | Update PROGRESS.md | ✅ | — | Track progress |
+
+---
+
+## Phase 3: Core Gameplay Services — Detailed Steps
+
+| Step | Task | Status | Commit | Notes |
+|------|------|--------|--------|-------|
+| 3.0 | Create branch `service-core-gameplay` with rollback anchor | ✅ | d6ac09d | `git checkout -b service-core-gameplay && git commit --allow-empty -m "chore: rollback anchor for service-core-gameplay"` |
+| 3.1 | `service-player-lifecycle` — PlayerJoinService, PlayerLeaveService, PlayerRespawnService | 🔄 | — | EntityRef, PositionComponent, HealthComponent, InventoryComponent |
+| 3.2 | `service-chunk-management` — ChunkLoadService, ChunkUnloadService, ChunkSendService | ⏳ | — | StoragePort, ChunkData, NetworkPort |
+| 3.3 | `service-block-interaction` — BlockBreakService, BlockPlaceService, BlockUpdateService | ⏳ | — | ECS commands, CollisionComponent, InventoryComponent |
+| 3.4 | `service-entity-management` — EntitySpawnService, EntityDespawnService, EntityInteractionService | ⏳ | — | EntityRef, EntityBuilder, QueryBuilder |
+| 3.5 | `service-combat` — CombatService, DamageService, KnockbackService | ⏳ | — | AttributeComponent, HealthComponent, VelocityComponent |
+| 3.6 | `service-inventory` — InventoryService, CraftingService, ContainerService | ⏳ | — | InventoryComponent, ItemStack |
+| 3.7 | Update PROGRESS.md | ⏳ | — | Track progress |
 
 ---
 
@@ -85,17 +100,19 @@
 |--------|-------------|----------------|------|--------|
 | foundation-bootstrap | eb32941 | ac5b861 | #18 | ✅ Merged |
 | ecs-components-basic | ac5b861 | 378400c | #19 | ✅ Merged |
-| adapter-implementation | 3b66cf1 | 6036942 | #20 | 🔄 Active (PR updated) |
+| adapter-implementation | 3b66cf1 | 63a1b02 | #20 | ✅ Merged |
+| service-core-gameplay | 49cf545 | d6ac09d | — | 🔄 Active |
 
 ---
 
 ## Next Actions
 
-1. ✅ Phase 0 & 1 complete (PRs #18, #19 merged)
-2. ✅ PLAN.md updated: Phase 4 = New Plugin API (breaking), removed Legacy Strangler Fig
-3. ✅ Create `adapter-implementation` branch with rollback anchor
-4. ✅ Implement **NEW** Protocol84NetworkAdapter (direct RakLib UDP, protocol 84)
-5. ✅ Implement **NEW** AnvilStorageAdapter (direct .mca I/O)
-6. ✅ Implement **NEW** ParallelGeneratorAdapter (chunk gen, populate, light)
-7. ✅ Implement PmmpThreadPool improvements (round-robin, parallelMap)
-8. ✅ Update docs, commit, push, PR #20 updated
+1. ✅ Phase 0, 1, 2 complete (PRs #18, #19, #20 merged)
+2. ✅ Create `service-core-gameplay` branch with rollback anchor
+3. 🔄 Implement PlayerJoinService, PlayerLeaveService, PlayerRespawnService
+4. ⏳ Implement ChunkLoadService, ChunkUnloadService, ChunkSendService
+5. ⏳ Implement BlockBreakService, BlockPlaceService, BlockUpdateService
+6. ⏳ Implement EntitySpawnService, EntityDespawnService, EntityInteractionService
+7. ⏳ Implement CombatService, DamageService, KnockbackService
+8. ⏳ Implement InventoryService, CraftingService, ContainerService
+9. ⏳ Update docs, commit, push, open PR
