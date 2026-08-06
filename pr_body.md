@@ -1,44 +1,42 @@
 ## Summary
 
-Phase 2 of the optimization plan: Infrastructure Adapters.
+Phase 3 of the optimization plan: Core Gameplay Services.
 
-### Adapters Implemented
+### Services Implemented
 
-| Adapter | Description |
+| Service | Description |
 |---------|-------------|
-| **Protocol84NetworkAdapter** | Wires new NetworkPort to legacy `Network.php` and `Player` |
-| **AnvilStorageAdapter** | Wraps existing Anvil/LevelDB providers for chunk/entity/tile persistence |
-| **ParallelGeneratorAdapter** | Chunk generation/population/light via ThreadingPort |
-| **PmmpThreadPool** | Improved with round-robin, parallelMap, removed unused queues |
+| **PlayerJoinService** | Create/load player entity, send join packets, load player data from storage |
+| **PlayerLeaveService** | Save player data, broadcast leave, despawn entity |
+| **PlayerRespawnService** | Reset health/velocity/inventory, teleport to spawn, clear effects |
 
-### Protocol84NetworkAdapter Details
+| **ChunkLoadService** | Load/generate/populate chunks, calculate light |
+| **ChunkUnloadService** | Save entities, unload unused chunks |
+| **ChunkSendService** | Send chunks to player based on view distance |
 
-- `sendPacket()` / `broadcastPacket()` → queues outbound packets
-- `flushOutboundPackets()` → maps `PlayerRef.entityId` to legacy `Player` via `Server::getOnlinePlayers()`, calls `Player::dataPacket()`
-- `disconnect()` → creates `DisconnectPacket` and sends
-- `createPlayerRef(Player)` → factory for `PlayerRef` (uniqueId, entityId, name)
+| **BlockBreakService** | Break blocks with reach check, tool speed, drops |
+| **BlockPlaceService** | Place blocks with reach/inventory check |
+| **BlockUpdateService** | Schedule and process block updates |
 
-### AnvilStorageAdapter Details
+| **EntitySpawnService** | Spawn mobs, items, projectiles with type initialization |
+| **EntityDespawnService** | Despawn with save, distance-based cleanup |
+| **EntityInteractionService** | Interact, attack, pickup items, trade |
 
-- `loadChunkWithContext(Level, chunkX, chunkZ)` → extracts sections, biomes, heightmap, entities, tile entities from `FullChunk`
-- `saveChunkWithContext(Level, ChunkData)` → applies sections, biomes, heightmap to `FullChunk`
-- `serializeEntity()` / `serializeTileEntity()` → creates `EntitySnapshot` / `TileEntitySnapshot` with ECS components
-- `saveAll()` → delegates to `Level::save()` for all levels
+| **CombatService** | Damage with armor reduction, knockback, death handling |
+| **DamageService** | Apply damage/healing, health management |
+| **KnockbackService** | Horizontal/vertical/explosion/directional knockback |
 
-### ParallelGeneratorAdapter
+| **InventoryService** | Add/remove/swap items, held slot management |
+| **CraftingService** | Recipe matching, ingredient consumption |
+| **ContainerService** | Open/close, slot operations, item transfers |
 
-- `generateChunk()` → synchronous generation via level's generator, converts `FullChunk` to `ChunkData`
-- `populateChunk()` / `calculateLight()` → stubs for parallel execution
+### Architecture
 
-### PmmpThreadPool Improvements
-
-- `submitRoundRobin()` for work distribution
-- `parallelMap(iterable, callable)` → map-reduce pattern returning keyed results
-- Removed unused `$resultQueue` from `WorkerThread`
-
-### Kernel
-
-- Added `wireLegacyDependencies(Kernel)` — connects `Protocol84NetworkAdapter` to legacy `Network` after `Server::getInstance()` is available
+All services use:
+- **ECS components**: EntityRef, PositionComponent, HealthComponent, InventoryComponent, MetadataComponent, VelocityComponent, etc.
+- **Ports**: NetworkPort, StoragePort, WorldGenPort
+- **World/EntityRef** for entity management
+- **ComponentSerializer** for storage serialization
 
 ### Testing
 
@@ -54,4 +52,4 @@ bin/php7/bin/php vendor/bin/phpstan analyse --configuration=phpstan.neon
 
 ### Related
 
-Implements Phase 2 of the optimization plan: docs/PLAN.md
+Implements Phase 3 of the optimization plan: docs/PLAN.md

@@ -9,11 +9,28 @@ use pocketmine\adapter\driven\storage\AnvilStorageAdapter;
 use pocketmine\adapter\driven\threading\PmmpThreadPool;
 use pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter;
 use pocketmine\adapter\driving\console\ConsoleCommandAdapter;
-use pocketmine\adapter\driving\plugin\PluginManagerAdapter;
 use pocketmine\domain\ecs\ComponentRegistry;
 use pocketmine\domain\ecs\ResourceRegistry;
 use pocketmine\domain\ecs\SystemScheduler;
 use pocketmine\domain\ecs\World;
+use pocketmine\domain\service\PlayerJoinService;
+use pocketmine\domain\service\PlayerLeaveService;
+use pocketmine\domain\service\PlayerRespawnService;
+use pocketmine\domain\service\ChunkLoadService;
+use pocketmine\domain\service\ChunkUnloadService;
+use pocketmine\domain\service\ChunkSendService;
+use pocketmine\domain\service\BlockBreakService;
+use pocketmine\domain\service\BlockPlaceService;
+use pocketmine\domain\service\BlockUpdateService;
+use pocketmine\domain\service\EntitySpawnService;
+use pocketmine\domain\service\EntityDespawnService;
+use pocketmine\domain\service\EntityInteractionService;
+use pocketmine\domain\service\CombatService;
+use pocketmine\domain\service\DamageService;
+use pocketmine\domain\service\KnockbackService;
+use pocketmine\domain\service\InventoryService;
+use pocketmine\domain\service\CraftingService;
+use pocketmine\domain\service\ContainerService;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\ThreadingPort;
@@ -25,6 +42,25 @@ use pocketmine\port\driving\PluginPort;
 final class Kernel {
     private bool $running = false;
     private array $tickDurations = [];
+
+    private PlayerJoinService $playerJoinService;
+    private PlayerLeaveService $playerLeaveService;
+    private PlayerRespawnService $playerRespawnService;
+    private ChunkLoadService $chunkLoadService;
+    private ChunkUnloadService $chunkUnloadService;
+    private ChunkSendService $chunkSendService;
+    private BlockBreakService $blockBreakService;
+    private BlockPlaceService $blockPlaceService;
+    private BlockUpdateService $blockUpdateService;
+    private EntitySpawnService $entitySpawnService;
+    private EntityDespawnService $entityDespawnService;
+    private EntityInteractionService $entityInteractionService;
+    private CombatService $combatService;
+    private DamageService $damageService;
+    private KnockbackService $knockbackService;
+    private InventoryService $inventoryService;
+    private CraftingService $craftingService;
+    private ContainerService $containerService;
 
     public function __construct(
         private readonly NetworkPort $networkPort,
@@ -38,7 +74,26 @@ final class Kernel {
         private readonly SystemScheduler $systemScheduler,
         private readonly ComponentRegistry $componentRegistry,
         private readonly ResourceRegistry $resourceRegistry,
-    ) {}
+    ) {
+        $this->playerJoinService = new PlayerJoinService($world, $networkPort, $storagePort, $worldGenPort);
+        $this->playerLeaveService = new PlayerLeaveService($world, $networkPort, $storagePort);
+        $this->playerRespawnService = new PlayerRespawnService($world, $storagePort);
+        $this->chunkLoadService = new ChunkLoadService($world, $storagePort, $worldGenPort);
+        $this->chunkUnloadService = new ChunkUnloadService($world, $storagePort);
+        $this->chunkSendService = new ChunkSendService($world, $networkPort);
+        $this->blockBreakService = new BlockBreakService($world, $storagePort);
+        $this->blockPlaceService = new BlockPlaceService($world);
+        $this->blockUpdateService = new BlockUpdateService($world, $storagePort);
+        $this->entitySpawnService = new EntitySpawnService($world, $storagePort);
+        $this->entityDespawnService = new EntityDespawnService($world, $storagePort);
+        $this->entityInteractionService = new EntityInteractionService($world);
+        $this->combatService = new CombatService($world);
+        $this->damageService = new DamageService($world);
+        $this->knockbackService = new KnockbackService($world);
+        $this->inventoryService = new InventoryService($world);
+        $this->craftingService = new CraftingService($world);
+        $this->containerService = new ContainerService($world);
+    }
 
     public function run(int $maxTicks = -1): void {
         $this->running = true;
@@ -165,6 +220,78 @@ final class Kernel {
 
     public function getPluginPort(): PluginPort {
         return $this->pluginPort;
+    }
+
+    public function getPlayerJoinService(): PlayerJoinService {
+        return $this->playerJoinService;
+    }
+
+    public function getPlayerLeaveService(): PlayerLeaveService {
+        return $this->playerLeaveService;
+    }
+
+    public function getPlayerRespawnService(): PlayerRespawnService {
+        return $this->playerRespawnService;
+    }
+
+    public function getChunkLoadService(): ChunkLoadService {
+        return $this->chunkLoadService;
+    }
+
+    public function getChunkUnloadService(): ChunkUnloadService {
+        return $this->chunkUnloadService;
+    }
+
+    public function getChunkSendService(): ChunkSendService {
+        return $this->chunkSendService;
+    }
+
+    public function getBlockBreakService(): BlockBreakService {
+        return $this->blockBreakService;
+    }
+
+    public function getBlockPlaceService(): BlockPlaceService {
+        return $this->blockPlaceService;
+    }
+
+    public function getBlockUpdateService(): BlockUpdateService {
+        return $this->blockUpdateService;
+    }
+
+    public function getEntitySpawnService(): EntitySpawnService {
+        return $this->entitySpawnService;
+    }
+
+    public function getEntityDespawnService(): EntityDespawnService {
+        return $this->entityDespawnService;
+    }
+
+    public function getEntityInteractionService(): EntityInteractionService {
+        return $this->entityInteractionService;
+    }
+
+    public function getCombatService(): CombatService {
+        return $this->combatService;
+    }
+
+    public function getDamageService(): DamageService {
+        return $this->damageService;
+    }
+
+    public function getKnockbackService(): KnockbackService {
+        return $this->knockbackService;
+    }
+
+    public function getInventoryService(): InventoryService {
+        return $this->inventoryService;
+    }
+
+    public function getCraftingService(): CraftingService {
+        return $this->craftingService;
+    }
+
+    public function getContainerService(): ContainerService {
+        return $this->containerService;
     }
 }
 
