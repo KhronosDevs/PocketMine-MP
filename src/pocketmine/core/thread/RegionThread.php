@@ -34,6 +34,12 @@ final class RegionThread extends Thread {
 
     public const ENTITY_BYTES = 52; // id(4) + 6 doubles(48)
 
+    /** Lockstep integration constants - shared with Kernel::integrateOnce so
+     *  the diff-only mirror's prediction can never silently drift from the
+     *  worker's integration. */
+    public const TARGET_DELTA_TIME = 0.05;   // 20 TPS
+    public const GRAVITY_ACCELERATION = 0.08; // blocks/tick^2 (matches PhysicsSystem)
+
     private ThreadSafeArray $commandQueue;
     private ThreadSafeArray $syncQueue;
     private ThreadSafeArray $migrationQueue;
@@ -48,7 +54,6 @@ final class RegionThread extends Thread {
     private int $maxChunkX;
     private int $minChunkZ;
     private int $maxChunkZ;
-    private float $targetDeltaTime;
 
     public function __construct(
         int $regionId,
@@ -62,7 +67,6 @@ final class RegionThread extends Thread {
         $this->maxChunkX = $maxChunkX;
         $this->minChunkZ = $minChunkZ;
         $this->maxChunkZ = $maxChunkZ;
-        $this->targetDeltaTime = 0.05; // 20 TPS
         $this->commandQueue = new ThreadSafeArray();
         $this->syncQueue = new ThreadSafeArray();
         $this->migrationQueue = new ThreadSafeArray();
@@ -217,6 +221,12 @@ final class RegionThread extends Thread {
                     break;
                 case self::MSG_TICK:
                     $this->currentTickSeq = self::decodeHeaderSeq($cmd);
+                    // The kernel pushes migrations before the tick for the same
+                    // pass, so any pending migration is already queued here.
+                    // Draining before integrating guarantees a migrated entity
+                    // is stored before this tick integrates it - no lost or
+                    // doubled integration at region boundaries.
+                    $this->processMigrations();
                     $this->tickSnapshots();
                     $this->syncQueue[] = self::encodeAck($this->currentTickSeq);
                     break;
@@ -274,11 +284,11 @@ final class RegionThread extends Thread {
                 continue;
             }
             $snapshot = self::decodeEntity($bin);
-            $snapshot['position']['x'] += $snapshot['velocity']['x'] * $this->targetDeltaTime;
-            $snapshot['position']['y'] += $snapshot['velocity']['y'] * $this->targetDeltaTime;
-            $snapshot['position']['z'] += $snapshot['velocity']['z'] * $this->targetDeltaTime;
-            // Gravity: same constant as PhysicsSystem (0.08 blocks/tick^2).
-            $snapshot['velocity']['y'] -= 0.08 * $this->targetDeltaTime;
+            $snapshot['position']['x'] += $snapshot['velocity']['x'] * self::TARGET_DELTA_TIME;
+            $snapshot['position']['y'] += $snapshot['velocity']['y'] * self::TARGET_DELTA_TIME;
+            $snapshot['position']['z'] += $snapshot['velocity']['z'] * self::TARGET_DELTA_TIME;
+            // Gravity: same constant as PhysicsSystem.
+            $snapshot['velocity']['y'] -= self::GRAVITY_ACCELERATION * self::TARGET_DELTA_TIME;
             $this->entityData[(string)$entityId] = self::encodeEntity($snapshot['entityId'], $snapshot['position'], $snapshot['velocity']);
             $updated[] = $snapshot;
         }

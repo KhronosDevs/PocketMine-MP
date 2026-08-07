@@ -52,6 +52,8 @@ final class Protocol84NetworkAdapter implements NetworkPort {
     private array $connectedPlayers = [];
     private bool $running = false;
     private ?NetworkThread $networkThread = null;
+    /** Whether this adapter created the thread itself (and owns its lifecycle). */
+    private bool $ownsNetworkThread = false;
     private string $serverName = "Khronos Server";
     private int $serverId;
 
@@ -79,24 +81,43 @@ final class Protocol84NetworkAdapter implements NetworkPort {
             throw new \RuntimeException("Failed to bind socket: " . socket_strerror(socket_last_error()));
         }
 
-        // Start the packet pipeline worker (compression). Socket I/O stays here.
-        $this->networkThread = new NetworkThread();
-        $this->networkThread->start(Thread::INHERIT_ALL);
+        // Start the packet pipeline worker (compression/batching). Socket I/O
+        // stays here. When the kernel injects its own NetworkThread (the
+        // single pipeline worker owned and started by Kernel::run()), reuse it
+        // instead of spawning a second thread.
+        if ($this->networkThread === null) {
+            $this->networkThread = new NetworkThread();
+            $this->ownsNetworkThread = true;
+            $this->networkThread->start(Thread::INHERIT_ALL);
+        }
 
         $this->running = true;
     }
 
     public function shutdown(): void {
         $this->running = false;
-        if ($this->networkThread !== null) {
+        // Only reap a thread this adapter created; an injected kernel thread
+        // is shut down and joined by Kernel::shutdown().
+        if ($this->ownsNetworkThread && $this->networkThread !== null) {
             $this->networkThread->shutdown();
             $this->networkThread->join();
             $this->networkThread = null;
+            $this->ownsNetworkThread = false;
         }
         if ($this->socket !== null) {
             socket_close($this->socket);
             $this->socket = null;
         }
+    }
+
+    /**
+     * Point this adapter at the kernel's NetworkThread (the single packet
+     * pipeline worker). The kernel owns its lifecycle: start it via
+     * Kernel::run() and shut it down via Kernel::shutdown().
+     */
+    public function setNetworkThread(NetworkThread $thread): void {
+        $this->networkThread = $thread;
+        $this->ownsNetworkThread = false;
     }
 
     /**

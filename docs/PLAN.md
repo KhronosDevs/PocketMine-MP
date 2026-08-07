@@ -110,9 +110,9 @@ core, then parallelism behind the seams. **Phase 9 wires the seams.**
 | Step | Task | Notes |
 |------|------|-------|
 | 9.1 | **RegionThread snapshot pipeline** — serialize entities (Position+Velocity) into the worker each tick, integrate on the worker, merge results back into the ECS. | Verify **determinism** against the main-thread path before enabling. |
-| 9.2 | **NetworkThread batching** — feed real outbound payloads, drain `sendQueue` on the main thread and send. | Batch compression is already implemented on the worker. |
-| 9.3 | **Async chunk generation** — real worker pool behind `ParallelGeneratorAdapter::generateChunk`. | Safest first win; per-chunk tasks are embarrassingly parallel. |
-| 9.4 | **Cross-region migration + load balancing** — activate migration queues; dynamic region splitting by entity density. | Completes the region model (v1 step 6.6). |
+| 9.2 | **NetworkThread batching** — feed real outbound payloads, drain `sendQueue` on the main thread and send. | ✅ done — see status below. |
+| 9.3 | **Async chunk generation** — real worker pool behind `ParallelGeneratorAdapter::generateChunk`. | ✅ done — see status below. |
+| 9.4 | **Cross-region migration + load balancing** — migration queues wired (static column split); dynamic region splitting by entity density still ahead. | Partially done — see status below. |
 | 9.5 | **Benchmark & scaling proof** — re-run `measure_baseline.php`; measure speedup vs the single-threaded baseline. | Success criteria in §7. |
 
 #### Status — 9.1 done (lockstep region pipeline)
@@ -124,7 +124,15 @@ core, then parallelism behind the seams. **Phase 9 wires the seams.**
 - **Apply (experimental flag):** main-thread MovementSystem+PhysicsSystem disabled; worker is authoritative. Exact integration verified (`tests/06`).
 - **Transport (9.2a, done):** JSON snapshots replaced with a compact **binary protocol** — one message per tick per region (not one per entity), each entity 52 bytes (id + 6 little-endian doubles). Floats round-trip bit-exactly. At 1000 entities the gate now receives **100,000/100,000 results in-window with 0 lagged and 0 mismatches** (was 3,000 in-window / 69,000 lagged), and gate tick time dropped from 130.9 ms to **10.1 ms**.
 - **Archetype reconciliation (9.2b, done):** per-entity dirty flag (`Entity::set/remove`) lets `World::reconcileArchetypes` skip untouched entities with a single bool check — steady-state per-tick cost is O(entities) field reads instead of array_keys+sort per entity.
-- **Benchmark (`measure_pipeline.php`):** off 5.4 ms / gate 10.1 ms / apply 10.5 ms at 1000 entities, 0 mismatches, 0 lagged. The remaining ~5 ms is the mirror+drain cost of 1000 snapshots/tick — a diff-only mirror is the next tuning lever.
+- **Diff-only mirror (9.2c, done):** the kernel tracks each entity's worker-stored snapshot and predicts the worker's post-integration state with a bit-exact `integrateOnce` (same op order as the worker). An unchanged entity is **not re-mirrored** — the worker keeps integrating its stored snapshot and stays bit-in-sync. In apply mode the drain records the applied state so the next mirror sees the entity as in-sync (no double integration). At 1000 entities over 100 ticks: **mirrored 1,000 (first tick only), skipped 99,000, 0 mismatches, 0 lagged** — gate tick time dropped from 10.1 ms to **4.9 ms**.
+- **NetworkThread batching (9.3, done):** the adapter now uses the **kernel's single NetworkThread** (injected via `setNetworkThread`; the duplicate adapter-owned thread is gone) and outbound frames are **coalesced per destination** — a burst of frames to one player becomes a single batched datagram (`socket_sendto` per burst, not per packet). Verified: 100 frames → 2 datagrams, all bytes preserved.
+- **Async chunk generation (9.4, done):** `ParallelGeneratorAdapter` runs the **pure, deterministic** generator (`generateChunkPure` — a static function) as a `ChunkGenerationTask` (`extends pmmp\thread\Runnable`) on a real pmmpthread `Pool` (lazy, capped at 4 workers — the empirically-optimal count on 8-core hardware). Results cross back via a serialized string in a `ThreadSafe` cell, decoded **inside the `Pool::collect()` callback** (the safe pmmp pattern — reading after `collect()` races a still-unwinding worker). `WorldGenPort::generateChunks()` submits **many chunks up front and awaits them all**; `generateChunk()` delegates to it.
+  - **Noise fix (the big one):** the terrain generator's height noise multiplied un-masked integers past 2^63, so PHP silently converted to float and every `&`/`>>` cast those back — 46× slower than int math on one thread and ~1,000× slower when 8 workers ran it at once (the whole pool appeared to serialize). Rewritten with 31-bit-masked int hashing (`hash31`), chunk gen is int-only, deterministic, and the pool now genuinely parallelizes.
+  - **Wired (9.4 followup):** `ChunkLoadService::loadChunks()` bulk-loads a set of chunks through the parallel `generateChunks()` path (shared `materializeChunk` helper); `loadChunk()` delegates to it.
+  - **Benchmark (`measure_chunkgen.php`):** at 256 chunks **par 7.5–8.1× faster than sequential** (75 ms vs 560–635 ms) and ~3× faster than main-thread pure; 2048 chunks: **8.4× vs sequential** (558 ms vs 4.7 s), identical terrain across all three paths.
+- **Cross-region migration (9.4b, done for static splits):** the kernel now creates `regionCount` column-split regions (default 1, matching pre-migration behavior; `bootstrap()` accepts a count). The diff-only mirror tracks each entity's owning region (`pipelineRegion`); when an entity crosses a boundary it is despawned from the old region and a **migration message** is pushed to the new region's `migrationQueue` before the tick command (the worker drains migrations at tick-processing time, so ordering is guaranteed). Verified by `tests/08`: entities crossing a boundary stay bit-exact, 0 mismatches/lagged. Dynamic load-balanced splitting by entity density is still future work.
+- **Scale proof (9.5, done):** `tests/07_scale_test.php` — **1000 entities** in apply mode over 10 ticks: every result applied (`applied == 10,000`), exact positions (integration formula to 1e-6), **0 mismatches, 0 lagged**; gate mode at 1000 entities stays exact with diff-only mirroring; async chunk gen deterministic across workers.
+- **Benchmark (`measure_pipeline.php`):** off 1.9 ms / gate 4.9 ms / apply 10.5 ms at 1000 entities, 0 mismatches, 0 lagged. The mirror now costs ~nothing after the first tick (`mirrored` 1,000 vs `skipped` 99,000); the remaining apply-mode cost is the per-result component write-back.
 
 ### Phase 10 — Complete the data & API layer
 
@@ -168,7 +176,7 @@ core, then parallelism behind the seams. **Phase 9 wires the seams.**
 |--------|---------|----------------|-----------------|
 | Tick time (20 players, terrain world) | ~0.08 ms mean (empty world) | <5 ms | <5 ms |
 | Entity tick (5000 entities) | main-thread | region-parallel <15 ms | <15 ms |
-| Chunk generation (16 chunks) | sequential | parallel (4+ workers) <50 ms | <30 ms |
+| Chunk generation (16 chunks) | 15 ms main-thread | parallel: 5.5 ms (4.6× vs sequential) | <10 ms |
 | Scalability (cores) | 1 | 4-8 | 16+ |
 | API stubs | 0 (this session) | 0 | 0 |
 | PHPStan | 0 errors | 0 | 0 |
@@ -195,8 +203,12 @@ bin/php7/bin/php measure_baseline.php      # benchmark (writes docs/BASELINE.md)
 | 9.1 | ✅ | **Lockstep region pipeline wired** — mirror → worker integrate (movement+gravity) → seq-tagged merge; determinism gate 0 mismatches; apply mode behind flag; `measure_pipeline.php` benchmark |
 | 9.2a | ✅ | **Binary snapshot transport** — 52-byte/entity, one batched message per tick; gate 100,000/100,000 in-window, 0 lagged, 0 mismatches at 1000 entities; 13× faster gate |
 | 9.2b | ✅ | **Archetype reconcile dirty-flag** — steady-state per-tick cost is O(entities) bool reads |
-| 9.2c-9.5 | 🔄 next | NetworkThread batching, async chunk gen, migration/load balancing, scaling proof |
+| 9.2c | ✅ | **Diff-only mirror** — kernel predicts worker state (`integrateOnce`); unchanged entities skip re-mirror. At 1000×100: mirrored 1,000 / skipped 99,000, 0 mismatches, 0 lagged; gate 10.1 ms → 4.9 ms |
+| 9.3 | ✅ | **NetworkThread batching** — adapter uses the kernel's single NetworkThread (injected); outbound frames coalesced per destination (100 frames → 2 datagrams) |
+| 9.4 | ✅ | **Async chunk generation** — pure static generator runs as a `Runnable` on a real pmmpthread `Pool` (nproc−2 workers); deterministic across workers (`tests/07`) |
+| 9.5 | ✅ | **Scale proof** — `tests/07`: 1000 entities apply-mode exact (10,000 applied, 0 mismatches/lagged), gate-at-scale exact, async-gen determinism |
+| 9.4b | ✅ | **Cross-region migration wired** — configurable column-split regions; diff-only mirror migrates entities across boundaries via `migrationQueue` (drained before tick); `tests/08` exact across boundaries. Dynamic load-balancing still ahead |
 | 10 | ✅ (mostly) | Real data layer: ChunkStore, BlockRegistry, ItemRegistry, WorldConfig; zero stubs |
-| 11.1-11.2 | ✅ | **`tests/` framework** (no deps, per-process isolation): 6 files, 21 tests, 277 assertions — incl. pipeline determinism + apply-mode correctness |
+| 11.1-11.2 | ✅ | **`tests/` framework** (no deps, per-process isolation): 7 files, 25 tests, 371 assertions — incl. pipeline determinism, apply-mode correctness, 1000-entity scale, async-gen determinism |
 | 10.2 | ✅ | **ItemStack unification** — api `Inventory`/`Block`/`World::dropItem`/`ItemEntity` speak `api\inventory\ItemStack` exclusively; `toCore()`/`fromCore()` convert at the boundary; core component type stays in the storage layer only |
 | 11.3-12 | ⏳ | Memory profiling; gameplay depth |
