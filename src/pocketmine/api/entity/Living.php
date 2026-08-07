@@ -1,0 +1,92 @@
+<?php
+
+declare(strict_types=1);
+
+namespace pocketmine\api\entity;
+
+use pocketmine\domain\ecs\EntityRef;
+use pocketmine\domain\ecs\World;
+use pocketmine\domain\component\tags\MonsterTag;
+
+abstract class Living extends Entity {
+    public function __construct(EntityRef $ref, \pocketmine\domain\ecs\World $world) {
+        parent::__construct($ref, $world);
+    }
+
+    public function isAlive(): bool {
+        return !$this->isDead() && $this->getHealth() > 0;
+    }
+
+    public function getMaxHealth(): float {
+        return $this->getHealth()->max;
+    }
+
+    public function setMaxHealth(float $health): void {
+        $this->getHealth()->max = max(1, $health);
+        if ($this->getHealth()->current > $this->getHealth()->max) {
+            $this->getHealth()->current = $this->getHealth()->max;
+        }
+    }
+
+    public function heal(float $amount): void {
+        parent::heal($amount);
+    }
+
+    public function damage(float $amount): bool {
+        return parent::damage($amount);
+    }
+
+    public function attack(Entity $target): bool {
+        $interactionService = \pocketmine\Kernel::getInstance()->getEntityInteractionService();
+        return $interactionService->attack($this->ref, $target->ref);
+    }
+
+    public function interact(Entity $target): bool {
+        $interactionService = \pocketmine\Kernel::getInstance()->getEntityInteractionService();
+        return $interactionService->interact($this->ref, $target->ref);
+    }
+
+    public function getAttribute(string $name): float {
+        return $this->getAttributes()->get($name);
+    }
+
+    public function setAttribute(string $name, float $value): void {
+        $this->getAttributes()->set($name, $value);
+    }
+
+    public function addAttributeModifier(string $attribute, string $modifierId, float $amount, int $operation): void {
+        $this->getAttributes()->addModifier($attribute, $modifierId, $amount, $operation);
+    }
+
+    public function removeAttributeModifier(string $attribute, string $modifierId): void {
+        $this->getAttributes()->removeModifier($attribute, $modifierId);
+    }
+
+    public function addEffect(int $effectId, int $duration, int $amplifier = 0, bool $ambient = false, bool $particles = true): void {
+        $this->getEffects()->add($effectId, $amplifier, $duration, $ambient, $particles);
+    }
+
+    public function removeEffect(int $effectId): void {
+        $this->getEffects()->remove($effectId);
+    }
+
+    public function hasEffect(int $effectId): bool {
+        return $this->getEffects()->has($effectId);
+    }
+
+    public function getEffect(int $effectId): ?\pocketmine\domain\component\EffectInstance {
+        return $this->getEffects()->get($effectId);
+    }
+
+    public function clearEffects(): void {
+        $this->getEffects()->clear();
+    }
+
+    public function getActiveEffects(): array {
+        return $this->getEffects()->getAll();
+    }
+
+    public function isMonster(): bool {
+        return $this->ref->hasComponent(\pocketmine\domain\component\tags\MonsterTag::class);
+    }
+}
