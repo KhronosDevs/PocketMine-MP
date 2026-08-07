@@ -6,7 +6,6 @@ namespace pocketmine\core\service;
 
 use pocketmine\core\component\InventoryComponent;
 use pocketmine\core\component\ItemStack;
-use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
 
@@ -103,22 +102,20 @@ final class InventoryService {
         $entity = $entityRef->getEntity();
         if (!$entity) return null;
         
-        $metadata = $entity->get(MetadataComponent::class);
-        $heldSlot = $metadata?->get('heldSlot') ?? 0;
+        $inventory = $entity->get(InventoryComponent::class);
+        if (!$inventory) return null;
         
-        return $this->getItem($entityRef, $heldSlot);
+        return $this->getItem($entityRef, $inventory->heldSlot);
     }
 
     public function setHeldSlot(EntityRef $entityRef, int $slot): void {
         $entity = $entityRef->getEntity();
         if (!$entity) return;
         
-        $metadata = $entity->get(MetadataComponent::class);
-        if (!$metadata) return;
+        $inventory = $entity->get(InventoryComponent::class);
+        if (!$inventory) return;
         
-        if ($slot >= 0 && $slot < 9) { // Hotbar slots 0-8
-            $metadata->set('heldSlot', $slot);
-        }
+        $inventory->setHeldSlot($slot);
     }
 
     public function getFreeSlots(EntityRef $entityRef): int {

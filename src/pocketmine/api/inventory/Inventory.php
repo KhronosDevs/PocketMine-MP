@@ -93,15 +93,11 @@ class Inventory {
     }
 
     public function setHeldSlot(int $slot): void {
-        $metadata = $this->holder->getMetadata();
-        if ($metadata) {
-            $metadata->set('heldSlot', $slot);
-        }
+        $this->inventory->setHeldSlot($slot);
     }
 
     public function getHeldSlot(): int {
-        $metadata = $this->holder->getMetadata();
-        return $metadata?->get('heldSlot', 0) ?? 0;
+        return $this->inventory->heldSlot;
     }
 
     public function getFreeSlots(): int {
