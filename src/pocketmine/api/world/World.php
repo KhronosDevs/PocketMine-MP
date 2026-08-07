@@ -9,6 +9,10 @@ use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\QueryBuilder;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\MetadataComponent;
+use pocketmine\core\component\tags\PlayerTag;
+use pocketmine\core\resource\BlockRegistry;
+use pocketmine\core\resource\ChunkStore;
+use pocketmine\core\resource\WorldConfig;
 use pocketmine\core\service\ChunkLoadService;
 use pocketmine\core\service\ChunkUnloadService;
 use pocketmine\core\service\ChunkSendService;
@@ -34,6 +38,13 @@ class World {
         $this->chunkLoadService = $kernel->getChunkLoadService();
         $this->chunkUnloadService = $kernel->getChunkUnloadService();
         $this->chunkSendService = $kernel->getChunkSendService();
+
+        // Keep the world-level config resource in sync with this facade.
+        $config = $this->getWorldConfig();
+        if ($config !== null) {
+            $config->name = $name;
+            $config->folderName = $folderName;
+        }
     }
 
     public function getName(): string {
@@ -62,8 +73,8 @@ class World {
     public function getPlayers(): array {
         $players = [];
         $query = $this->world->query()
-            ->with(\pocketmine\core\component\MetadataComponent::class)
-            ->withTag(\pocketmine\core\component\tags\PlayerTag::class)
+            ->with(MetadataComponent::class)
+            ->withTag(PlayerTag::class)
             ->build();
         
         foreach ($query as $entity) {
@@ -86,14 +97,14 @@ class World {
 
     public function getEntitiesInRadius(float $x, float $y, float $z, float $radius): array {
         $query = $this->world->query()
-            ->with(\pocketmine\core\component\PositionComponent::class)
+            ->with(PositionComponent::class)
             ->build();
 
         $entities = [];
         $radiusSq = $radius * $radius;
 
         foreach ($query as $entity) {
-            $pos = $entity->get(\pocketmine\core\component\PositionComponent::class);
+            $pos = $entity->get(PositionComponent::class);
             if (!$pos) continue;
 
             $dx = $pos->x - $x;
@@ -112,12 +123,12 @@ class World {
 
     public function getEntitiesInChunk(int $chunkX, int $chunkZ): array {
         $query = $this->world->query()
-            ->with(\pocketmine\core\component\PositionComponent::class)
+            ->with(PositionComponent::class)
             ->build();
 
         $entities = [];
         foreach ($query as $entity) {
-            $pos = $entity->get(\pocketmine\core\component\PositionComponent::class);
+            $pos = $entity->get(PositionComponent::class);
             if (!$pos) continue;
 
             $entityChunkX = (int)floor($pos->x / 16);
@@ -142,58 +153,86 @@ class World {
     }
 
     public function isChunkLoaded(int $chunkX, int $chunkZ): bool {
-        // Would check if chunk is loaded
-        return true; // Simplified
+        $store = $this->getChunkStore();
+        return $store !== null && $store->isLoaded($chunkX, $chunkZ);
+    }
+
+    public function isChunkGenerated(int $chunkX, int $chunkZ): bool {
+        $store = $this->getChunkStore();
+        return $store !== null && $store->isGenerated($chunkX, $chunkZ);
+    }
+
+    public function isChunkPopulated(int $chunkX, int $chunkZ): bool {
+        $store = $this->getChunkStore();
+        return $store !== null && $store->isPopulated($chunkX, $chunkZ);
     }
 
     public function getBlock(int $x, int $y, int $z): int {
-        // Would query chunk data
-        return 0; // Simplified
+        $store = $this->getChunkStore();
+        return $store?->getBlock($x, $y, $z) ?? 0;
     }
 
     public function setBlock(int $x, int $y, int $z, int $blockId, int $meta = 0): bool {
-        // Would set block in chunk data
-        return true; // Simplified
+        $store = $this->getChunkStore();
+        return $store?->setBlock($x, $y, $z, $blockId, $meta) ?? false;
     }
 
     public function getBlockMeta(int $x, int $y, int $z): int {
-        return 0; // Simplified
+        $store = $this->getChunkStore();
+        return $store?->getBlockMeta($x, $y, $z) ?? 0;
     }
 
     public function getHighestBlockAt(int $x, int $z): int {
-        // Would query heightmap
-        return 0; // Simplified
+        $store = $this->getChunkStore();
+        return $store?->getHighestBlockAt($x, $z) ?? 0;
     }
 
     public function getBiome(int $x, int $z): int {
-        // Would query biome data
-        return 0; // Simplified
+        $store = $this->getChunkStore();
+        return $store?->getBiome($x, $z) ?? 0;
     }
 
     public function setBiome(int $x, int $z, int $biome): void {
-        // Would set biome
+        $store = $this->getChunkStore();
+        $store?->setBiome($x, $z, $biome);
     }
 
     public function getTime(): int {
-        $metadata = new \pocketmine\core\component\MetadataComponent();
-        // Would get from world metadata
-        return 0;
+        return $this->getWorldConfig()?->time ?? 0;
     }
 
     public function setTime(int $time): void {
-        // Would set world time
+        $config = $this->getWorldConfig();
+        if ($config !== null) {
+            $config->time = $time;
+        }
     }
 
     public function getSeed(): int {
-        return 0; // Simplified
+        return $this->getWorldConfig()?->seed ?? 0;
+    }
+
+    public function setSeed(int $seed): void {
+        $config = $this->getWorldConfig();
+        if ($config !== null) {
+            $config->seed = $seed;
+        }
     }
 
     public function getSpawnLocation(): array {
-        return ['x' => 0, 'y' => 64, 'z' => 0]; // Simplified
+        $config = $this->getWorldConfig();
+        return $config !== null
+            ? ['x' => $config->spawnX, 'y' => $config->spawnY, 'z' => $config->spawnZ]
+            : ['x' => 0, 'y' => 64, 'z' => 0];
     }
 
     public function setSpawnLocation(float $x, float $y, float $z): void {
-        // Would set spawn
+        $config = $this->getWorldConfig();
+        if ($config !== null) {
+            $config->spawnX = (int)$x;
+            $config->spawnY = (int)$y;
+            $config->spawnZ = (int)$z;
+        }
     }
 
     public function addEntity(\pocketmine\api\entity\Entity $entity): void {
@@ -215,47 +254,56 @@ class World {
     }
 
     public function dropExp(float $x, float $y, float $z, int $amount): void {
-        // Would spawn XP orbs
+        $this->world->spawn(
+            (new \pocketmine\core\ecs\EntityBuilder())
+                ->with(new PositionComponent($x, $y + 0.5, $z))
+                ->with(new \pocketmine\core\component\VelocityComponent())
+                ->with(new \pocketmine\core\component\HealthComponent(1, 1))
+                ->with(new MetadataComponent(['xp' => $amount]))
+                ->withTag('xp_orb')
+        );
     }
 
     public function getChunkData(int $chunkX, int $chunkZ): ?ChunkData {
+        $store = $this->getChunkStore();
+        if ($store !== null && $store->isLoaded($chunkX, $chunkZ)) {
+            return $store->toChunkData($chunkX, $chunkZ);
+        }
         return $this->chunkLoadService->loadChunk($chunkX, $chunkZ);
     }
 
     public function setChunkData(ChunkData $data): void {
-        // Would save chunk data
-    }
-
-    public function isChunkGenerated(int $chunkX, int $chunkZ): bool {
-        return true; // Simplified
-    }
-
-    public function isChunkPopulated(int $chunkX, int $chunkZ): bool {
-        return true; // Simplified
+        $this->getChunkStore()?->load($data);
     }
 
     public function getGenerator(): string {
-        return 'default'; // Simplified
+        return $this->getWorldConfig()?->generator ?? 'normal';
     }
 
     public function getDifficulty(): int {
-        return 1; // Simplified
+        return $this->getWorldConfig()?->difficulty ?? 1;
     }
 
     public function setDifficulty(int $difficulty): void {
-        // Would set difficulty
+        $config = $this->getWorldConfig();
+        if ($config !== null) {
+            $config->difficulty = $difficulty;
+        }
     }
 
     public function getGameMode(): int {
-        return 0; // Simplified
+        return $this->getWorldConfig()?->gameMode ?? 0;
     }
 
     public function setGameMode(int $gamemode): void {
-        // Would set gamemode
+        $config = $this->getWorldConfig();
+        if ($config !== null) {
+            $config->gameMode = $gamemode;
+        }
     }
 
     public function getMaxPlayers(): int {
-        return 20; // Simplified
+        return $this->getWorldConfig()?->maxPlayers ?? 20;
     }
 
     public function getOnlinePlayers(): array {
@@ -312,5 +360,15 @@ class World {
             );
         }
         return $entities;
+    }
+
+    private function getChunkStore(): ?ChunkStore {
+        $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
+        return $store instanceof ChunkStore ? $store : null;
+    }
+
+    private function getWorldConfig(): ?WorldConfig {
+        $config = $this->world->getResourceRegistry()->get(WorldConfig::class);
+        return $config instanceof WorldConfig ? $config : null;
     }
 }

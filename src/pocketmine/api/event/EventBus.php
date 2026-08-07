@@ -4,44 +4,6 @@ declare(strict_types=1);
 
 namespace pocketmine\api\event;
 
-abstract class Event {
-    private bool $cancelled = false;
-
-    public function isCancelled(): bool {
-        return $this->cancelled;
-    }
-
-    public function setCancelled(bool $cancelled): void {
-        $this->cancelled = $cancelled;
-    }
-
-    public function getEventName(): string {
-        return get_class($this);
-    }
-}
-
-class CancellableEvent extends Event {
-    // Marker for cancellable events
-}
-
-#[\Attribute(\Attribute::TARGET_CLASS)]
-final class EventPriority {
-    public const LOWEST = 0;
-    public const LOW = 1;
-    public const NORMAL = 2;
-    public const HIGH = 3;
-    public const HIGHEST = 4;
-    public const MONITOR = 5;
-}
-
-#[\Attribute(\Attribute::TARGET_METHOD)]
-final class EventHandler {
-    public function __construct(
-        public int $priority = EventPriority::NORMAL,
-        public bool $ignoreCancelled = false,
-    ) {}
-}
-
 class EventBus {
     /** @var array<class-string<Event>, array<ListenerEntry>> */
     private array $listeners = [];
@@ -101,12 +63,4 @@ class EventBus {
         // For now, just emit synchronously
         $this->emit($event);
     }
-}
-
-final class ListenerEntry {
-    public function __construct(
-        public readonly mixed $handler,
-        public readonly int $priority,
-        public bool $ignoreCancelled = false,
-    ) {}
 }

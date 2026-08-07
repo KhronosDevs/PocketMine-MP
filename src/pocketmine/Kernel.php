@@ -77,6 +77,7 @@ final class Kernel {
     private InventoryService $inventoryService;
     private CraftingService $craftingService;
     private ContainerService $containerService;
+    private \pocketmine\api\scheduler\Scheduler $scheduler;
 
     public function __construct(
         private readonly NetworkPort $networkPort,
@@ -109,6 +110,10 @@ final class Kernel {
         $this->inventoryService = new InventoryService($world);
         $this->craftingService = new CraftingService($world);
         $this->containerService = new ContainerService($world);
+
+        // Single scheduler instance: it registers a tick system that runs tasks,
+        // so it must not be recreated per access.
+        $this->scheduler = new \pocketmine\api\scheduler\Scheduler($world, $systemScheduler, $threadingPort);
 
         $this->dataPath = getcwd() . DIRECTORY_SEPARATOR;
         $this->startTime = time();
@@ -284,7 +289,7 @@ final class Kernel {
     }
 
     public function getScheduler(): \pocketmine\api\scheduler\Scheduler {
-        return new \pocketmine\api\scheduler\Scheduler();
+        return $this->scheduler;
     }
 
     public function getComponentRegistry(): ComponentRegistry {
@@ -522,6 +527,10 @@ function registerBuiltinResources(ResourceRegistry $registry): void {
     $registry->set(new \pocketmine\core\resource\TickCounter());
     $registry->set(new \pocketmine\core\resource\ServerConfig());
     $registry->set(new \pocketmine\core\resource\SpatialIndex());
+    $registry->set(new \pocketmine\core\resource\WorldConfig());
+    $registry->set(new \pocketmine\core\resource\BlockRegistry());
+    $registry->set(new \pocketmine\core\resource\ItemRegistry());
+    $registry->set(new \pocketmine\core\resource\ChunkStore());
 }
 
 function registerBuiltinSystems(SystemScheduler $scheduler): void {

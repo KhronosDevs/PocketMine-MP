@@ -36,9 +36,10 @@ class ItemStack {
         $this->count = max(0, $count);
     }
 
+    private static ?\pocketmine\core\resource\ItemRegistry $itemRegistry = null;
+
     public function getMaxStackSize(): int {
-        // Would look up from item registry
-        return 64;
+        return self::registry()?->getMaxStackSize($this->itemId) ?? 64;
     }
 
     public function isNull(): bool {
@@ -72,8 +73,20 @@ class ItemStack {
     }
 
     public function getName(): string {
-        // Would look up from item registry
-        return "item.{$this->itemId}";
+        return self::registry()?->getName($this->itemId) ?? "item.{$this->itemId}";
+    }
+
+    private static function registry(): ?\pocketmine\core\resource\ItemRegistry {
+        if (self::$itemRegistry === null) {
+            $kernel = \pocketmine\Kernel::getInstance();
+            if ($kernel !== null) {
+                $registry = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ItemRegistry::class);
+                if ($registry instanceof \pocketmine\core\resource\ItemRegistry) {
+                    self::$itemRegistry = $registry;
+                }
+            }
+        }
+        return self::$itemRegistry;
     }
 
     public function getDisplayName(): string {
@@ -130,8 +143,7 @@ class ItemStack {
     }
 
     public function getMaxDurability(): int {
-        // Would look up from item registry
-        return 0;
+        return self::registry()?->getMaxDurability($this->itemId) ?? 0;
     }
 
     public function isEnchanted(): bool {

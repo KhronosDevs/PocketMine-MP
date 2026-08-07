@@ -23,6 +23,7 @@ final class AIStateComponent {
     public bool $avoidFire = true;
     public float $followRange = 16.0;
     public float $attackRange = 2.0;
+    public float $attackDamage = 2.0;
 
     public function __construct() {}
 

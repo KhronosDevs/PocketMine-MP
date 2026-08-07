@@ -136,7 +136,11 @@ final class AISystem implements ParallelSystem {
             if ($distSq <= $attackRangeSq) {
                 // In attack range - stop and attack
                 $velocity->setPending(0, $velocity->y, 0);
-                // TODO: Trigger attack logic
+                $healthArr = $archetype->getComponentArray(\pocketmine\core\component\HealthComponent::class);
+                $targetHealth = $healthArr[$ai->targetEntity] ?? null;
+                if ($targetHealth !== null) {
+                    $targetHealth->current = max(0.0, $targetHealth->current - $ai->attackDamage);
+                }
             } else {
                 // Move toward target
                 $dist = sqrt($distSq);

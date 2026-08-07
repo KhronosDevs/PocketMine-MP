@@ -20,7 +20,10 @@
 | 5: Archetype Parallelism | ✅ Done | multithread-archetype-parallelism | #23 | Movement, Effect, Physics, AI parallel execution |
 | 6: Region-Based Architecture | ✅ Done | region-based-architecture | #24 | RegionWorld, RegionThread, coordination, network threads |
 | 7: Polish & Optimize | ✅ Done | polish-optimize | #25 | Storage, queries, memory, network batching, benchmarks |
-| 8: **API ECS Rewrite** | ✅ Done | api-ecs-rewrite | #26 | **Complete ECS-based API rewrite** — Entity, Level, Server, Inventory, Block, Scheduler, Command, Permission, Event, Plugin, World; PHPStan clean, legacy code fully removed |
+| 8: **API ECS Rewrite** | ✅ Done | api-ecs-rewrite | #26 | **Complete ECS-based API rewrite** — Entity, World, Server, Inventory, Block, Scheduler, Command, Permission, Event, Plugin; PHPStan clean, legacy code fully removed |
+| 8.5: World Rename | ✅ Done | api-ecs-rewrite | #26 | `Level` API renamed to `World` (Server getWorlds/getDefaultWorld/loadWorld, Block getWorld) |
+| 9: Wire the Threading | ⏳ Next | — | — | RegionThread snapshot pipeline, NetworkThread batching, async chunk gen, migration/load balancing, scaling proof |
+| 10: Complete Data & API Layer | ✅ Mostly | api-ecs-rewrite | #26 | ChunkStore, BlockRegistry, ItemRegistry, WorldConfig; all `// Simplified` stubs removed; real block/chunk/inventory/world APIs |
 
 ---
 
@@ -213,3 +216,7 @@
 17. ✅ Fix runtime landmines (Info constants, Binary ENDIANNESS/bcmath, spawn() EntityRef, service layer)
 18. ✅ PHPStan 0 errors (was 142); lint clean; boot/full/API tests pass; benchmark mean 0.077 ms
 19. ✅ Update docs, commit, push, open PR #26
+20. ✅ Rename API `Level` → `World` (Server world methods, Block getWorld, Events import cleanup)
+21. ✅ **Phase 10: real data layer** — new `core/resource/` resources: ChunkStore (binary-string block store), BlockRegistry (~70 block property table), ItemRegistry (stack/durability/names), WorldConfig (time/seed/spawn/rules); ChunkLoad/Unload, BlockBreak/Place services operate on real chunk data; api World/Block/Inventory wired end-to-end
+22. ✅ Remove **all** `// Simplified` and `// Would` placeholders (Server uptime/TPS/dispatch, Player sendMessage/kick via NetworkPort, PluginCommand executors, Animal owner/breed, Plugin config files, Scheduler ownership, AI attack, ItemStack registry lookups, `canAddItem` recursion bug)
+23. ⏳ **Next: Phase 9** — wire the threading (see docs/PLAN.md §5): region snapshot pipeline → network batching → async chunk gen → migration/load balancing → scaling benchmark

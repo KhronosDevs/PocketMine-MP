@@ -23,6 +23,21 @@ final class SystemScheduler {
         };
     }
 
+    public function unregister(System $system): void {
+        $this->sequentialSystems = array_values(array_filter(
+            $this->sequentialSystems,
+            fn(System $s) => $s !== $system
+        ));
+        $this->parallelSystems = array_values(array_filter(
+            $this->parallelSystems,
+            fn(System $s) => $s !== $system
+        ));
+        $this->chunkParallelSystems = array_values(array_filter(
+            $this->chunkParallelSystems,
+            fn(System $s) => $s !== $system
+        ));
+    }
+
     public function run(World $world, float $deltaTime): void {
         // Sequential systems (dependencies, writes shared state)
         foreach ($this->sequentialSystems as $system) {

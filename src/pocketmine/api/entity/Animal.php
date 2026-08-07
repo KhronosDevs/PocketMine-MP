@@ -51,8 +51,35 @@ abstract class Animal extends Living {
     }
 
     public function breed(\pocketmine\api\entity\Animal $partner): ?self {
-        // Breeding logic would be implemented here
-        return null;
+        if (!$this->canBreed() || !$partner->canBreed()) {
+            return null;
+        }
+
+        $metadata = $this->getMetadata();
+        $this->setLoveTimer(600);
+        $partner->setLoveTimer(600);
+
+        $position = $this->getPosition();
+        $partnerPos = $partner->getPosition();
+
+        $ref = $this->world->spawn(
+            (new \pocketmine\core\ecs\EntityBuilder())
+                ->with(new \pocketmine\core\component\PositionComponent(
+                    ($position->x + ($partnerPos?->x ?? $position->x)) / 2,
+                    $position->y,
+                    ($position->z + ($partnerPos?->z ?? $position->z)) / 2
+                ))
+                ->with(new \pocketmine\core\component\HealthComponent(10, 10))
+                ->with(new MetadataComponent([
+                    'entityType' => $metadata->get('entityType', get_class($this)),
+                    'age' => -1, // baby
+                    'owner' => $metadata->get('owner'),
+                ]))
+                ->withTag('animal')
+        );
+
+        $class = get_class($this);
+        return new $class($ref, $this->world);
     }
 
     public function setOwner(\pocketmine\api\entity\Player $player): void {
@@ -63,9 +90,23 @@ abstract class Animal extends Living {
     public function getOwner(): ?\pocketmine\api\entity\Player {
         $metadata = $this->getMetadata();
         $ownerId = $metadata->get('owner');
-        if ($ownerId) {
-            // Would need to find player by uniqueId
+        if (!is_string($ownerId) || $ownerId === '') {
             return null;
+        }
+
+        $query = $this->world->query()
+            ->with(MetadataComponent::class)
+            ->withTag(\pocketmine\core\component\tags\PlayerTag::class)
+            ->build();
+
+        foreach ($query as $entity) {
+            $entityMeta = $entity->get(MetadataComponent::class);
+            if ($entityMeta && $entityMeta->get('uniqueId') === $ownerId) {
+                return new \pocketmine\api\entity\Player(
+                    \pocketmine\core\ecs\EntityRef::create($entity->id, $this->world),
+                    $this->world
+                );
+            }
         }
         return null;
     }

@@ -11,6 +11,8 @@ use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\RotationComponent;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\BlockRegistry;
+use pocketmine\core\resource\ChunkStore;
 
 final class BlockPlaceService {
     public function __construct(
@@ -102,14 +104,31 @@ final class BlockPlaceService {
     }
 
     private function isValidPlacement(int $x, int $y, int $z): bool {
-        // Check if target position is air
-        // In a full implementation, this would check chunk data
-        return true; // Simplified
+        $store = $this->getChunkStore();
+        if ($store === null) {
+            return false;
+        }
+        $existing = $store->getBlock($x, $y, $z);
+        // A block may be placed only into air or a replaceable block
+        // (tall grass, water, snow layers, etc.).
+        return $existing === 0 || $this->getBlockRegistry()->isReplaceable($existing);
     }
 
     private function setBlock(int $x, int $y, int $z, int $blockId, int $meta): void {
-        // Set block in chunk data
-        // This would modify the chunk's block data
+        $store = $this->getChunkStore();
+        if ($store !== null) {
+            $store->setBlock($x, $y, $z, $blockId, $meta);
+        }
+    }
+
+    private function getChunkStore(): ?ChunkStore {
+        $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
+        return $store instanceof ChunkStore ? $store : null;
+    }
+
+    private function getBlockRegistry(): BlockRegistry {
+        $registry = $this->world->getResourceRegistry()->get(BlockRegistry::class);
+        return $registry instanceof BlockRegistry ? $registry : new BlockRegistry();
     }
 
     private function playPlaceEffects(int $x, int $y, int $z, int $blockId): void {

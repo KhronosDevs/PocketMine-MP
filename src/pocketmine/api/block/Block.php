@@ -6,6 +6,7 @@ namespace pocketmine\api\block;
 
 use pocketmine\api\world\World;
 use pocketmine\api\inventory\ItemStack;
+use pocketmine\core\resource\BlockRegistry;
 
 class Block {
     private World $world;
@@ -45,7 +46,7 @@ class Block {
     }
 
     public function setId(int $id): bool {
-        return $this->world->setBlock($this->x, $this->y, $this->z, $id);
+        return $this->world->setBlock($this->x, $this->y, $this->z, $id, $this->getMeta());
     }
 
     public function getMeta(): int {
@@ -53,13 +54,11 @@ class Block {
     }
 
     public function setMeta(int $meta): bool {
-        // Would set block meta
-        return true;
+        return $this->world->setBlock($this->x, $this->y, $this->z, $this->getId(), $meta);
     }
 
     public function getType(): string {
-        // Would look up from block registry
-        return "block.{$this->getId()}";
+        return $this->getRegistry()->getName($this->getId());
     }
 
     public function getName(): string {
@@ -67,45 +66,43 @@ class Block {
     }
 
     public function isSolid(): bool {
-        // Would check block properties
-        return true;
+        return $this->getRegistry()->isSolid($this->getId());
     }
 
     public function isTransparent(): bool {
-        return !$this->isSolid();
+        return $this->getRegistry()->isTransparent($this->getId());
     }
 
     public function isPassable(): bool {
-        // Would check block properties
-        return false;
+        return !$this->isSolid();
     }
 
     public function isFlammable(): bool {
-        return false; // Simplified
+        return $this->getRegistry()->isFlammable($this->getId());
     }
 
     public function getFlammability(): int {
-        return 0;
+        return $this->getRegistry()->getFlammability($this->getId());
     }
 
     public function getBurnTime(): int {
-        return 0;
+        return $this->getRegistry()->getBurnTime($this->getId());
     }
 
     public function getHardness(): float {
-        return 0.0; // Simplified
+        return $this->getRegistry()->getHardness($this->getId());
     }
 
     public function getResistance(): float {
-        return 0.0; // Simplified
+        return $this->getRegistry()->getResistance($this->getId());
     }
 
     public function getLightLevel(): int {
-        return 0; // Simplified
+        return $this->getRegistry()->getLightLevel($this->getId());
     }
 
     public function getLightOpacity(): int {
-        return 0; // Simplified
+        return $this->getRegistry()->getLightOpacity($this->getId());
     }
 
     public function isLightSource(): bool {
@@ -113,37 +110,49 @@ class Block {
     }
 
     public function canBeReplaced(): bool {
-        return false; // Simplified
+        return $this->getRegistry()->isReplaceable($this->getId());
     }
 
     public function canBeSilkTouched(): bool {
-        return true; // Simplified
+        return $this->getRegistry()->canBeSilkTouched($this->getId());
     }
 
     public function getToolType(): string {
-        return 'hand'; // Simplified
+        return $this->getRegistry()->getToolType($this->getId());
     }
 
     public function getToolLevel(): int {
-        return 0; // Simplified
+        return $this->getRegistry()->getToolLevel($this->getId());
     }
 
+    /**
+     * @return array<int, ItemStack> item drops for this block.
+     */
     public function getDrops(ItemStack $item): array {
-        // Would return block drops based on tool
-        return [];
+        $silkTouch = $item->getId() === 359; // shears
+        $drops = $this->getRegistry()->getDrops($this->getId(), $silkTouch);
+        $stacks = [];
+        foreach ($drops as $drop) {
+            $stacks[] = new ItemStack($drop['id'], $drop['meta'], $drop['count']);
+        }
+        return $stacks;
     }
 
     public function getExperienceDrop(): int {
-        return 0; // Simplified
+        return $this->getRegistry()->getExperienceDrop($this->getId());
     }
 
     public function isReplaceable(): bool {
-        return false; // Simplified
+        return $this->getRegistry()->isReplaceable($this->getId());
     }
 
+    /**
+     * Return the block one block in the given direction.
+     *
+     * @param array<int, int> $direction [dx, dy, dz]
+     */
     public function getBlockFace(array $direction): self {
-        // Would return adjacent block
-        return new self($this->world, $this->x, $this->y, $this->z);
+        return $this->getRelative((int)($direction[0] ?? 0), (int)($direction[1] ?? 0), (int)($direction[2] ?? 0));
     }
 
     public function getRelative(int $dx, int $dy, int $dz): self {
@@ -158,8 +167,24 @@ class Block {
         return sqrt($dx * $dx + $dy * $dy + $dz * $dz);
     }
 
+    /**
+     * Face index of $to relative to $from (0=down, 1=up, 2=north, 3=south, 4=west, 5=east).
+     */
     public function getBlockFaceFromTo(Block $from, Block $to): int {
-        // Would calculate face
-        return 0;
+        $dx = $to->getX() - $from->getX();
+        $dy = $to->getY() - $from->getY();
+        $dz = $to->getZ() - $from->getZ();
+        if (abs($dy) >= abs($dx) && abs($dy) >= abs($dz)) {
+            return $dy > 0 ? 1 : 0;
+        }
+        if (abs($dx) >= abs($dz)) {
+            return $dx > 0 ? 5 : 4;
+        }
+        return $dz > 0 ? 3 : 2;
+    }
+
+    private function getRegistry(): BlockRegistry {
+        $registry = $this->world->getEcsWorld()->getResourceRegistry()->get(BlockRegistry::class);
+        return $registry instanceof BlockRegistry ? $registry : new BlockRegistry();
     }
 }

@@ -123,15 +123,31 @@ class Player extends Entity {
     }
 
     public function sendMessage(string $message): void {
-        // Would send TextPacket via NetworkPort
+        $this->sendTextPacket(0, $message); // raw message
     }
 
     public function sendTip(string $message): void {
-        // Would send tip packet
+        $this->sendTextPacket(4, $message); // tip
     }
 
     public function sendPopup(string $message): void {
-        // Would send popup packet
+        $this->sendTextPacket(5, $message); // popup
+    }
+
+    private function sendTextPacket(int $type, string $message): void {
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel === null) {
+            return;
+        }
+        $ref = new \pocketmine\port\driven\PlayerRef(
+            $this->getUniqueId(),
+            $this->getId(),
+            $this->getName()
+        );
+        $packet = new \pocketmine\protocol\TextPacket();
+        $packet->type = $type;
+        $packet->message = $message;
+        $kernel->getNetworkPort()->sendPacket($ref, $packet);
     }
 
     public function getInventory(): InventoryComponent {
@@ -212,7 +228,16 @@ class Player extends Entity {
     }
 
     public function kick(string $reason = ''): void {
-        // Would send DisconnectPacket and close connection
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel !== null) {
+            $ref = new \pocketmine\port\driven\PlayerRef(
+                $this->getUniqueId(),
+                $this->getId(),
+                $this->getName()
+            );
+            $kernel->getNetworkPort()->disconnect($ref, $reason);
+        }
+        $this->getMetadata()->set('online', false);
     }
 
     public function teleport(float $x, float $y, float $z, float $yaw = 0, float $pitch = 0): bool {
@@ -229,6 +254,6 @@ class Player extends Entity {
     }
 
     public function setAbsorption(float $amount): void {
-        // Would apply absorption effect
+        $this->getMetadata()->set('absorption', max(0.0, $amount));
     }
 }
