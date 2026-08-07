@@ -7,6 +7,9 @@ namespace pocketmine\domain\ecs;
 final class ComponentRegistry {
     private array $componentTypes = [];
     private array $archetypes = [];
+    
+    // Archetype index: componentType => archetypeKey => Archetype
+    private array $archetypeIndex = [];
 
     public function register(string $componentType): void {
         $this->componentTypes[$componentType] = true;
@@ -37,5 +40,71 @@ final class ComponentRegistry {
 
         $newArchetype = $this->getOrCreateArchetype($entity);
         $newArchetype->addEntity($entity);
+        
+        // Update index
+        $this->updateIndex($newArchetype);
+    }
+
+    public function getArchetypesWithComponent(string $componentType): array {
+        return $this->archetypeIndex[$componentType] ?? [];
+    }
+
+    public function getArchetypesWithAllComponents(array $componentTypes): array {
+        if (empty($componentTypes)) {
+            return array_values($this->archetypes);
+        }
+
+        // Start with the rarest component type
+        $rarestType = null;
+        $minCount = PHP_INT_MAX;
+        
+        foreach ($componentTypes as $type) {
+            $count = count($this->archetypeIndex[$type] ?? []);
+            if ($count < $minCount) {
+                $minCount = $count;
+                $rarestType = $type;
+            }
+        }
+
+        if ($rarestType === null) {
+            return [];
+        }
+
+        $candidates = $this->archetypeIndex[$rarestType] ?? [];
+        $result = [];
+
+        foreach ($candidates as $key => $archetype) {
+            $hasAll = true;
+            foreach ($componentTypes as $type) {
+                if (!$archetype->hasComponentType($type)) {
+                    $hasAll = false;
+                    break;
+                }
+            }
+            if ($hasAll) {
+                $result[$key] = $archetype;
+            }
+        }
+
+        return $result;
+    }
+
+    private function updateIndex(Archetype $archetype): void {
+        $key = $this->getArchetypeKey($archetype->componentTypes);
+        
+        foreach ($archetype->componentTypes as $type) {
+            if (!isset($this->archetypeIndex[$type])) {
+                $this->archetypeIndex[$type] = [];
+            }
+            $this->archetypeIndex[$type][$key] = $archetype;
+        }
+    }
+
+    public function removeArchetypeFromIndex(Archetype $archetype): void {
+        $key = $this->getArchetypeKey($archetype->componentTypes);
+        
+        foreach ($archetype->componentTypes as $type) {
+            unset($this->archetypeIndex[$type][$key] ?? null);
+        }
     }
 }
