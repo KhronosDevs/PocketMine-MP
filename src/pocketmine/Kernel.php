@@ -62,6 +62,10 @@ final class Kernel {
      */
     private bool $autoShutdownOnRun = true;
     private array $tickDurations = [];
+    /** Per-phase timing accumulation (mirror / world tick / drain / balance),
+     *  enabled via setPhaseProfiling() for benchmarking the pipeline. */
+    private bool $phaseProfiling = false;
+    private array $phaseTimes = ['mirror' => [], 'tick' => [], 'drain' => [], 'balance' => [], 'rest' => []];
 
     private CoordinationThread $coordinationThread;
     private NetworkThread $networkThread;
@@ -81,17 +85,41 @@ final class Kernel {
     /** @var array<int, int> entityId => owning region id (last mirrored; used for migration) */
     private array $pipelineRegion = [];
     /**
-     * @var array<int, array{x: float, y: float, z: float, vx: float, vy: float, vz: float}>
+     * Per-entity chunk + region-ownership cache so the mirror's steady-state
+     * hot loop skips the ownsChunk() ThreadSafe reads entirely. Valid only
+     * while pipelineChunkEpoch[id] === regionEpoch (epoch bumps on every
+     * split/merge, which resizes region bounds and can change ownership for
+     * entities that did not move).
+     */
+    private int $regionEpoch = 0;
+    /** @var array<int, int> entityId => chunk X verified against the cached region */
+    private array $pipelineChunkX = [];
+    /** @var array<int, int> entityId => chunk Z verified against the cached region */
+    private array $pipelineChunkZ = [];
+    /** @var array<int, int> entityId => regionEpoch when the chunk cache was last verified */
+    private array $pipelineChunkEpoch = [];
+    /**
      * entityId => the snapshot the region worker currently has stored
      * (pre-integration). Advanced by one lockstep integration each tick, so
-     * the kernel can detect when a re-mirror is actually needed.
+     * the kernel can detect when a re-mirror is actually needed. Kept as six
+     * flat number-keyed arrays (not one array of arrays) so the per-entity
+     * hot path allocates nothing and stays cache-friendly.
      */
-    private array $pipelineStored = [];
+    private array $pipelineStoredX = [];
+    private array $pipelineStoredY = [];
+    private array $pipelineStoredZ = [];
+    private array $pipelineStoredVX = [];
+    private array $pipelineStoredVY = [];
+    private array $pipelineStoredVZ = [];
     private int $pipelineTickSeq = 0;
     /** Next region id for dynamically split regions (9.4b). */
     private int $nextRegionId = 0;
     /** @var array<int, int> regionId => entities owned after this tick's mirror */
     private array $regionEntityCounts = [];
+    /** Last tick's counts - the chunk-X collector only runs for regions that
+     *  were already over the split threshold, so post-convergence ticks (all
+     *  regions under) collect nothing. */
+    private array $regionEntityCountsPrev = [];
     /** @var array<int, list<int>> regionId => chunk X of each owned entity (for split medians) */
     private array $regionEntityChunkXs = [];
     /** Region ids created by a split during the current balance pass - never
@@ -262,21 +290,36 @@ final class Kernel {
             $this->threadsStarted = true;
         }
 
+        // Profiling closure is created once (not per tick) so the hot loop
+        // does not pay closure allocation on every iteration.
+        $phaseStart = 0;
+        $markPhase = function (string $name) use (&$phaseStart): void {
+            if ($this->phaseProfiling) {
+                $now = hrtime(true);
+                $this->phaseTimes[$name][] = ($now - $phaseStart) / 1_000_000;
+                $phaseStart = $now;
+            }
+        };
+
         while ($this->running && ($maxTicks < 0 || $tick < $maxTicks)) {
             $start = hrtime(true);
+            $phaseStart = $start;
 
             // 0a. Mirror entity snapshots to region workers (pipeline).
             if ($this->regionPipelineEnabled && $this->threadsStarted) {
                 $this->mirrorEntitiesToRegions();
             }
+            $markPhase('mirror');
 
             // 0. Tick the ECS world on the main thread (ownership model)
             $this->world->tick(0.05);
+            $markPhase('tick');
 
             // 0b. Drain worker results: compare (gate) or apply.
             if ($this->regionPipelineEnabled && $this->threadsStarted) {
                 $this->drainRegionResults();
             }
+            $markPhase('drain');
 
             // 0c. Dynamic region load balancing (splits/merges). Runs after
             // the drain so this tick's integration is coherent; its effects
@@ -284,6 +327,7 @@ final class Kernel {
             if ($this->regionPipelineEnabled && $this->threadsStarted) {
                 $this->balanceRegions();
             }
+            $markPhase('balance');
 
             // 1. Main thread acts as coordinator - process global events
             $this->processGlobalCoordination();
@@ -298,6 +342,9 @@ final class Kernel {
 
             $end = hrtime(true);
             $elapsedMs = ($end - $start) / 1_000_000;
+            if ($this->phaseProfiling) {
+                $this->phaseTimes['rest'][] = ($end - $phaseStart) / 1_000_000;
+            }
             $this->recordTickDuration($elapsedMs);
             $targetMs = 50.0;
 
@@ -359,23 +406,32 @@ final class Kernel {
      * exactly the operations RegionThread::tickSnapshots performs on the
      * worker side (and bit-for-bit the main thread's MovementSystem +
      * PhysicsSystem order): integrate position with pre-gravity velocity,
-     * then apply gravity to velocity.
-     *
-     * @param array{x: float, y: float, z: float, vx: float, vy: float, vz: float} $s
-     * @return array{x: float, y: float, z: float, vx: float, vy: float, vz: float}
+     * then apply gravity to velocity. Inline scalar version of the old
+     * array-returning integrateOnce() - the mirror's per-entity hot path
+     * allocates nothing.
      */
-    private function integrateOnce(array $s): array {
+    private function advanceStored(int $id, float $x, float $y, float $z, float $vx, float $vy, float $vz): void {
         // Shared constants with RegionThread so this prediction can never
         // silently drift from the worker's integration.
         $dt = RegionThread::TARGET_DELTA_TIME;
-        return [
-            'x' => $s['x'] + $s['vx'] * $dt,
-            'y' => $s['y'] + $s['vy'] * $dt,
-            'z' => $s['z'] + $s['vz'] * $dt,
-            'vx' => $s['vx'],
-            'vy' => $s['vy'] - RegionThread::GRAVITY_ACCELERATION * $dt,
-            'vz' => $s['vz'],
-        ];
+        $this->pipelineStoredX[$id] = $x + $vx * $dt;
+        $this->pipelineStoredY[$id] = $y + $vy * $dt;
+        $this->pipelineStoredZ[$id] = $z + $vz * $dt;
+        $this->pipelineStoredVX[$id] = $vx;
+        $this->pipelineStoredVY[$id] = $vy - RegionThread::GRAVITY_ACCELERATION * $dt;
+        $this->pipelineStoredVZ[$id] = $vz;
+    }
+
+    /** Forget all six stored-snapshot scalars for an entity. */
+    private function forgetStored(int $id): void {
+        unset(
+            $this->pipelineStoredX[$id],
+            $this->pipelineStoredY[$id],
+            $this->pipelineStoredZ[$id],
+            $this->pipelineStoredVX[$id],
+            $this->pipelineStoredVY[$id],
+            $this->pipelineStoredVZ[$id],
+        );
     }
 
     /**
@@ -389,9 +445,14 @@ final class Kernel {
      */
     private function mirrorEntitiesToRegions(): void {
         $this->pipelineTickSeq++;
-        $this->regionEntityCounts = [];
+        // Pre-fill the per-region counters so the per-entity hot loop only
+        // does ++ (no ?? read) when balance tracking is configured.
+        $this->regionEntityCounts = $this->maxEntitiesPerRegion !== null
+            ? array_fill_keys(array_keys($this->regionThreads), 0)
+            : [];
         $this->regionEntityChunkXs = [];
-        $currentIds = [];
+        /** @var array<int, bool> id => seen this tick (for the despawn sweep) */
+        $currentIdSet = [];
         /** @var array<int, list<array{entityId: int, position: array{x: float, y: float, z: float}, velocity: array{x: float, y: float, z: float}}>> $updatesByRegion */
         $updatesByRegion = [];
         /** @var array<int, list<int>> $despawnsByRegion */
@@ -404,81 +465,134 @@ final class Kernel {
             if ($pos === null || $vel === null) {
                 continue;
             }
-            $currentIds[] = $entity->id;
+            $id = $entity->id;
+            $currentIdSet[$id] = true;
+            // Chunk = 16 blocks; (int)floor($x / 16) floors toward -inf for
+            // negative positions. (A raw right shift would implicitly cast the
+            // float and truncate negatives toward zero - wrong chunk for
+            // -0.5 <= x < 0.)
             $chunkX = (int)floor($pos->x / 16);
             $chunkZ = (int)floor($pos->z / 16);
-            foreach ($this->regionThreads as $regionId => $region) {
-                if (!$region->ownsChunk($chunkX, $chunkZ)) {
-                    continue;
-                }
-                $state = [
-                    'x' => $pos->x, 'y' => $pos->y, 'z' => $pos->z,
-                    'vx' => $vel->x, 'vy' => $vel->y, 'vz' => $vel->z,
-                ];
 
-                // Cross-region migration: the entity changed owners. Drop the
-                // stale copy in the old region and hand the snapshot to the
-                // new region's migration queue (RegionThread::processMigrations).
-                $prevRegion = $this->pipelineRegion[$entity->id] ?? null;
-                if ($prevRegion !== null && $prevRegion !== $regionId) {
-                    $despawnsByRegion[$prevRegion][] = $entity->id;
-                    $migrationsByRegion[$regionId][] = [
-                        'entityId' => $entity->id,
-                        'snapshot' => [
-                            'position' => ['x' => $pos->x, 'y' => $pos->y, 'z' => $pos->z],
-                            'velocity' => ['x' => $vel->x, 'y' => $vel->y, 'z' => $vel->z],
-                        ],
-                    ];
-                    $this->pipelineStats['migrated']++;
-                    $this->pipelineStored[$entity->id] = $this->integrateOnce($state);
-                    $this->pipelineRegion[$entity->id] = $regionId;
-                    $this->pipelineMirroredIds[$entity->id] = $regionId;
-                    $this->regionEntityCounts[$regionId] = ($this->regionEntityCounts[$regionId] ?? 0) + 1;
-                    $this->regionEntityChunkXs[$regionId][] = $chunkX;
-                    break;
-                }
-                $this->pipelineRegion[$entity->id] = $regionId;
-
-                $stored = $this->pipelineStored[$entity->id] ?? null;
-                $inSync = $stored !== null
-                    && $stored['x'] === $state['x'] && $stored['y'] === $state['y'] && $stored['z'] === $state['z']
-                    && $stored['vx'] === $state['vx'] && $stored['vy'] === $state['vy'] && $stored['vz'] === $state['vz'];
-                if ($inSync) {
-                    // Worker and main agree; no transport needed. The worker
-                    // will integrate its stored snapshot and produce results.
-                    $this->pipelineStats['skipped']++;
+            // Fast path: an entity's owning region only changes when it
+            // crosses a chunk-column boundary or a split/merge resized the
+            // regions. We cache the (chunk, region) pair verified on the last
+            // mirror; while the epoch is unchanged the ownership cannot have
+            // changed, so no ownsChunk() ThreadSafe read is needed. Only a
+            // moved entity (new chunk) or a resized region (epoch bump) falls
+            // back to the real ownership scan.
+            $prevRegion = $this->pipelineRegion[$id] ?? null;
+            $regionId = null;
+            // isset() guard: today a merged region's entities always have
+            // pipelineRegion cleared before the region is removed, but the
+            // guard keeps the fast path immune to future code paths that
+            // unset a region without clearing ownership.
+            if ($prevRegion !== null
+                && isset($this->regionThreads[$prevRegion])
+                && ($this->pipelineChunkEpoch[$id] ?? -1) === $this->regionEpoch
+                && $this->pipelineChunkX[$id] === $chunkX
+                && $this->pipelineChunkZ[$id] === $chunkZ) {
+                $regionId = $prevRegion;
+            } else {
+                if ($prevRegion !== null && isset($this->regionThreads[$prevRegion])
+                    && $this->regionThreads[$prevRegion]->ownsChunk($chunkX, $chunkZ)) {
+                    $regionId = $prevRegion;
                 } else {
-                    $updatesByRegion[$regionId][] = [
-                        'entityId' => $entity->id,
-                        'position' => ['x' => $pos->x, 'y' => $pos->y, 'z' => $pos->z],
-                        'velocity' => ['x' => $vel->x, 'y' => $vel->y, 'z' => $vel->z],
-                    ];
-                    $this->pipelineStats['mirrored']++;
+                    foreach ($this->regionThreads as $rid => $region) {
+                        if ($region->ownsChunk($chunkX, $chunkZ)) {
+                            $regionId = $rid;
+                            break;
+                        }
+                    }
                 }
-                // The worker stores this state and integrates it once when the
-                // tick command arrives - predict its stored snapshot for the
-                // next mirror.
-                $this->pipelineStored[$entity->id] = $this->integrateOnce($state);
-                $this->pipelineMirroredIds[$entity->id] = $regionId;
-                $this->regionEntityCounts[$regionId] = ($this->regionEntityCounts[$regionId] ?? 0) + 1;
-                $this->regionEntityChunkXs[$regionId][] = $chunkX;
-                break;
+                $this->pipelineChunkX[$id] = $chunkX;
+                $this->pipelineChunkZ[$id] = $chunkZ;
+                $this->pipelineChunkEpoch[$id] = $this->regionEpoch;
             }
+            if ($regionId === null) {
+                continue; // outside every region (should not happen)
+            }
+            // Split bookkeeping: count every owned entity (cheap int bump), but
+            // only collect chunk Xs for regions that were already over the
+            // split threshold last tick - the median only needs the over-threshold
+            // region, and post-convergence ticks then collect nothing. When no
+            // split threshold is configured (default) this stays off entirely.
+            if ($this->maxEntitiesPerRegion !== null) {
+                $this->regionEntityCounts[$regionId]++;
+                if (($this->regionEntityCountsPrev[$regionId] ?? 0) > $this->maxEntitiesPerRegion) {
+                    $this->regionEntityChunkXs[$regionId][] = $chunkX;
+                }
+            }
+
+            $x = $pos->x;
+            $y = $pos->y;
+            $z = $pos->z;
+            $vx = $vel->x;
+            $vy = $vel->y;
+            $vz = $vel->z;
+
+            // Cross-region migration: the entity changed owners. Drop the
+            // stale copy in the old region and hand the snapshot to the new
+            // region's migration queue (RegionThread::processMigrations).
+            if ($prevRegion !== null && $prevRegion !== $regionId) {
+                $despawnsByRegion[$prevRegion][] = $id;
+                $migrationsByRegion[$regionId][] = [
+                    'entityId' => $id,
+                    'snapshot' => [
+                        'position' => ['x' => $x, 'y' => $y, 'z' => $z],
+                        'velocity' => ['x' => $vx, 'y' => $vy, 'z' => $vz],
+                    ],
+                ];
+                $this->pipelineStats['migrated']++;
+                $this->advanceStored($id, $x, $y, $z, $vx, $vy, $vz);
+                $this->pipelineRegion[$id] = $regionId;
+                $this->pipelineMirroredIds[$id] = $regionId;
+                continue;
+            }
+            $this->pipelineRegion[$id] = $regionId;
+
+            $inSync = isset($this->pipelineStoredX[$id])
+                && $this->pipelineStoredX[$id] === $x
+                && $this->pipelineStoredY[$id] === $y
+                && $this->pipelineStoredZ[$id] === $z
+                && $this->pipelineStoredVX[$id] === $vx
+                && $this->pipelineStoredVY[$id] === $vy
+                && $this->pipelineStoredVZ[$id] === $vz;
+            if ($inSync) {
+                // Worker and main agree; no transport needed. The worker
+                // will integrate its stored snapshot and produce results.
+                $this->pipelineStats['skipped']++;
+            } else {
+                $updatesByRegion[$regionId][] = [
+                    'entityId' => $id,
+                    'position' => ['x' => $x, 'y' => $y, 'z' => $z],
+                    'velocity' => ['x' => $vx, 'y' => $vy, 'z' => $vz],
+                ];
+                $this->pipelineStats['mirrored']++;
+            }
+            // The worker stores this state and integrates it once when the
+            // tick command arrives - predict its stored snapshot for the
+            // next mirror.
+            $this->advanceStored($id, $x, $y, $z, $vx, $vy, $vz);
+            $this->pipelineMirroredIds[$id] = $regionId;
         }
+
+        // Snapshot this tick's counts for next tick's chunk-X collector gate.
+        $this->regionEntityCountsPrev = $this->regionEntityCounts;
 
         // Entities that left the pipeline (despawned or lost a component).
         // Note: an entity removed this tick is still present in getEntities()
         // until world->tick flushes removals, so it is mirrored once more and
         // its result surfaces as a dropped 'stale' result before the 'despawn'
         // command fires on the following tick - intentional one-tick lag.
-        $currentIdsSet = array_flip($currentIds); // O(1) lookups instead of in_array
         foreach ($this->pipelineMirroredIds as $id => $regionId) {
-            if (!isset($currentIdsSet[$id])) {
+            if (!isset($currentIdSet[$id])) {
                 $despawnsByRegion[$regionId][] = $id;
                 $this->pipelineStats['despawned']++;
                 unset($this->pipelineMirroredIds[$id]);
-                unset($this->pipelineStored[$id]);
+                $this->forgetStored($id);
                 unset($this->pipelineRegion[$id]);
+                unset($this->pipelineChunkX[$id], $this->pipelineChunkZ[$id], $this->pipelineChunkEpoch[$id]);
             }
         }
 
@@ -520,7 +634,12 @@ final class Kernel {
         // Wait only when there are tracked entities: with diff-only mirroring
         // most ticks have zero re-mirrors, but the worker still integrates its
         // stored snapshots and must be drained for gate comparison / apply.
-        $syncWaitMs = !empty($this->pipelineMirroredIds) ? 10.0 : 0.0;
+        // The cap only guards against a wedged worker during split/migration
+        // bursts - it is not the steady-state path (workers run a full
+        // world-tick ahead). Tightening below 8 ms dropped results during
+        // splits (10k lagged at 4 ms), so keep it comfortably above the
+        // encode+push worst case.
+        $syncWaitMs = !empty($this->pipelineMirroredIds) ? 8.0 : 0.0;
         foreach ($this->regionThreads as $region) {
             $queue = $region->getSyncQueue();
             $deadline = microtime(true) + $syncWaitMs / 1000.0;
@@ -684,6 +803,7 @@ final class Kernel {
             $eastRegion->start(Thread::INHERIT_ALL);
         }
         $this->freshlySplitRegions[] = $newId;
+        $this->regionEpoch++; // region bounds changed: cached ownership is stale
         $this->pipelineStats['splits']++;
     }
 
@@ -734,14 +854,16 @@ final class Kernel {
         // this (dying) region.
         foreach ($this->pipelineRegion as $id => $owner) {
             if ($owner === $regionId) {
-                unset($this->pipelineStored[$id]);
+                $this->forgetStored($id);
                 unset($this->pipelineRegion[$id]);
+                unset($this->pipelineChunkX[$id], $this->pipelineChunkZ[$id], $this->pipelineChunkEpoch[$id]);
             }
         }
 
         unset($this->regionThreads[$regionId]);
         $region->shutdown();
         $region->join();
+        $this->regionEpoch++; // region bounds changed: cached ownership is stale
         $this->pipelineStats['merges']++;
         return $absorber;
     }
@@ -755,22 +877,24 @@ final class Kernel {
      * the epsilon only guards against future variable-timestep drift.
      */
     private function processPipelineResults(string $blob): void {
-        if (strlen($blob) < 9 || $blob[0] !== RegionThread::MSG_RESULTS) {
+        $decoded = RegionThread::decodeResultsBlock($blob);
+        if ($decoded['seq'] !== $this->pipelineTickSeq) {
+            $this->pipelineStats['lagged'] += count($decoded['ids']);
             return;
         }
-        $hdr = unpack('Nseq/Ncount', substr($blob, 1, 8));
-        if ($hdr['seq'] !== $this->pipelineTickSeq) {
-            $this->pipelineStats['lagged'] += $hdr['count'];
-            return;
-        }
-        $off = 9;
-        for ($i = 0; $i < $hdr['count']; $i++) {
-            if ($off + RegionThread::ENTITY_BYTES > strlen($blob)) {
-                break; // truncated/malformed batch: drop the remainder
-            }
-            $e = RegionThread::decodeEntity(substr($blob, $off, RegionThread::ENTITY_BYTES));
-            $off += RegionThread::ENTITY_BYTES;
-            $entity = $this->world->getEntity($e['entityId']);
+        $ids = $decoded['ids'];
+        $doubles = $decoded['doubles'];
+        $count = min(count($ids), intdiv(count($doubles), 6));
+        for ($i = 0; $i < $count; $i++) {
+            $entityId = $ids[$i];
+            $j = $i * 6;
+            $wx = $doubles[$j];
+            $wy = $doubles[$j + 1];
+            $wz = $doubles[$j + 2];
+            $vx = $doubles[$j + 3];
+            $vy = $doubles[$j + 4];
+            $vz = $doubles[$j + 5];
+            $entity = $this->world->getEntity($entityId);
             if ($entity === null) {
                 $this->pipelineStats['stale']++;
                 continue;
@@ -780,27 +904,26 @@ final class Kernel {
                 continue;
             }
             $this->pipelineStats['received']++;
-            $wx = $e['position']['x'];
-            $wy = $e['position']['y'];
-            $wz = $e['position']['z'];
             if ($this->regionPipelineApply) {
                 $pos->x = $wx;
                 $pos->y = $wy;
                 $pos->z = $wz;
                 $vel = $entity->get(VelocityComponent::class);
                 if ($vel !== null) {
-                    $vel->x = $e['velocity']['x'];
-                    $vel->y = $e['velocity']['y'];
-                    $vel->z = $e['velocity']['z'];
+                    $vel->x = $vx;
+                    $vel->y = $vy;
+                    $vel->z = $vz;
                 }
                 // The worker's stored snapshot is now the applied (post-
                 // integration) state - record it so the next mirror sees the
                 // entity as in-sync and skips the re-mirror (no double
                 // integration).
-                $this->pipelineStored[$e['entityId']] = [
-                    'x' => $wx, 'y' => $wy, 'z' => $wz,
-                    'vx' => $e['velocity']['x'], 'vy' => $e['velocity']['y'], 'vz' => $e['velocity']['z'],
-                ];
+                $this->pipelineStoredX[$entityId] = $wx;
+                $this->pipelineStoredY[$entityId] = $wy;
+                $this->pipelineStoredZ[$entityId] = $wz;
+                $this->pipelineStoredVX[$entityId] = $vx;
+                $this->pipelineStoredVY[$entityId] = $vy;
+                $this->pipelineStoredVZ[$entityId] = $vz;
                 $this->pipelineStats['applied']++;
             } else {
                 $this->pipelineStats['compared']++;
@@ -846,6 +969,24 @@ final class Kernel {
             'max_ms' => round($max, 3),
             'stddev_ms' => round($stddev, 3),
         ];
+    }
+
+    public function setPhaseProfiling(bool $enabled): void {
+        $this->phaseProfiling = $enabled;
+    }
+
+    /** Per-phase mean timings (ms) across the run, for pipeline benchmarks. */
+    public function getPhaseStats(): array {
+        $out = [];
+        foreach ($this->phaseTimes as $name => $samples) {
+            $count = count($samples);
+            if ($count === 0) {
+                $out[$name . '_ms'] = 0.0;
+                continue;
+            }
+            $out[$name . '_ms'] = round(array_sum($samples) / $count, 3);
+        }
+        return $out;
     }
 
     public function shutdown(): void {

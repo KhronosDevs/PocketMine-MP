@@ -50,6 +50,7 @@ for ($i = 0; $i < $entities; $i++) {
 }
 
 echo "mode={$mode} entities={$entities} ticks={$ticks} regions={$regions} maxPerRegion=" . ($maxPerRegion ?? 'off') . "\n";
+$kernel->setPhaseProfiling(true);
 $kernel->run($ticks);
 
 $stats = $kernel->getTickStats();
@@ -58,5 +59,6 @@ echo json_encode([
     'entities' => $entities,
     'ticks' => $ticks,
     'stats' => $stats,
+    'phases' => $kernel->getPhaseStats(),
     'pipeline' => $kernel->getRegionPipelineStats(),
 ], JSON_PRETTY_PRINT) . "\n";

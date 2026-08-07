@@ -34,7 +34,7 @@ final class RegionThread extends Thread {
 
     public const ENTITY_BYTES = 52; // id(4) + 6 doubles(48)
 
-    /** Lockstep integration constants - shared with Kernel::integrateOnce so
+    /** Lockstep integration constants - shared with Kernel::advanceStored so
      *  the diff-only mirror's prediction can never silently drift from the
      *  worker's integration. */
     public const TARGET_DELTA_TIME = 0.05;   // 20 TPS
@@ -141,23 +141,24 @@ final class RegionThread extends Thread {
     }
 
     /**
-     * @return array{entityId: int, position: array{x: float, y: float, z: float}, velocity: array{x: float, y: float, z: float}}
+     * Decode a block-layout results batch: two unpack() calls for the whole
+     * batch (ids, then doubles at 6 per entity) instead of per-entity unpack.
+     *
+     * @return array{seq: int, ids: list<int>, doubles: list<float>}
      */
-    public static function decodeEntity(string $bin): array {
-        $d = unpack('Nid/e6', $bin);
-        return [
-            'entityId' => $d['id'],
-            'position' => ['x' => $d[1], 'y' => $d[2], 'z' => $d[3]],
-            'velocity' => ['x' => $d[4], 'y' => $d[5], 'z' => $d[6]],
-        ];
-    }
-
-    public static function encodeResults(int $seq, array $entities): string {
-        $bin = self::MSG_RESULTS . pack('NN', $seq, count($entities));
-        foreach ($entities as $e) {
-            $bin .= self::encodeEntity($e['entityId'], $e['position'], $e['velocity']);
+    public static function decodeResultsBlock(string $blob): array {
+        if (strlen($blob) < 9 || $blob[0] !== self::MSG_RESULTS) {
+            return ['seq' => -1, 'ids' => [], 'doubles' => []];
         }
-        return $bin;
+        $hdr = unpack('Nseq/Ncount', substr($blob, 1, 8));
+        $count = $hdr['count'];
+        $idsLen = $count * 4;
+        if (strlen($blob) < 9 + $idsLen) {
+            return ['seq' => $hdr['seq'], 'ids' => [], 'doubles' => []];
+        }
+        $ids = array_values(unpack('N*', substr($blob, 9, $idsLen)));
+        $doubles = array_values(unpack('e*', substr($blob, 9 + $idsLen)));
+        return ['seq' => $hdr['seq'], 'ids' => $ids, 'doubles' => $doubles];
     }
 
     public static function encodeAck(int $seq): string {
@@ -310,25 +311,33 @@ final class RegionThread extends Thread {
      * PhysicsSystem order exactly (integrate with pre-gravity velocity, then
      * decelerate) so results are bit-for-bit comparable.
      *
-     * Pure data transform on binary snapshots - no shared object state.
+     * Works directly on the packed doubles (one unpack + one pack per entity,
+     * no intermediate arrays) and emits the results in the block layout the
+     * kernel decodes with two unpack() calls.
      */
     private function tickSnapshots(): void {
-        $updated = [];
+        $ids = '';
+        $doubles = '';
+        $count = 0;
         foreach ($this->entityData as $entityId => $bin) {
             if (!is_string($bin) || strlen($bin) < self::ENTITY_BYTES) {
                 continue;
             }
-            $snapshot = self::decodeEntity($bin);
-            $snapshot['position']['x'] += $snapshot['velocity']['x'] * self::TARGET_DELTA_TIME;
-            $snapshot['position']['y'] += $snapshot['velocity']['y'] * self::TARGET_DELTA_TIME;
-            $snapshot['position']['z'] += $snapshot['velocity']['z'] * self::TARGET_DELTA_TIME;
+            $id = (int)$entityId; // entityData is keyed by the entity id
+            $d = unpack('e6', substr($bin, 4, 48));
+            $x = $d[1] + $d[4] * self::TARGET_DELTA_TIME;
+            $y = $d[2] + $d[5] * self::TARGET_DELTA_TIME;
+            $z = $d[3] + $d[6] * self::TARGET_DELTA_TIME;
             // Gravity: same constant as PhysicsSystem.
-            $snapshot['velocity']['y'] -= self::GRAVITY_ACCELERATION * self::TARGET_DELTA_TIME;
-            $this->entityData[(string)$entityId] = self::encodeEntity($snapshot['entityId'], $snapshot['position'], $snapshot['velocity']);
-            $updated[] = $snapshot;
+            $vy = $d[5] - self::GRAVITY_ACCELERATION * self::TARGET_DELTA_TIME;
+            $this->entityData[(string)$entityId] = pack('N', $id)
+                . pack('e6', $x, $y, $z, $d[4], $vy, $d[6]);
+            $ids .= pack('N', $id);
+            $doubles .= pack('e6', $x, $y, $z, $d[4], $vy, $d[6]);
+            $count++;
         }
-        if (!empty($updated)) {
-            $this->syncQueue[] = self::encodeResults($this->currentTickSeq, $updated);
+        if ($count > 0) {
+            $this->syncQueue[] = self::MSG_RESULTS . pack('NN', $this->currentTickSeq, $count) . $ids . $doubles;
         }
     }
 
