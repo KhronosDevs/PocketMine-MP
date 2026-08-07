@@ -177,6 +177,13 @@ class Entity {
     }
 
     public function kill(): void {
+        // Route through the unified death pipeline: death events, loot drops,
+        // XP orbs, then despawn. (Entity::remove() remains the silent path.)
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel !== null) {
+            $kernel->getCombatService()->kill($this->ref);
+            return;
+        }
         $this->despawnService->despawn($this->ref, true);
     }
 
