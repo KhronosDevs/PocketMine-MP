@@ -25,5 +25,9 @@
     "prefer-stable": true,
     "require-dev": {
         "phpstan/phpstan": "^1.12"
+    },
+    "scripts": {
+        "test": "@php tests/run.php",
+        "analyse": "phpstan analyse -c phpstan.neon"
     }
 }

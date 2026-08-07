@@ -115,6 +115,15 @@ core, then parallelism behind the seams. **Phase 9 wires the seams.**
 | 9.4 | **Cross-region migration + load balancing** — activate migration queues; dynamic region splitting by entity density. | Completes the region model (v1 step 6.6). |
 | 9.5 | **Benchmark & scaling proof** — re-run `measure_baseline.php`; measure speedup vs the single-threaded baseline. | Success criteria in §7. |
 
+#### Status — 9.1 done (lockstep region pipeline)
+
+- **Feed:** every tick the kernel mirrors all entities with Position+Velocity into the owning `RegionThread` command queue (with despawn sync for removed entities).
+- **Compute:** the worker integrates position from velocity **plus gravity** in lockstep — one integration per kernel `tick` command, matching the main thread's MovementSystem+PhysicsSystem order exactly.
+- **Merge back:** the kernel drains the worker's `syncQueue` at a bounded sync point. Results carry a **tick sequence**; out-of-window results are dropped (`lagged`), never misapplied.
+- **Gate (default):** main thread still simulates; worker results are compared bit-for-bit. **Zero mismatches** at ≤40 entities (`tests/05`), proving determinism.
+- **Apply (experimental flag):** main-thread MovementSystem+PhysicsSystem disabled; worker is authoritative. Exact integration verified (`tests/06`).
+- **Benchmark finding (`measure_pipeline.php`):** at 1000 entities the JSON-snapshot transport is the bottleneck — worker per-tick latency exceeds the 10 ms drain window, so most results are correctly dropped as `lagged`. Correctness is proven; **the next optimization is the transport** (binary-packed snapshots / batch diffs / double-buffered handoff) before 9.2-9.4.
+
 ### Phase 10 — Complete the data & API layer
 
 | Step | Task |
@@ -181,6 +190,8 @@ bin/php7/bin/php measure_baseline.php      # benchmark (writes docs/BASELINE.md)
 | 7 | ✅ | Struct-of-arrays, query caching, memory pooling, batching, benchmarks |
 | 8 | ✅ | Complete API rewrite; 1,100+ legacy files removed; PHPStan clean |
 | 8.5 | ✅ | `Level` API renamed to `World` |
-| 9 | 🔄 **next** | Wire the threading (§5) |
+| 9.1 | ✅ | **Lockstep region pipeline wired** — mirror → worker integrate (movement+gravity) → seq-tagged merge; determinism gate 0 mismatches; apply mode behind flag; `measure_pipeline.php` benchmark (JSON transport = next bottleneck) |
+| 9.2-9.5 | 🔄 next | NetworkThread batching, async chunk gen, migration/load balancing, scaling proof |
 | 10 | ✅ (mostly) | Real data layer: ChunkStore, BlockRegistry, ItemRegistry, WorldConfig; zero stubs |
-| 11-12 | ⏳ | Tests/hardening; gameplay depth |
+| 11.1-11.2 | ✅ | **`tests/` framework** (no deps, per-process isolation): 6 files, 21 tests, 277 assertions — incl. pipeline determinism + apply-mode correctness |
+| 11.3-12 | ⏳ | Memory profiling; gameplay depth |
