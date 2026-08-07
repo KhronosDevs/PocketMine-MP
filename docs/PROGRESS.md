@@ -115,13 +115,13 @@
 | Step | Task | Status | Commit | Notes |
 |------|------|--------|--------|-------|
 | 6.0 | Create branch `region-based-architecture` with rollback anchor | ✅ | 37860e3 | `git checkout -b region-based-architecture && git commit --allow-empty -m "chore: rollback anchor for region-based-architecture"` |
-| 6.1 | `region-world` — RegionWorld ECS World slice per spatial region (16×16 chunks) | 🔄 | — | RegionWorld with spatial bounds, chunk ownership |
-| 6.2 | `region-thread` — RegionThread per region with independent ECS tick loop | ⏳ | — | Dedicated thread, command/sync queues |
-| 6.3 | `region-coordination` — CoordinationThread for entity migration, global events | ⏳ | — | Cross-region migration, plugin dispatch, chunk coordination |
-| 6.4 | `region-network` — NetworkThread for RakLib I/O + packet encoding | ⏳ | — | Dedicated network thread, batch encoding |
-| 6.5 | `region-migration` — Cross-region entity migration with snapshots | ⏳ | — | EntityRef transfer, component snapshot |
+| 6.1 | `region-world` — RegionWorld ECS World slice per spatial region (16×16 chunks) | ✅ | b33d6a1 | RegionWorld with spatial bounds, chunk ownership |
+| 6.2 | `region-thread` — RegionThread per region with independent ECS tick loop | ✅ | b33d6a1 | Dedicated thread, command/sync queues |
+| 6.3 | `region-coordination` — CoordinationThread for entity migration, global events | ✅ | b33d6a1 | Cross-region migration, plugin dispatch, chunk coordination |
+| 6.4 | `region-network` — NetworkThread for RakLib I/O + packet encoding | ✅ | b33d6a1 | Dedicated network thread, batch encoding |
+| 6.5 | `region-migration` — Cross-region entity migration with snapshots | ✅ | b33d6a1 | EntityRef transfer, component snapshot |
 | 6.6 | `region-load-balancing` — Dynamic region splitting/merging | ⏳ | — | Workload-aware partitioning |
-| 6.7 | Update PROGRESS.md | ⏳ | — | Track progress |
+| 6.7 | Update PROGRESS.md | 🔄 | — | Track progress |
 
 ---
 
@@ -151,7 +151,7 @@
 | service-core-gameplay | 49cf545 | 7ce67ce | #21 | ✅ Merged |
 | api-ecs-plugin | 8f3a171 | fc1c65d | #22 | ✅ Merged |
 | multithread-archetype-parallelism | 43996ce | 33f6ff6 | #23 | ✅ Merged |
-| region-based-architecture | c7e445f | 37860e3 | — | 🔄 Active |
+| region-based-architecture | c7e445f | b33d6a1 | #24 | 🔄 Active (PR opened) |
 
 ---
 
@@ -159,10 +159,10 @@
 
 1. ✅ Phase 0, 1, 2, 3, 4, 5 complete (PRs #18, #19, #20, #21, #22, #23 merged)
 2. ✅ Create `region-based-architecture` branch with rollback anchor
-3. 🔄 Implement RegionWorld — ECS World slice per spatial region (16×16 chunks)
-3. ⏳ Implement RegionThread — Dedicated thread per region with independent ECS tick loop
-4. ⏳ Implement CoordinationThread — Entity migration, global events, plugin dispatch
-5. ⏳ Implement NetworkThread — Dedicated RakLib I/O + packet encoding
-6. ⏳ Implement cross-region entity migration
+3. ✅ Implement RegionWorld — ECS World slice per spatial region (16×16 chunks)
+4. ✅ Implement RegionThread — Dedicated thread per region with independent ECS tick loop
+5. ✅ Implement CoordinationThread — Entity migration, global events, plugin dispatch
+5. ✅ Implement NetworkThread — Dedicated RakLib I/O + packet encoding
+6. ✅ Implement cross-region entity migration
 7. ⏳ Implement dynamic region load balancing
-8. ⏳ Update docs, commit, push, open PR
+8. ⏳ Update docs, commit, push, open PR #24
