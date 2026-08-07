@@ -181,8 +181,10 @@ final class Kernel {
         $this->playerJoinService = new PlayerJoinService($world, $networkPort, $storagePort, $worldGenPort);
         $this->playerLeaveService = new PlayerLeaveService($world, $networkPort, $storagePort);
         $this->playerRespawnService = new PlayerRespawnService($world, $storagePort);
-        $this->chunkLoadService = new ChunkLoadService($world, $storagePort, $worldGenPort);
+        // The load service enforces the loaded-chunk budget by evicting via
+        // the unload service, so the unload service is constructed first.
         $this->chunkUnloadService = new ChunkUnloadService($world, $storagePort);
+        $this->chunkLoadService = new ChunkLoadService($world, $storagePort, $worldGenPort, $this->chunkUnloadService);
         $this->chunkSendService = new ChunkSendService($world, $networkPort);
         $this->blockBreakService = new BlockBreakService($world, $storagePort);
         $this->blockPlaceService = new BlockPlaceService($world);
@@ -1039,6 +1041,32 @@ final class Kernel {
 
     public function getComponentRegistry(): ComponentRegistry {
         return $this->componentRegistry;
+    }
+
+    /**
+     * Memory profile snapshot (11.3): resident entities and archetype array
+     * sizing from the ECS, plus loaded-chunk count and payload bytes from the
+     * ChunkStore. Rough per-archetype cost = sum of wasted slots * ~16 bytes
+     * per slot (zval pointer); chunk bytes are the actual binary strings.
+     */
+    public function getMemoryProfile(): array {
+        $archetypes = [];
+        foreach ($this->componentRegistry->getArchetypes() as $key => $archetype) {
+            $archetypes[$key] = $archetype->getStats();
+        }
+        $chunkStore = $this->resourceRegistry->get(\pocketmine\core\resource\ChunkStore::class);
+        $chunkCount = $chunkStore instanceof \pocketmine\core\resource\ChunkStore ? $chunkStore->getCount() : 0;
+        $chunkBytes = $chunkStore instanceof \pocketmine\core\resource\ChunkStore ? $chunkStore->getMemoryEstimate() : 0;
+        return [
+            'entities' => count($this->world->getEntities()),
+            'archetypes' => count($archetypes),
+            'archetypeStats' => $archetypes,
+            'loadedChunks' => $chunkCount,
+            'chunkBytes' => $chunkBytes,
+            'maxLoadedChunks' => $this->chunkLoadService->getMaxLoadedChunks(),
+            'phpPeakBytes' => memory_get_peak_usage(true),
+            'phpCurrentBytes' => memory_get_usage(true),
+        ];
     }
 
     public function getResourceRegistry(): ResourceRegistry {

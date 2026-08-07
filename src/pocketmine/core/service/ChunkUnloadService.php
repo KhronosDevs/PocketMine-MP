@@ -25,6 +25,39 @@ final class ChunkUnloadService {
             $this->saveEntity($entityRef);
         }
         
+        $this->persistAndUnload($chunkX, $chunkZ);
+    }
+
+    /**
+     * Enforce the loaded-chunk budget (11.3): while more than
+     * $maxLoadedChunks chunks are resident, persist + drop the oldest ones
+     * (FIFO by load order). Nothing is lost - every evicted chunk is written
+     * to disk before it leaves memory, so a later loadChunk() reads it back
+     * exactly as it was. Returns how many chunks were evicted.
+     *
+     * FIFO is the current eviction policy (cheap, deterministic, testable);
+     * a distance-from-players policy would need player position tracking in
+     * this service and can slot in behind the same call sites.
+     */
+    public function unloadUnusedChunks(int $maxLoadedChunks = 10000): int {
+        $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
+        if (!$store instanceof ChunkStore) {
+            return 0;
+        }
+        $evicted = 0;
+        while ($store->getCount() > $maxLoadedChunks) {
+            $oldest = $store->getOldestLoadedChunk();
+            if ($oldest === null) {
+                break; // store empty or inconsistent
+            }
+            [$chunkX, $chunkZ] = $oldest;
+            $this->persistAndUnload($chunkX, $chunkZ);
+            $evicted++;
+        }
+        return $evicted;
+    }
+
+    private function persistAndUnload(int $chunkX, int $chunkZ): void {
         // Persist and drop the chunk from the in-memory store.
         $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
         if ($store instanceof ChunkStore && $store->isLoaded($chunkX, $chunkZ)) {
@@ -34,11 +67,6 @@ final class ChunkUnloadService {
             }
             $store->unload($chunkX, $chunkZ);
         }
-    }
-
-    public function unloadUnusedChunks(int $maxLoadedChunks = 10000): void {
-        // In a real implementation, this would track loaded chunks
-        // and unload those far from players
     }
 
     private function getEntitiesInChunk(int $chunkX, int $chunkZ): array {

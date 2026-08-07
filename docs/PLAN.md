@@ -152,7 +152,7 @@ core, then parallelism behind the seams. **Phase 9 wires the seams.**
 |------|------|
 | 11.1 | Unit tests: ChunkStore, BlockRegistry, ItemRegistry, Inventory, services. |
 | 11.2 | Threading determinism tests (9.1 merge == main-thread result). |
-| 11.3 | Memory profiling (loaded-chunk budget, archetype arrays) + load tests. |
+| 11.3 | Memory profiling (loaded-chunk budget, archetype arrays) + load tests. | ✅ done — see status below. |
 
 ### Phase 12 — Gameplay depth
 
@@ -217,4 +217,5 @@ bin/php7/bin/php measure_baseline.php      # benchmark (writes docs/BASELINE.md)
 | 10.2 | ✅ | **ItemStack unification** — api `Inventory`/`Block`/`World::dropItem`/`ItemEntity` speak `api\inventory\ItemStack` exclusively; `toCore()`/`fromCore()` convert at the boundary; core component type stays in the storage layer only |
 | 9.5b | ✅ | **Pipeline hot-path optimization** — flat stored-state arrays (zero-alloc mirror loop), per-entity chunk/region cache + epoch (no ThreadSafe reads in steady state), gated balance bookkeeping, block wire layout (2 unpack calls per batch; worker integrates on packed doubles). 5000 entities apply: 26.9 → 15.7–17.4 ms, 100% result delivery, 0 mismatches/lagged |
 | 10.3 | ✅ | **Held-slot single source of truth** — `InventoryComponent::$heldSlot` was declared but never used; all consumers read the metadata `heldSlot` key. Now the component property is the single source: the API facade, `InventoryService`, `BlockBreakService`, and `EntityInteractionService` all read/write it (metadata key gone). Policy centralized in a bound-checked `InventoryComponent::setHeldSlot(int): bool` (validated against inventory size) that both the facade and service call — the facade was previously unbounded while the service enforced a hotbar bound. Bonus: held slot now persists with the component via `ComponentSerializer` (it was metadata-only before). `tests/03` asserts the facade writes the component property and metadata has no `heldSlot`. **Phase 10 now complete.** |
-| 11.3-12 | ⏳ | Memory profiling; gameplay depth |
+| 11.3 | ✅ | **Memory profiling & budget** — loaded-chunk budget now *enforced* (was a dead constant + stub): `ChunkLoadService` enforces a configurable cap after every bulk load, `ChunkUnloadService::unloadUnusedChunks` evicts the **oldest** resident chunks FIFO (persisted to disk first, so nothing is lost — `tests/11` proves a marker block survives eviction + reload); `ChunkStore` gains `getOldestLoadedChunk()`/`getMemoryEstimate()`; **Archetype free-list leak fixed** (indices were tracked per-component-type but only the first type's list was ever popped → every other list accumulated duplicate stale entries forever; one shared flat list is correct); `getMemoryProfile()` on the kernel + `measure_memory.php` profiler (per-entity ~1–2 KB, ~160 KB/chunk, index high-water stays flat across despawn/respawn churn, 200 loaded chunks → exactly 64 resident at the 64-chunk budget). 4 tests / 20 assertions added |
+| 12.x | ⏳ | Gameplay depth (AI, combat, crafting, plugin jars) |
