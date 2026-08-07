@@ -130,12 +130,12 @@
 | Step | Task | Status | Commit | Notes |
 |------|------|--------|--------|-------|
 | 7.0 | Create branch `polish-optimize` with rollback anchor | ✅ | 6c291d9 | `git checkout -b polish-optimize && git commit --allow-empty -m "chore: rollback anchor for polish-optimize"` |
-| 7.1 | `optimize-archetype-storage` — Compact component arrays, reduce indirection | 🔄 | — | Struct-of-arrays, eliminate object overhead |
-| 7.2 | `optimize-query-performance` — Query caching, archetype indexing | ⏳ | — | Query plan caching, archetype bitmap index |
-| 7.3 | `optimize-memory-layout` — Struct-of-arrays, reduce object allocation | ⏳ | — | Flat arrays, object pooling, weak refs |
-| 7.4 | `optimize-network-batching` — Batch NetworkSyncComponent flushes across regions | ⏳ | — | Cross-region packet batching |
-| 7.5 | `benchmark-profile` — Full profiling, tick rate analysis, scalability testing | ⏳ | — | Load testing, flame graphs, regression tests |
-| 7.6 | Update PROGRESS.md | ⏳ | — | Track progress |
+| 7.1 | `optimize-archetype-storage` — Compact component arrays, reduce indirection | ✅ | 04f0ea3 | Struct-of-arrays, eliminate object overhead |
+| 7.2 | `optimize-query-performance` — Query caching, archetype indexing | ✅ | 04f0ea3 | Query plan caching, archetype bitmap index |
+| 7.3 | `optimize-memory-layout` — Struct-of-arrays, reduce object allocation | ✅ | 04f0ea3 | Flat arrays, object pooling, weak refs |
+| 7.4 | `optimize-network-batching` — Batch NetworkSyncComponent flushes across regions | ✅ | 04f0ea3 | Cross-region packet batching |
+| 7.5 | `benchmark-profile` — Full profiling, tick rate analysis, scalability testing | ✅ | 04f0ea3 | Load testing, flame graphs, regression tests |
+| 7.6 | Update PROGRESS.md | 🔄 | — | Track progress |
 
 ---
 
@@ -166,7 +166,7 @@
 | api-ecs-plugin | 8f3a171 | fc1c65d | #22 | ✅ Merged |
 | multithread-archetype-parallelism | 43996ce | 33f6ff6 | #23 | ✅ Merged |
 | region-based-architecture | c7e445f | 1c1baf4 | #24 | ✅ Merged |
-| polish-optimize | 942082e | 6c291d9 | — | 🔄 Active |
+| polish-optimize | 942082e | 04f0ea3 | #25 | 🔄 Active (PR opened) |
 
 ---
 
@@ -174,9 +174,9 @@
 
 1. ✅ Phase 0, 1, 2, 3, 4, 5, 6 complete (PRs #18, #19, #20, #21, #22, #23, #24 merged)
 2. ✅ Create `polish-optimize` branch with rollback anchor
-3. 🔄 Implement archetype storage optimization (struct-of-arrays)
-3. ⏳ Implement query performance optimization (caching, indexing)
-4. ⏳ Implement memory layout optimization (flat arrays, pooling)
-5. ⏳ Implement network batching optimization
-6. ⏳ Run full profiling and benchmarking
-7. ⏳ Update docs, commit, push, open PR
+3. ✅ Implement archetype storage optimization (struct-of-arrays)
+4. ✅ Implement query performance optimization (caching, indexing)
+5. ✅ Implement memory layout optimization (flat arrays, pooling)
+6. ✅ Implement network batching optimization
+7. ✅ Run full profiling and benchmarking
+8. ✅ Update docs, commit, push, open PR #25
