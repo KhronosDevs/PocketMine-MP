@@ -144,7 +144,7 @@ core, then parallelism behind the seams. **Phase 9 wires the seams.**
 | 10.1 | Full block registry coverage (all protocol-84 block IDs), block-state metadata (slab/stairs/doors). |
 | 10.2 | **Unify Inventory types** — `api\inventory\Inventory` currently exposes `core\component\ItemStack`; make the facade consistently use the API `ItemStack`. |
 | 10.3 | Held-slot single source of truth (core `InventoryComponent::$heldSlot` vs metadata `heldSlot`). |
-| 10.4 | World persistence round-trip: load → store → mutate → save → reload equality. |
+| 10.4 | World persistence round-trip: load → store → mutate → save → reload equality. | ✅ done — see status below. |
 
 ### Phase 11 — Tests & hardening
 
@@ -212,7 +212,8 @@ bin/php7/bin/php measure_baseline.php      # benchmark (writes docs/BASELINE.md)
 | 9.5 | ✅ | **Scale proof** — `tests/07`: 1000 entities apply-mode exact (10,000 applied, 0 mismatches/lagged), gate-at-scale exact, async-gen determinism |
 | 9.4b | ✅ | **Migration + dynamic load balancing** — column-split regions with cross-boundary migration (`tests/08`); regions auto-split at the entity-weighted median when over `maxEntitiesPerRegion` and fold back when idle (`tests/09`); both stay bit-exact. 5000 entities → 7 balanced regions, 0 mismatches, 0 lagged |
 | 10 | ✅ (mostly) | Real data layer: ChunkStore, BlockRegistry, ItemRegistry, WorldConfig; zero stubs |
-| 11.1-11.2 | ✅ | **`tests/` framework** (no deps, per-process isolation): 9 files, 30 tests, 412 assertions — incl. pipeline determinism, apply-mode correctness, 1000-entity scale, async-gen determinism, region split/merge balance |
+| 11.1-11.2 | ✅ | **`tests/` framework** (no deps, per-process isolation): 10 files, 35 tests, 596 assertions — incl. pipeline determinism, apply-mode correctness, 1000-entity scale, async-gen determinism, region split/merge balance, persistence round-trip |
+| 10.4 | ✅ | **World persistence round-trip** — `tests/10`: full DTO equality through a fresh adapter instance (restart scenario), negative chunk coordinates (region-file naming), re-save idempotency, service-level load→mutate→save→reload, and cross-kernel persistence (kernel A saves, fresh kernel B reads the mutation back). **Fixed 3 real storage bugs the tests caught:** (1) region timestamp table was written at byte 8192 (over the first chunk's data sector), corrupting every chunk's length field on save; (2) `BinaryStream` lacked `getDouble`/`putDouble` (entity positions crashed); (3) entity/tile ids were cast to int and written as varints (`getVarInt`/`putVarInt` don't exist in this codebase) — ids now round-trip as strings, UUID-style ids survive |
 | 10.2 | ✅ | **ItemStack unification** — api `Inventory`/`Block`/`World::dropItem`/`ItemEntity` speak `api\inventory\ItemStack` exclusively; `toCore()`/`fromCore()` convert at the boundary; core component type stays in the storage layer only |
 | 9.5b | ✅ | **Pipeline hot-path optimization** — flat stored-state arrays (zero-alloc mirror loop), per-entity chunk/region cache + epoch (no ThreadSafe reads in steady state), gated balance bookkeeping, block wire layout (2 unpack calls per batch; worker integrates on packed doubles). 5000 entities apply: 26.9 → 15.7–17.4 ms, 100% result delivery, 0 mismatches/lagged |
 | 11.3-12 | ⏳ | Memory profiling; gameplay depth |

@@ -145,6 +145,16 @@ class BinaryStream extends \stdClass
         $this->buffer .= Binary::writeFloat($v);
     }
 
+    public function getDouble(): float
+    {
+        return Binary::readDouble($this->get(8));
+    }
+
+    public function putDouble(float $v): void
+    {
+        $this->buffer .= Binary::writeDouble($v);
+    }
+
     public function getLShort(bool $signed = true): int
     {
         return $signed
