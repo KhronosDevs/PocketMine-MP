@@ -13,6 +13,10 @@ use pocketmine\domain\ecs\ComponentRegistry;
 use pocketmine\domain\ecs\ResourceRegistry;
 use pocketmine\domain\ecs\SystemScheduler;
 use pocketmine\domain\ecs\World;
+use pocketmine\domain\region\RegionWorld;
+use pocketmine\domain\thread\CoordinationThread;
+use pocketmine\domain\thread\NetworkThread;
+use pocketmine\domain\thread\RegionThread;
 use pocketmine\domain\service\PlayerJoinService;
 use pocketmine\domain\service\PlayerLeaveService;
 use pocketmine\domain\service\PlayerRespawnService;
@@ -43,6 +47,10 @@ use pocketmine\port\driving\PluginPort;
 final class Kernel {
     private bool $running = false;
     private array $tickDurations = [];
+
+    private CoordinationThread $coordinationThread;
+    private NetworkThread $networkThread;
+    private array $regionThreads = [];
 
     private PlayerJoinService $playerJoinService;
     private PlayerLeaveService $playerLeaveService;
@@ -94,28 +102,62 @@ final class Kernel {
         $this->inventoryService = new InventoryService($world);
         $this->craftingService = new CraftingService($world);
         $this->containerService = new ContainerService($world);
+
+        // Initialize region-based architecture
+        $this->initializeRegions();
+    }
+
+    private function initializeRegions(): void {
+        // Create coordination thread
+        $this->coordinationThread = new CoordinationThread($this->threadingPort);
+        
+        // Create network thread
+        $this->networkThread = new NetworkThread($this->networkPort);
+        
+        // Create region threads (for now, create a single region covering the whole world)
+        // In the future, this would be split based on world size
+        $regionWorld = new \pocketmine\domain\region\RegionWorld(
+            0, // regionId
+            -1000, 1000, // minChunkX, maxChunkX
+            -1000, 1000, // minChunkZ, maxChunkZ
+            $this->componentRegistry,
+            $this->resourceRegistry,
+            $this->systemScheduler,
+        );
+        
+        $regionThread = new RegionThread(
+            $regionWorld,
+            $this->threadingPort,
+            $this->networkPort,
+            $this->storagePort,
+            $this->worldGenPort,
+        );
+        
+        $this->regionThreads[0] = $regionThread;
+        $this->coordinationThread->addRegion(0, $regionThread);
     }
 
     public function run(int $maxTicks = -1): void {
         $this->running = true;
         $tick = 0;
 
+        // Start threads
+        $this->coordinationThread->start();
+        $this->networkThread->start();
+        foreach ($this->regionThreads as $regionThread) {
+            $regionThread->start();
+        }
+
         while ($this->running && ($maxTicks < 0 || $tick < $maxTicks)) {
             $start = hrtime(true);
 
-            // 1. Process network commands (from network thread in future)
-            $this->networkPort->processPendingCommands();
+            // 1. Main thread acts as coordinator - process global events
+            $this->processGlobalCoordination();
 
-            // 2. Run application services (use cases)
-            // TODO: Implement service execution
+            // 2. Flush network sync from all regions
+            $this->flushNetworkSync();
 
-            // 3. Run ECS systems
-            $this->systemScheduler->run($this->world, 0.05); // 20 TPS = 50ms
-
-            // 4. Flush network sync
-            $this->networkPort->flushOutboundPackets();
-
-            // 5. Storage autosave (periodic)
+            // 3. Storage autosave (periodic)
             if ($tick % 6000 === 0) {
                 $this->storagePort->saveAll();
             }
@@ -175,6 +217,21 @@ final class Kernel {
 
     public function shutdown(): void {
         $this->running = false;
+        
+        // Shutdown threads
+        $this->coordinationThread->shutdown();
+        $this->networkThread->shutdown();
+        foreach ($this->regionThreads as $regionThread) {
+            $regionThread->shutdown();
+        }
+        
+        // Wait for threads to finish
+        $this->coordinationThread->join();
+        $this->networkThread->join();
+        foreach ($this->regionThreads as $regionThread) {
+            $regionThread->join();
+        }
+        
         $this->threadingPort->shutdown();
         $this->storagePort->saveAll();
     }
@@ -221,6 +278,18 @@ final class Kernel {
 
     public function getPluginPort(): PluginPort {
         return $this->pluginPort;
+    }
+
+    public function getCoordinationThread(): CoordinationThread {
+        return $this->coordinationThread;
+    }
+
+    public function getNetworkThread(): NetworkThread {
+        return $this->networkThread;
+    }
+
+    public function getRegionThreads(): array {
+        return $this->regionThreads;
     }
 
     public function getPlayerJoinService(): PlayerJoinService {
@@ -293,6 +362,22 @@ final class Kernel {
 
     public function getContainerService(): ContainerService {
         return $this->containerService;
+    }
+
+    private function processGlobalCoordination(): void {
+        // Process any global coordination tasks
+        // This runs on the main thread
+    }
+
+    private function flushNetworkSync(): void {
+        // Collect network sync from all region threads
+        foreach ($this->regionThreads as $regionThread) {
+            // Network sync would be collected from region thread's sync queue
+            // and sent via network thread
+        }
+        
+        // Flush network thread outbound queue
+        $this->networkThread->getOutboundQueue();
     }
 }
 

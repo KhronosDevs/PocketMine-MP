@@ -2,9 +2,9 @@
 
 **Plan Version:** docs/PLAN.md
 **Last Updated:** 2026-08-07
-**Current Phase:** 5 (Archetype Parallelism)
-**Current Branch:** multithread-archetype-parallelism
-**Base Commit:** 43996ce (master after PR #22 merge)
+**Current Phase:** 6 (Region-Based Architecture)
+**Current Branch:** region-based-architecture
+**Base Commit:** c7e445f (master after PR #23 merge)
 
 ---
 
@@ -17,8 +17,8 @@
 | 2: Infrastructure Adapters | ✅ Done | adapter-implementation | #20 | Network, storage, worldgen, thread pool (NEW) |
 | 3: Core Gameplay Services | ✅ Done | service-core-gameplay | #21 | Player, chunk, block, entity, combat, inventory |
 | 4: **New Plugin API** | ✅ Done | api-ecs-plugin | #22 | **BREAKING** — EntityRef, Query, System, Event, Command, Scheduler |
-| 5: Archetype Parallelism | 🔄 In Progress | multithread-archetype-parallelism | — | Movement, Effect, Physics, AI parallel execution |
-| 6: Region-Based | ⏳ Pending | — | — | RegionWorld, RegionThread, coordination, network threads |
+| 5: Archetype Parallelism | ✅ Done | multithread-archetype-parallelism | #23 | Movement, Effect, Physics, AI parallel execution |
+| 6: Region-Based Architecture | 🔄 In Progress | region-based-architecture | — | RegionWorld, RegionThread, coordination, network threads |
 | 7: Polish & Optimize | ⏳ Pending | — | — | Storage, queries, memory, network batching, benchmarks |
 
 ---
@@ -106,7 +106,22 @@
 | 5.4 | `multithread-ai` — AISystem parallel per archetype | ✅ | 3f35600 | Pathfinding via ThreadingPort, double-buffered AIState |
 | 5.5 | `multithread-chunk` — ChunkParallelSystem for block updates | ✅ | 3f35600 | Per-chunk parallel block updates |
 | 5.6 | `multithread-scheduler` — SystemScheduler parallel execution via ThreadingPort | ✅ | 3f35600 | AwaitAll on parallel systems |
-| 5.7 | Update PROGRESS.md | 🔄 | — | Track progress |
+| 5.7 | Update PROGRESS.md | ✅ | — | Track progress |
+
+---
+
+## Phase 6: Region-Based Architecture — Detailed Steps
+
+| Step | Task | Status | Commit | Notes |
+|------|------|--------|--------|-------|
+| 6.0 | Create branch `region-based-architecture` with rollback anchor | ✅ | 37860e3 | `git checkout -b region-based-architecture && git commit --allow-empty -m "chore: rollback anchor for region-based-architecture"` |
+| 6.1 | `region-world` — RegionWorld ECS World slice per spatial region (16×16 chunks) | 🔄 | — | RegionWorld with spatial bounds, chunk ownership |
+| 6.2 | `region-thread` — RegionThread per region with independent ECS tick loop | ⏳ | — | Dedicated thread, command/sync queues |
+| 6.3 | `region-coordination` — CoordinationThread for entity migration, global events | ⏳ | — | Cross-region migration, plugin dispatch, chunk coordination |
+| 6.4 | `region-network` — NetworkThread for RakLib I/O + packet encoding | ⏳ | — | Dedicated network thread, batch encoding |
+| 6.5 | `region-migration` — Cross-region entity migration with snapshots | ⏳ | — | EntityRef transfer, component snapshot |
+| 6.6 | `region-load-balancing` — Dynamic region splitting/merging | ⏳ | — | Workload-aware partitioning |
+| 6.7 | Update PROGRESS.md | ⏳ | — | Track progress |
 
 ---
 
@@ -122,6 +137,7 @@
 | D006 | Establish tick-profiling baseline early | 2026-08-06 | Before any threading work |
 | D007 | **New Plugin API = breaking changes, no legacy compat** | 2026-08-07 | Clean ECS-based API (EntityRef, Query, System) |
 | D008 | **Double-buffered components for parallel writes** | 2026-08-07 | PositionComponent, VelocityComponent, AIStateComponent |
+| D009 | **Region size: 16×16 chunks (256×256 blocks)** | 2026-08-07 | Balance between parallelism and migration overhead |
 
 ---
 
@@ -134,19 +150,19 @@
 | adapter-implementation | 3b66cf1 | 63a1b02 | #20 | ✅ Merged |
 | service-core-gameplay | 49cf545 | 7ce67ce | #21 | ✅ Merged |
 | api-ecs-plugin | 8f3a171 | fc1c65d | #22 | ✅ Merged |
-| multithread-archetype-parallelism | 43996ce | 3f35600 | #23 | 🔄 Active (PR opened) |
+| multithread-archetype-parallelism | 43996ce | 33f6ff6 | #23 | ✅ Merged |
+| region-based-architecture | c7e445f | 37860e3 | — | 🔄 Active |
 
 ---
 
 ## Next Actions
 
-1. ✅ Phase 0, 1, 2, 3, 4 complete (PRs #18, #19, #20, #21, #22 merged)
-2. ✅ Create `multithread-archetype-parallelism` branch with rollback anchor
-3. ✅ Implement double-buffered PositionComponent + VelocityComponent
-4. ✅ Implement MovementSystem parallel archetype execution
-5. ✅ Implement PhysicsSystem parallel broad-phase collision
-6. ✅ Implement EffectSystem parallel optimization
-7. ✅ Implement AISystem parallel per archetype
-8. ✅ Implement ChunkParallelSystem for block updates
-9. ✅ Implement SystemScheduler parallel execution via ThreadingPort
-9. ✅ Update docs, commit, push, open PR #23
+1. ✅ Phase 0, 1, 2, 3, 4, 5 complete (PRs #18, #19, #20, #21, #22, #23 merged)
+2. ✅ Create `region-based-architecture` branch with rollback anchor
+3. 🔄 Implement RegionWorld — ECS World slice per spatial region (16×16 chunks)
+3. ⏳ Implement RegionThread — Dedicated thread per region with independent ECS tick loop
+4. ⏳ Implement CoordinationThread — Entity migration, global events, plugin dispatch
+5. ⏳ Implement NetworkThread — Dedicated RakLib I/O + packet encoding
+6. ⏳ Implement cross-region entity migration
+7. ⏳ Implement dynamic region load balancing
+8. ⏳ Update docs, commit, push, open PR
