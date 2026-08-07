@@ -75,12 +75,18 @@ final class EntityInteractionService {
         $inventory = $player->get(\pocketmine\core\component\InventoryComponent::class);
         if (!$inventory) return false;
         
-        $heldItem = $inventory->get(0); // Simplified - check held slot
+        $heldItem = $inventory->get($this->getHeldSlot($player));
         if (!$heldItem) return false;
         
         // Check if item is food for this animal
         // If so, breed or tame
         return true;
+    }
+
+    private function getHeldSlot(\pocketmine\core\ecs\Entity $player): int {
+        $metadata = $player->get(\pocketmine\core\component\MetadataComponent::class);
+        $slot = $metadata?->get('heldSlot') ?? 0;
+        return is_int($slot) ? $slot : 0;
     }
 
     private function pickupItem(EntityRef $playerRef, EntityRef $itemRef): bool {
@@ -173,7 +179,7 @@ final class EntityInteractionService {
         // Check for weapon
         $inventory = $attacker->get(\pocketmine\core\component\InventoryComponent::class);
         if ($inventory) {
-            $heldItem = $inventory->get(0);
+            $heldItem = $inventory->get($this->getHeldSlot($attacker));
             if ($heldItem) {
                 // Add weapon damage
                 $damage += $this->getWeaponDamage($heldItem->itemId);

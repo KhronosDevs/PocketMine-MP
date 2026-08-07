@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\core\service;
 
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\ChunkStore;
 use pocketmine\port\driven\ChunkData;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\WorldGenPort;
@@ -29,7 +30,8 @@ final class ChunkLoadService {
         }
         
         // Populate if needed
-        if (!$this->isPopulated($chunkData)) {
+        $needsPopulate = !$this->isPopulated($chunkData);
+        if ($needsPopulate) {
             $this->worldGenPort->populateChunk($chunkX, $chunkZ, $chunkData);
         }
         
@@ -37,6 +39,20 @@ final class ChunkLoadService {
         if (!$this->hasLightData($chunkData)) {
             $lightData = $this->worldGenPort->calculateLight($chunkX, $chunkZ, $chunkData);
             // Apply light data to chunk
+        }
+        
+        // Materialize the chunk into the in-memory store so block reads/writes
+        // and the API World facade operate on real data.
+        $store = $this->getChunkStore();
+        if ($store !== null) {
+            $store->load($chunkData);
+            if (!$this->isEmptyChunk($chunkData)) {
+                $store->markGenerated($chunkX, $chunkZ);
+                // Generated chunks are populated once the population pass ran
+                // (for generators whose population is a no-op, this is still true
+                // because the pass executed).
+                $store->markPopulated($chunkX, $chunkZ);
+            }
         }
         
         return $chunkData;
@@ -83,11 +99,29 @@ final class ChunkLoadService {
     }
 
     public function unloadChunk(int $chunkX, int $chunkZ): void {
-        // Save chunk to storage
-        // In practice, this would be called with the chunk data from the world
+        // Save the in-memory chunk to storage, then drop it from the store.
+        $store = $this->getChunkStore();
+        if ($store !== null && $store->isLoaded($chunkX, $chunkZ)) {
+            $chunkData = $store->toChunkData($chunkX, $chunkZ);
+            if ($chunkData !== null) {
+                $this->storagePort->saveChunk($chunkX, $chunkZ, $chunkData);
+            }
+            $store->unload($chunkX, $chunkZ);
+        }
     }
 
     public function saveChunk(ChunkData $data): void {
+        $store = $this->getChunkStore();
+        // Never overwrite newer in-memory state with an older DTO: only import
+        // the DTO when the chunk is not currently loaded.
+        if ($store !== null && !$store->isLoaded($data->chunkX, $data->chunkZ)) {
+            $store->load($data);
+        }
         $this->storagePort->saveChunk($data->chunkX, $data->chunkZ, $data);
+    }
+
+    private function getChunkStore(): ?ChunkStore {
+        $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
+        return $store instanceof ChunkStore ? $store : null;
     }
 }

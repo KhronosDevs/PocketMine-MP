@@ -6,11 +6,14 @@ namespace pocketmine\core\service;
 
 use pocketmine\core\component\CollisionComponent;
 use pocketmine\core\component\InventoryComponent;
+use pocketmine\core\component\ItemStack;
 use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\RotationComponent;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\BlockRegistry;
+use pocketmine\core\resource\ChunkStore;
 use pocketmine\port\driven\StoragePort;
 
 final class BlockBreakService {
@@ -74,9 +77,12 @@ final class BlockBreakService {
     }
 
     private function isBreakable(int $x, int $y, int $z): bool {
-        // Check if block at position is breakable
-        // In a full implementation, this would query the chunk/block data
-        return true; // Simplified
+        $store = $this->getChunkStore();
+        if ($store === null) {
+            return false;
+        }
+        $blockId = $store->getBlock($x, $y, $z);
+        return $this->getBlockRegistry()->isBreakable($blockId);
     }
 
     private function getHeldItem(EntityRef $playerRef): ?\pocketmine\core\component\ItemStack {
@@ -92,13 +98,38 @@ final class BlockBreakService {
         return $inventory->get($heldSlot);
     }
 
-    private function calculateBreakSpeed(?\pocketmine\core\component\ItemStack $tool, int $x, int $y, int $z): float {
-        // Calculate break speed based on tool and block
-        // Simplified for now
-        return 1.0;
+    private function calculateBreakSpeed(?ItemStack $tool, int $x, int $y, int $z): float {
+        $store = $this->getChunkStore();
+        if ($store === null) {
+            return 0.0;
+        }
+        $blockId = $store->getBlock($x, $y, $z);
+        $registry = $this->getBlockRegistry();
+
+        $hardness = $registry->getHardness($blockId);
+        if ($hardness < 0.0) {
+            return 0.0; // unbreakable
+        }
+        if ($hardness === 0.0) {
+            return 10.0; // instant (grass, torches, etc.)
+        }
+
+        // Correct tool tier mines faster; wrong tool mines very slowly.
+        $requiredTool = $registry->getToolType($blockId);
+        $toolType = $tool !== null ? $this->toolTypeForItem($tool->itemId) : 'hand';
+        $speed = 1.0 / $hardness;
+
+        if ($toolType === $requiredTool) {
+            $toolLevel = $registry->getToolLevel($blockId);
+            $speed *= $toolLevel <= 0 ? 2.0 : 3.0 + $toolLevel; // correct tool
+        } elseif ($registry->requiresTool($blockId)) {
+            $speed *= 0.2; // wrong tool: five times slower
+        }
+
+        return max(0.05, $speed);
     }
 
-    private function doBreakBlock(EntityRef $playerRef, int $x, int $y, int $z, ?\pocketmine\core\component\ItemStack $tool): bool {
+    private function doBreakBlock(EntityRef $playerRef, int $x, int $y, int $z, ?ItemStack $tool): bool {
         // Get block drops
         $drops = $this->getBlockDrops($x, $y, $z, $tool);
         
@@ -116,10 +147,39 @@ final class BlockBreakService {
         return true;
     }
 
-    private function getBlockDrops(int $x, int $y, int $z, ?\pocketmine\core\component\ItemStack $tool): array {
-        // Return item drops for the block
-        // In a full implementation, this would use block registry
-        return [];
+    /**
+     * @return ItemStack[]
+     */
+    private function getBlockDrops(int $x, int $y, int $z, ?ItemStack $tool): array {
+        $store = $this->getChunkStore();
+        if ($store === null) {
+            return [];
+        }
+        $blockId = $store->getBlock($x, $y, $z);
+
+        $silkTouch = false;
+        $toolType = $tool !== null ? $this->toolTypeForItem($tool->itemId) : null;
+        if ($toolType === 'shears') {
+            $silkTouch = true;
+        }
+
+        $drops = $this->getBlockRegistry()->getDrops($blockId, $silkTouch, $toolType);
+        $items = [];
+        foreach ($drops as $drop) {
+            $items[] = new ItemStack($drop['id'], $drop['meta'], $drop['count']);
+        }
+        return $items;
+    }
+
+    private function toolTypeForItem(int $itemId): string {
+        return match (true) {
+            $itemId >= 256 && $itemId <= 259 => 'sword',
+            $itemId >= 269 && $itemId <= 271 => 'shovel',
+            $itemId >= 273 && $itemId <= 275 => 'pickaxe',
+            $itemId >= 277 && $itemId <= 279 => 'axe',
+            $itemId >= 284 && $itemId <= 286 => 'shears',
+            default => 'hand',
+        };
     }
 
     private function spawnDropEntity(float $x, float $y, float $z, \pocketmine\core\component\ItemStack $item): void {
@@ -147,7 +207,19 @@ final class BlockBreakService {
     }
 
     private function setBlock(int $x, int $y, int $z, int $blockId): void {
-        // Set block in chunk data
-        // This would modify the chunk's block data
+        $store = $this->getChunkStore();
+        if ($store !== null) {
+            $store->setBlock($x, $y, $z, $blockId, 0);
+        }
+    }
+
+    private function getChunkStore(): ?ChunkStore {
+        $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
+        return $store instanceof ChunkStore ? $store : null;
+    }
+
+    private function getBlockRegistry(): BlockRegistry {
+        $registry = $this->world->getResourceRegistry()->get(BlockRegistry::class);
+        return $registry instanceof BlockRegistry ? $registry : new BlockRegistry();
     }
 }

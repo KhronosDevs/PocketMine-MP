@@ -11,116 +11,85 @@ use pocketmine\core\ecs\System;
 use pocketmine\core\ecs\SystemPhase;
 use pocketmine\port\driven\ThreadingPort;
 
-interface Task {
-    public function getTaskId(): int;
-    public function isCancelled(): bool;
-    public function cancel(): void;
-}
-
-interface TaskHandler {
-    public function getTask(): Task;
-    public function cancel(): void;
-}
-
-class PluginTask implements Task {
-    private int $taskId = 0;
-    private bool $cancelled = false;
-
-    public function __construct(
-        private $callback,
-        private readonly int $delay,
-        private readonly int $period,
-    ) {}
-
-    public function setTaskId(int $id): void {
-        $this->taskId = $id;
-    }
-
-    public function getTaskId(): int {
-        return $this->taskId;
-    }
-
-    public function isCancelled(): bool {
-        return $this->cancelled;
-    }
-
-    public function cancel(): void {
-        $this->cancelled = true;
-    }
-
-    public function run(int $currentTick): void {
-        if ($this->cancelled) {
-            return;
-        }
-        ($this->callback)($currentTick);
-    }
-
-    public function isRepeating(): bool {
-        return $this->period > 0;
-    }
-
-    public function getPeriod(): int {
-        return $this->period;
-    }
-
-    public function getDelay(): int {
-        return $this->delay;
-    }
-}
-
-class TaskHandlerImpl implements TaskHandler {
-    public function __construct(
-        private readonly Task $task,
-    ) {}
-
-    public function getTask(): Task {
-        return $this->task;
-    }
-
-    public function cancel(): void {
-        $this->task->cancel();
-    }
-}
-
 class Scheduler {
     private World $world;
     private SystemScheduler $systemScheduler;
     private ThreadingPort $threadingPort;
     private int $taskCounter = 0;
+    private int $currentTick = 0;
     private array $tasks = [];
 
-    public function __construct() {
-        $kernel = \pocketmine\Kernel::getInstance();
-        $this->world = $kernel->getWorld();
-        $this->systemScheduler = $kernel->getSystemScheduler();
-        $this->threadingPort = $kernel->getThreadingPort();
+    public function __construct(?World $world = null, ?SystemScheduler $systemScheduler = null, ?ThreadingPort $threadingPort = null) {
+        if ($world === null || $systemScheduler === null || $threadingPort === null) {
+            $kernel = \pocketmine\Kernel::getInstance();
+            if ($kernel === null) {
+                throw new \RuntimeException("Scheduler requires a running Kernel");
+            }
+            $world ??= $kernel->getWorld();
+            $systemScheduler ??= $kernel->getSystemScheduler();
+            $threadingPort ??= $kernel->getThreadingPort();
+        }
+        $this->world = $world;
+        $this->systemScheduler = $systemScheduler;
+        $this->threadingPort = $threadingPort;
+
+        // Tick pending tasks once per world tick (a single Scheduler instance
+        // is held by the Kernel, so this registers exactly one system).
+        $this->systemScheduler->register(new class($this) implements System {
+            public function __construct(private readonly Scheduler $scheduler) {}
+
+            public function run(World $world, float $deltaTime): void {
+                $this->scheduler->tickTasks();
+            }
+        }, SystemPhase::SEQUENTIAL);
     }
 
-    public function scheduleRepeatingTask(callable $callback, int $period): TaskHandler {
+    /**
+     * Advance the internal tick counter and run tasks whose delay has elapsed.
+     */
+    public function tickTasks(): void {
+        $this->currentTick++;
+        foreach ($this->tasks as $taskId => $task) {
+            if (!$task instanceof PluginTask || $task->isCancelled()) {
+                continue;
+            }
+            if ($task->nextRunTick > $this->currentTick) {
+                continue;
+            }
+            $task->run($this->currentTick);
+            if ($task->isRepeating()) {
+                $task->nextRunTick += $task->getPeriod();
+            } else {
+                unset($this->tasks[$taskId]);
+            }
+        }
+    }
+
+    public function scheduleRepeatingTask(callable $callback, int $period, ?Plugin $owner = null): TaskHandler {
         $taskId = ++$this->taskCounter;
-        $task = new PluginTask($callback, -1, $period);
+        $task = new PluginTask($callback, -1, $period, $owner);
         $task->setTaskId($taskId);
+        $task->nextRunTick = $this->currentTick + $period;
         $this->tasks[$taskId] = $task;
-        
-        // Register as a system that runs every $period ticks
-        // This would need a wrapper system
         
         return new TaskHandlerImpl($task);
     }
 
-    public function scheduleDelayedTask(callable $callback, int $delay): TaskHandler {
+    public function scheduleDelayedTask(callable $callback, int $delay, ?Plugin $owner = null): TaskHandler {
         $taskId = ++$this->taskCounter;
-        $task = new PluginTask($callback, $delay, -1);
+        $task = new PluginTask($callback, $delay, -1, $owner);
         $task->setTaskId($taskId);
+        $task->nextRunTick = $this->currentTick + max(1, $delay);
         $this->tasks[$taskId] = $task;
         
         return new TaskHandlerImpl($task);
     }
 
-    public function scheduleDelayedRepeatingTask(callable $callback, int $delay, int $period): TaskHandler {
+    public function scheduleDelayedRepeatingTask(callable $callback, int $delay, int $period, ?Plugin $owner = null): TaskHandler {
         $taskId = ++$this->taskCounter;
-        $task = new PluginTask($callback, $delay, $period);
+        $task = new PluginTask($callback, $delay, $period, $owner);
         $task->setTaskId($taskId);
+        $task->nextRunTick = $this->currentTick + max(1, $delay);
         $this->tasks[$taskId] = $task;
         
         return new TaskHandlerImpl($task);
@@ -139,8 +108,10 @@ class Scheduler {
 
     public function cancelTasks(Plugin $plugin): void {
         foreach ($this->tasks as $taskId => $task) {
-            // Would check if task belongs to plugin
-            $task->cancel();
+            if ($task instanceof PluginTask && $task->getOwner() === $plugin) {
+                $task->cancel();
+                unset($this->tasks[$taskId]);
+            }
         }
     }
 
@@ -154,6 +125,7 @@ class Scheduler {
     }
 
     public function unregisterSystem(System $system): void {
-        // Would unregister system
+        $kernel = \pocketmine\Kernel::getInstance();
+        $kernel->getSystemScheduler()->unregister($system);
     }
 }

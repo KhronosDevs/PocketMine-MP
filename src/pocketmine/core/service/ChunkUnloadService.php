@@ -7,6 +7,7 @@ namespace pocketmine\core\service;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\ChunkStore;
 use pocketmine\port\driven\StoragePort;
 
 final class ChunkUnloadService {
@@ -24,8 +25,15 @@ final class ChunkUnloadService {
             $this->saveEntity($entityRef);
         }
         
-        // Save chunk data (would be called with actual chunk data)
-        // $this->saveChunkData($chunkX, $chunkZ, $chunkData);
+        // Persist and drop the chunk from the in-memory store.
+        $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
+        if ($store instanceof ChunkStore && $store->isLoaded($chunkX, $chunkZ)) {
+            $chunkData = $store->toChunkData($chunkX, $chunkZ);
+            if ($chunkData !== null) {
+                $this->storagePort->saveChunk($chunkX, $chunkZ, $chunkData);
+            }
+            $store->unload($chunkX, $chunkZ);
+        }
     }
 
     public function unloadUnusedChunks(int $maxLoadedChunks = 10000): void {

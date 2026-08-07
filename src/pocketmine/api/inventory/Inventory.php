@@ -60,7 +60,7 @@ class Inventory {
     }
 
     public function getHeldItem(): ?ItemStack {
-        return $this->getItem(0); // Simplified - would use held slot
+        return $this->getItem($this->getHeldSlot());
     }
 
     public function setHeldSlot(int $slot): void {
@@ -86,7 +86,21 @@ class Inventory {
     }
 
     public function canAddItem(ItemStack $item): bool {
-        return $this->canAddItem($item);
+        if ($item->count <= 0) {
+            return true;
+        }
+        $remaining = $item->count;
+        // First, fit what we can into existing stacks of the same item.
+        foreach ($this->getContents() as $existing) {
+            if ($existing->canStackWith($item)) {
+                $remaining -= $existing->getMaxStackSize() - $existing->count;
+                if ($remaining <= 0) {
+                    return true;
+                }
+            }
+        }
+        // Any remainder needs empty slots (a full stack per slot).
+        return $this->getFreeSlots() * $item->getMaxStackSize() >= $remaining;
     }
 
     public function getFirstFreeSlot(): int {

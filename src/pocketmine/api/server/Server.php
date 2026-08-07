@@ -12,6 +12,7 @@ class Server {
     private static ?self $instance = null;
     
     private array $worlds = [];
+    private \pocketmine\api\command\CommandMap $commandMap;
     private World $defaultWorld;
     private string $name = 'Khronos';
     private string $version = '2.0.0';
@@ -30,7 +31,7 @@ class Server {
     private string $language = 'eng';
 
     private function __construct() {
-        // Singleton constructor
+        $this->commandMap = new \pocketmine\api\command\CommandMap();
     }
 
     public static function getInstance(): self {
@@ -187,13 +188,21 @@ class Server {
     }
 
     public function loadWorld(string $name): World {
-        // Would load world from storage
-        return $this->getDefaultWorld(); // Simplified
+        if (isset($this->worlds[$name])) {
+            return $this->worlds[$name];
+        }
+        // Only the single world is loaded in the current architecture; the
+        // storage port is fixed to one level name.
+        throw new \RuntimeException("World '$name' is not loaded");
     }
 
-    public function generateWorld(string $name, int $seed = 0, string $generator = 'default', array $options = []): World {
-        // Would generate world
-        return $this->getDefaultWorld(); // Simplified
+    public function generateWorld(string $name, int $seed = 0, string $generator = 'normal', array $options = []): World {
+        if (isset($this->worlds[$name])) {
+            return $this->worlds[$name];
+        }
+        // Multi-world generation is not supported yet: the ECS holds a single
+        // world and the worldgen/storage adapters are single-level.
+        throw new \RuntimeException("World generation is not supported yet (only the default world exists)");
     }
 
     public function unloadWorld(string $name, bool $save = true): bool {
@@ -281,17 +290,38 @@ class Server {
     }
 
     public function getUptime(): string {
-        // Would return server uptime
-        return '0s'; // Simplified
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel === null) {
+            return '0s';
+        }
+        $seconds = $kernel->getUptime();
+        $days = intdiv($seconds, 86400);
+        $hours = intdiv($seconds % 86400, 3600);
+        $minutes = intdiv($seconds % 3600, 60);
+        $secs = $seconds % 60;
+        $parts = [];
+        if ($days > 0) $parts[] = $days . 'd';
+        if ($hours > 0) $parts[] = $hours . 'h';
+        if ($minutes > 0) $parts[] = $minutes . 'm';
+        $parts[] = $secs . 's';
+        return implode(' ', $parts);
     }
 
     public function getTicksPerSecond(): float {
         $kernel = \pocketmine\Kernel::getInstance();
-        return 20.0; // Simplified
+        if ($kernel === null) {
+            return 20.0;
+        }
+        $stats = $kernel->getTickStats();
+        $mean = $stats['mean_ms'] ?? null;
+        if (!is_numeric($mean) || $mean <= 0) {
+            return 20.0;
+        }
+        return round(1000.0 / (float)$mean, 1);
     }
 
     public function getTicksPerSecondAverage(): float {
-        return 20.0; // Simplified
+        return $this->getTicksPerSecond();
     }
 
     public function isRunning(): bool {
@@ -323,8 +353,18 @@ class Server {
     }
 
     public function dispatchCommand(string $command, string $sender = 'CONSOLE'): bool {
-        // Would dispatch command
-        return true;
+        return $this->commandMap->execute(new \pocketmine\api\command\ConsoleCommandSender(), $command);
+    }
+
+    /**
+     * Register a command into the server-wide command map (used by plugins).
+     */
+    public function registerCommand(\pocketmine\api\command\Command $command): void {
+        $this->commandMap->register($command);
+    }
+
+    public function getCommand(string $name): ?\pocketmine\api\command\Command {
+        return $this->commandMap->getCommand($name);
     }
 
     public function getPluginManager(): \pocketmine\api\plugin\PluginManager {
@@ -336,7 +376,7 @@ class Server {
     }
 
     public function getScheduler(): \pocketmine\api\scheduler\Scheduler {
-        return new \pocketmine\api\scheduler\Scheduler();
+        return \pocketmine\Kernel::getInstance()->getScheduler();
     }
 
     public function getServices(): array {

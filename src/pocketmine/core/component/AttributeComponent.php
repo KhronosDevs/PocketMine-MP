@@ -68,39 +68,3 @@ final class AttributeComponent {
         return $result;
     }
 }
-
-final class AttributeInstance {
-    /** @var array<string, AttributeModifier> */
-    public array $modifiers = [];
-    public float $value = 0.0;
-    public float $baseValue = 0.0;
-
-    public function __construct(float $baseValue = 0.0) {
-        $this->baseValue = $baseValue;
-        $this->value = $baseValue;
-    }
-
-    public function toArray(): array {
-        return [
-            'base' => $this->baseValue,
-            'value' => $this->value,
-            'modifiers' => array_map(fn(AttributeModifier $m) => $m->toArray(), $this->modifiers),
-        ];
-    }
-}
-
-final class AttributeModifier {
-    public function __construct(
-        public string $id,
-        public float $amount,
-        public int $operation, // 0=add, 1=multiply_base, 2=multiply_total
-    ) {}
-
-    public function toArray(): array {
-        return [
-            'id' => $this->id,
-            'amount' => $this->amount,
-            'operation' => $this->operation,
-        ];
-    }
-}

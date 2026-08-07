@@ -44,21 +44,3 @@ abstract class Command {
         return $sender->hasPermission($this->permission);
     }
 }
-
-class PluginCommand extends Command {
-    public function __construct(
-        string $name,
-        Plugin $owner,
-        string $description = "",
-        string $usage = "",
-        array $aliases = [],
-        ?string $permission = null,
-    ) {
-        parent::__construct($name, $description, $usage, $aliases, $permission);
-    }
-
-    public function execute(CommandSender $sender, array $args): bool {
-        // Would call plugin's onCommand
-        return true;
-    }
-}
