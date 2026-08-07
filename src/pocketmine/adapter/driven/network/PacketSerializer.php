@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\adapter\driven\network;
 
-use pocketmine\network\protocol\DataPacket;
+use pocketmine\protocol\DataPacket;
 
 final class PacketSerializer {
     public function serialize(DataPacket $packet): string {

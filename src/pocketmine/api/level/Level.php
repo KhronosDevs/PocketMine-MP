@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace pocketmine\api\level;
 
-use pocketmine\domain\ecs\World;
-use pocketmine\domain\ecs\EntityRef;
-use pocketmine\domain\ecs\QueryBuilder;
-use pocketmine\domain\component\PositionComponent;
-use pocketmine\domain\component\MetadataComponent;
-use pocketmine\domain\service\ChunkLoadService;
-use pocketmine\domain\service\ChunkUnloadService;
-use pocketmine\domain\service\ChunkSendService;
+use pocketmine\core\ecs\World;
+use pocketmine\core\ecs\EntityRef;
+use pocketmine\core\ecs\QueryBuilder;
+use pocketmine\core\component\PositionComponent;
+use pocketmine\core\component\MetadataComponent;
+use pocketmine\core\service\ChunkLoadService;
+use pocketmine\core\service\ChunkUnloadService;
+use pocketmine\core\service\ChunkSendService;
 use pocketmine\port\driven\ChunkData;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\WorldGenPort;
@@ -51,7 +51,10 @@ class Level {
     public function getEntities(): array {
         $entities = [];
         foreach ($this->world->getEntities() as $entity) {
-            $entities[] = new \pocketmine\api\entity\Entity($entity, $this->world);
+            $entities[] = \pocketmine\api\entity\Entity::wrap(
+                EntityRef::create($entity->id, $this->world),
+                $this->world
+            );
         }
         return $entities;
     }
@@ -59,12 +62,15 @@ class Level {
     public function getPlayers(): array {
         $players = [];
         $query = $this->world->query()
-            ->with(\pocketmine\domain\component\MetadataComponent::class)
-            ->withTag(\pocketmine\domain\component\tags\PlayerTag::class)
+            ->with(\pocketmine\core\component\MetadataComponent::class)
+            ->withTag(\pocketmine\core\component\tags\PlayerTag::class)
             ->build();
         
         foreach ($query as $entity) {
-            $players[] = new \pocketmine\api\entity\Player($entity, $this->world);
+            $players[] = new \pocketmine\api\entity\Player(
+                EntityRef::create($entity->id, $this->world),
+                $this->world
+            );
         }
         return $players;
     }
@@ -72,19 +78,63 @@ class Level {
     public function getEntity(int $entityId): ?\pocketmine\api\entity\Entity {
         $entity = $this->world->getEntity($entityId);
         if (!$entity) return null;
-        return new \pocketmine\api\entity\Entity($entity, $this->world);
+        return \pocketmine\api\entity\Entity::wrap(
+            EntityRef::create($entity->id, $this->world),
+            $this->world
+        );
     }
 
     public function getEntitiesInRadius(float $x, float $y, float $z, float $radius): array {
-        return $this->world->getEntitiesInRadius($x, $y, $z, $radius);
+        $query = $this->world->query()
+            ->with(\pocketmine\core\component\PositionComponent::class)
+            ->build();
+
+        $entities = [];
+        $radiusSq = $radius * $radius;
+
+        foreach ($query as $entity) {
+            $pos = $entity->get(\pocketmine\core\component\PositionComponent::class);
+            if (!$pos) continue;
+
+            $dx = $pos->x - $x;
+            $dy = $pos->y - $y;
+            $dz = $pos->z - $z;
+            if ($dx * $dx + $dy * $dy + $dz * $dz <= $radiusSq) {
+                $entities[] = \pocketmine\api\entity\Entity::wrap(
+                    EntityRef::create($entity->id, $this->world),
+                    $this->world
+                );
+            }
+        }
+
+        return $entities;
     }
 
     public function getEntitiesInChunk(int $chunkX, int $chunkZ): array {
-        return $this->world->getEntitiesInChunk($chunkX, $chunkZ);
+        $query = $this->world->query()
+            ->with(\pocketmine\core\component\PositionComponent::class)
+            ->build();
+
+        $entities = [];
+        foreach ($query as $entity) {
+            $pos = $entity->get(\pocketmine\core\component\PositionComponent::class);
+            if (!$pos) continue;
+
+            $entityChunkX = (int)floor($pos->x / 16);
+            $entityChunkZ = (int)floor($pos->z / 16);
+            if ($entityChunkX === $chunkX && $entityChunkZ === $chunkZ) {
+                $entities[] = \pocketmine\api\entity\Entity::wrap(
+                    EntityRef::create($entity->id, $this->world),
+                    $this->world
+                );
+            }
+        }
+
+        return $entities;
     }
 
     public function loadChunk(int $chunkX, int $chunkZ): ChunkData {
-        return $this->chunkLoadService->loadChunkWithContext($this, $chunkX, $chunkZ);
+        return $this->chunkLoadService->loadChunk($chunkX, $chunkZ);
     }
 
     public function unloadChunk(int $chunkX, int $chunkZ): void {
@@ -125,7 +175,7 @@ class Level {
     }
 
     public function getTime(): int {
-        $metadata = new \pocketmine\domain\component\MetadataComponent();
+        $metadata = new \pocketmine\core\component\MetadataComponent();
         // Would get from level metadata
         return 0;
     }
@@ -147,15 +197,21 @@ class Level {
     }
 
     public function addEntity(\pocketmine\api\entity\Entity $entity): void {
-        $this->world->addEntity($entity->getInternalRef());
+        $core = $entity->getInternalRef()->getEntity();
+        if ($core) {
+            $this->world->addEntity($core);
+        }
     }
 
     public function removeEntity(\pocketmine\api\entity\Entity $entity): void {
-        $this->world->despawn($entity->getInternalRef());
+        $core = $entity->getInternalRef()->getEntity();
+        if ($core) {
+            $this->world->despawn($core);
+        }
     }
 
-    public function dropItem(float $x, float $y, float $z, \pocketmine\domain\component\ItemStack $item): void {
-        \pocketmine\api\entity\ItemEntity::create($x, $y, $z, func_get_arg(3));
+    public function dropItem(float $x, float $y, float $z, \pocketmine\core\component\ItemStack $item): void {
+        \pocketmine\api\entity\ItemEntity::create($x, $y, $z, $item);
     }
 
     public function dropExp(float $x, float $y, float $z, int $amount): void {
@@ -163,7 +219,7 @@ class Level {
     }
 
     public function getChunkData(int $chunkX, int $chunkZ): ?ChunkData {
-        return $this->chunkLoadService->loadChunkWithContext($this, $chunkX, $chunkZ);
+        return $this->chunkLoadService->loadChunk($chunkX, $chunkZ);
     }
 
     public function setChunkData(ChunkData $data): void {
@@ -250,7 +306,10 @@ class Level {
             ->build();
         
         foreach ($query as $entity) {
-            $entities[] = new \pocketmine\api\entity\Entity($entity, $this->world);
+            $entities[] = \pocketmine\api\entity\Entity::wrap(
+                EntityRef::create($entity->id, $this->world),
+                $this->world
+            );
         }
         return $entities;
     }

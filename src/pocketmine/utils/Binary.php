@@ -30,7 +30,6 @@
  */
 namespace pocketmine\utils;
 
-use pocketmine\entity\Entity;
 use function bcadd;
 use function bccomp;
 use function bcdiv;
@@ -51,6 +50,28 @@ use const PHP_INT_SIZE;
 class Binary{
 	const BIG_ENDIAN = 0x00;
 	const LITTLE_ENDIAN = 0x01;
+
+	// Entity metadata data-type codes (previously from pocketmine\entity\Entity).
+	public const DATA_TYPE_BYTE = 0;
+	public const DATA_TYPE_SHORT = 1;
+	public const DATA_TYPE_INT = 2;
+	public const DATA_TYPE_FLOAT = 3;
+	public const DATA_TYPE_STRING = 4;
+	public const DATA_TYPE_SLOT = 5;
+	public const DATA_TYPE_POS = 6;
+	public const DATA_TYPE_LONG = 7;
+
+	private static ?int $endianness = null;
+
+	/**
+	 * Detects the platform byte order once (replaces the legacy global ENDIANNESS constant).
+	 */
+	public static function endianness() : int{
+		if(self::$endianness === null){
+			self::$endianness = pack("L", 1) === "\x01\x00\x00\x00" ? self::LITTLE_ENDIAN : self::BIG_ENDIAN;
+		}
+		return self::$endianness;
+	}
 
 	/**
 	 * Reads a 3-byte big-endian number. Returns 0 on truncated input (see readInt guard).
@@ -90,32 +111,32 @@ class Binary{
 		foreach($data as $bottom => $d){
 			$m .= chr(($d[0] << 5) | ($bottom & 0x1F));
 			switch($d[0]){
-				case Entity::DATA_TYPE_BYTE:
+				case self::DATA_TYPE_BYTE:
 					$m .= self::writeByte($d[1]);
 					break;
-				case Entity::DATA_TYPE_SHORT:
+				case self::DATA_TYPE_SHORT:
 					$m .= self::writeLShort($d[1]);
 					break;
-				case Entity::DATA_TYPE_INT:
+				case self::DATA_TYPE_INT:
 					$m .= self::writeLInt($d[1]);
 					break;
-				case Entity::DATA_TYPE_FLOAT:
+				case self::DATA_TYPE_FLOAT:
 					$m .= self::writeLFloat($d[1]);
 					break;
-				case Entity::DATA_TYPE_STRING:
+				case self::DATA_TYPE_STRING:
 					$m .= self::writeLShort(strlen($d[1])) . $d[1];
 					break;
-				case Entity::DATA_TYPE_SLOT:
+				case self::DATA_TYPE_SLOT:
 					$m .= self::writeLShort($d[1][0]);
 					$m .= self::writeByte($d[1][1]);
 					$m .= self::writeLShort($d[1][2]);
 					break;
-				case Entity::DATA_TYPE_POS:
+				case self::DATA_TYPE_POS:
 					$m .= self::writeLInt($d[1][0]);
 					$m .= self::writeLInt($d[1][1]);
 					$m .= self::writeLInt($d[1][2]);
 					break;
-				case Entity::DATA_TYPE_LONG:
+				case self::DATA_TYPE_LONG:
 					$m .= self::writeLLong($d[1]);
 					break;
 			}
@@ -137,29 +158,29 @@ class Binary{
 			$bottom = $b & 0x1F;
 			$type = $b >> 5;
 			switch($type){
-				case Entity::DATA_TYPE_BYTE:
+				case self::DATA_TYPE_BYTE:
 					$r = self::readByte($value[$offset]);
 					++$offset;
 					break;
-				case Entity::DATA_TYPE_SHORT:
+				case self::DATA_TYPE_SHORT:
 					$r = self::readLShort(substr($value, $offset, 2));
 					$offset += 2;
 					break;
-				case Entity::DATA_TYPE_INT:
+				case self::DATA_TYPE_INT:
 					$r = self::readLInt(substr($value, $offset, 4));
 					$offset += 4;
 					break;
-				case Entity::DATA_TYPE_FLOAT:
+				case self::DATA_TYPE_FLOAT:
 					$r = self::readLFloat(substr($value, $offset, 4));
 					$offset += 4;
 					break;
-				case Entity::DATA_TYPE_STRING:
+				case self::DATA_TYPE_STRING:
 					$len = self::readLShort(substr($value, $offset, 2));
 					$offset += 2;
 					$r = substr($value, $offset, $len);
 					$offset += $len;
 					break;
-				case Entity::DATA_TYPE_SLOT:
+				case self::DATA_TYPE_SLOT:
 					$r = [];
 					$r[] = self::readLShort(substr($value, $offset, 2));
 					$offset += 2;
@@ -168,14 +189,14 @@ class Binary{
 					$r[] = self::readLShort(substr($value, $offset, 2));
 					$offset += 2;
 					break;
-				case Entity::DATA_TYPE_POS:
+				case self::DATA_TYPE_POS:
 					$r = [];
 					for($i = 0; $i < 3; ++$i){
 						$r[] = self::readLInt(substr($value, $offset, 4));
 						$offset += 4;
 					}
 					break;
-				case Entity::DATA_TYPE_LONG:
+				case self::DATA_TYPE_LONG:
 					$r = self::readLLong(substr($value, $offset, 4));
 					$offset += 8;
 					break;
@@ -315,11 +336,11 @@ class Binary{
 	 */
 	public static function readFloat(string $str) : float{
 		if(strlen($str) < 4) return 0.0;
-		return ENDIANNESS === self::BIG_ENDIAN ? unpack("f", $str)[1] : unpack("f", strrev($str))[1];
+		return self::endianness() === self::BIG_ENDIAN ? unpack("f", $str)[1] : unpack("f", strrev($str))[1];
 	}
 
 	public static function writeFloat(float $value) : string{
-		return ENDIANNESS === self::BIG_ENDIAN ? pack("f", $value) : strrev(pack("f", $value));
+		return self::endianness() === self::BIG_ENDIAN ? pack("f", $value) : strrev(pack("f", $value));
 	}
 
 	/**
@@ -327,11 +348,11 @@ class Binary{
 	 */
 	public static function readLFloat(string $str) : float{
 		if(strlen($str) < 4) return 0.0;
-		return ENDIANNESS === self::BIG_ENDIAN ? unpack("f", strrev($str))[1] : unpack("f", $str)[1];
+		return self::endianness() === self::BIG_ENDIAN ? unpack("f", strrev($str))[1] : unpack("f", $str)[1];
 	}
 
 	public static function writeLFloat(float $value) : string{
-		return ENDIANNESS === self::BIG_ENDIAN ? strrev(pack("f", $value)) : pack("f", $value);
+		return self::endianness() === self::BIG_ENDIAN ? strrev(pack("f", $value)) : pack("f", $value);
 	}
 
 	public static function printFloat(float $value) : string{
@@ -343,11 +364,11 @@ class Binary{
 	 */
 	public static function readDouble(string $str) : float{
 		if(strlen($str) < 8) return 0.0;
-		return ENDIANNESS === self::BIG_ENDIAN ? unpack("d", $str)[1] : unpack("d", strrev($str))[1];
+		return self::endianness() === self::BIG_ENDIAN ? unpack("d", $str)[1] : unpack("d", strrev($str))[1];
 	}
 
 	public static function writeDouble(float $value) : string{
-		return ENDIANNESS === self::BIG_ENDIAN ? pack("d", $value) : strrev(pack("d", $value));
+		return self::endianness() === self::BIG_ENDIAN ? pack("d", $value) : strrev(pack("d", $value));
 	}
 
 	/**
@@ -355,11 +376,11 @@ class Binary{
 	 */
 	public static function readLDouble(string $str) : float{
 		if(strlen($str) < 8) return 0.0;
-		return ENDIANNESS === self::BIG_ENDIAN ? unpack("d", strrev($str))[1] : unpack("d", $str)[1];
+		return self::endianness() === self::BIG_ENDIAN ? unpack("d", strrev($str))[1] : unpack("d", $str)[1];
 	}
 
 	public static function writeLDouble(float $value) : string{
-		return ENDIANNESS === self::BIG_ENDIAN ? strrev(pack("d", $value)) : pack("d", $value);
+		return self::endianness() === self::BIG_ENDIAN ? strrev(pack("d", $value)) : pack("d", $value);
 	}
 
 	/**
@@ -381,7 +402,7 @@ class Binary{
 				$value = bcadd($value, "-18446744073709551616");
 			}
 
-			return $value;
+			return (int) $value;
 		}
 	}
 
@@ -391,14 +412,14 @@ class Binary{
 		}else{
 			$x = "";
 
-			if(bccomp($value, "0") == -1){
-				$value = bcadd($value, "18446744073709551616");
+			if(bccomp(strval($value), "0") == -1){
+				$value = bcadd(strval($value), "18446744073709551616");
 			}
 
-			$x .= self::writeShort(bcmod(bcdiv($value, "281474976710656"), "65536"));
-			$x .= self::writeShort(bcmod(bcdiv($value, "4294967296"), "65536"));
-			$x .= self::writeShort(bcmod(bcdiv($value, "65536"), "65536"));
-			$x .= self::writeShort(bcmod($value, "65536"));
+			$x .= self::writeShort((int) bcmod(bcdiv($value, "281474976710656"), "65536"));
+			$x .= self::writeShort((int) bcmod(bcdiv($value, "4294967296"), "65536"));
+			$x .= self::writeShort((int) bcmod(bcdiv($value, "65536"), "65536"));
+			$x .= self::writeShort((int) bcmod($value, "65536"));
 
 			return $x;
 		}

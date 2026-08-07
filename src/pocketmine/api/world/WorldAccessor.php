@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace pocketmine\api\world;
 
-use pocketmine\domain\ecs\EntityRef;
-use pocketmine\domain\ecs\QueryBuilder;
-use pocketmine\domain\ecs\World;
-use pocketmine\domain\component\PositionComponent;
-use pocketmine\domain\component\CollisionComponent;
-use pocketmine\domain\component\MetadataComponent;
+use pocketmine\core\ecs\EntityRef;
+use pocketmine\core\ecs\QueryBuilder;
+use pocketmine\core\ecs\World;
+use pocketmine\core\component\PositionComponent;
+use pocketmine\core\component\CollisionComponent;
+use pocketmine\core\component\MetadataComponent;
 
 final class WorldAccessor {
     public function __construct(
@@ -34,7 +34,7 @@ final class WorldAccessor {
     public function getPlayers(): array {
         $query = $this->world->query()
             ->with(MetadataComponent::class)
-            ->withTag(\pocketmine\domain\component\tags\PlayerTag::class)
+            ->withTag(\pocketmine\core\component\tags\PlayerTag::class)
             ->build();
         
         $players = [];

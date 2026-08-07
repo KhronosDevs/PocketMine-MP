@@ -9,33 +9,33 @@ use pocketmine\adapter\driven\storage\AnvilStorageAdapter;
 use pocketmine\adapter\driven\threading\PmmpThreadPool;
 use pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter;
 use pocketmine\adapter\driving\console\ConsoleCommandAdapter;
-use pocketmine\domain\ecs\ComponentRegistry;
-use pocketmine\domain\ecs\ResourceRegistry;
-use pocketmine\domain\ecs\SystemScheduler;
-use pocketmine\domain\ecs\World;
-use pocketmine\domain\region\RegionWorld;
-use pocketmine\domain\thread\CoordinationThread;
-use pocketmine\domain\thread\NetworkThread;
-use pocketmine\domain\thread\RegionThread;
-use pocketmine\domain\service\PlayerJoinService;
-use pocketmine\domain\service\PlayerLeaveService;
-use pocketmine\domain\service\PlayerRespawnService;
-use pocketmine\domain\service\ChunkLoadService;
-use pocketmine\domain\service\ChunkUnloadService;
-use pocketmine\domain\service\ChunkSendService;
-use pocketmine\domain\service\BlockBreakService;
-use pocketmine\domain\service\BlockPlaceService;
-use pocketmine\domain\service\BlockUpdateService;
-use pocketmine\domain\service\EntitySpawnService;
-use pocketmine\domain\service\EntityDespawnService;
-use pocketmine\domain\service\EntityInteractionService;
-use pocketmine\domain\service\CombatService;
-use pocketmine\domain\service\DamageService;
-use pocketmine\domain\service\KnockbackService;
-use pocketmine\domain\service\InventoryService;
-use pocketmine\domain\service\CraftingService;
-use pocketmine\domain\service\ContainerService;
-use pocketmine\domain\system\ChunkUpdateSystem;
+use pocketmine\adapter\driving\plugin\PluginManagerAdapter;
+use pocketmine\core\ecs\ComponentRegistry;
+use pocketmine\core\ecs\ResourceRegistry;
+use pocketmine\core\ecs\SystemScheduler;
+use pocketmine\core\ecs\World;
+use pocketmine\core\thread\CoordinationThread;
+use pocketmine\core\thread\NetworkThread;
+use pocketmine\core\thread\RegionThread;
+use pocketmine\core\service\PlayerJoinService;
+use pocketmine\core\service\PlayerLeaveService;
+use pocketmine\core\service\PlayerRespawnService;
+use pocketmine\core\service\ChunkLoadService;
+use pocketmine\core\service\ChunkUnloadService;
+use pocketmine\core\service\ChunkSendService;
+use pocketmine\core\service\BlockBreakService;
+use pocketmine\core\service\BlockPlaceService;
+use pocketmine\core\service\BlockUpdateService;
+use pocketmine\core\service\EntitySpawnService;
+use pocketmine\core\service\EntityDespawnService;
+use pocketmine\core\service\EntityInteractionService;
+use pocketmine\core\service\CombatService;
+use pocketmine\core\service\DamageService;
+use pocketmine\core\service\KnockbackService;
+use pocketmine\core\service\InventoryService;
+use pocketmine\core\service\CraftingService;
+use pocketmine\core\service\ContainerService;
+use pocketmine\core\system\ChunkUpdateSystem;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\ThreadingPort;
@@ -43,14 +43,21 @@ use pocketmine\port\driven\WorldGenPort;
 use pocketmine\port\driving\CommandPort;
 use pocketmine\port\driving\EventPort;
 use pocketmine\port\driving\PluginPort;
+use pmmp\thread\Thread;
 
 final class Kernel {
+    private static ?self $instance = null;
+
     private bool $running = false;
+    private bool $shutdownComplete = false;
     private array $tickDurations = [];
 
     private CoordinationThread $coordinationThread;
     private NetworkThread $networkThread;
     private array $regionThreads = [];
+    private bool $threadsStarted = false;
+    private string $dataPath;
+    private int $startTime;
 
     private PlayerJoinService $playerJoinService;
     private PlayerLeaveService $playerLeaveService;
@@ -103,53 +110,76 @@ final class Kernel {
         $this->craftingService = new CraftingService($world);
         $this->containerService = new ContainerService($world);
 
+        $this->dataPath = getcwd() . DIRECTORY_SEPARATOR;
+        $this->startTime = time();
+        self::$instance = $this;
+
         // Initialize region-based architecture
         $this->initializeRegions();
     }
 
+    public static function getInstance(): ?self {
+        return self::$instance;
+    }
+
+    public function isRunning(): bool {
+        return $this->running;
+    }
+
+    public function getDataPath(): string {
+        return $this->dataPath;
+    }
+
+    public function getUptime(): int {
+        return time() - $this->startTime;
+    }
+
     private function initializeRegions(): void {
-        // Create coordination thread
-        $this->coordinationThread = new CoordinationThread($this->threadingPort);
-        
-        // Create network thread
-        $this->networkThread = new NetworkThread($this->networkPort);
-        
-        // Create region threads (for now, create a single region covering the whole world)
-        // In the future, this would be split based on world size
-        $regionWorld = new \pocketmine\domain\region\RegionWorld(
+        // Create coordination thread (thread-safe values only)
+        $this->coordinationThread = new CoordinationThread();
+
+        // Create network pipeline worker (socket I/O stays on the main thread)
+        $this->networkThread = new NetworkThread();
+
+        // Create region threads (for now, a single region covering the whole world)
+        // In the future, this would be split based on world size.
+        // The ECS world itself remains on the main thread; region threads
+        // process serialized snapshots via thread-safe queues.
+        $regionThread = new RegionThread(
             0, // regionId
             -1000, 1000, // minChunkX, maxChunkX
             -1000, 1000, // minChunkZ, maxChunkZ
-            $this->componentRegistry,
-            $this->resourceRegistry,
-            $this->systemScheduler,
         );
-        
-        $regionThread = new RegionThread(
-            $regionWorld,
-            $this->threadingPort,
-            $this->networkPort,
-            $this->storagePort,
-            $this->worldGenPort,
-        );
-        
+
         $this->regionThreads[0] = $regionThread;
-        $this->coordinationThread->addRegion(0, $regionThread);
+        $this->coordinationThread->addRegion(0, $regionThread->getCommandQueue());
     }
 
     public function run(int $maxTicks = -1): void {
+        if ($this->running) {
+            return;
+        }
         $this->running = true;
         $tick = 0;
 
-        // Start threads
-        $this->coordinationThread->start();
-        $this->networkThread->start();
-        foreach ($this->regionThreads as $regionThread) {
-            $regionThread->start();
+        // Start threads only on the first invocation (a started/joined Thread
+        // cannot be restarted, so subsequent run() calls reuse the main-thread
+        // ECS loop without worker threads).
+        $ownsThreads = !$this->threadsStarted;
+        if ($ownsThreads) {
+            $this->coordinationThread->start(Thread::INHERIT_ALL);
+            $this->networkThread->start(Thread::INHERIT_ALL);
+            foreach ($this->regionThreads as $regionThread) {
+                $regionThread->start(Thread::INHERIT_ALL);
+            }
+            $this->threadsStarted = true;
         }
 
         while ($this->running && ($maxTicks < 0 || $tick < $maxTicks)) {
             $start = hrtime(true);
+
+            // 0. Tick the ECS world on the main thread (ownership model)
+            $this->world->tick(0.05);
 
             // 1. Main thread acts as coordinator - process global events
             $this->processGlobalCoordination();
@@ -177,7 +207,10 @@ final class Kernel {
             $tick++;
         }
 
-        $this->shutdown();
+        $this->running = false;
+        if ($ownsThreads) {
+            $this->shutdown();
+        }
     }
 
     private function recordTickDuration(float $ms): void {
@@ -216,24 +249,30 @@ final class Kernel {
     }
 
     public function shutdown(): void {
+        if (!$this->running && $this->shutdownComplete) {
+            return;
+        }
         $this->running = false;
         
-        // Shutdown threads
-        $this->coordinationThread->shutdown();
-        $this->networkThread->shutdown();
-        foreach ($this->regionThreads as $regionThread) {
-            $regionThread->shutdown();
-        }
-        
-        // Wait for threads to finish
-        $this->coordinationThread->join();
-        $this->networkThread->join();
-        foreach ($this->regionThreads as $regionThread) {
-            $regionThread->join();
+        // Shutdown threads (only if they were actually started)
+        if ($this->threadsStarted) {
+            $this->coordinationThread->shutdown();
+            $this->networkThread->shutdown();
+            foreach ($this->regionThreads as $regionThread) {
+                $regionThread->shutdown();
+            }
+            
+            // Wait for threads to finish
+            $this->coordinationThread->join();
+            $this->networkThread->join();
+            foreach ($this->regionThreads as $regionThread) {
+                $regionThread->join();
+            }
         }
         
         $this->threadingPort->shutdown();
         $this->storagePort->saveAll();
+        $this->shutdownComplete = true;
     }
 
     public function getWorld(): World {
@@ -242,6 +281,10 @@ final class Kernel {
 
     public function getSystemScheduler(): SystemScheduler {
         return $this->systemScheduler;
+    }
+
+    public function getScheduler(): \pocketmine\api\scheduler\Scheduler {
+        return new \pocketmine\api\scheduler\Scheduler();
     }
 
     public function getComponentRegistry(): ComponentRegistry {
@@ -365,19 +408,26 @@ final class Kernel {
     }
 
     private function processGlobalCoordination(): void {
-        // Process any global coordination tasks
-        // This runs on the main thread
+        // Drain global command/event queues from the coordination thread
+        // and route them to the appropriate region command queues.
+        while (($cmd = $this->coordinationThread->getGlobalCommandQueue()->shift()) !== null) {
+            $decoded = json_decode($cmd, true);
+            if (!is_array($decoded)) {
+                continue;
+            }
+            $regionId = (int)($decoded['regionId'] ?? 0);
+            if (isset($this->regionThreads[$regionId])) {
+                $this->regionThreads[$regionId]->getCommandQueue()[] = $cmd;
+            }
+        }
     }
 
     private function flushNetworkSync(): void {
-        // Collect network sync from all region threads
-        foreach ($this->regionThreads as $regionThread) {
-            // Network sync would be collected from region thread's sync queue
-            // and sent via network thread
+        // Network adapter I/O happens on the main thread.
+        if ($this->networkPort instanceof \pocketmine\adapter\driven\network\Protocol84NetworkAdapter) {
+            $this->networkPort->processPendingCommands();
+            $this->networkPort->flushOutboundPackets();
         }
-        
-        // Flush network thread outbound queue
-        $this->networkThread->getOutboundQueue();
     }
 }
 
@@ -449,37 +499,37 @@ function createPluginPort(CommandPort $commandPort, EventPort $eventPort): Plugi
 }
 
 function registerBuiltinComponents(ComponentRegistry $registry): void {
-    $registry->register(\pocketmine\domain\component\PositionComponent::class);
-    $registry->register(\pocketmine\domain\component\RotationComponent::class);
-    $registry->register(\pocketmine\domain\component\VelocityComponent::class);
-    $registry->register(\pocketmine\domain\component\CollisionComponent::class);
-    $registry->register(\pocketmine\domain\component\HealthComponent::class);
-    $registry->register(\pocketmine\domain\component\MetadataComponent::class);
-    $registry->register(\pocketmine\domain\component\EffectComponent::class);
-    $registry->register(\pocketmine\domain\component\AttributeComponent::class);
-    $registry->register(\pocketmine\domain\component\InventoryComponent::class);
-    $registry->register(\pocketmine\domain\component\AIStateComponent::class);
-    $registry->register(\pocketmine\domain\component\PathComponent::class);
-    $registry->register(\pocketmine\domain\component\tags\PlayerTag::class);
-    $registry->register(\pocketmine\domain\component\tags\MonsterTag::class);
-    $registry->register(\pocketmine\domain\component\tags\OnGroundTag::class);
-    $registry->register(\pocketmine\domain\component\tags\InvisibleTag::class);
-    $registry->register(\pocketmine\domain\component\tags\DeadTag::class);
-    $registry->register(\pocketmine\domain\component\tags\SpectatorTag::class);
+    $registry->register(\pocketmine\core\component\PositionComponent::class);
+    $registry->register(\pocketmine\core\component\RotationComponent::class);
+    $registry->register(\pocketmine\core\component\VelocityComponent::class);
+    $registry->register(\pocketmine\core\component\CollisionComponent::class);
+    $registry->register(\pocketmine\core\component\HealthComponent::class);
+    $registry->register(\pocketmine\core\component\MetadataComponent::class);
+    $registry->register(\pocketmine\core\component\EffectComponent::class);
+    $registry->register(\pocketmine\core\component\AttributeComponent::class);
+    $registry->register(\pocketmine\core\component\InventoryComponent::class);
+    $registry->register(\pocketmine\core\component\AIStateComponent::class);
+    $registry->register(\pocketmine\core\component\PathComponent::class);
+    $registry->register(\pocketmine\core\component\tags\PlayerTag::class);
+    $registry->register(\pocketmine\core\component\tags\MonsterTag::class);
+    $registry->register(\pocketmine\core\component\tags\OnGroundTag::class);
+    $registry->register(\pocketmine\core\component\tags\InvisibleTag::class);
+    $registry->register(\pocketmine\core\component\tags\DeadTag::class);
+    $registry->register(\pocketmine\core\component\tags\SpectatorTag::class);
 }
 
 function registerBuiltinResources(ResourceRegistry $registry): void {
-    $registry->set(new \pocketmine\domain\resource\TickCounter());
-    $registry->set(new \pocketmine\domain\resource\ServerConfig());
-    $registry->set(new \pocketmine\domain\resource\SpatialIndex());
+    $registry->set(new \pocketmine\core\resource\TickCounter());
+    $registry->set(new \pocketmine\core\resource\ServerConfig());
+    $registry->set(new \pocketmine\core\resource\SpatialIndex());
 }
 
 function registerBuiltinSystems(SystemScheduler $scheduler): void {
-    $scheduler->register(new \pocketmine\domain\system\PhysicsSystem(), \pocketmine\domain\ecs\SystemPhase::PARALLEL);
-    $scheduler->register(new \pocketmine\domain\system\MovementSystem(), \pocketmine\domain\ecs\SystemPhase::PARALLEL);
-    $scheduler->register(new \pocketmine\domain\system\EffectSystem(), \pocketmine\domain\ecs\SystemPhase::PARALLEL);
-    $scheduler->register(new \pocketmine\domain\system\AISystem(), \pocketmine\domain\ecs\SystemPhase::PARALLEL);
-    $scheduler->register(new \pocketmine\domain\system\ChunkUpdateSystem(), \pocketmine\domain\ecs\SystemPhase::CHUNK_PARALLEL);
+    $scheduler->register(new \pocketmine\core\system\PhysicsSystem(), \pocketmine\core\ecs\SystemPhase::PARALLEL);
+    $scheduler->register(new \pocketmine\core\system\MovementSystem(), \pocketmine\core\ecs\SystemPhase::PARALLEL);
+    $scheduler->register(new \pocketmine\core\system\EffectSystem(), \pocketmine\core\ecs\SystemPhase::PARALLEL);
+    $scheduler->register(new \pocketmine\core\system\AISystem(), \pocketmine\core\ecs\SystemPhase::PARALLEL);
+    $scheduler->register(new \pocketmine\core\system\ChunkUpdateSystem(), \pocketmine\core\ecs\SystemPhase::CHUNK_PARALLEL);
 }
 
 function bootstrap(): Kernel {

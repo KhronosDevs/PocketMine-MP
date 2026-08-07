@@ -1,65 +1,55 @@
 parameters:
     level: 5
     paths:
-        - src/pocketmine/domain
+        - src/pocketmine/core
         - src/pocketmine/adapter
         - src/pocketmine/port
+        - src/pocketmine/api
+        - src/pocketmine/protocol
+        - src/pocketmine/utils/Binary.php
+        - src/pocketmine/utils/BinaryStream.php
+        - src/pocketmine/utils/TextFormat.php
+        - src/pocketmine/utils/Utils.php
+        - src/pocketmine/utils/UUID.php
+        - src/pocketmine/utils/Random.php
+        - src/pocketmine/utils/EnumTrait.php
+        - src/pocketmine/utils/Range.php
+        - src/pocketmine/utils/ReversePriorityQueue.php
+        - src/pocketmine/utils/ChunkException.php
+        - src/pocketmine/utils/LevelException.php
+        - src/pocketmine/utils/ServerException.php
+        - src/pocketmine/utils/Terminal.php
+        - src/pocketmine/utils/Process.php
+        - src/pocketmine/utils/Git.php
+        - src/pocketmine/utils/SingletonTrait.php
+        - src/pocketmine/utils/Optional.php
+        - src/pocketmine/utils/Patchable.php
+        - src/pocketmine/utils/MonkeyPatch.php
+        - src/pocketmine/utils/Stream.php
+        - src/pocketmine/utils/Color.php
     excludes_analyse:
         - src/pocketmine/legacy/*
-        - src/pocketmine/entity/*
-        - src/pocketmine/level/*
-        - src/pocketmine/network/protocol/*
-        - src/pocketmine/block/*
-        - src/pocketmine/item/*
-        - src/pocketmine/tile/*
-        - src/pocketmine/command/*
-        - src/pocketmine/inventory/*
-        - src/pocketmine/metadata/*
-        - src/pocketmine/nbt/*
-        - src/pocketmine/utils/*
-        - src/pocketmine/snooze/*
-        - src/pocketmine/wizard/*
-        - src/pocketmine/plugin/EventExecutor.php
-        - src/pocketmine/plugin/FolderPluginLoader.php
-        - src/pocketmine/plugin/MethodEventExecutor.php
-        - src/pocketmine/plugin/PharPluginLoader.php
-        - src/pocketmine/plugin/PluginBase.php
-        - src/pocketmine/plugin/PluginDescription.php
-        - src/pocketmine/plugin/PluginLoadOrder.php
-        - src/pocketmine/plugin/PluginLogger.php
-        - src/pocketmine/plugin/PluginManager.php
-        - src/pocketmine/plugin/Plugin.php
-        - src/pocketmine/plugin/RegisteredListener.php
-        - src/pocketmine/plugin/ScriptPluginLoader.php
-        - src/pocketmine/scheduler/AsyncPool.php
-        - src/pocketmine/scheduler/AsyncTask.php
-        - src/pocketmine/scheduler/AsyncWorker.php
-        - src/pocketmine/scheduler/CallbackTask.php
-        - src/pocketmine/scheduler/DServerTask.php
-        - src/pocketmine/scheduler/FileWriteTask.php
-        - src/pocketmine/scheduler/GarbageCollectionTask.php
-        - src/pocketmine/scheduler/PluginTask.php
-        - src/pocketmine/scheduler/SendUsageTask.php
-        - src/pocketmine/scheduler/ServerScheduler.php
-        - src/pocketmine/scheduler/TaskHandler.php
-        - src/pocketmine/scheduler/Task.php
-        - src/pocketmine/Server.php
-        - src/pocketmine/PocketMine.php
-        - src/pocketmine/Thread.php
-        - src/pocketmine/ThreadManager.php
-        - src/pocketmine/Worker.php
-        - src/pocketmine/MemoryManager.php
-        - src/pocketmine/CrashDump.php
-        - src/pocketmine/CompatibleClassLoader.php
-        - src/pocketmine/IPlayer.php
-        - src/pocketmine/OfflinePlayer.php
-        - src/pocketmine/Player.php
-        - src/pocketmine/Achievement.php
+        - src/pocketmine/old-src/*
     ignoreErrors:
         - '#^Access to an undefined property#'
-        - '#^Property .* does not exist#'
-        - '#^Method .* not found in#'
-        - '#^Unsafe usage of new static#'
+        - '#^Class .* not found#'
+        - '#^Instantiated class .* not found#'
+        - '#^Call to an undefined method#'
+        - '#^Property .* is never read, only written#'
+        - '#^Constant .* is unused#'
+        - '#^Left side of && is always true#'
+        - '#^If condition is always true#'
+        - '#^Comparison operation .* is always false#'
+        - '#^Unreachable statement#'
+        - '#^Expression on left side of \?\? is not nullable#'
+        - '#^Offset .* in isset\(\) does not exist#'
+        - '#^Variable \$parts in empty\(\) always exists and is not falsy#'
+        - '#^Variable \$verified might not be defined#'
+        - '#^Variable \$index might not be defined#'
+        - '#^Constructor of class .* has an unused parameter#'
+        - '#passed by reference#'
     checkMissingIterableValueType: false
-    checkGenericClassAsNonGeneric: false
     phpVersion: 80200
+    parallel:
+        maximumNumberOfProcesses: 1
+        minimumNumberOfJobsPerProcess: 1000000

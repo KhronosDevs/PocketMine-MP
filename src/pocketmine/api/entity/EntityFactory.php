@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace pocketmine\api\entity;
 
-use pocketmine\domain\ecs\EntityRef;
-use pocketmine\domain\ecs\World;
+use pocketmine\core\ecs\EntityRef;
+use pocketmine\core\ecs\World;
 
 class EntityFactory {
     private static array $entityTypes = [

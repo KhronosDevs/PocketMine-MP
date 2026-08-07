@@ -2,15 +2,9 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/spl/ClassLoader.php';
-require_once __DIR__ . '/spl/BaseClassLoader.php';
-require_once __DIR__ . '/pocketmine/CompatibleClassLoader.php';
+require_once __DIR__ . '/autoload.php';
 
-use pocketmine\Kernel;
-
-$loader = new \pocketmine\CompatibleClassLoader();
-$loader->addPsr4('pocketmine\\', __DIR__ . '/pocketmine');
-$loader->register(true);
+use function pocketmine\bootstrap;
 
 $kernel = bootstrap();
 

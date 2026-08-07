@@ -15,3 +15,5 @@ server.log
 server.properties
 white-list.txt
 PocketMine-MP.phar
+vendor/
+composer.phar

@@ -11,7 +11,7 @@ use pocketmine\api\event\EventBus;
 use pocketmine\api\permission\PermissionManager;
 use pocketmine\api\scheduler\Scheduler;
 use pocketmine\api\world\WorldAccessor;
-use pocketmine\domain\ecs\World;
+use pocketmine\core\ecs\World;
 use pocketmine\Kernel;
 
 class PluginManager {
@@ -44,10 +44,7 @@ class PluginManager {
         $eventBus = new EventBus();
         
         // Register scheduler
-        $scheduler = new Scheduler(
-            $this->kernel->getWorld(),
-            $this->kernel->getThreadingPort()
-        );
+        $scheduler = new Scheduler();
         
         // Register permissions
         $permissionManager = new PermissionManager();

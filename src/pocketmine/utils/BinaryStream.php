@@ -14,7 +14,6 @@ declare(strict_types=1);
 
 namespace pocketmine\utils;
 
-use pocketmine\item\Item;
 use function chr;
 use function ord;
 use function strlen;
@@ -227,12 +226,15 @@ class BinaryStream extends \stdClass
         $this->put($uuid->toBinary());
     }
 
-    public function getSlot(): Item
+    /**
+     * Reads an item slot as a plain array: [id, count, damage, nbt].
+     */
+    public function getSlot(): array
     {
         $id = $this->getSignedShort();
 
         if ($id <= 0) {
-            return Item::get(0, 0, 0);
+            return [0, 0, 0, null];
         }
 
         $cnt = $this->getByte();
@@ -240,35 +242,39 @@ class BinaryStream extends \stdClass
 
         $nbtLen = $this->getLShort();
 
-        $nbt = "";
+        $nbt = null;
 
         if ($nbtLen > 0) {
             $nbt = $this->get($nbtLen);
         }
 
-        return Item::get(
-            $id,
-            $data,
-            $cnt,
-            $nbt
-        );
+        return [$id, $cnt, $data, $nbt];
     }
 
-    public function putSlot(Item $item): void
+    /**
+     * Writes an item slot from a plain array: [id, count, damage, nbt].
+     */
+    public function putSlot(array $item): void
     {
-        if ($item->getId() === 0) {
+        $id = (int)($item[0] ?? 0);
+        $cnt = (int)($item[1] ?? 0);
+        $data = (int)($item[2] ?? 0);
+        $nbt = $item[3] ?? null;
+
+        if ($id === 0) {
             $this->putShort(0);
             return;
         }
 
-        $this->putShort($item->getId());
-        $this->putByte($item->getCount());
-        $this->putShort($item->getDamage() === null ? -1 : $item->getDamage());
+        $this->putShort($id);
+        $this->putByte($cnt);
+        $this->putShort($data);
 
-        $nbt = $item->getCompoundTag();
-
-        $this->putLShort(strlen($nbt));
-        $this->put($nbt);
+        $nbtLen = $nbt !== null ? strlen($nbt) : 0;
+        $this->putLShort($nbtLen);
+        if ($nbt !== null) {
+            $this->put($nbt);
+        }
     }
 
     public function getString(): string

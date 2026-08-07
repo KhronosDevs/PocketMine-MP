@@ -4,27 +4,30 @@ declare(strict_types=1);
 
 namespace pocketmine\api\entity;
 
-use pocketmine\domain\ecs\EntityRef;
-use pocketmine\domain\ecs\World;
-use pocketmine\domain\component\tags\MonsterTag;
+use pocketmine\core\ecs\EntityRef;
+use pocketmine\core\ecs\World;
+use pocketmine\core\component\tags\MonsterTag;
 
 abstract class Living extends Entity {
-    public function __construct(EntityRef $ref, \pocketmine\domain\ecs\World $world) {
+    public function __construct(EntityRef $ref, \pocketmine\core\ecs\World $world) {
         parent::__construct($ref, $world);
     }
 
     public function isAlive(): bool {
-        return !$this->isDead() && $this->getHealth() > 0;
+        return !$this->isDead() && $this->getHealthComponent()?->current > 0;
     }
 
     public function getMaxHealth(): float {
-        return $this->getHealth()->max;
+        return $this->getHealthComponent()?->max ?? 20.0;
     }
 
     public function setMaxHealth(float $health): void {
-        $this->getHealth()->max = max(1, $health);
-        if ($this->getHealth()->current > $this->getHealth()->max) {
-            $this->getHealth()->current = $this->getHealth()->max;
+        $comp = $this->getHealthComponent();
+        if ($comp) {
+            $comp->max = max(1, $health);
+            if ($comp->current > $comp->max) {
+                $comp->current = $comp->max;
+            }
         }
     }
 
@@ -74,7 +77,7 @@ abstract class Living extends Entity {
         return $this->getEffects()->has($effectId);
     }
 
-    public function getEffect(int $effectId): ?\pocketmine\domain\component\EffectInstance {
+    public function getEffect(int $effectId): ?\pocketmine\core\component\EffectInstance {
         return $this->getEffects()->get($effectId);
     }
 
@@ -87,6 +90,6 @@ abstract class Living extends Entity {
     }
 
     public function isMonster(): bool {
-        return $this->ref->hasComponent(\pocketmine\domain\component\tags\MonsterTag::class);
+        return $this->ref->hasComponent(\pocketmine\core\component\tags\MonsterTag::class);
     }
 }

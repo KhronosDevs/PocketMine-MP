@@ -14,8 +14,8 @@ use pocketmine\api\event\Event;
 use pocketmine\api\permission\PermissionManager;
 use pocketmine\api\scheduler\Scheduler;
 use pocketmine\api\world\WorldAccessor;
-use pocketmine\domain\ecs\World;
-use pocketmine\domain\ecs\EntityRef;
+use pocketmine\core\ecs\World;
+use pocketmine\core\ecs\EntityRef;
 use pocketmine\Kernel;
 
 abstract class Plugin {
@@ -26,13 +26,14 @@ abstract class Plugin {
     private array $softDepend = [];
     private bool $enabled = false;
     private ?PluginDescription $description = null;
+    private \pocketmine\api\command\CommandMap $commandMap;
+
+    final public function __construct() {
+        $this->commandMap = new \pocketmine\api\command\CommandMap();
+    }
     
     // Injected by PluginManager
     private ?KernelAccessor $kernelAccessor = null;
-
-    final public function __construct() {
-        // Plugin constructor - no arguments
-    }
 
     // Kernel access (injected by PluginManager)
     final public function setKernelAccessor(KernelAccessor $accessor): void {
@@ -46,91 +47,91 @@ abstract class Plugin {
         return $this->kernelAccessor;
     }
 
-    // World access
+    // World access (ECS World for queries)
     final protected function getWorld(): World {
         return $this->getKernel()->getWorld();
     }
 
     // ECS Query API
-    final protected function query(): \pocketmine\domain\ecs\QueryBuilder {
+    final protected function query(): \pocketmine\core\ecs\QueryBuilder {
         return $this->getWorld()->query();
     }
 
     // System registration
-    final protected function registerSystem(\pocketmine\domain\ecs\System $system, \pocketmine\domain\ecs\SystemPhase $phase = \pocketmine\domain\ecs\SystemPhase::SEQUENTIAL): void {
+    final protected function registerSystem(\pocketmine\core\ecs\System $system, \pocketmine\core\ecs\SystemPhase $phase = \pocketmine\core\ecs\SystemPhase::SEQUENTIAL): void {
         $this->getKernel()->getSystemScheduler()->register($system, $phase);
     }
 
     // Service access
-    final protected function getPlayerJoinService(): \pocketmine\domain\service\PlayerJoinService {
+    final protected function getPlayerJoinService(): \pocketmine\core\service\PlayerJoinService {
         return $this->getKernel()->getPlayerJoinService();
     }
 
-    final protected function getPlayerLeaveService(): \pocketmine\domain\service\PlayerLeaveService {
+    final protected function getPlayerLeaveService(): \pocketmine\core\service\PlayerLeaveService {
         return $this->getKernel()->getPlayerLeaveService();
     }
 
-    final protected function getPlayerRespawnService(): \pocketmine\domain\service\PlayerRespawnService {
+    final protected function getPlayerRespawnService(): \pocketmine\core\service\PlayerRespawnService {
         return $this->getKernel()->getPlayerRespawnService();
     }
 
-    final protected function getChunkLoadService(): \pocketmine\domain\service\ChunkLoadService {
+    final protected function getChunkLoadService(): \pocketmine\core\service\ChunkLoadService {
         return $this->getKernel()->getChunkLoadService();
     }
 
-    final protected function getChunkUnloadService(): \pocketmine\domain\service\ChunkUnloadService {
+    final protected function getChunkUnloadService(): \pocketmine\core\service\ChunkUnloadService {
         return $this->getKernel()->getChunkUnloadService();
     }
 
-    final protected function getChunkSendService(): \pocketmine\domain\service\ChunkSendService {
+    final protected function getChunkSendService(): \pocketmine\core\service\ChunkSendService {
         return $this->getKernel()->getChunkSendService();
     }
 
-    final protected function getBlockBreakService(): \pocketmine\domain\service\BlockBreakService {
+    final protected function getBlockBreakService(): \pocketmine\core\service\BlockBreakService {
         return $this->getKernel()->getBlockBreakService();
     }
 
-    final protected function getBlockPlaceService(): \pocketmine\domain\service\BlockPlaceService {
+    final protected function getBlockPlaceService(): \pocketmine\core\service\BlockPlaceService {
         return $this->getKernel()->getBlockPlaceService();
     }
 
-    final protected function getBlockUpdateService(): \pocketmine\domain\service\BlockUpdateService {
+    final protected function getBlockUpdateService(): \pocketmine\core\service\BlockUpdateService {
         return $this->getKernel()->getBlockUpdateService();
     }
 
-    final protected function getEntitySpawnService(): \pocketmine\domain\service\EntitySpawnService {
+    final protected function getEntitySpawnService(): \pocketmine\core\service\EntitySpawnService {
         return $this->getKernel()->getEntitySpawnService();
     }
 
-    final protected function getEntityDespawnService(): \pocketmine\domain\service\EntityDespawnService {
+    final protected function getEntityDespawnService(): \pocketmine\core\service\EntityDespawnService {
         return $this->getKernel()->getEntityDespawnService();
     }
 
-    final protected function getEntityInteractionService(): \pocketmine\domain\service\EntityInteractionService {
+    final protected function getEntityInteractionService(): \pocketmine\core\service\EntityInteractionService {
         return $this->getKernel()->getEntityInteractionService();
     }
 
-    final protected function getCombatService(): \pocketmine\domain\service\CombatService {
+    final protected function getCombatService(): \pocketmine\core\service\CombatService {
         return $this->getKernel()->getCombatService();
     }
 
-    final protected function getDamageService(): \pocketmine\domain\service\DamageService {
+    final protected function getDamageService(): \pocketmine\core\service\DamageService {
         return $this->getKernel()->getDamageService();
     }
 
-    final protected function getKnockbackService(): \pocketmine\domain\service\KnockbackService {
+    final protected function getKnockbackService(): \pocketmine\core\service\KnockbackService {
         return $this->getKernel()->getKnockbackService();
     }
 
-    final protected function getInventoryService(): \pocketmine\domain\service\InventoryService {
+    final protected function getInventoryService(): \pocketmine\core\service\InventoryService {
         return $this->getKernel()->getInventoryService();
     }
 
-    final protected function getCraftingService(): \pocketmine\domain\service\CraftingService {
+    final protected function getCraftingService(): \pocketmine\core\service\CraftingService {
         return $this->getKernel()->getCraftingService();
     }
 
-    final protected function getContainerService(): \pocketmine\domain\service\ContainerService {
+    final protected function getContainerService(): \pocketmine\core\service\ContainerService {
         return $this->getKernel()->getContainerService();
     }
 
@@ -208,27 +209,27 @@ abstract class Plugin {
     }
 
     // Internal setters (called by PluginManager)
-    final internal function setName(string $name): void {
+    final public function setName(string $name): void {
         $this->name = $name;
     }
 
-    final internal function setVersion(string $version): void {
+    final public function setVersion(string $version): void {
         $this->version = $version;
     }
 
-    final internal function setAuthor(string $author): void {
+    final public function setAuthor(string $author): void {
         $this->author = $author;
     }
 
-    final internal function setDepend(array $depend): void {
+    final public function setDepend(array $depend): void {
         $this->depend = $depend;
     }
 
-    final internal function setSoftDepend(array $softDepend): void {
+    final public function setSoftDepend(array $softDepend): void {
         $this->softDepend = $softDepend;
     }
 
-    final internal function setEnabled(bool $enabled): void {
+    final public function setEnabled(bool $enabled): void {
         $this->enabled = $enabled;
     }
 
@@ -271,8 +272,8 @@ abstract class Plugin {
     }
 
     // Event registration
-    final protected function registerEvent(string $eventClass, callable $handler, int $priority = \pocketmine\api\event\EventPriority::NORMAL, bool $ignoreCancelled = false): void {
-        $this->getKernel()->getEventPort()->subscribe($eventClass, $handler, $priority, $ignoreCancelled);
+    final protected function registerEvent(string $eventClass, callable $handler, int $priority = \pocketmine\api\event\EventPriority::NORMAL): void {
+        $this->getKernel()->getEventPort()->subscribe($eventClass, $handler, $priority);
     }
 
     final protected function unregisterEvent(string $eventClass, callable $handler): void {
@@ -281,7 +282,11 @@ abstract class Plugin {
 
     // Command registration
     final protected function registerCommand(\pocketmine\api\command\Command $command): void {
-        $this->getKernel()->getCommandPort()->register($command);
+        $this->commandMap->register($command);
+    }
+
+    final protected function getCommandMap(): \pocketmine\api\command\CommandMap {
+        return $this->commandMap;
     }
 
     // Scheduler access
@@ -311,8 +316,8 @@ abstract class Plugin {
         return true;
     }
 
-    // World access
-    final protected function getWorld(): \pocketmine\api\world\WorldAccessor {
+    // World access (typed WorldAccessor facade)
+    final protected function getWorldAccessor(): \pocketmine\api\world\WorldAccessor {
         return new \pocketmine\api\world\WorldAccessor($this->getWorld());
     }
 }
@@ -326,79 +331,83 @@ class KernelAccessor {
         return $this->kernel->getWorld();
     }
 
-    public function getSystemScheduler(): \pocketmine\domain\ecs\SystemScheduler {
+    public function getScheduler(): Scheduler {
+        return $this->kernel->getScheduler();
+    }
+
+    public function getSystemScheduler(): \pocketmine\core\ecs\SystemScheduler {
         return $this->kernel->getSystemScheduler();
     }
 
-    public function getPlayerJoinService(): \pocketmine\domain\service\PlayerJoinService {
+    public function getPlayerJoinService(): \pocketmine\core\service\PlayerJoinService {
         return $this->kernel->getPlayerJoinService();
     }
 
-    public function getPlayerLeaveService(): \pocketmine\domain\service\PlayerLeaveService {
+    public function getPlayerLeaveService(): \pocketmine\core\service\PlayerLeaveService {
         return $this->kernel->getPlayerLeaveService();
     }
 
-    public function getPlayerRespawnService(): \pocketmine\domain\service\PlayerRespawnService {
+    public function getPlayerRespawnService(): \pocketmine\core\service\PlayerRespawnService {
         return $this->kernel->getPlayerRespawnService();
     }
 
-    public function getChunkLoadService(): \pocketmine\domain\service\ChunkLoadService {
+    public function getChunkLoadService(): \pocketmine\core\service\ChunkLoadService {
         return $this->kernel->getChunkLoadService();
     }
 
-    public function getChunkUnloadService(): \pocketmine\domain\service\ChunkUnloadService {
+    public function getChunkUnloadService(): \pocketmine\core\service\ChunkUnloadService {
         return $this->kernel->getChunkUnloadService();
     }
 
-    public function getChunkSendService(): \pocketmine\domain\service\ChunkSendService {
+    public function getChunkSendService(): \pocketmine\core\service\ChunkSendService {
         return $this->kernel->getChunkSendService();
     }
 
-    public function getBlockBreakService(): \pocketmine\domain\service\BlockBreakService {
+    public function getBlockBreakService(): \pocketmine\core\service\BlockBreakService {
         return $this->kernel->getBlockBreakService();
     }
 
-    public function getBlockPlaceService(): \pocketmine\domain\service\BlockPlaceService {
+    public function getBlockPlaceService(): \pocketmine\core\service\BlockPlaceService {
         return $this->kernel->getBlockPlaceService();
     }
 
-    public function getBlockUpdateService(): \pocketmine\domain\service\BlockUpdateService {
+    public function getBlockUpdateService(): \pocketmine\core\service\BlockUpdateService {
         return $this->kernel->getBlockUpdateService();
     }
 
-    public function getEntitySpawnService(): \pocketmine\domain\service\EntitySpawnService {
+    public function getEntitySpawnService(): \pocketmine\core\service\EntitySpawnService {
         return $this->kernel->getEntitySpawnService();
     }
 
-    public function getEntityDespawnService(): \pocketmine\domain\service\EntityDespawnService {
+    public function getEntityDespawnService(): \pocketmine\core\service\EntityDespawnService {
         return $this->kernel->getEntityDespawnService();
     }
 
-    public function getEntityInteractionService(): \pocketmine\domain\service\EntityInteractionService {
+    public function getEntityInteractionService(): \pocketmine\core\service\EntityInteractionService {
         return $this->kernel->getEntityInteractionService();
     }
 
-    public function getCombatService(): \pocketmine\domain\service\CombatService {
+    public function getCombatService(): \pocketmine\core\service\CombatService {
         return $this->kernel->getCombatService();
     }
 
-    public function getDamageService(): \pocketmine\domain\service\DamageService {
+    public function getDamageService(): \pocketmine\core\service\DamageService {
         return $this->kernel->getDamageService();
     }
 
-    public function getKnockbackService(): \pocketmine\domain\service\KnockbackService {
+    public function getKnockbackService(): \pocketmine\core\service\KnockbackService {
         return $this->kernel->getKnockbackService();
     }
 
-    public function getInventoryService(): \pocketmine\domain\service\InventoryService {
+    public function getInventoryService(): \pocketmine\core\service\InventoryService {
         return $this->kernel->getInventoryService();
     }
 
-    public function getCraftingService(): \pocketmine\domain\service\CraftingService {
+    public function getCraftingService(): \pocketmine\core\service\CraftingService {
         return $this->kernel->getCraftingService();
     }
 
-    public function getContainerService(): \pocketmine\domain\service\ContainerService {
+    public function getContainerService(): \pocketmine\core\service\ContainerService {
         return $this->kernel->getContainerService();
     }
 

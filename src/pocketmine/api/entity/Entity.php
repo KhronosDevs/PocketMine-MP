@@ -4,29 +4,29 @@ declare(strict_types=1);
 
 namespace pocketmine\api\entity;
 
-use pocketmine\domain\ecs\EntityRef;
-use pocketmine\domain\ecs\World;
-use pocketmine\domain\ecs\EntityBuilder;
-use pocketmine\domain\component\PositionComponent;
-use pocketmine\domain\component\RotationComponent;
-use pocketmine\domain\component\VelocityComponent;
-use pocketmine\domain\component\HealthComponent;
-use pocketmine\domain\component\MetadataComponent;
-use pocketmine\domain\component\InventoryComponent;
-use pocketmine\domain\component\AttributeComponent;
-use pocketmine\domain\component\EffectComponent;
-use pocketmine\domain\component\CollisionComponent;
-use pocketmine\domain\component\tags\PlayerTag;
-use pocketmine\domain\component\tags\MonsterTag;
-use pocketmine\domain\component\tags\OnGroundTag;
-use pocketmine\domain\component\tags\InvisibleTag;
-use pocketmine\domain\component\tags\DeadTag;
-use pocketmine\domain\component\tags\SpectatorTag;
-use pocketmine\domain\service\EntitySpawnService;
-use pocketmine\domain\service\EntityDespawnService;
-use pocketmine\domain\service\EntityInteractionService;
+use pocketmine\core\ecs\EntityRef;
+use pocketmine\core\ecs\World;
+use pocketmine\core\ecs\EntityBuilder;
+use pocketmine\core\component\PositionComponent;
+use pocketmine\core\component\RotationComponent;
+use pocketmine\core\component\VelocityComponent;
+use pocketmine\core\component\HealthComponent;
+use pocketmine\core\component\MetadataComponent;
+use pocketmine\core\component\InventoryComponent;
+use pocketmine\core\component\AttributeComponent;
+use pocketmine\core\component\EffectComponent;
+use pocketmine\core\component\CollisionComponent;
+use pocketmine\core\component\tags\PlayerTag;
+use pocketmine\core\component\tags\MonsterTag;
+use pocketmine\core\component\tags\OnGroundTag;
+use pocketmine\core\component\tags\InvisibleTag;
+use pocketmine\core\component\tags\DeadTag;
+use pocketmine\core\component\tags\SpectatorTag;
+use pocketmine\core\service\EntitySpawnService;
+use pocketmine\core\service\EntityDespawnService;
+use pocketmine\core\service\EntityInteractionService;
 
-abstract class Entity {
+class Entity {
     protected EntityRef $ref;
     protected World $world;
     
@@ -68,8 +68,44 @@ abstract class Entity {
         return $this->ref->getVelocity() ?? new VelocityComponent();
     }
 
-    public function getHealth(): HealthComponent {
-        return $this->ref->getHealth() ?? new HealthComponent();
+    public function getHealth(): float {
+        return $this->ref->getHealth()?->current ?? 0.0;
+    }
+
+    public function getHealthComponent(): ?HealthComponent {
+        return $this->ref->getHealth();
+    }
+
+    public function getMaxHealth(): float {
+        return $this->getHealthComponent()?->max ?? 20.0;
+    }
+
+    public function setMaxHealth(float $health): void {
+        $comp = $this->getHealthComponent();
+        if ($comp) {
+            $comp->max = max(1, $health);
+            if ($comp->current > $comp->max) {
+                $comp->current = $comp->max;
+            }
+        }
+    }
+
+    /**
+     * Wrap an EntityRef into the most specific API entity subclass based on tags/metadata.
+     */
+    public static function wrap(EntityRef $ref, World $world): Entity {
+        if ($ref->hasComponent(PlayerTag::class)) {
+            return new Player($ref, $world);
+        }
+        $type = strtolower((string)($ref->getMetadata()?->get('entityType', '')));
+        return match ($type) {
+            'zombie' => new Zombie($ref, $world),
+            'skeleton' => new Skeleton($ref, $world),
+            'creeper' => new Creeper($ref, $world),
+            'pig' => new Pig($ref, $world),
+            'item' => new ItemEntity($ref, $world),
+            default => new Entity($ref, $world),
+        };
     }
 
     public function getMetadata(): MetadataComponent {
@@ -150,17 +186,5 @@ abstract class Entity {
 
     public function getInternalRef(): EntityRef {
         return $this->ref;
-    }
-
-    public static function create(string $type, float $x, float $y, float $z): self {
-        $kernel = \pocketmine\Kernel::getInstance();
-        $spawnService = $kernel->getEntitySpawnService();
-        
-        $entityRef = $spawnService->spawnEntity($type, func_get_arg(1), func_get_arg(2), func_get_arg(3));
-        
-        $kernel = \pocketmine\Kernel::getInstance();
-        $world = $kernel->getWorld();
-        
-        return new static($entityRef, $world);
     }
 }

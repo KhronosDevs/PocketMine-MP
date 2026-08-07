@@ -1,0 +1,29 @@
+{
+    "name": "khronos/pocketmine-mp",
+    "description": "PocketMine-MP 2.0.0 - ECS-based Minecraft PE server",
+    "type": "project",
+    "require": {
+        "php": ">=8.2",
+        "ext-pmmpthread": "^6.3.0",
+        "ext-zlib": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "ext-sockets": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "pocketmine\\": "src/pocketmine"
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "8.2"
+        },
+        "optimize-autoloader": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "require-dev": {
+        "phpstan/phpstan": "^1.12"
+    }
+}

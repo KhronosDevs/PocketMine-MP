@@ -4,11 +4,83 @@ declare(strict_types=1);
 
 namespace pocketmine\api\scheduler;
 
-use pocketmine\domain\ecs\World;
-use pocketmine\domain\ecs\SystemScheduler;
-use pocketmine\domain\ecs\System;
-use pocketmine\domain\ecs\SystemPhase;
+use pocketmine\api\plugin\Plugin;
+use pocketmine\core\ecs\World;
+use pocketmine\core\ecs\SystemScheduler;
+use pocketmine\core\ecs\System;
+use pocketmine\core\ecs\SystemPhase;
 use pocketmine\port\driven\ThreadingPort;
+
+interface Task {
+    public function getTaskId(): int;
+    public function isCancelled(): bool;
+    public function cancel(): void;
+}
+
+interface TaskHandler {
+    public function getTask(): Task;
+    public function cancel(): void;
+}
+
+class PluginTask implements Task {
+    private int $taskId = 0;
+    private bool $cancelled = false;
+
+    public function __construct(
+        private $callback,
+        private readonly int $delay,
+        private readonly int $period,
+    ) {}
+
+    public function setTaskId(int $id): void {
+        $this->taskId = $id;
+    }
+
+    public function getTaskId(): int {
+        return $this->taskId;
+    }
+
+    public function isCancelled(): bool {
+        return $this->cancelled;
+    }
+
+    public function cancel(): void {
+        $this->cancelled = true;
+    }
+
+    public function run(int $currentTick): void {
+        if ($this->cancelled) {
+            return;
+        }
+        ($this->callback)($currentTick);
+    }
+
+    public function isRepeating(): bool {
+        return $this->period > 0;
+    }
+
+    public function getPeriod(): int {
+        return $this->period;
+    }
+
+    public function getDelay(): int {
+        return $this->delay;
+    }
+}
+
+class TaskHandlerImpl implements TaskHandler {
+    public function __construct(
+        private readonly Task $task,
+    ) {}
+
+    public function getTask(): Task {
+        return $this->task;
+    }
+
+    public function cancel(): void {
+        $this->task->cancel();
+    }
+}
 
 class Scheduler {
     private World $world;

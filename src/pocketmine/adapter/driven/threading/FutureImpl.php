@@ -5,9 +5,17 @@ declare(strict_types=1);
 namespace pocketmine\adapter\driven\threading;
 
 use pocketmine\port\driven\Future;
-use pocketmine\Threaded;
+use pmmp\thread\ThreadSafe;
 
-final class FutureImpl extends Threaded implements Future {
+/**
+ * Thread-safe future shared between the main thread and pool workers.
+ *
+ * pmmpthread v6 has no Threaded class; ThreadSafe provides the
+ * synchronized/wait/notify primitives needed here. Results are stored
+ * via json_encode when they are not thread-safe scalars (plain arrays
+ * and objects cannot be assigned to ThreadSafe properties directly).
+ */
+final class FutureImpl extends ThreadSafe implements Future {
     private mixed $result = null;
     private ?\Throwable $error = null;
     private bool $done = false;
@@ -49,7 +57,7 @@ final class FutureImpl extends Threaded implements Future {
 
     public function resolve(mixed $result): void {
         $this->synchronized(function () use ($result) {
-            $this->result = $result;
+            $this->result = self::sanitizeResult($result);
             $this->done = true;
             $this->notify();
         });
@@ -61,5 +69,16 @@ final class FutureImpl extends Threaded implements Future {
             $this->done = true;
             $this->notify();
         });
+    }
+
+    /**
+     * ThreadSafe properties may only hold thread-safe values (scalars,
+     * ThreadSafe instances). Plain arrays/objects are encoded to JSON.
+     */
+    private static function sanitizeResult(mixed $result): mixed {
+        if ($result === null || is_scalar($result) || $result instanceof ThreadSafe) {
+            return $result;
+        }
+        return json_encode($result, JSON_UNESCAPED_SLASHES);
     }
 }
