@@ -1,42 +1,56 @@
 ## Summary
 
-Phase 3 of the optimization plan: Core Gameplay Services.
+Phase 6 of the optimization plan: **Region-Based Architecture** — spatial partitioning with dedicated threads per region.
 
-### Services Implemented
+### Components Implemented
 
-| Service | Description |
-|---------|-------------|
-| **PlayerJoinService** | Create/load player entity, send join packets, load player data from storage |
-| **PlayerLeaveService** | Save player data, broadcast leave, despawn entity |
-| **PlayerRespawnService** | Reset health/velocity/inventory, teleport to spawn, clear effects |
+| Component | Description |
+|-----------|-------------|
+| **RegionWorld** | ECS World slice per spatial region (16×16 chunks = 256×256 blocks) |
+| **RegionThread** | Dedicated thread per region with independent ECS tick loop |
+| **CoordinationThread** | Global coordinator for entity migration, events, chunk coordination |
+| **NetworkThread** | Dedicated RakLib I/O + packet encoding thread |
 
-| **ChunkLoadService** | Load/generate/populate chunks, calculate light |
-| **ChunkUnloadService** | Save entities, unload unused chunks |
-| **ChunkSendService** | Send chunks to player based on view distance |
+### RegionWorld
 
-| **BlockBreakService** | Break blocks with reach check, tool speed, drops |
-| **BlockPlaceService** | Place blocks with reach/inventory check |
-| **BlockUpdateService** | Schedule and process block updates |
+- ECS World slice per spatial region (16×16 chunks = 256×256 blocks)
+- Spatial bounds (min/max chunk X/Z)
+- `ownsChunk()`, `ownsEntity()` for region ownership checks
+- Region ID for identification
 
-| **EntitySpawnService** | Spawn mobs, items, projectiles with type initialization |
-| **EntityDespawnService** | Despawn with save, distance-based cleanup |
-| **EntityInteractionService** | Interact, attack, pickup items, trade |
+### RegionThread
 
-| **CombatService** | Damage with armor reduction, knockback, death handling |
-| **DamageService** | Apply damage/healing, health management |
-| **KnockbackService** | Horizontal/vertical/explosion/directional knockback |
+- Dedicated thread per region with independent ECS tick loop (20 TPS)
+- Command queue from coordination thread
+- Sync queue for network updates
+- Migration queue for cross-region entity transfer
+- Entity migration out via component snapshot
 
-| **InventoryService** | Add/remove/swap items, held slot management |
-| **CraftingService** | Recipe matching, ingredient consumption |
-| **ContainerService** | Open/close, slot operations, item transfers |
+### CoordinationThread
 
-### Architecture
+- Manages all region threads
+- Global command queue (player join/leave, entity spawn/despawn, chunk load/unload)
+- Global migration queue for cross-region entity migration
+- Global event queue for plugin event dispatch
+- `findRegionForPosition()` for entity routing
 
-All services use:
-- **ECS components**: EntityRef, PositionComponent, HealthComponent, InventoryComponent, MetadataComponent, VelocityComponent, etc.
-- **Ports**: NetworkPort, StoragePort, WorldGenPort
-- **World/EntityRef** for entity management
-- **ComponentSerializer** for storage serialization
+### NetworkThread
+
+- Dedicated network I/O thread
+- Outbound queue for packet sending
+- Inbound queue for packet receiving
+- Dedicated thread for RakLib I/O
+
+### Kernel Updates
+
+- `initializeRegions()` creates region threads
+- `run()` starts all threads and runs main coordination loop
+- `shutdown()` properly stops all threads
+- `processGlobalCoordination()` and `flushNetworkSync()` for main thread coordination
+
+### Decision D009
+
+Region size: 16×16 chunks (256×256 blocks) — balance between parallelism and migration overhead
 
 ### Testing
 
@@ -52,4 +66,4 @@ bin/php7/bin/php vendor/bin/phpstan analyse --configuration=phpstan.neon
 
 ### Related
 
-Implements Phase 3 of the optimization plan: docs/PLAN.md
+Implements Phase 6 of the optimization plan: docs/PLAN.md

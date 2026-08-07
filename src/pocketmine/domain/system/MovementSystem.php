@@ -24,9 +24,13 @@ final class MovementSystem implements ParallelSystem {
             return;
         }
 
-        foreach ($positions as $entityId => $position) {
-            $velocity = $velocities[$entityId] ?? null;
-            if ($velocity === null) {
+        // Iterate over flat arrays using index
+        $count = min(count($positions), count($velocities));
+        for ($i = 0; $i < $count; $i++) {
+            $position = $positions[$i];
+            $velocity = $velocities[$i];
+            
+            if ($position === null || $velocity === null) {
                 continue;
             }
 
