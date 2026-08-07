@@ -71,12 +71,22 @@ final class Kernel {
     private bool $regionPipelineApply = false;
     /** @var array<int, int> entityId => owning region id */
     private array $pipelineMirroredIds = [];
+    /** @var array<int, int> entityId => owning region id (last mirrored; used for migration) */
+    private array $pipelineRegion = [];
+    /**
+     * @var array<int, array{x: float, y: float, z: float, vx: float, vy: float, vz: float}>
+     * entityId => the snapshot the region worker currently has stored
+     * (pre-integration). Advanced by one lockstep integration each tick, so
+     * the kernel can detect when a re-mirror is actually needed.
+     */
+    private array $pipelineStored = [];
     private int $pipelineTickSeq = 0;
-    private int $pipelineMirroredThisTick = 0;
     private array $pipelineStats = [
         'enabled' => false,
         'applyMode' => false,
         'mirrored' => 0,
+        'skipped' => 0,
+        'migrated' => 0,
         'despawned' => 0,
         'received' => 0,
         'applied' => 0,
@@ -119,6 +129,7 @@ final class Kernel {
         private readonly SystemScheduler $systemScheduler,
         private readonly ComponentRegistry $componentRegistry,
         private readonly ResourceRegistry $resourceRegistry,
+        private readonly int $regionCount = 1,
     ) {
         $this->playerJoinService = new PlayerJoinService($world, $networkPort, $storagePort, $worldGenPort);
         $this->playerLeaveService = new PlayerLeaveService($world, $networkPort, $storagePort);
@@ -171,21 +182,31 @@ final class Kernel {
         // Create coordination thread (thread-safe values only)
         $this->coordinationThread = new CoordinationThread();
 
-        // Create network pipeline worker (socket I/O stays on the main thread)
+        // Create the single network pipeline worker (compression + outbound
+        // batching; socket I/O stays on the main thread). The adapter is
+        // pointed at it so real outbound frames flow through this thread and
+        // its sendQueue is drained by the adapter's flush path.
         $this->networkThread = new NetworkThread();
+        if ($this->networkPort instanceof Protocol84NetworkAdapter) {
+            $this->networkPort->setNetworkThread($this->networkThread);
+        }
 
-        // Create region threads (for now, a single region covering the whole world)
-        // In the future, this would be split based on world size.
-        // The ECS world itself remains on the main thread; region threads
-        // process serialized snapshots via thread-safe queues.
-        $regionThread = new RegionThread(
-            0, // regionId
-            -1000, 1000, // minChunkX, maxChunkX
-            -1000, 1000, // minChunkZ, maxChunkZ
-        );
-
-        $this->regionThreads[0] = $regionThread;
-        $this->coordinationThread->addRegion(0, $regionThread->getCommandQueue());
+        // Create region threads: the world is split into regionCount columns
+        // along the X axis so entities crossing chunk boundaries exercise the
+        // migration path (9.4b). Each region processes serialized snapshots
+        // via thread-safe queues; the ECS world itself stays on the main
+        // thread. regionCount = 1 keeps the whole world in a single region
+        // (the default, matching pre-migration behavior).
+        $worldMinX = -1000;
+        $worldMaxX = 1000;
+        $chunksPerRegion = (int)ceil(($worldMaxX - $worldMinX + 1) / max(1, $this->regionCount));
+        for ($i = 0; $i < $this->regionCount; $i++) {
+            $minX = $worldMinX + $i * $chunksPerRegion;
+            $maxX = min($minX + $chunksPerRegion - 1, $worldMaxX);
+            $regionThread = new RegionThread($i, $minX, $maxX, -1000, 1000);
+            $this->regionThreads[$i] = $regionThread;
+            $this->coordinationThread->addRegion($i, $regionThread->getCommandQueue());
+        }
     }
 
     public function run(int $maxTicks = -1): void {
@@ -298,14 +319,48 @@ final class Kernel {
      * the region that owns its chunk, and send 'despawn' for entities that no
      * longer qualify so the worker store stays in sync.
      */
+    /**
+     * Predict the worker's stored snapshot after one lockstep integration -
+     * exactly the operations RegionThread::tickSnapshots performs on the
+     * worker side (and bit-for-bit the main thread's MovementSystem +
+     * PhysicsSystem order): integrate position with pre-gravity velocity,
+     * then apply gravity to velocity.
+     *
+     * @param array{x: float, y: float, z: float, vx: float, vy: float, vz: float} $s
+     * @return array{x: float, y: float, z: float, vx: float, vy: float, vz: float}
+     */
+    private function integrateOnce(array $s): array {
+        // Shared constants with RegionThread so this prediction can never
+        // silently drift from the worker's integration.
+        $dt = RegionThread::TARGET_DELTA_TIME;
+        return [
+            'x' => $s['x'] + $s['vx'] * $dt,
+            'y' => $s['y'] + $s['vy'] * $dt,
+            'z' => $s['z'] + $s['vz'] * $dt,
+            'vx' => $s['vx'],
+            'vy' => $s['vy'] - RegionThread::GRAVITY_ACCELERATION * $dt,
+            'vz' => $s['vz'],
+        ];
+    }
+
+    /**
+     * Serialize entities into the owning region's command queue - but only
+     * when the worker's stored snapshot would diverge from the main-thread
+     * state. Since both sides integrate identically, an unchanged entity needs
+     * no re-mirror: the worker keeps integrating its stored snapshot and stays
+     * bit-in-sync. The kernel tracks the worker's stored state (pipelineStored,
+     * advanced by one lockstep integration per tick) and re-mirrors only on
+     * real divergence (teleport, knockback, plugin mutation, new entity).
+     */
     private function mirrorEntitiesToRegions(): void {
         $this->pipelineTickSeq++;
-        $this->pipelineMirroredThisTick = 0;
         $currentIds = [];
         /** @var array<int, list<array{entityId: int, position: array{x: float, y: float, z: float}, velocity: array{x: float, y: float, z: float}}>> $updatesByRegion */
         $updatesByRegion = [];
         /** @var array<int, list<int>> $despawnsByRegion */
         $despawnsByRegion = [];
+        /** @var array<int, list<array{entityId: int, snapshot: array{position: array{x: float, y: float, z: float}, velocity: array{x: float, y: float, z: float}}}}> $migrationsByRegion */
+        $migrationsByRegion = [];
         foreach ($this->world->getEntities() as $entity) {
             $pos = $entity->get(PositionComponent::class);
             $vel = $entity->get(VelocityComponent::class);
@@ -316,17 +371,57 @@ final class Kernel {
             $chunkX = (int)floor($pos->x / 16);
             $chunkZ = (int)floor($pos->z / 16);
             foreach ($this->regionThreads as $regionId => $region) {
-                if ($region->ownsChunk($chunkX, $chunkZ)) {
+                if (!$region->ownsChunk($chunkX, $chunkZ)) {
+                    continue;
+                }
+                $state = [
+                    'x' => $pos->x, 'y' => $pos->y, 'z' => $pos->z,
+                    'vx' => $vel->x, 'vy' => $vel->y, 'vz' => $vel->z,
+                ];
+
+                // Cross-region migration: the entity changed owners. Drop the
+                // stale copy in the old region and hand the snapshot to the
+                // new region's migration queue (RegionThread::processMigrations).
+                $prevRegion = $this->pipelineRegion[$entity->id] ?? null;
+                if ($prevRegion !== null && $prevRegion !== $regionId) {
+                    $despawnsByRegion[$prevRegion][] = $entity->id;
+                    $migrationsByRegion[$regionId][] = [
+                        'entityId' => $entity->id,
+                        'snapshot' => [
+                            'position' => ['x' => $pos->x, 'y' => $pos->y, 'z' => $pos->z],
+                            'velocity' => ['x' => $vel->x, 'y' => $vel->y, 'z' => $vel->z],
+                        ],
+                    ];
+                    $this->pipelineStats['migrated']++;
+                    $this->pipelineStored[$entity->id] = $this->integrateOnce($state);
+                    $this->pipelineRegion[$entity->id] = $regionId;
+                    $this->pipelineMirroredIds[$entity->id] = $regionId;
+                    break;
+                }
+                $this->pipelineRegion[$entity->id] = $regionId;
+
+                $stored = $this->pipelineStored[$entity->id] ?? null;
+                $inSync = $stored !== null
+                    && $stored['x'] === $state['x'] && $stored['y'] === $state['y'] && $stored['z'] === $state['z']
+                    && $stored['vx'] === $state['vx'] && $stored['vy'] === $state['vy'] && $stored['vz'] === $state['vz'];
+                if ($inSync) {
+                    // Worker and main agree; no transport needed. The worker
+                    // will integrate its stored snapshot and produce results.
+                    $this->pipelineStats['skipped']++;
+                } else {
                     $updatesByRegion[$regionId][] = [
                         'entityId' => $entity->id,
                         'position' => ['x' => $pos->x, 'y' => $pos->y, 'z' => $pos->z],
                         'velocity' => ['x' => $vel->x, 'y' => $vel->y, 'z' => $vel->z],
                     ];
-                    $this->pipelineMirroredIds[$entity->id] = $regionId;
                     $this->pipelineStats['mirrored']++;
-                    $this->pipelineMirroredThisTick++;
-                    break;
                 }
+                // The worker stores this state and integrates it once when the
+                // tick command arrives - predict its stored snapshot for the
+                // next mirror.
+                $this->pipelineStored[$entity->id] = $this->integrateOnce($state);
+                $this->pipelineMirroredIds[$entity->id] = $regionId;
+                break;
             }
         }
 
@@ -341,12 +436,15 @@ final class Kernel {
                 $despawnsByRegion[$regionId][] = $id;
                 $this->pipelineStats['despawned']++;
                 unset($this->pipelineMirroredIds[$id]);
+                unset($this->pipelineStored[$id]);
+                unset($this->pipelineRegion[$id]);
             }
         }
 
-        // Emit one binary batch per region: updates, despawns, then the
+        // Emit one batch per region: updates, despawns, migrations, then the
         // lockstep tick (the worker integrates stored snapshots exactly once
-        // per tick command).
+        // per tick command). Migrations ride the dedicated migration queue so
+        // the worker stores the snapshot via processMigrations().
         foreach ($this->regionThreads as $regionId => $region) {
             $queue = $region->getCommandQueue();
             if (!empty($updatesByRegion[$regionId])) {
@@ -354,6 +452,12 @@ final class Kernel {
             }
             if (!empty($despawnsByRegion[$regionId])) {
                 $queue[] = RegionThread::encodeDespawns($despawnsByRegion[$regionId]);
+            }
+            if (!empty($migrationsByRegion[$regionId])) {
+                $migrationQueue = $region->getMigrationQueue();
+                foreach ($migrationsByRegion[$regionId] as $migration) {
+                    $migrationQueue[] = json_encode($migration);
+                }
             }
             $queue[] = RegionThread::encodeTick($this->pipelineTickSeq);
         }
@@ -372,7 +476,10 @@ final class Kernel {
      */
     private function drainRegionResults(): void {
         $this->pipelineStats['lastTickMismatches'] = 0;
-        $syncWaitMs = $this->pipelineMirroredThisTick > 0 ? 10.0 : 0.0;
+        // Wait only when there are tracked entities: with diff-only mirroring
+        // most ticks have zero re-mirrors, but the worker still integrates its
+        // stored snapshots and must be drained for gate comparison / apply.
+        $syncWaitMs = !empty($this->pipelineMirroredIds) ? 10.0 : 0.0;
         foreach ($this->regionThreads as $region) {
             $queue = $region->getSyncQueue();
             $deadline = microtime(true) + $syncWaitMs / 1000.0;
@@ -458,6 +565,14 @@ final class Kernel {
                     $vel->y = $e['velocity']['y'];
                     $vel->z = $e['velocity']['z'];
                 }
+                // The worker's stored snapshot is now the applied (post-
+                // integration) state - record it so the next mirror sees the
+                // entity as in-sync and skips the re-mirror (no double
+                // integration).
+                $this->pipelineStored[$e['entityId']] = [
+                    'x' => $wx, 'y' => $wy, 'z' => $wz,
+                    'vx' => $e['velocity']['x'], 'vy' => $e['velocity']['y'], 'vz' => $e['velocity']['z'],
+                ];
                 $this->pipelineStats['applied']++;
             } else {
                 $this->pipelineStats['compared']++;
@@ -527,6 +642,15 @@ final class Kernel {
             }
         }
         
+        // Stop the chunk-generation pool (real worker threads) and close the
+        // adapter's UDP socket. The adapter does not touch the injected
+        // NetworkThread - that was joined above.
+        if ($this->worldGenPort instanceof ParallelGeneratorAdapter) {
+            $this->worldGenPort->shutdown();
+        }
+        if ($this->networkPort instanceof Protocol84NetworkAdapter) {
+            $this->networkPort->shutdown();
+        }
         $this->threadingPort->shutdown();
         $this->storagePort->saveAll();
         $this->shutdownComplete = true;
@@ -688,7 +812,7 @@ final class Kernel {
     }
 }
 
-function createKernel(): Kernel {
+function createKernel(int $regionCount = 1): Kernel {
     $threadingPort = createThreadingPort();
     $networkPort = createNetworkPort();
     $storagePort = createStoragePort();
@@ -723,6 +847,7 @@ function createKernel(): Kernel {
         $systemScheduler,
         $componentRegistry,
         $resourceRegistry,
+        $regionCount,
     );
 }
 
@@ -793,6 +918,6 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     $scheduler->register(new \pocketmine\core\system\ChunkUpdateSystem(), \pocketmine\core\ecs\SystemPhase::CHUNK_PARALLEL);
 }
 
-function bootstrap(): Kernel {
-    return createKernel();
+function bootstrap(int $regionCount = 1): Kernel {
+    return createKernel($regionCount);
 }

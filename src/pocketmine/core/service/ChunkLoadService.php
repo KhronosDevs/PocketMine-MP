@@ -9,7 +9,6 @@ use pocketmine\core\resource\ChunkStore;
 use pocketmine\port\driven\ChunkData;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\WorldGenPort;
-use pocketmine\port\driven\LightData;
 
 final class ChunkLoadService {
     private const MAX_LOADED_CHUNKS = 10000;
@@ -21,17 +20,71 @@ final class ChunkLoadService {
     ) {}
 
     public function loadChunk(int $chunkX, int $chunkZ): ChunkData {
-        // Try to load from storage
-        $chunkData = $this->storagePort->loadChunk($chunkX, $chunkZ);
-        
-        // If chunk doesn't exist, generate it
-        if ($this->isEmptyChunk($chunkData)) {
-            $chunkData = $this->generateChunk($chunkX, $chunkZ);
+        return $this->loadChunks([[$chunkX, $chunkZ]])[0];
+    }
+
+    /**
+     * Bulk-load a set of chunks, generating any missing ones in a single
+     * parallel WorldGenPort::generateChunks() call (the pool runs them across
+     * worker threads) instead of one serialized generateChunk() per chunk.
+     *
+     * @param array<int, array{0: int, 1: int}> $chunkCoords chunk coordinate pairs
+     * @return list<ChunkData> one per requested coord, in input order
+     */
+    public function loadChunks(array $chunkCoords): array {
+        if (empty($chunkCoords)) {
+            return [];
         }
-        
+        $config = new \pocketmine\port\driven\GeneratorConfig(
+            'normal', // default generator
+            $this->getWorldSeed(),
+            []
+        );
+
+        // Split into stored (already on disk) vs missing (need generation).
+        /** @var list<array{0: int, 1: int}> $toGenerate */
+        $toGenerate = [];
+        /** @var array<int, ?ChunkData> $byIndex */
+        $byIndex = [];
+        foreach ($chunkCoords as $index => [$chunkX, $chunkZ]) {
+            $chunkData = $this->storagePort->loadChunk($chunkX, $chunkZ);
+            if ($this->isEmptyChunk($chunkData)) {
+                $toGenerate[] = [$chunkX, $chunkZ];
+                $byIndex[$index] = null;
+            } else {
+                $byIndex[$index] = $chunkData;
+            }
+        }
+
+        if (!empty($toGenerate)) {
+            $generated = $this->worldGenPort->generateChunks($toGenerate, $config);
+            $gi = 0;
+            foreach ($byIndex as $index => $data) {
+                if ($data === null) {
+                    $byIndex[$index] = $generated[$gi];
+                    $gi++;
+                }
+            }
+        }
+
+        // Populate, light, and materialize each chunk into the in-memory store.
+        $result = [];
+        ksort($byIndex);
+        foreach ($byIndex as $index => $chunkData) {
+            if (!$chunkData instanceof ChunkData) {
+                continue; // defensive: every index was resolved above
+            }
+            $result[$index] = $this->materializeChunk($chunkData);
+        }
+        return array_values($result);
+    }
+
+    private function materializeChunk(ChunkData $chunkData): ChunkData {
+        $chunkX = $chunkData->chunkX;
+        $chunkZ = $chunkData->chunkZ;
+
         // Populate if needed
-        $needsPopulate = !$this->isPopulated($chunkData);
-        if ($needsPopulate) {
+        if (!$this->isPopulated($chunkData)) {
             $this->worldGenPort->populateChunk($chunkX, $chunkZ, $chunkData);
         }
         
@@ -56,16 +109,6 @@ final class ChunkLoadService {
         }
         
         return $chunkData;
-    }
-
-    private function generateChunk(int $chunkX, int $chunkZ): ChunkData {
-        $config = new \pocketmine\port\driven\GeneratorConfig(
-            'normal', // default generator
-            $this->getWorldSeed(),
-            []
-        );
-        
-        return $this->worldGenPort->generateChunk($chunkX, $chunkZ, $config);
     }
 
     private function getWorldSeed(): int {

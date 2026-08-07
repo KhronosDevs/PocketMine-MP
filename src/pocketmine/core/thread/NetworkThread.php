@@ -8,6 +8,7 @@ use pmmp\thread\Thread;
 use pmmp\thread\ThreadSafe;
 use pmmp\thread\ThreadSafeArray;
 use function count;
+use function pack;
 use function strlen;
 use function zlib_encode;
 use const ZLIB_ENCODING_DEFLATE;
@@ -25,6 +26,8 @@ use const ZLIB_ENCODING_DEFLATE;
 final class NetworkThread extends Thread {
     private const BATCH_THRESHOLD = 512;
     private const BATCH_MAX_PACKETS = 64;
+    /** Cap frames drained per pass so a burst cannot monopolize the loop. */
+    private const OUTBOUND_FRAME_CAP = 512;
 
     /** @var ThreadSafeArray<int, string> inbound frames awaiting batching: json_encode([addrKey, payload]) */
     private ThreadSafeArray $inboundQueue;
@@ -96,8 +99,32 @@ final class NetworkThread extends Thread {
     }
 
     private function processOutbound(): void {
-        while (($frame = $this->outboundQueue->shift()) !== null) {
-            $this->sendQueue[] = $frame;
+        // Coalesce per-destination frames into single batched datagrams so the
+        // adapter makes one socket_sendto per burst instead of one per packet.
+        // Each payload is length-prefixed (2-byte big-endian) so the batch is
+        // self-delimiting: [len:2][body][len:2][body]... A receiver splits the
+        // datagram by reading lengths. (Raw getBuffer() bodies are NOT
+        // length-prefixed on their own, hence the explicit framing here.)
+        $batches = []; // addrKey => concatenated length-prefixed payloads
+        $processed = 0;
+        while (($frame = $this->outboundQueue->shift()) !== null && $processed < self::OUTBOUND_FRAME_CAP) {
+            $decoded = json_decode($frame, true);
+            if (!is_array($decoded) || count($decoded) < 2) {
+                continue;
+            }
+            [$addrKey, $payload] = $decoded;
+            if (!is_string($addrKey) || !is_string($payload)) {
+                continue;
+            }
+            $processed++;
+            $batches[$addrKey] = ($batches[$addrKey] ?? '') . pack('n', strlen($payload)) . $payload;
+            if (strlen($batches[$addrKey]) >= self::BATCH_THRESHOLD) {
+                $this->sendQueue[] = json_encode([$addrKey, $batches[$addrKey]]);
+                unset($batches[$addrKey]);
+            }
+        }
+        foreach ($batches as $addrKey => $payload) {
+            $this->sendQueue[] = json_encode([$addrKey, $payload]);
         }
     }
 
