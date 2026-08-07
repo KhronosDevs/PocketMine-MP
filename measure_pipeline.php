@@ -12,10 +12,12 @@ declare(strict_types=1);
  *   gate  - pipeline mirrors + compares worker results (main still simulates)
  *   apply - pipeline is authoritative for movement+gravity (main systems off)
  *
- * Usage: bin/php7/bin/php measure_pipeline.php [mode] [entities] [ticks]
- *   mode     off|gate|apply   (default: off)
- *   entities number of moving entities (default: 1000)
- *   ticks    number of ticks to run (default: 200)
+ * Usage: bin/php7/bin/php measure_pipeline.php [mode] [entities] [ticks] [regions] [maxPerRegion]
+ *   mode          off|gate|apply   (default: off)
+ *   entities      number of moving entities (default: 1000)
+ *   ticks         number of ticks to run (default: 200)
+ *   regions       initial region count (default: 1)
+ *   maxPerRegion  optional: dynamic-split threshold (9.4b); omit to disable
  */
 
 require_once __DIR__ . '/autoload.php';
@@ -26,8 +28,10 @@ use pocketmine\core\ecs\EntityBuilder;
 $mode = $argv[1] ?? 'off';
 $entities = (int)($argv[2] ?? 1000);
 $ticks = (int)($argv[3] ?? 200);
+$regions = (int)($argv[4] ?? 1);
+$maxPerRegion = isset($argv[5]) && $argv[5] !== '' ? (int)$argv[5] : null;
 
-$kernel = \pocketmine\bootstrap();
+$kernel = \pocketmine\bootstrap($regions, $maxPerRegion);
 if ($mode !== 'off') {
     $kernel->setRegionPipelineEnabled(true);
     if ($mode === 'apply') {
@@ -45,7 +49,7 @@ for ($i = 0; $i < $entities; $i++) {
     );
 }
 
-echo "mode={$mode} entities={$entities} ticks={$ticks}\n";
+echo "mode={$mode} entities={$entities} ticks={$ticks} regions={$regions} maxPerRegion=" . ($maxPerRegion ?? 'off') . "\n";
 $kernel->run($ticks);
 
 $stats = $kernel->getTickStats();
