@@ -12,6 +12,7 @@ use pocketmine\core\ecs\World;
 final class EntityInteractionService {
     public function __construct(
         private readonly World $world,
+        private readonly CombatService $combatService,
     ) {}
 
     public function interact(EntityRef $playerRef, EntityRef $targetRef): bool {
@@ -132,21 +133,14 @@ final class EntityInteractionService {
         // Calculate damage
         $damage = $this->calculateDamage($attackerRef, $targetRef);
         
-        // Apply damage
-        $targetHealth = $target->get(\pocketmine\core\component\HealthComponent::class);
-        if ($targetHealth) {
-            $targetHealth->current = max(0, $targetHealth->current - $damage);
-            
-            // Apply knockback
-            $this->applyKnockback($attackerRef, $targetRef, $damage);
-            
-            // Check death
-            if ($targetHealth->current <= 0) {
-                $this->handleDeath($targetRef, $attackerRef);
-            }
-        }
-        
-        return true;
+        // Route through the unified combat pipeline: damage event, armor
+        // reduction, knockback, death handling + loot drops.
+        return $this->combatService->applyDamage(
+            $targetRef,
+            $damage,
+            $attackerRef,
+            \pocketmine\api\event\EntityDamageEvent::CAUSE_ENTITY_ATTACK
+        );
     }
 
     private function canAttack(EntityRef $attackerRef, EntityRef $targetRef): bool {
@@ -202,69 +196,5 @@ final class EntityInteractionService {
             279 => 3, // Diamond axe
             default => 1,
         };
-    }
-
-    private function applyKnockback(EntityRef $attackerRef, EntityRef $targetRef, float $damage): void {
-        $attacker = $attackerRef->getEntity();
-        $target = $targetRef->getEntity();
-        
-        if (!$attacker || !$target) return;
-        
-        $attackerPos = $attacker->get(\pocketmine\core\component\PositionComponent::class);
-        $targetPos = $target->get(\pocketmine\core\component\PositionComponent::class);
-        $targetVel = $target->get(\pocketmine\core\component\VelocityComponent::class);
-        
-        if (!$attackerPos || !$targetPos || !$targetVel) return;
-        
-        $dx = $targetPos->x - $attackerPos->x;
-        $dz = $targetPos->z - $attackerPos->z;
-        $dist = sqrt($dx * $dx + $dz * $dz);
-        
-        if ($dist > 0) {
-            $knockback = $damage * 0.4;
-            $targetVel->x += ($dx / $dist) * $knockback;
-            $targetVel->z += ($dz / $dist) * $knockback;
-            $targetVel->y = $damage * 0.2;
-        }
-    }
-
-    private function handleDeath(EntityRef $targetRef, EntityRef $killerRef): void {
-        // Drop experience
-        $this->dropExperience($targetRef);
-        
-        // Drop loot
-        $this->dropLoot($targetRef);
-        
-        // Despawn entity
-        $targetEntity = $targetRef->getEntity();
-        if ($targetEntity) {
-            $this->world->despawn($targetEntity);
-        }
-    }
-
-    private function dropExperience(EntityRef $entityRef): void {
-        // Spawn XP orbs
-        $entity = $entityRef->getEntity();
-        if (!$entity) return;
-        
-        $position = $entity->get(\pocketmine\core\component\PositionComponent::class);
-        if (!$position) return;
-        
-        // Calculate XP drop based on entity type
-        $xpAmount = 5; // Default
-        
-        $this->world->spawn(
-            (new \pocketmine\core\ecs\EntityBuilder())
-                ->with(new \pocketmine\core\component\PositionComponent($entity->x, $entity->y + 0.5, $entity->z))
-                ->with(new \pocketmine\core\component\VelocityComponent())
-                ->with(new \pocketmine\core\component\HealthComponent(1, 1))
-                ->with(new \pocketmine\core\component\MetadataComponent())
-                ->withTag('xp_orb')
-                
-        );
-    }
-
-    private function dropLoot(EntityRef $entityRef): void {
-        // Drop items based on entity loot table
     }
 }

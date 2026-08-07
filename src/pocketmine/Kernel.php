@@ -191,10 +191,10 @@ final class Kernel {
         $this->blockUpdateService = new BlockUpdateService($world, $storagePort);
         $this->entitySpawnService = new EntitySpawnService($world, $storagePort);
         $this->entityDespawnService = new EntityDespawnService($world, $storagePort);
-        $this->entityInteractionService = new EntityInteractionService($world);
-        $this->combatService = new CombatService($world);
-        $this->damageService = new DamageService($world);
+        $this->combatService = new CombatService($world, $eventPort, $this->entitySpawnService);
+        $this->damageService = new DamageService($world, $this->combatService);
         $this->knockbackService = new KnockbackService($world);
+        $this->entityInteractionService = new EntityInteractionService($world, $this->combatService);
         $this->inventoryService = new InventoryService($world);
         $this->craftingService = new CraftingService($world);
         $this->containerService = new ContainerService($world);

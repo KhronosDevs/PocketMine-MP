@@ -128,7 +128,9 @@ final class World {
         // Double-buffer swap for parallel systems
         foreach ($this->entities as $entity) {
             foreach ($entity->getComponents() as $type => $component) {
-                if (method_exists($component, 'applyPending')) {
+                // Tags and other non-object components (withTag stores `true`)
+                // have no pending state to apply.
+                if (is_object($component) && method_exists($component, 'applyPending')) {
                     $component->applyPending();
                 }
             }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\core\service;
 
+use pocketmine\api\event\EntityDamageEvent;
 use pocketmine\core\component\HealthComponent;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
@@ -11,65 +12,39 @@ use pocketmine\core\ecs\World;
 final class DamageService {
     public function __construct(
         private readonly World $world,
+        private readonly CombatService $combatService,
     ) {}
 
-    public function applyDamage(EntityRef $targetRef, float $damage, int $cause = 0): bool {
-        $target = $targetRef->getEntity();
-        if (!$target) return false;
-        
-        $health = $target->get(HealthComponent::class);
-        if (!$health) return false;
-        
-        $health->current = max(0, $health->current - $damage);
-        
-        if ($health->current <= 0) {
-            $this->handleDeath($targetRef);
-        }
-        
-        return true;
+    /**
+     * Route damage through the unified combat pipeline (damage event, armor,
+     * knockback, death handling + loot drops).
+     */
+    public function applyDamage(EntityRef $targetRef, float $damage, int $cause = EntityDamageEvent::CAUSE_CUSTOM): bool {
+        return $this->combatService->applyDamage($targetRef, $damage, null, $cause);
     }
 
     public function applyHealing(EntityRef $targetRef, float $amount): void {
-        $target = $targetRef->getEntity();
-        if (!$target) return;
-        
-        $health = $target->get(HealthComponent::class);
-        if (!$health) return;
-        
-        $health->current = min($health->max, $health->current + $amount);
+        $this->combatService->heal($targetRef, $amount);
     }
 
     public function setHealth(EntityRef $targetRef, float $health): void {
         $target = $targetRef->getEntity();
         if (!$target) return;
-        
+
         $healthComp = $target->get(HealthComponent::class);
         if (!$healthComp) return;
-        
-        $healthComp->current = max(0, min($healthComp->max, $health));
-        
-        if ($healthComp->current <= 0) {
-            $this->handleDeath($targetRef);
-        }
-    }
 
-    private function handleDeath(EntityRef $targetRef): void {
-        $target = $targetRef->getEntity();
-        if (!$target) return;
-        
-        // In a full implementation, this would:
-        // - Drop experience
-        // - Drop loot
-        // - Send death event
-        // - Despawn entity
-        
-        $this->world->despawn($target);
+        $healthComp->current = max(0, min($healthComp->max, $health));
+
+        if ($healthComp->current <= 0) {
+            $this->combatService->kill($targetRef);
+        }
     }
 
     public function getHealth(EntityRef $targetRef): ?HealthComponent {
         $target = $targetRef->getEntity();
         if (!$target) return null;
-        
+
         return $target->get(HealthComponent::class);
     }
 
@@ -81,7 +56,7 @@ final class DamageService {
     public function getHealthPercentage(EntityRef $targetRef): float {
         $health = $this->getHealth($targetRef);
         if (!$health) return 0.0;
-        
+
         return $health->max > 0 ? ($health->current / $health->max) : 0.0;
     }
 }
