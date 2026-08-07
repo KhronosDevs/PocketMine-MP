@@ -171,12 +171,14 @@ final class AnvilStorageAdapter implements StoragePort {
         $data = fread($handle, max(0, $length - 1));
         fclose($handle);
         
-        if ($compression === 2 && $data !== false) {
-            $decompressed = gzuncompress($data);
-            return $decompressed !== false ? $decompressed : null;
+        // Only zlib (type 2) is written by this adapter; anything else is a
+        // corrupt or foreign file, so treat it as missing rather than parse
+        // still-compressed bytes as a chunk payload.
+        if ($compression !== 2 || $data === false) {
+            return null;
         }
-        
-        return $data !== false ? $data : null;
+        $decompressed = gzuncompress($data);
+        return $decompressed !== false ? $decompressed : null;
     }
 
     private function writeChunkToRegion(string $regionFile, int $chunkX, int $chunkZ, string $data): void {
@@ -189,7 +191,11 @@ final class AnvilStorageAdapter implements StoragePort {
             return;
         }
         $length = strlen($compressed) + 1;
-        $sectorCount = (int)ceil($length / self::SECTOR_SIZE);
+        // The sector must hold the 4-byte length prefix too; sizing from
+        // $length alone would under-count exactly when $length crosses a
+        // 4096 boundary, making the padding below negative and crashing
+        // str_repeat() on a legitimately-sized chunk.
+        $sectorCount = (int)ceil(($length + 4) / self::SECTOR_SIZE);
         
         $handle = fopen($regionFile, "r+b");
         if (!$handle) {
@@ -205,7 +211,7 @@ final class AnvilStorageAdapter implements StoragePort {
         fwrite($handle, chr(2));
         fwrite($handle, $compressed);
         
-        $padding = $sectorCount * self::SECTOR_SIZE - $length - 5;
+        $padding = $sectorCount * self::SECTOR_SIZE - $length - 4;
         if ($padding > 0) {
             fwrite($handle, str_repeat("\x00", $padding));
         }
@@ -214,7 +220,11 @@ final class AnvilStorageAdapter implements StoragePort {
         $offsetAndSize = ($sectorOffset << 8) | $sectorCount;
         fwrite($handle, pack("N", $offsetAndSize));
         
-        fseek($handle, self::HEADER_SIZE + ($localZ * 32 + $localX) * 4);
+        // Timestamp table lives in the SECOND half of the header (bytes
+        // 4096..8191). Using HEADER_SIZE (8192) as the base would write the
+        // first timestamp over the first chunk's data sector, corrupting the
+        // length field on every save.
+        fseek($handle, self::HEADER_SIZE / 2 + ($localZ * 32 + $localX) * 4);
         fwrite($handle, pack("N", time()));
         
         fclose($handle);
@@ -273,7 +283,7 @@ final class AnvilStorageAdapter implements StoragePort {
     }
 
     private function readEntity(BinaryStream $stream): EntitySnapshot {
-        $entityId = $stream->getVarInt();
+        $entityId = $stream->getString();
         $className = $stream->getString();
         $x = $stream->getDouble();
         $y = $stream->getDouble();
@@ -299,7 +309,7 @@ final class AnvilStorageAdapter implements StoragePort {
     }
 
     private function readTileEntity(BinaryStream $stream): TileEntitySnapshot {
-        $id = $stream->getVarInt();
+        $id = $stream->getString();
         $className = $stream->getString();
         $x = $stream->getInt();
         $y = $stream->getInt();
@@ -340,7 +350,7 @@ final class AnvilStorageAdapter implements StoragePort {
         
         $stream->putInt(count($data->entities));
         foreach ($data->entities as $entity) {
-            $stream->putVarInt((int)$entity->id);
+            $stream->putString($entity->id);
             $stream->putString($entity->type);
             $stream->putDouble($entity->x);
             $stream->putDouble($entity->y);
@@ -357,7 +367,7 @@ final class AnvilStorageAdapter implements StoragePort {
         
         $stream->putInt(count($data->tileEntities));
         foreach ($data->tileEntities as $tile) {
-            $stream->putVarInt((int)$tile->id);
+            $stream->putString($tile->id);
             $stream->putString($tile->type);
             $stream->putInt($tile->x);
             $stream->putInt($tile->y);
