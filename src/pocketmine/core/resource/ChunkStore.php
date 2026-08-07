@@ -7,8 +7,10 @@ namespace pocketmine\core\resource;
 use pocketmine\core\ecs\Resource;
 use pocketmine\port\driven\ChunkData;
 use function array_fill;
+use function array_key_first;
 use function chr;
 use function count;
+use function explode;
 use function ltrim;
 use function ord;
 use function str_repeat;
@@ -40,6 +42,39 @@ final class ChunkStore {
 
     public function getCount(): int {
         return count($this->chunks);
+    }
+
+    /**
+     * Coordinates of the longest-loaded chunk (PHP arrays preserve insertion
+     * order, so the first key is the oldest). Used for FIFO eviction when the
+     * loaded-chunk budget is exceeded.
+     *
+     * @return array{0: int, 1: int}|null null when the store is empty
+     */
+    public function getOldestLoadedChunk(): ?array {
+        $key = array_key_first($this->chunks);
+        if ($key === null) {
+            return null;
+        }
+        $parts = explode(':', $key, 2);
+        return [(int)$parts[0], (int)$parts[1]];
+    }
+
+    /**
+     * Approximate resident memory of every loaded chunk's payload (block,
+     * meta, light, biome binary strings). Each loaded chunk holds ~160KB of
+     * strings, so this is the dominant term in the chunk-budget equation.
+     */
+    public function getMemoryEstimate(): int {
+        $bytes = 0;
+        foreach ($this->chunks as $chunk) {
+            $bytes += strlen((string)$chunk['blocks'])
+                + strlen((string)$chunk['meta'])
+                + strlen((string)$chunk['skyLight'])
+                + strlen((string)$chunk['blockLight'])
+                + strlen((string)$chunk['biomes']);
+        }
+        return $bytes;
     }
 
     /**

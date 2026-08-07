@@ -49,6 +49,13 @@ final class ComponentRegistry {
         return $this->archetypeIndex[$componentType] ?? [];
     }
 
+    /**
+     * @return array<string, Archetype> archetypeKey => archetype (all live archetypes)
+     */
+    public function getArchetypes(): array {
+        return $this->archetypes;
+    }
+
     public function getArchetypesWithAllComponents(array $componentTypes): array {
         if (empty($componentTypes)) {
             return array_values($this->archetypes);

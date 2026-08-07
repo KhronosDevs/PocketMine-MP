@@ -11,13 +11,27 @@ use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\WorldGenPort;
 
 final class ChunkLoadService {
-    private const MAX_LOADED_CHUNKS = 10000;
+    public const DEFAULT_MAX_LOADED_CHUNKS = 10000;
+
+    private int $maxLoadedChunks;
 
     public function __construct(
         private readonly World $world,
         private readonly StoragePort $storagePort,
         private readonly WorldGenPort $worldGenPort,
-    ) {}
+        private readonly ChunkUnloadService $chunkUnloadService,
+        int $maxLoadedChunks = self::DEFAULT_MAX_LOADED_CHUNKS,
+    ) {
+        $this->maxLoadedChunks = max(1, $maxLoadedChunks);
+    }
+
+    public function getMaxLoadedChunks(): int {
+        return $this->maxLoadedChunks;
+    }
+
+    public function setMaxLoadedChunks(int $maxLoadedChunks): void {
+        $this->maxLoadedChunks = max(1, $maxLoadedChunks);
+    }
 
     public function loadChunk(int $chunkX, int $chunkZ): ChunkData {
         return $this->loadChunks([[$chunkX, $chunkZ]])[0];
@@ -27,6 +41,12 @@ final class ChunkLoadService {
      * Bulk-load a set of chunks, generating any missing ones in a single
      * parallel WorldGenPort::generateChunks() call (the pool runs them across
      * worker threads) instead of one serialized generateChunk() per chunk.
+     *
+     * The returned ChunkData DTOs are independent snapshots; when the request
+     * exceeds the loaded-chunk budget, the newest chunks stay resident and the
+     * oldest are evicted to disk immediately after this call. The DTOs are
+     * still valid (they were built before eviction), but a later read through
+     * the ChunkStore may need to re-load an evicted chunk from disk.
      *
      * @param array<int, array{0: int, 1: int}> $chunkCoords chunk coordinate pairs
      * @return list<ChunkData> one per requested coord, in input order
@@ -76,6 +96,13 @@ final class ChunkLoadService {
             }
             $result[$index] = $this->materializeChunk($chunkData);
         }
+
+        // Loaded-chunk budget (11.3): the store grew, so bring it back under
+        // the cap by evicting the oldest residents (persisted first, so
+        // nothing is lost). This is the single choke point for the world
+        // growing its resident set - every load path funnels through here.
+        $this->chunkUnloadService->unloadUnusedChunks($this->maxLoadedChunks);
+
         return array_values($result);
     }
 

@@ -22,7 +22,11 @@ final class Archetype {
     /** @var array<string, int> componentType => count of valid entries */
     private array $componentCounts = [];
     
-    /** @var array<string, array> freed indices for reuse */
+    /** @var list<int> freed indices for reuse. One index space is shared by
+     *  ALL component arrays (an entity occupies the same index in each), so a
+     *  single flat list is correct. A per-type list was a leak: allocateIndex
+     *  only ever popped the FIRST type's list, so every other type's list
+     *  accumulated duplicate stale entries forever (unbounded growth). */
     private array $freeIndices = [];
 
     /** Monotonic index allocator: indices are never derived from the current
@@ -36,7 +40,6 @@ final class Archetype {
         foreach ($componentTypes as $type) {
             $this->componentArrays[$type] = [];
             $this->componentCounts[$type] = 0;
-            $this->freeIndices[$type] = [];
         }
     }
 
@@ -64,26 +67,29 @@ final class Archetype {
         if ($index !== null) {
             unset($this->entityIdToIndex[$entity->id]);
             
+            $released = false;
             foreach ($this->componentTypes as $type) {
                 if (isset($this->componentArrays[$type][$index])) {
                     $this->componentArrays[$type][$index] = null;
                     $this->componentCounts[$type]--;
-                    
-                    // Add to free list for reuse
-                    $this->freeIndices[$type][] = $index;
+                    $released = true;
                 }
+            }
+            
+            // The index is reusable across all component arrays at once.
+            if ($released) {
+                $this->freeIndices[] = $index;
             }
         }
     }
 
     private function allocateIndex(int $entityId): int {
-        // Try to reuse a freed index from the first component type
-        $firstType = $this->componentTypes[0] ?? null;
-        if ($firstType && !empty($this->freeIndices[$firstType])) {
-            return array_pop($this->freeIndices[$firstType]);
+        // Reuse a freed index when one exists (shared across all component
+        // arrays), else grow the monotonic high-water mark.
+        if (!empty($this->freeIndices)) {
+            return array_pop($this->freeIndices);
         }
         
-        // Allocate new index (monotonic, reused from the free list when possible)
         return $this->nextIndex++;
     }
 
@@ -130,5 +136,32 @@ final class Archetype {
         foreach ($this->entities as $id => $entity) {
             yield $id => $entity;
         }
+    }
+
+    /**
+     * Memory-stats snapshot for profiling: how many array slots each
+     * component type has allocated vs how many are actually valid, plus the
+     * index high-water mark and free-list size. Wasted slots = capacity -
+     * valid (nulls left behind by removals that have not been reused yet).
+     *
+     * @return array{entities: int, indexHighWater: int, freeIndices: int, components: array<string, array{capacity: int, valid: int, wasted: int}>}
+     */
+    public function getStats(): array {
+        $components = [];
+        foreach ($this->componentTypes as $type) {
+            $capacity = count($this->componentArrays[$type]);
+            $valid = $this->componentCounts[$type];
+            $components[$type] = [
+                'capacity' => $capacity,
+                'valid' => $valid,
+                'wasted' => max(0, $capacity - $valid),
+            ];
+        }
+        return [
+            'entities' => count($this->entities),
+            'indexHighWater' => $this->nextIndex,
+            'freeIndices' => count($this->freeIndices),
+            'components' => $components,
+        ];
     }
 }
