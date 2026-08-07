@@ -2,9 +2,9 @@
 
 **Plan Version:** docs/PLAN.md
 **Last Updated:** 2026-08-07
-**Current Phase:** 6 (Region-Based Architecture)
-**Current Branch:** region-based-architecture
-**Base Commit:** c7e445f (master after PR #23 merge)
+**Current Phase:** 7 (Polish & Optimize)
+**Current Branch:** polish-optimize
+**Base Commit:** 942082e (master after PR #24 merge)
 
 ---
 
@@ -18,8 +18,8 @@
 | 3: Core Gameplay Services | ✅ Done | service-core-gameplay | #21 | Player, chunk, block, entity, combat, inventory |
 | 4: **New Plugin API** | ✅ Done | api-ecs-plugin | #22 | **BREAKING** — EntityRef, Query, System, Event, Command, Scheduler |
 | 5: Archetype Parallelism | ✅ Done | multithread-archetype-parallelism | #23 | Movement, Effect, Physics, AI parallel execution |
-| 6: Region-Based Architecture | 🔄 In Progress | region-based-architecture | — | RegionWorld, RegionThread, coordination, network threads |
-| 7: Polish & Optimize | ⏳ Pending | — | — | Storage, queries, memory, network batching, benchmarks |
+| 6: Region-Based Architecture | ✅ Done | region-based-architecture | #24 | RegionWorld, RegionThread, coordination, network threads |
+| 7: Polish & Optimize | 🔄 In Progress | polish-optimize | — | Storage, queries, memory, network batching, benchmarks |
 
 ---
 
@@ -120,8 +120,22 @@
 | 6.3 | `region-coordination` — CoordinationThread for entity migration, global events | ✅ | b33d6a1 | Cross-region migration, plugin dispatch, chunk coordination |
 | 6.4 | `region-network` — NetworkThread for RakLib I/O + packet encoding | ✅ | b33d6a1 | Dedicated network thread, batch encoding |
 | 6.5 | `region-migration` — Cross-region entity migration with snapshots | ✅ | b33d6a1 | EntityRef transfer, component snapshot |
-| 6.6 | `region-load-balancing` — Dynamic region splitting/merging | ⏳ | — | Workload-aware partitioning |
-| 6.7 | Update PROGRESS.md | 🔄 | — | Track progress |
+| 6.6 | `region-load-balancing` — Dynamic region splitting/merging | ✅ | — | Workload-aware partitioning |
+| 6.7 | Update PROGRESS.md | ✅ | — | Track progress |
+
+---
+
+## Phase 7: Polish & Optimize — Detailed Steps
+
+| Step | Task | Status | Commit | Notes |
+|------|------|--------|--------|-------|
+| 7.0 | Create branch `polish-optimize` with rollback anchor | ✅ | 6c291d9 | `git checkout -b polish-optimize && git commit --allow-empty -m "chore: rollback anchor for polish-optimize"` |
+| 7.1 | `optimize-archetype-storage` — Compact component arrays, reduce indirection | 🔄 | — | Struct-of-arrays, eliminate object overhead |
+| 7.2 | `optimize-query-performance` — Query caching, archetype indexing | ⏳ | — | Query plan caching, archetype bitmap index |
+| 7.3 | `optimize-memory-layout` — Struct-of-arrays, reduce object allocation | ⏳ | — | Flat arrays, object pooling, weak refs |
+| 7.4 | `optimize-network-batching` — Batch NetworkSyncComponent flushes across regions | ⏳ | — | Cross-region packet batching |
+| 7.5 | `benchmark-profile` — Full profiling, tick rate analysis, scalability testing | ⏳ | — | Load testing, flame graphs, regression tests |
+| 7.6 | Update PROGRESS.md | ⏳ | — | Track progress |
 
 ---
 
@@ -151,18 +165,18 @@
 | service-core-gameplay | 49cf545 | 7ce67ce | #21 | ✅ Merged |
 | api-ecs-plugin | 8f3a171 | fc1c65d | #22 | ✅ Merged |
 | multithread-archetype-parallelism | 43996ce | 33f6ff6 | #23 | ✅ Merged |
-| region-based-architecture | c7e445f | b33d6a1 | #24 | 🔄 Active (PR opened) |
+| region-based-architecture | c7e445f | 1c1baf4 | #24 | ✅ Merged |
+| polish-optimize | 942082e | 6c291d9 | — | 🔄 Active |
 
 ---
 
 ## Next Actions
 
-1. ✅ Phase 0, 1, 2, 3, 4, 5 complete (PRs #18, #19, #20, #21, #22, #23 merged)
-2. ✅ Create `region-based-architecture` branch with rollback anchor
-3. ✅ Implement RegionWorld — ECS World slice per spatial region (16×16 chunks)
-4. ✅ Implement RegionThread — Dedicated thread per region with independent ECS tick loop
-5. ✅ Implement CoordinationThread — Entity migration, global events, plugin dispatch
-5. ✅ Implement NetworkThread — Dedicated RakLib I/O + packet encoding
-6. ✅ Implement cross-region entity migration
-7. ⏳ Implement dynamic region load balancing
-8. ⏳ Update docs, commit, push, open PR #24
+1. ✅ Phase 0, 1, 2, 3, 4, 5, 6 complete (PRs #18, #19, #20, #21, #22, #23, #24 merged)
+2. ✅ Create `polish-optimize` branch with rollback anchor
+3. 🔄 Implement archetype storage optimization (struct-of-arrays)
+3. ⏳ Implement query performance optimization (caching, indexing)
+4. ⏳ Implement memory layout optimization (flat arrays, pooling)
+5. ⏳ Implement network batching optimization
+6. ⏳ Run full profiling and benchmarking
+7. ⏳ Update docs, commit, push, open PR

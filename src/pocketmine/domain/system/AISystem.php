@@ -26,11 +26,13 @@ final class AISystem implements ParallelSystem {
             return;
         }
 
-        foreach ($aiStates as $entityId => $ai) {
-            $position = $positions[$entityId] ?? null;
-            $velocity = $velocities[$entityId] ?? null;
+        $count = min(count($aiStates), count($positions), count($velocities));
+        for ($i = 0; $i < $count; $i++) {
+            $ai = $aiStates[$i];
+            $position = $positions[$i];
+            $velocity = $velocities[$i];
 
-            if (!$position || !$velocity || !$ai->canNavigate) {
+            if (!$ai || !$position || !$velocity || !$ai->canNavigate) {
                 continue;
             }
 
