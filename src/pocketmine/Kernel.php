@@ -1312,7 +1312,10 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     $scheduler->register(new \pocketmine\core\system\PhysicsSystem(), \pocketmine\core\ecs\SystemPhase::PARALLEL);
     $scheduler->register(new \pocketmine\core\system\MovementSystem(), \pocketmine\core\ecs\SystemPhase::PARALLEL);
     $scheduler->register(new \pocketmine\core\system\EffectSystem(), \pocketmine\core\ecs\SystemPhase::PARALLEL);
-    $scheduler->register(new \pocketmine\core\system\AISystem(), \pocketmine\core\ecs\SystemPhase::PARALLEL);
+    // Sequential: AI needs main-thread access to the combat pipeline, spatial
+    // index, and cross-entity reads. Runs before parallel movement/physics so
+    // the velocities it writes are integrated the same tick.
+    $scheduler->register(new \pocketmine\core\system\AISystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     $scheduler->register(new \pocketmine\core\system\ChunkUpdateSystem(), \pocketmine\core\ecs\SystemPhase::CHUNK_PARALLEL);
 }
 

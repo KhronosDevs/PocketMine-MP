@@ -24,6 +24,12 @@ final class AIStateComponent {
     public float $followRange = 16.0;
     public float $attackRange = 2.0;
     public float $attackDamage = 2.0;
+    /** Ticks remaining before the next attack is allowed. */
+    public int $attackCooldown = 0;
+    /** Cooldown reset value in ticks (20 TPS => 20 = 1 second). */
+    public int $attackCooldownMax = 20;
+    /** Flee below this fraction of max health (0.2 = 20%). 0 disables. */
+    public float $retreatHealthPercent = 0.0;
 
     public function __construct() {}
 
