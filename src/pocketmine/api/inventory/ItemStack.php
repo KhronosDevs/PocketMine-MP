@@ -4,6 +4,13 @@ declare(strict_types=1);
 
 namespace pocketmine\api\inventory;
 
+/**
+ * Plugin-facing item value object.
+ *
+ * The API layer speaks this type exclusively; the core ECS storage layer
+ * uses \pocketmine\core\component\ItemStack. Convert at the boundary with
+ * toCore()/fromCore() - never mix the two in API signatures.
+ */
 class ItemStack {
     public function __construct(
         public int $itemId = 0,
@@ -148,6 +155,14 @@ class ItemStack {
 
     public function isEnchanted(): bool {
         return isset($this->nbt['ench']) && !empty($this->nbt['ench']);
+    }
+
+    public function toCore(): \pocketmine\core\component\ItemStack {
+        return new \pocketmine\core\component\ItemStack($this->itemId, $this->meta, $this->count, $this->nbt);
+    }
+
+    public static function fromCore(\pocketmine\core\component\ItemStack $item): self {
+        return new self($item->itemId, $item->meta, $item->count, $item->nbt);
     }
 
     public function clone(): self {

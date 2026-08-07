@@ -6,10 +6,10 @@ require dirname(__DIR__) . '/autoload.php';
 require __DIR__ . '/helpers.php';
 
 use pocketmine\api\inventory\Inventory;
+use pocketmine\api\inventory\ItemStack;
 use pocketmine\api\world\World;
 use pocketmine\core\component\CollisionComponent;
 use pocketmine\core\component\InventoryComponent;
-use pocketmine\core\component\ItemStack;
 use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\ecs\EntityBuilder;
 use pocketmine\core\ecs\EntityRef;

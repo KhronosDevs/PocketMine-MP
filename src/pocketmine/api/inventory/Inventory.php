@@ -5,11 +5,20 @@ declare(strict_types=1);
 namespace pocketmine\api\inventory;
 
 use pocketmine\core\component\InventoryComponent;
-use pocketmine\core\component\ItemStack;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
-use pocketmine\api\entity\Player;
 
+/**
+ * Plugin-facing inventory facade over the core InventoryComponent.
+ *
+ * The facade speaks api\inventory\ItemStack exclusively and converts to the
+ * core storage type (core\component\ItemStack) at the boundary, so plugins
+ * never touch core component types.
+ *
+ * Note: getItem()/getContents() return detached api ItemStack copies - mutate
+ * them and write back via setItem()/setContents(); the underlying storage is
+ * only written through the facade.
+ */
 class Inventory {
     private InventoryComponent $inventory;
     private EntityRef $holder;
@@ -32,31 +41,51 @@ class Inventory {
     }
 
     public function getItem(int $slot): ?ItemStack {
-        return $this->inventory->get($slot);
+        $item = $this->inventory->get($slot);
+        return $item === null ? null : ItemStack::fromCore($item);
     }
 
     public function setItem(int $slot, ?ItemStack $item): void {
-        $this->inventory->set($slot, $item);
+        $this->inventory->set($slot, $item === null ? null : $item->toCore());
     }
 
     public function addItem(ItemStack $item): bool {
-        return $this->inventory->add($item);
+        $core = $item->toCore();
+        $ok = $this->inventory->add($core);
+        // Reflect what was actually consumed back onto the caller's stack.
+        $item->setCount($core->count);
+        return $ok;
     }
 
     public function removeItem(int $slot, int $count = 1): ?ItemStack {
-        return $this->inventory->remove($slot, $count);
+        $removed = $this->inventory->remove($slot, $count);
+        return $removed === null ? null : ItemStack::fromCore($removed);
     }
 
     public function clear(): void {
         $this->inventory->clear();
     }
 
+    /**
+     * @return array<int, ItemStack>
+     */
     public function getContents(): array {
-        return $this->inventory->getContents();
+        $items = [];
+        foreach ($this->inventory->getContents() as $slot => $item) {
+            $items[$slot] = ItemStack::fromCore($item);
+        }
+        return $items;
     }
 
+    /**
+     * @param array<int, ItemStack|null> $items
+     */
     public function setContents(array $items): void {
-        $this->inventory->setContents($items);
+        $coreItems = [];
+        foreach ($items as $slot => $item) {
+            $coreItems[$slot] = $item === null ? null : $item->toCore();
+        }
+        $this->inventory->setContents($coreItems);
     }
 
     public function getHeldItem(): ?ItemStack {
@@ -86,13 +115,14 @@ class Inventory {
     }
 
     public function canAddItem(ItemStack $item): bool {
-        if ($item->count <= 0) {
+        $core = $item->toCore();
+        if ($core->count <= 0) {
             return true;
         }
-        $remaining = $item->count;
+        $remaining = $core->count;
         // First, fit what we can into existing stacks of the same item.
-        foreach ($this->getContents() as $existing) {
-            if ($existing->canStackWith($item)) {
+        foreach ($this->inventory->getContents() as $existing) {
+            if ($existing->canStackWith($core)) {
                 $remaining -= $existing->getMaxStackSize() - $existing->count;
                 if ($remaining <= 0) {
                     return true;
@@ -100,7 +130,7 @@ class Inventory {
             }
         }
         // Any remainder needs empty slots (a full stack per slot).
-        return $this->getFreeSlots() * $item->getMaxStackSize() >= $remaining;
+        return $this->getFreeSlots() * $core->getMaxStackSize() >= $remaining;
     }
 
     public function getFirstFreeSlot(): int {
@@ -113,8 +143,9 @@ class Inventory {
     }
 
     public function contains(ItemStack $item): bool {
+        $core = $item->toCore();
         foreach ($this->inventory->getContents() as $existing) {
-            if ($existing->canStackWith($item)) {
+            if ($existing->canStackWith($core)) {
                 return true;
             }
         }

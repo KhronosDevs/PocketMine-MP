@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace pocketmine\api\entity;
 
+use pocketmine\api\inventory\ItemStack;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
 use pocketmine\core\component\InventoryComponent;
-use pocketmine\core\component\ItemStack;
 use pocketmine\core\component\MetadataComponent;
 
 class ItemEntity extends Entity {
@@ -15,11 +15,11 @@ class ItemEntity extends Entity {
         parent::__construct($ref, $world);
     }
 
-    public static function create(float $x, float $y, float $z, \pocketmine\core\component\ItemStack $item): self {
+    public static function create(float $x, float $y, float $z, ItemStack $item): self {
         $kernel = \pocketmine\Kernel::getInstance();
         $spawnService = $kernel->getEntitySpawnService();
         
-        $entityRef = $spawnService->spawnItem($x, $y, $z, $item);
+        $entityRef = $spawnService->spawnItem($x, $y, $z, $item->toCore());
         
         $kernel = \pocketmine\Kernel::getInstance();
         $world = $kernel->getWorld();
@@ -27,21 +27,21 @@ class ItemEntity extends Entity {
         return new self($entityRef, $world);
     }
 
-    public function getItem(): \pocketmine\core\component\ItemStack {
+    public function getItem(): ItemStack {
         $metadata = $this->ref->getMetadata();
         $item = $metadata?->get('item');
         return $item instanceof \pocketmine\core\component\ItemStack
-            ? $item
-            : new \pocketmine\core\component\ItemStack(0, 0, 0);
+            ? ItemStack::fromCore($item)
+            : new ItemStack(0, 0, 0);
     }
 
-    public function setItem(\pocketmine\core\component\ItemStack $item): void {
+    public function setItem(ItemStack $item): void {
         $metadata = $this->ref->getMetadata();
         if (!$metadata) {
             $metadata = new \pocketmine\core\component\MetadataComponent();
             $this->ref->setComponent(\pocketmine\core\component\MetadataComponent::class, $metadata);
         }
-        $metadata->set('item', $item);
+        $metadata->set('item', $item->toCore());
     }
 
     public function getPickupDelay(): int {

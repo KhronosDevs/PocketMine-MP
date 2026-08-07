@@ -249,7 +249,7 @@ class World {
         }
     }
 
-    public function dropItem(float $x, float $y, float $z, \pocketmine\core\component\ItemStack $item): void {
+    public function dropItem(float $x, float $y, float $z, \pocketmine\api\inventory\ItemStack $item): void {
         \pocketmine\api\entity\ItemEntity::create($x, $y, $z, $item);
     }
 
