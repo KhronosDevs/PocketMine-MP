@@ -66,8 +66,10 @@ final class World {
     }
 
     private function flushEntityChanges(): void {
+        $changed = false;
         foreach ($this->entitiesToAdd as $entity) {
             $this->entities[$entity->id] = $entity;
+            $changed = true;
         }
         $this->entitiesToAdd = [];
 
@@ -78,8 +80,17 @@ final class World {
                 $archetype->removeEntity($entity);
                 unset($this->entityArchetypes[$entity->id]);
             }
+            $changed = true;
         }
         $this->entitiesToRemove = [];
+
+        // A cached Query holds a frozen entity array - spawning or despawning
+        // an entity would otherwise leave every cached query (AI system
+        // included) iterating a stale snapshot forever. Drop the cache on any
+        // entity-set change; steady-state ticks (no add/remove) keep it.
+        if ($changed) {
+            QueryBuilder::clearCache();
+        }
 
         $this->reconcileArchetypes();
     }

@@ -4,54 +4,116 @@ declare(strict_types=1);
 
 namespace pocketmine\core\system;
 
+use pocketmine\api\event\EntityDamageEvent;
 use pocketmine\core\component\AIStateComponent;
-use pocketmine\core\component\PathComponent;
+use pocketmine\core\component\HealthComponent;
+use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\VelocityComponent;
-use pocketmine\core\ecs\Archetype;
-use pocketmine\core\ecs\ParallelSystem;
+use pocketmine\core\component\tags\PlayerTag;
+use pocketmine\core\ecs\EntityRef;
+use pocketmine\core\ecs\System;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\SpatialIndex;
+use pocketmine\core\service\CombatService;
 
-final class AISystem implements ParallelSystem {
+/**
+ * Real AI behaviors (12.1).
+ *
+ * Sequential (main-thread) system: target acquisition, chasing/attacking with
+ * cooldowns, and fleeing at low health. Runs before the parallel movement
+ * systems so the velocities it writes are integrated the same tick. Attacks go
+ * through CombatService so every hit fires the damage event, applies armor,
+ * and (on death) drops loot - no bypasses.
+ *
+ * Entities need an AIStateComponent (attached to mobs at spawn by
+ * EntitySpawnService) plus Position/Velocity/Health/Metadata components.
+ */
+final class AISystem implements System {
+    private ?CombatService $combatService = null;
+
     public function run(World $world, float $deltaTime): void {
-        // Not used - ParallelSystem uses runParallel
-    }
-
-    public function runParallel(Archetype $archetype, float $deltaTime): void {
-        $aiStates = $archetype->getComponentArray(AIStateComponent::class);
-        $positions = $archetype->getComponentArray(PositionComponent::class);
-        $velocities = $archetype->getComponentArray(VelocityComponent::class);
-
-        if (empty($aiStates) || empty($positions) || empty($velocities)) {
-            return;
+        // The spatial index is only consumed here; rebuild it once per tick so
+        // target acquisition sees current positions. O(entities) insert.
+        $spatial = $world->getResourceRegistry()->get(SpatialIndex::class);
+        if ($spatial instanceof SpatialIndex) {
+            $spatial->rebuild($world);
         }
 
-        $count = min(count($aiStates), count($positions), count($velocities));
-        for ($i = 0; $i < $count; $i++) {
-            $ai = $aiStates[$i];
-            $position = $positions[$i];
-            $velocity = $velocities[$i];
+        $combat = $this->getCombatService();
 
-            if (!$ai || !$position || !$velocity || !$ai->canNavigate) {
+        $query = $world->query()
+            ->with(
+                AIStateComponent::class,
+                PositionComponent::class,
+                VelocityComponent::class,
+                HealthComponent::class,
+                MetadataComponent::class,
+            )
+            ->build();
+
+        foreach ($query as $entity) {
+            $ai = $entity->get(AIStateComponent::class);
+            $pos = $entity->get(PositionComponent::class);
+            $vel = $entity->get(VelocityComponent::class);
+            $health = $entity->get(HealthComponent::class);
+            $meta = $entity->get(MetadataComponent::class);
+            if (!$ai || !$pos || !$vel || !$health || !$meta) {
                 continue;
             }
 
-            // Use pending components for parallel writes
+            if ($ai->attackCooldown > 0) {
+                $ai->attackCooldown--;
+            }
+
+            $hostile = (bool)$meta->get('hostile', false);
+
+            // Validate the current target: gone, dead, or out of follow range.
+            if ($ai->targetEntity !== null) {
+                $target = $world->getEntity($ai->targetEntity);
+                $targetHealth = $target?->get(HealthComponent::class);
+                $targetPos = $target?->get(PositionComponent::class);
+                $tooFar = $targetPos === null
+                    || $this->distSq($pos, $targetPos) > $ai->followRange * $ai->followRange;
+                if ($target === null || $targetHealth === null || $targetHealth->current <= 0 || $tooFar) {
+                    $ai->clearTarget();
+                }
+            }
+
+            // Hostile mobs acquire the nearest living player as a target.
+            if ($hostile && $ai->targetEntity === null) {
+                $this->acquireTarget($world, $spatial, $ai, $pos, $entity->id);
+            }
+
+            // Retreat: any mob below its health threshold flees the nearest
+            // player (passive mobs panic when hurt; hostile mobs fall back).
+            $flee = $ai->retreatHealthPercent > 0
+                && $health->max > 0
+                && $health->current <= $health->max * $ai->retreatHealthPercent;
+            if ($flee) {
+                $this->handleFleeing($world, $spatial, $ai, $pos, $vel, $entity->id);
+                continue;
+            }
+
+            if ($ai->targetEntity !== null) {
+                $this->handleChaseAndAttack($world, $combat, $ai, $pos, $vel, $entity->id);
+                continue;
+            }
+
+            // No target: idle / wander / follow a manually set path.
             switch ($ai->state) {
-                case 0: // Idle
-                    $this->handleIdle($ai, $position);
+                case 1:
+                    $this->handleWandering($ai, $pos, $vel);
                     break;
-                case 1: // Wandering
-                    $this->handleWandering($ai, $position, $velocity);
+                case 2:
+                    $this->handlePathfinding($ai, $pos, $vel);
                     break;
-                case 2: // Pathfinding to position
-                    $this->handlePathfinding($ai, $position, $velocity);
-                    break;
-                case 3: // Attacking/following entity
-                    $this->handleAttacking($archetype, $ai, $position, $velocity);
-                    break;
-                case 4: // Fleeing
-                    $this->handleFleeing($archetype, $ai, $position, $velocity);
+                default:
+                    // Idle: stop moving. Without this a mob that lost its target
+                    // keeps the last chase/flee velocity and slides forever.
+                    $vel->x = 0;
+                    $vel->z = 0;
+                    $this->handleIdle($ai, $pos);
                     break;
             }
         }
@@ -80,13 +142,16 @@ final class AISystem implements ParallelSystem {
 
         if ($distSq < 4.0) { // Close enough
             $ai->state = 0;
+            $velocity->x = 0;
+            $velocity->z = 0;
             return;
         }
 
-        // Simple movement toward target - write to pending velocity
         $dist = sqrt($distSq);
-        $speed = 0.2 * $ai->speedModifier;
-        $velocity->setPending(($dx / $dist) * $speed, $velocity->y, ($dz / $dist) * $speed);
+        // Velocity is in blocks/second (MovementSystem integrates v*dt).
+        $speed = 1.5 * $ai->speedModifier;
+        $velocity->x = ($dx / $dist) * $speed;
+        $velocity->z = ($dz / $dist) * $speed;
     }
 
     private function handlePathfinding(AIStateComponent $ai, PositionComponent $position, VelocityComponent $velocity): void {
@@ -99,80 +164,167 @@ final class AISystem implements ParallelSystem {
                 $dist = sqrt($dx * $dx + $dy * $dy + $dz * $dz);
 
                 if ($dist < 0.5) {
-                    // Close enough, advance to next node
-                    return;
+                    return; // Close enough, advance to next node
                 }
 
                 $speed = 0.3 * $ai->speedModifier;
-                $velocity->setPending(($dx / $dist) * $speed, ($dy / $dist) * $speed * 0.5, ($dz / $dist) * $speed);
+                $velocity->x = ($dx / $dist) * $speed;
+                $velocity->z = ($dz / $dist) * $speed;
             }
         } else {
-            // Path complete or no path
-            $ai->state = 0;
+            $ai->state = 0; // Path complete or no path
         }
     }
 
-    private function handleAttacking(Archetype $archetype, AIStateComponent $ai, PositionComponent $position, VelocityComponent $velocity): void {
-        if ($ai->targetEntity === null) {
-            $ai->state = 0;
+    /**
+     * Move toward the target; within attack range, stop and attack on a
+     * cooldown. Damage goes through CombatService (events, armor, death/loot).
+     */
+    private function handleChaseAndAttack(
+        World $world,
+        ?CombatService $combat,
+        AIStateComponent $ai,
+        PositionComponent $pos,
+        VelocityComponent $vel,
+        int $mobId,
+    ): void {
+        $target = $world->getEntity($ai->targetEntity);
+        $targetPos = $target?->get(PositionComponent::class);
+        if ($targetPos === null) {
+            $ai->clearTarget();
             return;
         }
 
-        // Target entity lookup would need to be done carefully in parallel
-        // For now, simplified - just move toward target position
-        if ($ai->targetEntity !== null) {
-            $targetPos = $archetype->getComponentArray(PositionComponent::class)[$ai->targetEntity] ?? null;
-            if (!$targetPos) {
-                $ai->clearTarget();
-                return;
-            }
+        $dx = $targetPos->x - $pos->x;
+        $dz = $targetPos->z - $pos->z;
+        $dist = sqrt($dx * $dx + $dz * $dz);
 
-            $dx = $targetPos->x - $position->x;
-            $dy = $targetPos->y - $position->y;
-            $dz = $targetPos->z - $position->z;
-            $distSq = $dx * $dx + $dy * $dy + $dz * $dz;
-            $attackRangeSq = $ai->attackRange * $ai->attackRange;
+        if ($dist <= 0.0001) {
+            $vel->x = 0;
+            $vel->z = 0;
+            return;
+        }
 
-            if ($distSq <= $attackRangeSq) {
-                // In attack range - stop and attack
-                $velocity->setPending(0, $velocity->y, 0);
-                $healthArr = $archetype->getComponentArray(\pocketmine\core\component\HealthComponent::class);
-                $targetHealth = $healthArr[$ai->targetEntity] ?? null;
-                if ($targetHealth !== null) {
-                    $targetHealth->current = max(0.0, $targetHealth->current - $ai->attackDamage);
-                }
-            } else {
-                // Move toward target
-                $dist = sqrt($distSq);
-                $speed = 0.35 * $ai->speedModifier;
-                $velocity->setPending(($dx / $dist) * $speed, $velocity->y, ($dz / $dist) * $speed);
+        // Attack range is 3D: a mob must not hit a player standing 10 blocks
+        // above it in the same XZ column. Chase steering stays 2D.
+        $dy = $targetPos->y - $pos->y;
+        $attackRangeSq = $ai->attackRange * $ai->attackRange;
+        if ($dx * $dx + $dz * $dz + $dy * $dy <= $attackRangeSq) {
+            // In attack range: stop and attack on cooldown.
+            $vel->x = 0;
+            $vel->z = 0;
+            if ($ai->attackCooldown <= 0 && $combat !== null && $ai->attackDamage > 0) {
+                $combat->applyDamage(
+                    EntityRef::create($ai->targetEntity, $world),
+                    $ai->attackDamage,
+                    EntityRef::create($mobId, $world),
+                    EntityDamageEvent::CAUSE_ENTITY_ATTACK,
+                );
+                $ai->attackCooldown = $ai->attackCooldownMax;
             }
+            return;
+        }
+
+        // Chase: full speed toward the target (blocks/second).
+        $speed = 4.0 * $ai->speedModifier;
+        $vel->x = ($dx / $dist) * $speed;
+        $vel->z = ($dz / $dist) * $speed;
+    }
+
+    /** Move away from the nearest player (panic / retreat). */
+    private function handleFleeing(
+        World $world,
+        ?SpatialIndex $spatial,
+        AIStateComponent $ai,
+        PositionComponent $pos,
+        VelocityComponent $vel,
+        int $mobId,
+    ): void {
+        $playerId = $this->findNearestPlayer($world, $spatial, $pos, 16.0, $mobId);
+        if ($playerId === null) {
+            $vel->x = 0;
+            $vel->z = 0;
+            return;
+        }
+        $playerPos = $world->getEntity($playerId)?->get(PositionComponent::class);
+        if ($playerPos === null) {
+            $vel->x = 0;
+            $vel->z = 0;
+            return;
+        }
+
+        $dx = $pos->x - $playerPos->x;
+        $dz = $pos->z - $playerPos->z;
+        $dist = sqrt($dx * $dx + $dz * $dz);
+        if ($dist > 0.0001) {
+            $speed = 5.0 * $ai->speedModifier;
+            $vel->x = ($dx / $dist) * $speed;
+            $vel->z = ($dz / $dist) * $speed;
         }
     }
 
-    private function handleFleeing(Archetype $archetype, AIStateComponent $ai, PositionComponent $position, VelocityComponent $velocity): void {
-        // Move away from target
-        if ($ai->targetEntity !== null) {
-            $targetPos = $archetype->getComponentArray(PositionComponent::class)[$ai->targetEntity] ?? null;
-            if ($targetPos) {
-                $dx = $position->x - $targetPos->x;
-                $dz = $position->z - $targetPos->z;
-                $dist = sqrt($dx * $dx + $dz * $dz);
-
-                if ($dist > 0) {
-                    $speed = 0.4 * $ai->speedModifier;
-                    $velocity->setPending(($dx / $dist) * $speed, $velocity->y, ($dz / $dist) * $speed);
-                }
-            }
+    /** Pick the nearest living player inside the follow range. */
+    private function acquireTarget(
+        World $world,
+        ?SpatialIndex $spatial,
+        AIStateComponent $ai,
+        PositionComponent $pos,
+        int $mobId,
+    ): void {
+        $playerId = $this->findNearestPlayer($world, $spatial, $pos, $ai->followRange, $mobId);
+        if ($playerId !== null) {
+            $ai->setTargetEntity($playerId);
         }
     }
 
-    public function getTargetArchetypes(World $world): iterable {
-        $query = $world->query()
-            ->with(\pocketmine\core\component\AIStateComponent::class, \pocketmine\core\component\PositionComponent::class, \pocketmine\core\component\VelocityComponent::class)
-            ->build();
+    private function findNearestPlayer(World $world, ?SpatialIndex $spatial, PositionComponent $pos, float $radius, int $selfId): ?int {
+        if ($spatial === null) {
+            return null;
+        }
+        $candidates = $spatial->getNearby($pos->x, $pos->z, $radius);
+        $bestId = null;
+        $bestDistSq = $radius * $radius;
+        foreach ($candidates as $candidateId) {
+            if ($candidateId === $selfId) {
+                continue;
+            }
+            $candidate = $world->getEntity($candidateId);
+            if ($candidate === null || !$candidate->has(PlayerTag::class)) {
+                continue;
+            }
+            $candidateHealth = $candidate->get(HealthComponent::class);
+            if ($candidateHealth === null || $candidateHealth->current <= 0) {
+                continue;
+            }
+            $candidatePos = $candidate->get(PositionComponent::class);
+            if ($candidatePos === null) {
+                continue;
+            }
+            $d = $this->distSq($pos, $candidatePos);
+            if ($d < $bestDistSq) {
+                $bestDistSq = $d;
+                $bestId = $candidateId;
+            }
+        }
+        return $bestId;
+    }
 
-        $registry = $world->getComponentRegistry();
-        return $query->archetypes($registry);
+    private function distSq(PositionComponent $a, PositionComponent $b): float {
+        $dx = $a->x - $b->x;
+        $dz = $a->z - $b->z;
+        return $dx * $dx + $dz * $dz;
+    }
+
+    /**
+     * CombatService is created by the Kernel constructor, after systems are
+     * registered - resolve lazily on first run (Kernel::getInstance() is set
+     * before any tick). Matches the pattern used by the api facades.
+     */
+    private function getCombatService(): ?CombatService {
+        if ($this->combatService === null) {
+            $kernel = \pocketmine\Kernel::getInstance();
+            $this->combatService = $kernel?->getCombatService();
+        }
+        return $this->combatService;
     }
 }
