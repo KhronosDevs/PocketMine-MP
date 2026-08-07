@@ -9,6 +9,9 @@ final class World {
     private array $entitiesToAdd = [];
     private array $entitiesToRemove = [];
 
+    /** @var array<int, Archetype> entityId => archetype the entity currently lives in */
+    private array $entityArchetypes = [];
+
     public function __construct(
         private readonly ComponentRegistry $componentRegistry,
         private readonly ResourceRegistry $resourceRegistry,
@@ -65,16 +68,55 @@ final class World {
     private function flushEntityChanges(): void {
         foreach ($this->entitiesToAdd as $entity) {
             $this->entities[$entity->id] = $entity;
-            $this->componentRegistry->getOrCreateArchetype($entity)->addEntity($entity);
         }
         $this->entitiesToAdd = [];
 
         foreach ($this->entitiesToRemove as $entity) {
             unset($this->entities[$entity->id]);
-            $archetype = $this->componentRegistry->getOrCreateArchetype($entity);
-            $archetype->removeEntity($entity);
+            $archetype = $this->entityArchetypes[$entity->id] ?? null;
+            if ($archetype !== null) {
+                $archetype->removeEntity($entity);
+                unset($this->entityArchetypes[$entity->id]);
+            }
         }
         $this->entitiesToRemove = [];
+
+        $this->reconcileArchetypes();
+    }
+
+    /**
+     * Ensure every live entity lives in the archetype matching its current
+     * component set. Components added or removed after spawn (e.g. teleport
+     * attaching RotationComponent) would otherwise leave the entity stranded
+     * in its original archetype, invisible to system queries.
+     *
+     * Runs on every flush (each tick + each spawn/despawn). Cost is O(entities)
+     * array_keys + sort even when nothing changed - a dirty-flag skip is a
+     * future optimization if thousands of entities make this measurable.
+     * Migrations allocate a fresh index in the target archetype (the old one's
+     * freed index stays in its free list for reuse by later additions), so
+     * repeated component toggling grows archetype indices slowly but never
+     * corrupts data.
+     */
+    private function reconcileArchetypes(): void {
+        foreach ($this->entities as $entity) {
+            $types = array_keys($entity->getComponents());
+            sort($types);
+
+            $recorded = $this->entityArchetypes[$entity->id] ?? null;
+            if ($recorded !== null) {
+                $recordedTypes = $recorded->componentTypes;
+                sort($recordedTypes);
+                if ($recordedTypes === $types) {
+                    continue;
+                }
+                $recorded->removeEntity($entity);
+            }
+
+            $archetype = $this->componentRegistry->getArchetype($types);
+            $archetype->addEntity($entity);
+            $this->entityArchetypes[$entity->id] = $archetype;
+        }
     }
 
     public function applyPendingComponents(): void {

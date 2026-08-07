@@ -25,6 +25,11 @@ final class Archetype {
     /** @var array<string, array> freed indices for reuse */
     private array $freeIndices = [];
 
+    /** Monotonic index allocator: indices are never derived from the current
+     *  entity count, which shifts the first entity into index -1 and makes
+     *  index-based system loops (for i=0; i<count; i++) skip it. */
+    private int $nextIndex = 0;
+
     public function __construct(
         public readonly array $componentTypes,
     ) {
@@ -78,8 +83,8 @@ final class Archetype {
             return array_pop($this->freeIndices[$firstType]);
         }
         
-        // Allocate new index
-        return count($this->entities) - 1 + count($this->freeIndices[$firstType ?? '']);
+        // Allocate new index (monotonic, reused from the free list when possible)
+        return $this->nextIndex++;
     }
 
     public function getEntity(int $id): ?Entity {

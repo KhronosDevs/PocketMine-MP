@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace pocketmine\core\ecs;
 
+use pocketmine\core\component\PositionComponent;
+
 final class EntityBuilder {
     private const TAG_MAP = [
         'player' => \pocketmine\core\component\tags\PlayerTag::class,

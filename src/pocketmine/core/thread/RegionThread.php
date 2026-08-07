@@ -25,6 +25,9 @@ final class RegionThread extends Thread {
     /** @var ThreadSafeArray<int, string> entityId => json-encoded component snapshot */
     private ThreadSafeArray $entityData;
     private ThreadSafe $state;
+    /** Sequence of the last processed 'tick' command, echoed back on results so
+     *  the kernel can drop stale (out-of-window) results. */
+    private int $currentTickSeq = 0;
     private int $regionId;
     private int $minChunkX;
     private int $maxChunkX;
@@ -76,19 +79,14 @@ final class RegionThread extends Thread {
 
     public function run(): void {
         while ($this->state->running) {
-            $start = hrtime(true);
-
             $this->processCommands();
             $this->processMigrations();
 
-            // Data-oriented simulation tick over serialized snapshots
-            $this->tickSnapshots();
-
-            $elapsedMs = (hrtime(true) - $start) / 1_000_000;
-            $sleepMs = $this->targetDeltaTime * 1000 - $elapsedMs;
-            if ($sleepMs > 0) {
-                usleep((int)($sleepMs * 1000));
-            }
+            // Lockstep: the kernel drives integration cadence by sending a
+            // 'tick' command after mirroring entity snapshots. The worker does
+            // NOT advance snapshots on its own timer, so results are exactly
+            // one integration per kernel tick - deterministic by construction.
+            usleep(200); // low-latency command polling
         }
     }
 
@@ -111,7 +109,9 @@ final class RegionThread extends Thread {
                     $this->entityData->offsetUnset((string)$entityId);
                     break;
                 case 'tick':
-                    $this->syncQueue[] = json_encode(['type' => 'tick_ack', 'regionId' => $this->regionId]);
+                    $this->currentTickSeq = (int)($decoded['seq'] ?? 0);
+                    $this->tickSnapshots();
+                    $this->syncQueue[] = json_encode(['type' => 'tick_ack', 'regionId' => $this->regionId, 'seq' => $this->currentTickSeq]);
                     break;
                 case 'shutdown':
                     $this->state->running = false;
@@ -134,7 +134,11 @@ final class RegionThread extends Thread {
     }
 
     /**
-     * Advance position from velocity for all snapshot entities.
+     * Advance position from velocity for all snapshot entities, then apply
+     * gravity to velocity - matching the main thread's MovementSystem +
+     * PhysicsSystem order exactly (integrate with pre-gravity velocity, then
+     * decelerate) so results are bit-for-bit comparable.
+     *
      * Pure data transform on JSON snapshots - no shared object state.
      */
     private function tickSnapshots(): void {
@@ -150,11 +154,18 @@ final class RegionThread extends Thread {
             $snapshot['position']['x'] += $snapshot['velocity']['x'] * $this->targetDeltaTime;
             $snapshot['position']['y'] += $snapshot['velocity']['y'] * $this->targetDeltaTime;
             $snapshot['position']['z'] += $snapshot['velocity']['z'] * $this->targetDeltaTime;
+            // Gravity: same constant as PhysicsSystem (0.08 blocks/tick^2).
+            $snapshot['velocity']['y'] -= 0.08 * $this->targetDeltaTime;
             $this->entityData[(string)$entityId] = json_encode($snapshot);
             $updated[] = ['entityId' => (int)$entityId, 'snapshot' => $snapshot];
         }
         if (!empty($updated)) {
-            $this->syncQueue[] = json_encode(['type' => 'snapshots', 'regionId' => $this->regionId, 'entities' => $updated]);
+            $this->syncQueue[] = json_encode([
+                'type' => 'snapshots',
+                'regionId' => $this->regionId,
+                'seq' => $this->currentTickSeq,
+                'entities' => $updated,
+            ]);
         }
     }
 

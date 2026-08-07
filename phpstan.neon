@@ -32,8 +32,6 @@ parameters:
         - src/pocketmine/old-src/*
     ignoreErrors:
         - '#^Access to an undefined property#'
-        - '#^Class .* not found#'
-        - '#^Instantiated class .* not found#'
         - '#^Call to an undefined method#'
         - '#^Property .* is never read, only written#'
         - '#^Constant .* is unused#'

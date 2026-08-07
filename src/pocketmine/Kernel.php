@@ -10,6 +10,8 @@ use pocketmine\adapter\driven\threading\PmmpThreadPool;
 use pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter;
 use pocketmine\adapter\driving\console\ConsoleCommandAdapter;
 use pocketmine\adapter\driving\plugin\PluginManagerAdapter;
+use pocketmine\core\component\PositionComponent;
+use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\ecs\ComponentRegistry;
 use pocketmine\core\ecs\ResourceRegistry;
 use pocketmine\core\ecs\SystemScheduler;
@@ -36,6 +38,8 @@ use pocketmine\core\service\InventoryService;
 use pocketmine\core\service\CraftingService;
 use pocketmine\core\service\ContainerService;
 use pocketmine\core\system\ChunkUpdateSystem;
+use pocketmine\core\system\MovementSystem;
+use pocketmine\core\system\PhysicsSystem;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\ThreadingPort;
@@ -58,6 +62,30 @@ final class Kernel {
     private bool $threadsStarted = false;
     private string $dataPath;
     private int $startTime;
+
+    // --- Region pipeline (Phase 9) ---------------------------------------
+    // Mirror entities to region workers each tick; workers integrate position
+    // from velocity (plus gravity) in lockstep; results are compared (gate
+    // mode) or applied (apply mode). Off by default: zero behavior change.
+    private bool $regionPipelineEnabled = false;
+    private bool $regionPipelineApply = false;
+    /** @var array<int, int> entityId => owning region id */
+    private array $pipelineMirroredIds = [];
+    private int $pipelineTickSeq = 0;
+    private int $pipelineMirroredThisTick = 0;
+    private array $pipelineStats = [
+        'enabled' => false,
+        'applyMode' => false,
+        'mirrored' => 0,
+        'despawned' => 0,
+        'received' => 0,
+        'applied' => 0,
+        'compared' => 0,
+        'mismatches' => 0,
+        'lagged' => 0,
+        'stale' => 0,
+        'lastTickMismatches' => 0,
+    ];
 
     private PlayerJoinService $playerJoinService;
     private PlayerLeaveService $playerLeaveService;
@@ -183,8 +211,18 @@ final class Kernel {
         while ($this->running && ($maxTicks < 0 || $tick < $maxTicks)) {
             $start = hrtime(true);
 
+            // 0a. Mirror entity snapshots to region workers (pipeline).
+            if ($this->regionPipelineEnabled && $this->threadsStarted) {
+                $this->mirrorEntitiesToRegions();
+            }
+
             // 0. Tick the ECS world on the main thread (ownership model)
             $this->world->tick(0.05);
+
+            // 0b. Drain worker results: compare (gate) or apply.
+            if ($this->regionPipelineEnabled && $this->threadsStarted) {
+                $this->drainRegionResults();
+            }
 
             // 1. Main thread acts as coordinator - process global events
             $this->processGlobalCoordination();
@@ -215,6 +253,205 @@ final class Kernel {
         $this->running = false;
         if ($ownsThreads) {
             $this->shutdown();
+        }
+    }
+
+    // --- Region pipeline (Phase 9) ---------------------------------------
+
+    /**
+     * Enable the region worker pipeline. In gate mode (apply off) the main
+     * thread continues to simulate movement and the worker's results are
+     * compared for determinism. Results are reported via getRegionPipelineStats().
+     */
+    public function setRegionPipelineEnabled(bool $enabled): void {
+        $this->regionPipelineEnabled = $enabled;
+        $this->pipelineStats['enabled'] = $enabled;
+    }
+
+    public function isRegionPipelineEnabled(): bool {
+        return $this->regionPipelineEnabled;
+    }
+
+    /**
+     * Experimental: hand movement+gravity integration over to the worker.
+     * The worker is authoritative for position/velocity; the main-thread
+     * MovementSystem and PhysicsSystem are disabled while enabled.
+     * Only valid once the determinism gate reports zero mismatches.
+     */
+    public function setRegionPipelineApplyMode(bool $apply): void {
+        $this->regionPipelineApply = $apply;
+        $this->pipelineStats['applyMode'] = $apply;
+        $this->systemScheduler->setEnabled(MovementSystem::class, !$apply);
+        $this->systemScheduler->setEnabled(PhysicsSystem::class, !$apply);
+    }
+
+    public function isRegionPipelineApplyMode(): bool {
+        return $this->regionPipelineApply;
+    }
+
+    public function getRegionPipelineStats(): array {
+        return $this->pipelineStats;
+    }
+
+    /**
+     * Serialize every entity with Position+Velocity into the command queue of
+     * the region that owns its chunk, and send 'despawn' for entities that no
+     * longer qualify so the worker store stays in sync.
+     */
+    private function mirrorEntitiesToRegions(): void {
+        $this->pipelineTickSeq++;
+        $this->pipelineMirroredThisTick = 0;
+        $currentIds = [];
+        foreach ($this->world->getEntities() as $entity) {
+            $pos = $entity->get(PositionComponent::class);
+            $vel = $entity->get(VelocityComponent::class);
+            if ($pos === null || $vel === null) {
+                continue;
+            }
+            $currentIds[] = $entity->id;
+            $chunkX = (int)floor($pos->x / 16);
+            $chunkZ = (int)floor($pos->z / 16);
+            $snapshot = [
+                'type' => 'update',
+                'entityId' => $entity->id,
+                'snapshot' => [
+                    'position' => ['x' => $pos->x, 'y' => $pos->y, 'z' => $pos->z],
+                    'velocity' => ['x' => $vel->x, 'y' => $vel->y, 'z' => $vel->z],
+                ],
+            ];
+            foreach ($this->regionThreads as $regionId => $region) {
+                if ($region->ownsChunk($chunkX, $chunkZ)) {
+                    $region->getCommandQueue()[] = json_encode($snapshot);
+                    $this->pipelineMirroredIds[$entity->id] = $regionId;
+                    $this->pipelineStats['mirrored']++;
+                    $this->pipelineMirroredThisTick++;
+                    break;
+                }
+            }
+        }
+
+        // Entities that left the pipeline (despawned or lost a component).
+        // Note: an entity removed this tick is still present in getEntities()
+        // until world->tick flushes removals, so it is mirrored once more and
+        // its result surfaces as a dropped 'stale' result before the 'despawn'
+        // command fires on the following tick - intentional one-tick lag.
+        $currentIdsSet = array_flip($currentIds); // O(1) lookups instead of in_array
+        foreach ($this->pipelineMirroredIds as $id => $regionId) {
+            if (!isset($currentIdsSet[$id])) {
+                $region = $this->regionThreads[$regionId] ?? null;
+                if ($region !== null) {
+                    $region->getCommandQueue()[] = json_encode(['type' => 'despawn', 'entityId' => $id]);
+                    $this->pipelineStats['despawned']++;
+                }
+                unset($this->pipelineMirroredIds[$id]);
+            }
+        }
+
+        // Lockstep tick: after all updates/despawns are queued, tell each
+        // region to integrate its stored snapshots exactly once.
+        foreach ($this->regionThreads as $region) {
+            $region->getCommandQueue()[] = json_encode(['type' => 'tick', 'seq' => $this->pipelineTickSeq]);
+        }
+    }
+
+    /**
+     * Drain worker integration results. Gate mode compares them to the
+     * main-thread result; apply mode writes them onto the entities.
+     *
+     * The sync point waits for a message tagged with the CURRENT tick seq
+     * (the worker pushes results then its ack in order), so the gate always
+     * compares this tick's results - leftovers from earlier ticks are drained
+     * and dropped as lagged instead of being compared against the wrong tick.
+     * When nothing was mirrored this tick there is nothing to sync, so the
+     * wait is skipped entirely (no idle stall).
+     */
+    private function drainRegionResults(): void {
+        $this->pipelineStats['lastTickMismatches'] = 0;
+        $syncWaitMs = $this->pipelineMirroredThisTick > 0 ? 10.0 : 0.0;
+        foreach ($this->regionThreads as $region) {
+            $queue = $region->getSyncQueue();
+            $deadline = microtime(true) + $syncWaitMs / 1000.0;
+            $synced = false;
+            do {
+                $msg = $queue->shift();
+                if ($msg === null) {
+                    if ($synced || microtime(true) >= $deadline) {
+                        break;
+                    }
+                    usleep(200);
+                    continue;
+                }
+                $decoded = json_decode($msg, true);
+                if (!is_array($decoded)) {
+                    continue;
+                }
+                if ((int)($decoded['seq'] ?? -1) === $this->pipelineTickSeq) {
+                    $synced = true; // worker finished this tick's integration
+                }
+                $this->processPipelineMessage($decoded);
+            } while (true);
+
+            // Drain anything that arrived just after the sync point.
+            while (($msg = $queue->shift()) !== null) {
+                $decoded = json_decode($msg, true);
+                if (is_array($decoded)) {
+                    $this->processPipelineMessage($decoded);
+                }
+            }
+        }
+    }
+
+    /**
+     * Process a single worker message. Only 'snapshots' batches tagged with
+     * the current tick seq are compared/applied; older batches are dropped as
+     * 'lagged'. The gate's drift check relies on bit-exact float equality
+     * between worker and main-thread integration (identical operations on the
+     * same values; JSON round-trips are exact with serialize_precision=-1),
+     * so the epsilon only guards against future variable-timestep drift.
+     */
+    private function processPipelineMessage(array $decoded): void {
+        if (($decoded['type'] ?? '') !== 'snapshots') {
+            return;
+        }
+        if ((int)($decoded['seq'] ?? -1) !== $this->pipelineTickSeq) {
+            $this->pipelineStats['lagged'] += count($decoded['entities'] ?? []);
+            return;
+        }
+        foreach ($decoded['entities'] ?? [] as $entry) {
+            $entityId = (int)$entry['entityId'];
+            $snapshot = $entry['snapshot'];
+            $entity = $this->world->getEntity($entityId);
+            if ($entity === null) {
+                $this->pipelineStats['stale']++;
+                continue;
+            }
+            $pos = $entity->get(PositionComponent::class);
+            if ($pos === null) {
+                continue;
+            }
+            $this->pipelineStats['received']++;
+            $wx = (float)$snapshot['position']['x'];
+            $wy = (float)$snapshot['position']['y'];
+            $wz = (float)$snapshot['position']['z'];
+            if ($this->regionPipelineApply) {
+                $pos->x = $wx;
+                $pos->y = $wy;
+                $pos->z = $wz;
+                $vel = $entity->get(VelocityComponent::class);
+                if ($vel !== null) {
+                    $vel->x = (float)$snapshot['velocity']['x'];
+                    $vel->y = (float)$snapshot['velocity']['y'];
+                    $vel->z = (float)$snapshot['velocity']['z'];
+                }
+                $this->pipelineStats['applied']++;
+            } else {
+                $this->pipelineStats['compared']++;
+                $drift = abs($pos->x - $wx) + abs($pos->y - $wy) + abs($pos->z - $wz);
+                if ($drift > 1e-6) {
+                    $this->pipelineStats['mismatches']++;
+                    $this->pipelineStats['lastTickMismatches']++;
+                }
+            }
         }
     }
 
