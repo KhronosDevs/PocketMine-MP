@@ -6,6 +6,10 @@ namespace pocketmine\domain\ecs;
 
 final class Entity {
     private static int $nextId = 1;
+    /** @var array<int, Entity> */
+    private static array $pool = [];
+    private static int $poolSize = 0;
+    private const MAX_POOL_SIZE = 10000;
 
     public function __construct(
         public readonly int $id,
@@ -14,6 +18,42 @@ final class Entity {
 
     public static function generateId(): int {
         return self::$nextId++;
+    }
+
+    public static function acquire(array $components = []): self {
+        if (!empty(self::$pool)) {
+            $entity = array_pop(self::$pool);
+            self::$poolSize--;
+            // Reset entity state
+            $reflection = new \ReflectionClass($entity);
+            $idProperty = $reflection->getProperty('id');
+            $idProperty->setAccessible(true);
+            $idProperty->setValue($entity, self::generateId());
+            $entity->components = $components;
+            return $entity;
+        }
+        return new self(self::generateId(), $components);
+    }
+
+    public static function release(Entity $entity): void {
+        if (self::$poolSize < self::MAX_POOL_SIZE) {
+            // Clear components
+            $entity->components = [];
+            self::$pool[] = $entity;
+            self::$poolSize++;
+        }
+    }
+
+    public static function clearPool(): void {
+        self::$pool = [];
+        self::$poolSize = 0;
+    }
+
+    public static function getPoolStats(): array {
+        return [
+            'size' => self::$poolSize,
+            'max' => self::MAX_POOL_SIZE,
+        ];
     }
 
     public function has(string $componentType): bool {
