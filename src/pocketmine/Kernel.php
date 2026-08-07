@@ -1229,6 +1229,9 @@ function createKernel(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): 
     // Register built-in resources
     registerBuiltinResources($resourceRegistry);
 
+    // Register built-in crafting recipes
+    registerBuiltinRecipes($resourceRegistry);
+
     // Register built-in systems
     registerBuiltinSystems($systemScheduler);
 
@@ -1306,6 +1309,69 @@ function registerBuiltinResources(ResourceRegistry $registry): void {
     $registry->set(new \pocketmine\core\resource\BlockRegistry());
     $registry->set(new \pocketmine\core\resource\ItemRegistry());
     $registry->set(new \pocketmine\core\resource\ChunkStore());
+    $registry->set(new \pocketmine\core\resource\RecipeRegistry());
+}
+
+function registerBuiltinRecipes(ResourceRegistry $registry): void {
+    $recipes = $registry->get(\pocketmine\core\resource\RecipeRegistry::class);
+    if (!$recipes instanceof \pocketmine\core\resource\RecipeRegistry) {
+        return;
+    }
+
+    $recipes->registerShaped(
+        'planks_from_log',
+        ['L'],
+        ['L' => new \pocketmine\core\component\ItemStack(17, -1)], // any log (meta wildcard)
+        new \pocketmine\core\component\ItemStack(5, 0, 4),     // 4 planks
+    );
+    $recipes->registerShaped(
+        'sticks',
+        ['P', 'P'],
+        ['P' => new \pocketmine\core\component\ItemStack(5)],
+        new \pocketmine\core\component\ItemStack(280, 0, 4),   // 4 sticks
+    );
+    $recipes->registerShaped(
+        'crafting_table',
+        ['PP', 'PP'],
+        ['P' => new \pocketmine\core\component\ItemStack(5)],
+        new \pocketmine\core\component\ItemStack(58, 0, 1),
+    );
+    $recipes->registerShaped(
+        'furnace',
+        ['CCC', 'C C', 'CCC'],
+        ['C' => new \pocketmine\core\component\ItemStack(4)],
+        new \pocketmine\core\component\ItemStack(61, 0, 1),
+    );
+    $recipes->registerShaped(
+        'chest',
+        ['PPP', 'P P', 'PPP'],
+        ['P' => new \pocketmine\core\component\ItemStack(5)],
+        new \pocketmine\core\component\ItemStack(54, 0, 1),
+    );
+    $recipes->registerShaped(
+        'wooden_pickaxe',
+        ['PPP', ' S ', ' S '],
+        ['P' => new \pocketmine\core\component\ItemStack(5), 'S' => new \pocketmine\core\component\ItemStack(280)],
+        new \pocketmine\core\component\ItemStack(270, 0, 1),
+    );
+    $recipes->registerShaped(
+        'wooden_axe',
+        ['PP ', 'PS ', ' S '],
+        ['P' => new \pocketmine\core\component\ItemStack(5), 'S' => new \pocketmine\core\component\ItemStack(280)],
+        new \pocketmine\core\component\ItemStack(271, 0, 1),
+    );
+    $recipes->registerShaped(
+        'wooden_sword',
+        ['P', 'P', 'S'],
+        ['P' => new \pocketmine\core\component\ItemStack(5), 'S' => new \pocketmine\core\component\ItemStack(280)],
+        new \pocketmine\core\component\ItemStack(268, 0, 1),
+    );
+    $recipes->registerShaped(
+        'torches',
+        ['C', 'S'],
+        ['C' => new \pocketmine\core\component\ItemStack(263), 'S' => new \pocketmine\core\component\ItemStack(280)],
+        new \pocketmine\core\component\ItemStack(50, 0, 4),    // 4 torches
+    );
 }
 
 function registerBuiltinSystems(SystemScheduler $scheduler): void {

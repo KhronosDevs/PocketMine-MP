@@ -160,7 +160,7 @@ core, then parallelism behind the seams. **Phase 9 wires the seams.**
 |------|------|
 | 12.1 | Real AI behaviors (attack/retreat cooldowns, pathfinding via ThreadingPort). | ✅ done — see status below. |
 | 12.2 | Combat + damage integration across services/systems; death/drops/loot tables. | ✅ done — see status below. |
-| 12.3 | Crafting/container recipes via registry data. |
+| 12.3 | Crafting/container recipes via registry data. | ✅ done — see status below. |
 | 12.4 | Plugin jar loading + unified server-wide command registration (`Server::dispatchCommand`). |
 
 ## 6. Thread-safety & ownership model
