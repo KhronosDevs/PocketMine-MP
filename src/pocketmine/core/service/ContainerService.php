@@ -110,10 +110,13 @@ final class ContainerService {
             // Move from container to player inventory
             $item = $containerInventory->get($fromSlot);
             if (!$item) return false;
+            // addToPlayerInventory mutates $item->count as it places stacks,
+            // so capture the source stack size BEFORE the transfer.
+            $transferCount = $item->count;
             
             // Find space in player inventory
             if ($this->addToPlayerInventory($playerInventory, $item)) {
-                $containerInventory->remove($fromSlot);
+                $containerInventory->remove($fromSlot, $transferCount);
                 return true;
             }
         } else {
@@ -125,7 +128,7 @@ final class ContainerService {
             for ($i = 0; $i < $containerInventory->size; $i++) {
                 if (!$containerInventory->get($i)) {
                     $containerInventory->set($i, $item);
-                    $playerInventory->remove($fromSlot);
+                    $playerInventory->remove($fromSlot, $item->count);
                     return true;
                 }
                 
@@ -137,7 +140,9 @@ final class ContainerService {
                     $existing->count += $transfer;
                     $item->count -= $transfer;
                     if ($item->count <= 0) {
-                        $playerInventory->remove($fromSlot);
+                        // remove() mutates $item->count, so capture the source
+                        // stack size before the transfer cleared it.
+                        $playerInventory->remove($fromSlot, $item->count + $transfer);
                         return true;
                     }
                 }

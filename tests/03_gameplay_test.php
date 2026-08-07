@@ -115,13 +115,17 @@ test('api inventory facade: held slot, canAddItem, removal', function () use ($w
     ok($inv->canAddItem(new ItemStack(1, 0, 100)), '100 stones fit in 36 empty slots');
     ok(!$inv->canAddItem(new ItemStack(1, 0, 10000)), '10000 stones do not fit (36 * 64)');
 
-    // addItem + removeItemById.
+    // addItem + removeItemById. 100 items cannot exceed a slot's max stack
+    // size: they split across two slots (64 + 36), never an over-stack slot.
     $inv->addItem(new ItemStack(1, 0, 100));
     same(100, $inv->countItem(1), '100 stones in inventory');
     same(40, $inv->removeItemById(1, 40), '40 stones removed');
     same(60, $inv->countItem(1), '60 stones remain');
     same(36, $inv->getSize(), 'inventory size 36');
-    same(35, $inv->getFreeSlots(), 'one occupied slot');
+    same(34, $inv->getFreeSlots(), 'two occupied slots (64 + 36 split)');
+    foreach ($inv->getContents() as $item) {
+        ok($item->count <= $item->getMaxStackSize(), 'no over-stack slot');
+    }
 });
 
 exit(runTests());

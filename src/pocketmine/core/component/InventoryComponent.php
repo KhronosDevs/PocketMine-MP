@@ -42,6 +42,34 @@ final class InventoryComponent {
         }
     }
 
+    /**
+     * Non-mutating check: could this stack fully fit in the inventory
+     * (existing stacks + empty slots)? Does not modify any state.
+     */
+    public function canAddItem(ItemStack $item): bool {
+        if ($item->count <= 0) {
+            return true;
+        }
+        $remaining = $item->count;
+        // Space in existing stacks of the same item first.
+        foreach ($this->slots as $existing) {
+            if ($existing->canStackWith($item)) {
+                $remaining -= $existing->getMaxStackSize() - $existing->count;
+                if ($remaining <= 0) {
+                    return true;
+                }
+            }
+        }
+        // Remainder needs empty slots, a full stack per slot.
+        $free = 0;
+        for ($i = 0; $i < $this->size; $i++) {
+            if (!isset($this->slots[$i])) {
+                $free++;
+            }
+        }
+        return $free * $item->getMaxStackSize() >= $remaining;
+    }
+
     public function add(ItemStack $item): bool {
         // Try to stack first
         foreach ($this->slots as $slot => $existing) {
@@ -55,12 +83,22 @@ final class InventoryComponent {
             }
         }
 
-        // Find empty slot
+        // Empty slots: split over-stack remainders across multiple slots so
+        // add() can always fit exactly what canAddItem() promises (a result
+        // larger than one stack fills several slots instead of creating an
+        // over-stack slot).
         for ($i = 0; $i < $this->size; $i++) {
-            if (!isset($this->slots[$i])) {
-                $this->slots[$i] = $item;
-                return true;
+            if (isset($this->slots[$i])) {
+                continue;
             }
+            $max = $item->getMaxStackSize();
+            if ($item->count > $max) {
+                $this->slots[$i] = new ItemStack($item->itemId, $item->meta, $max, $item->nbt);
+                $item->count -= $max;
+                continue;
+            }
+            $this->slots[$i] = $item;
+            return true;
         }
         return false;
     }

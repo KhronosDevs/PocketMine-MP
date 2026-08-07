@@ -9,150 +9,128 @@ use pocketmine\core\component\ItemStack;
 use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\RecipeRegistry;
 
 final class CraftingService {
     public function __construct(
         private readonly World $world,
     ) {}
 
-    public function craft(EntityRef $playerRef, array $grid, int $gridSize = 3): ?ItemStack {
+    /**
+     * Attempt a craft.
+     *
+     * @param list<ItemStack|null> $grid flat row-major crafting grid
+     * @param int $gridWidth 2 for the player 2x2, 3 for a crafting table
+     * @return ItemStack|null the crafted result (already added to the player's
+     *                        inventory), or null when the recipe does not
+     *                        match / ingredients are missing / no inventory space
+     */
+    public function craft(EntityRef $playerRef, array $grid, int $gridWidth = 2): ?ItemStack {
         $player = $playerRef->getEntity();
         if (!$player) return null;
-        
-        // Check if player has crafting table for 3x3
-        $metadata = $player->get(\pocketmine\core\component\MetadataComponent::class);
-        $hasCraftingTable = $metadata?->get('craftingTable') ?? false;
-        
-        if ($gridSize === 3 && !$hasCraftingTable) {
-            return null; // Need crafting table for 3x3
+
+        // 3x3 grids require a crafting table (metadata flag set on use).
+        if ($gridWidth === 3) {
+            $metadata = $player->get(MetadataComponent::class);
+            if (($metadata?->get('craftingTable') ?? false) !== true) {
+                return null;
+            }
         }
-        
-        // Find matching recipe
-        $recipe = $this->findRecipe($grid, $gridSize);
-        if (!$recipe) return null;
-        
-        // Check if player has ingredients
-        if (!$this->hasIngredients($playerRef, $grid, $recipe)) {
+
+        $recipes = $this->world->getResourceRegistry()->get(RecipeRegistry::class);
+        if (!$recipes instanceof RecipeRegistry) {
             return null;
         }
-        
-        // Consume ingredients
-        $this->consumeIngredients($playerRef, $grid, $recipe);
-        
-        // Create result
-        $result = new ItemStack(
-            $recipe['result']['id'],
-            $recipe['result']['meta'] ?? 0,
-            $recipe['result']['count'] ?? 1
-        );
-        
-        // Add to inventory
-        $inventory = $this->world->getComponentRegistry()->get(InventoryComponent::class);
-        // This would use InventoryService
-        
-        return $result;
-    }
 
-    private function findRecipe(array $grid, int $gridSize): ?array {
-        $recipes = [
-            // 2x2 crafting
-            'pickaxe_wood' => [
-                'pattern' => ['WWW', ' S ', ' S '],
-                'key' => ['W' => ['id' => 5, 'meta' => 0], 'S' => ['id' => 280, 'meta' => 0]],
-                'result' => ['id' => 270, 'count' => 1], // Wooden pickaxe
-                'size' => 3,
-            ],
-            // ... more recipes
-        ];
-
-        foreach ($recipes as $recipe) {
-            if ($recipe['size'] !== $gridSize) {
-                continue;
-            }
-            if ($this->gridMatches($grid, $recipe)) {
-                return $recipe;
-            }
+        $recipe = $recipes->matchShaped($grid, $gridWidth);
+        if ($recipe === null) {
+            return null;
         }
 
-        return null;
-    }
+        $inventory = $player->get(InventoryComponent::class);
+        if (!$inventory) return null;
 
-    private function gridMatches(array $grid, array $recipe): bool {
-        $width = strlen($recipe['pattern'][0] ?? '');
-        foreach ($recipe['pattern'] as $row => $patternRow) {
-            foreach (str_split($patternRow) as $col => $ch) {
-                $slot = $row * $width + $col;
-                $item = $grid[$slot] ?? null;
-                if ($ch === ' ') {
-                    if ($item !== null) {
-                        return false;
-                    }
-                    continue;
-                }
-                $key = $recipe['key'][$ch] ?? null;
-                if ($key === null || $item === null) {
-                    return false;
-                }
-                if (($item['id'] ?? null) !== $key['id']) {
-                    return false;
-                }
-                if (($item['meta'] ?? 0) !== ($key['meta'] ?? 0)) {
-                    return false;
-                }
-            }
+        // Verify the player actually holds every grid ingredient. The grid is
+        // consumed one item per occupied cell, so each cell must hold count 1
+        // (a stacked cell is not a valid crafting input).
+        $required = $this->countGridIngredients($grid);
+        if (!$this->inventoryHas($inventory, $required)) {
+            return null;
         }
-        return true;
+
+        // Clone the registered result: add() mutates the stack's count on the
+        // stacking path, which would corrupt the registry's stored recipe and
+        // hand the caller a result with a residual count.
+        $src = $recipe['result'];
+        $result = new ItemStack($src->itemId, $src->meta, $src->count, $src->nbt);
+        // The crafted item must fit BEFORE anything is consumed, so a failed
+        // craft never mutates the inventory (atomic check-then-commit).
+        if (!$inventory->canAddItem($result)) {
+            return null;
+        }
+
+        // Consume exactly one of each occupied grid cell.
+        $this->consumeIngredients($inventory, $grid);
+
+        // Now guaranteed to fit. add() mutates the passed stack's count down to
+        // 0 on the stacking path, so return a fresh copy of the pristine
+        // source rather than the consumed stack.
+        $inventory->add($result);
+        return new ItemStack($src->itemId, $src->meta, $src->count, $src->nbt);
     }
 
-    private function hasIngredients(EntityRef $playerRef, array $grid, array $recipe): bool {
-        $player = \pocketmine\core\ecs\EntityRef::create($playerRef->getId(), $this->world)->getEntity();
-        if (!$player) return false;
-        
-        $inventory = $player->get(\pocketmine\core\component\InventoryComponent::class);
-        if (!$inventory) return false;
-        
-        // Count required items
+    /**
+     * Count how many of each item id/meta the grid requires - one per occupied
+     * cell, matching consumeIngredients (a cell holding a stack > 1 is not a
+     * valid crafting input and is counted as a single required unit).
+     *
+     * @param list<ItemStack|null> $grid
+     * @return array<string, int> "id:meta" => count
+     */
+    private function countGridIngredients(array $grid): array {
         $required = [];
-        foreach ($grid as $slot => $item) {
-            if ($item) {
-                $key = $item['id'] . ':' . $item['meta'];
-                $required[$key] = ($required[$key] ?? 0) + $item['count'];
+        foreach ($grid as $item) {
+            if ($item !== null && $item->count > 0) {
+                $key = $item->itemId . ':' . $item->meta;
+                $required[$key] = ($required[$key] ?? 0) + 1;
             }
         }
-        
-        // Check inventory
+        return $required;
+    }
+
+    /**
+     * @param array<string, int> $required "id:meta" => count
+     */
+    private function inventoryHas(InventoryComponent $inventory, array $required): bool {
         foreach ($required as $key => $count) {
             [$id, $meta] = explode(':', $key);
             $found = 0;
-            
             foreach ($inventory->getContents() as $item) {
-                if ($item->itemId == (int)$id && $item->meta == (int)$meta) {
+                if ($item->itemId === (int)$id && $item->meta === (int)$meta) {
                     $found += $item->count;
                 }
             }
-            
-            if ($found < $count) return false;
+            if ($found < $count) {
+                return false;
+            }
         }
-        
         return true;
     }
 
-    private function consumeIngredients(EntityRef $playerRef, array $grid, array $recipe): void {
-        $player = \pocketmine\core\ecs\EntityRef::create($playerRef->getId(), $this->world)->getEntity();
-        if (!$player) return;
-        
-        $inventory = $player->get(\pocketmine\core\component\InventoryComponent::class);
-        if (!$inventory) return;
-        
-        // Count and remove items from grid positions
+    /**
+     * Remove one of each occupied grid item from the inventory.
+     *
+     * @param list<ItemStack|null> $grid
+     */
+    private function consumeIngredients(InventoryComponent $inventory, array $grid): void {
         foreach ($grid as $item) {
-            if ($item) {
-                // Find and remove one
-                foreach ($inventory->getContents() as $slot => $invItem) {
-                    if ($invItem->itemId === $item['id'] && $invItem->meta === $item['meta']) {
-                        $inventory->remove($slot, 1);
-                        break;
-                    }
+            if ($item === null || $item->count <= 0) {
+                continue;
+            }
+            foreach ($inventory->getContents() as $slot => $invItem) {
+                if ($invItem->itemId === $item->itemId && $invItem->meta === $item->meta) {
+                    $inventory->remove($slot, 1);
+                    break;
                 }
             }
         }
