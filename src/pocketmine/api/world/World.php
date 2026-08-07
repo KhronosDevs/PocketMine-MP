@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace pocketmine\api\level;
+namespace pocketmine\api\world;
 
-use pocketmine\core\ecs\World;
+use pocketmine\core\ecs\World as ECSWorld;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\QueryBuilder;
 use pocketmine\core\component\PositionComponent;
@@ -16,8 +16,8 @@ use pocketmine\port\driven\ChunkData;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\WorldGenPort;
 
-class Level {
-    private World $world;
+class World {
+    private ECSWorld $world;
     private string $name;
     private string $folderName;
     
@@ -25,7 +25,7 @@ class Level {
     private ChunkUnloadService $chunkUnloadService;
     private ChunkSendService $chunkSendService;
 
-    public function __construct(World $world, string $name, string $folderName) {
+    public function __construct(ECSWorld $world, string $name, string $folderName) {
         $this->world = $world;
         $this->name = $name;
         $this->folderName = $folderName;
@@ -44,7 +44,7 @@ class Level {
         return $this->folderName;
     }
 
-    public function getWorld(): World {
+    public function getEcsWorld(): ECSWorld {
         return $this->world;
     }
 
@@ -176,12 +176,12 @@ class Level {
 
     public function getTime(): int {
         $metadata = new \pocketmine\core\component\MetadataComponent();
-        // Would get from level metadata
+        // Would get from world metadata
         return 0;
     }
 
     public function setTime(int $time): void {
-        // Would set level time
+        // Would set world time
     }
 
     public function getSeed(): int {

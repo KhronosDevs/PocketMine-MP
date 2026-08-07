@@ -4,24 +4,24 @@ declare(strict_types=1);
 
 namespace pocketmine\api\block;
 
-use pocketmine\api\level\Level;
+use pocketmine\api\world\World;
 use pocketmine\api\inventory\ItemStack;
 
 class Block {
-    private Level $level;
+    private World $world;
     private int $x;
     private int $y;
     private int $z;
 
-    public function __construct(Level $level, int $x, int $y, int $z) {
-        $this->level = $level;
+    public function __construct(World $world, int $x, int $y, int $z) {
+        $this->world = $world;
         $this->x = $x;
         $this->y = $y;
         $this->z = $z;
     }
 
-    public function getLevel(): Level {
-        return $this->level;
+    public function getWorld(): World {
+        return $this->world;
     }
 
     public function getX(): int {
@@ -41,15 +41,15 @@ class Block {
     }
 
     public function getId(): int {
-        return $this->level->getBlock($this->x, $this->y, $this->z);
+        return $this->world->getBlock($this->x, $this->y, $this->z);
     }
 
     public function setId(int $id): bool {
-        return $this->level->setBlock($this->x, $this->y, $this->z, $id);
+        return $this->world->setBlock($this->x, $this->y, $this->z, $id);
     }
 
     public function getMeta(): int {
-        return $this->level->getBlockMeta($this->x, $this->y, $this->z);
+        return $this->world->getBlockMeta($this->x, $this->y, $this->z);
     }
 
     public function setMeta(int $meta): bool {
@@ -143,11 +143,11 @@ class Block {
 
     public function getBlockFace(array $direction): self {
         // Would return adjacent block
-        return new self($this->level, $this->x, $this->y, $this->z);
+        return new self($this->world, $this->x, $this->y, $this->z);
     }
 
     public function getRelative(int $dx, int $dy, int $dz): self {
-        return new self($this->level, $this->x + $dx, $this->y + $dy, $this->z + $dz);
+        return new self($this->world, $this->x + $dx, $this->y + $dy, $this->z + $dz);
     }
 
     public function distance($block): float {

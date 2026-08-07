@@ -6,7 +6,6 @@ namespace pocketmine\api\event;
 
 use pocketmine\api\entity\Player;
 use pocketmine\api\entity\Entity;
-use pocketmine\api\level\Level;
 use pocketmine\api\block\Block;
 
 class PlayerJoinEvent extends Event {

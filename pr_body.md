@@ -7,7 +7,7 @@ Phase 8 of the optimization plan: **Complete ECS-based API Rewrite** - replacing
 | Component | Files | Description |
 |-----------|-------|-------------|
 | **Entity API** | 10 files | Entity, Player, Living, Monster, Animal, Zombie, Skeleton, Creeper, Pig, ItemEntity, EntityFactory |
-| **Level API** | 1 file | Level with chunk/entity management via ECS services |
+| **World API** | 2 files | World with chunk/entity management via ECS services, WorldAccessor |
 | **Server API** | 1 file | Server singleton with ECS integration, service access |
 | **Inventory API** | 2 files | Inventory, ItemStack with full inventory management |
 | **Block API** | 1 file | Block with level integration |
@@ -23,7 +23,7 @@ Phase 8 of the optimization plan: **Complete ECS-based API Rewrite** - replacing
 | Aspect | Implementation |
 |--------|----------------|
 | **Entity API** | EntityRef-based with component accessors (Position, Health, Inventory, etc.) |
-| **Level API** | Chunk/entity management via ECS services (ChunkLoadService, EntitySpawnService, etc.) |
+| **World API** | Chunk/entity management via ECS services (ChunkLoadService, EntitySpawnService, etc.) |
 | **Server API** | Singleton with ECS integration, all 18 services accessible |
 | **Inventory/ItemStack** | Full inventory management with stacking, NBT, enchantments |
 | **Block API** | Block operations via Level integration |

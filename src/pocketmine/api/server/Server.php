@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace pocketmine\api\server;
 
 use pocketmine\core\ecs\EntityRef;
-use pocketmine\api\level\Level;
+use pocketmine\api\world\World;
 use pocketmine\api\entity\Player;
 
 class Server {
     private static ?self $instance = null;
     
-    private array $levels = [];
-    private Level $defaultLevel;
+    private array $worlds = [];
+    private World $defaultWorld;
     private string $name = 'Khronos';
     private string $version = '2.0.0';
     private int $maxPlayers = 20;
@@ -164,41 +164,41 @@ class Server {
         return \pocketmine\Kernel::getInstance()->getWorld();
     }
 
-    public function getLevels(): array {
-        return array_values($this->levels);
+    public function getWorlds(): array {
+        return array_values($this->worlds);
     }
 
-    public function getLevelByName(string $name): ?Level {
-        foreach ($this->levels as $level) {
-            if ($level->getName() === $name) {
-                return $level;
+    public function getWorldByName(string $name): ?World {
+        foreach ($this->worlds as $world) {
+            if ($world->getName() === $name) {
+                return $world;
             }
         }
         return null;
     }
 
-    public function getDefaultLevel(): Level {
-        return $this->defaultLevel;
+    public function getDefaultWorld(): World {
+        return $this->defaultWorld;
     }
 
-    public function setDefaultLevel(Level $level): void {
-        $this->defaultLevel = $level;
-        $this->levels[$level->getName()] = $level;
+    public function setDefaultWorld(World $world): void {
+        $this->defaultWorld = $world;
+        $this->worlds[$world->getName()] = $world;
     }
 
-    public function loadLevel(string $name): Level {
-        // Would load level from storage
-        return $this->getDefaultLevel(); // Simplified
+    public function loadWorld(string $name): World {
+        // Would load world from storage
+        return $this->getDefaultWorld(); // Simplified
     }
 
-    public function generateLevel(string $name, int $seed = 0, string $generator = 'default', array $options = []): Level {
-        // Would generate level
-        return $this->getDefaultLevel(); // Simplified
+    public function generateWorld(string $name, int $seed = 0, string $generator = 'default', array $options = []): World {
+        // Would generate world
+        return $this->getDefaultWorld(); // Simplified
     }
 
-    public function unloadLevel(string $name, bool $save = true): bool {
-        if (isset($this->levels[$name])) {
-            unset($this->levels[$name]);
+    public function unloadWorld(string $name, bool $save = true): bool {
+        if (isset($this->worlds[$name])) {
+            unset($this->worlds[$name]);
             return true;
         }
         return false;
