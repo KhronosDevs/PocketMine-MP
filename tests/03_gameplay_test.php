@@ -48,7 +48,7 @@ test('block place consumes inventory and writes to store', function () use ($ker
             ->at(8.5, $y, 8.5)
             ->with(new CollisionComponent(0.6, 1.8))
             ->with(new InventoryComponent(36))
-            ->with(new MetadataComponent(['gamemode' => 1, 'heldSlot' => 0]))
+            ->with(new MetadataComponent(['gamemode' => 1]))
             ->withTag('player')
     );
 
@@ -100,6 +100,14 @@ test('api inventory facade: held slot, canAddItem, removal', function () use ($w
     $inv->setHeldSlot(2);
     same(2, $inv->getHeldSlot(), 'held slot updated');
     same(267, $inv->getHeldItem()?->itemId, 'held item is the iron sword');
+
+    // Held slot lives on the core component (single source of truth), not in
+    // metadata - the facade routes through InventoryComponent::heldSlot.
+    $coreInv = $playerRef->getInventory();
+    ok($coreInv !== null, 'core InventoryComponent present');
+    same(2, $coreInv->heldSlot, 'facade setHeldSlot wrote the component property');
+    $meta = $playerRef->getMetadata();
+    ok($meta === null || !$meta->has('heldSlot'), 'heldSlot is not stored in metadata');
 
     // canAddItem (regression: used to recurse infinitely).
     $inv->clear();

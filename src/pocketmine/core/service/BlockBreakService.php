@@ -92,10 +92,7 @@ final class BlockBreakService {
         $inventory = $player->get(InventoryComponent::class);
         if (!$inventory) return null;
         
-        $metadata = $player->get(MetadataComponent::class);
-        $heldSlot = $metadata?->get('heldSlot') ?? 0;
-        
-        return $inventory->get($heldSlot);
+        return $inventory->get($inventory->heldSlot);
     }
 
     private function calculateBreakSpeed(?ItemStack $tool, int $x, int $y, int $z): float {

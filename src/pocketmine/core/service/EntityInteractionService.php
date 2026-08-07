@@ -84,9 +84,8 @@ final class EntityInteractionService {
     }
 
     private function getHeldSlot(\pocketmine\core\ecs\Entity $player): int {
-        $metadata = $player->get(\pocketmine\core\component\MetadataComponent::class);
-        $slot = $metadata?->get('heldSlot') ?? 0;
-        return is_int($slot) ? $slot : 0;
+        $inventory = $player->get(\pocketmine\core\component\InventoryComponent::class);
+        return $inventory?->heldSlot ?? 0;
     }
 
     private function pickupItem(EntityRef $playerRef, EntityRef $itemRef): bool {

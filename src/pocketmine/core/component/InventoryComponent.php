@@ -21,6 +21,19 @@ final class InventoryComponent {
         return $this->slots[$slot] ?? null;
     }
 
+    /**
+     * Set which slot is held. Validated against the inventory size so callers
+     * (API facade + services) share one policy and cannot point the held slot
+     * outside the inventory. Returns false when out of range.
+     */
+    public function setHeldSlot(int $slot): bool {
+        if ($slot < 0 || $slot >= $this->size) {
+            return false;
+        }
+        $this->heldSlot = $slot;
+        return true;
+    }
+
     public function set(int $slot, ?ItemStack $item): void {
         if ($item === null) {
             unset($this->slots[$slot]);
