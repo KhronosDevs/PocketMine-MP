@@ -11,6 +11,14 @@ final class Entity {
     private static int $poolSize = 0;
     private const MAX_POOL_SIZE = 10000;
 
+    /**
+     * True when the component SET may have changed since the last archetype
+     * reconciliation. Set()/remove() flip it; World::reconcileArchetypes
+     * clears it after migrating (or confirming no migration is needed). Lets
+     * per-tick reconciliation skip untouched entities entirely.
+     */
+    private bool $archetypeDirty = true;
+
     public function __construct(
         public readonly int $id,
         private array $components = [],
@@ -30,6 +38,7 @@ final class Entity {
             $idProperty->setAccessible(true);
             $idProperty->setValue($entity, self::generateId());
             $entity->components = $components;
+            $entity->archetypeDirty = true; // fresh identity needs reconciliation
             return $entity;
         }
         return new self(self::generateId(), $components);
@@ -66,10 +75,20 @@ final class Entity {
 
     public function set(string $componentType, mixed $component): void {
         $this->components[$componentType] = $component;
+        $this->archetypeDirty = true;
     }
 
     public function remove(string $componentType): void {
         unset($this->components[$componentType]);
+        $this->archetypeDirty = true;
+    }
+
+    public function isArchetypeDirty(): bool {
+        return $this->archetypeDirty;
+    }
+
+    public function markArchetypeClean(): void {
+        $this->archetypeDirty = false;
     }
 
     public function getComponents(): array {

@@ -90,16 +90,21 @@ final class World {
      * attaching RotationComponent) would otherwise leave the entity stranded
      * in its original archetype, invisible to system queries.
      *
-     * Runs on every flush (each tick + each spawn/despawn). Cost is O(entities)
-     * array_keys + sort even when nothing changed - a dirty-flag skip is a
-     * future optimization if thousands of entities make this measurable.
-     * Migrations allocate a fresh index in the target archetype (the old one's
-     * freed index stays in its free list for reuse by later additions), so
-     * repeated component toggling grows archetype indices slowly but never
-     * corrupts data.
+     * The per-entity archetype-dirty flag (set by Entity::set/remove) lets
+     * the pass skip untouched entities with a single bool check, so the
+     * steady-state cost per tick is O(entities) field reads, not array_keys
+     * + sort per entity. Migrations allocate a fresh index in the target
+     * archetype (the old one's freed index stays in its free list for reuse
+     * by later additions), so repeated component toggling grows archetype
+     * indices slowly but never corrupts data.
      */
     private function reconcileArchetypes(): void {
         foreach ($this->entities as $entity) {
+            if (!$entity->isArchetypeDirty()) {
+                continue;
+            }
+            $entity->markArchetypeClean();
+
             $types = array_keys($entity->getComponents());
             sort($types);
 

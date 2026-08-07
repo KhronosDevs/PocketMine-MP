@@ -122,7 +122,9 @@ core, then parallelism behind the seams. **Phase 9 wires the seams.**
 - **Merge back:** the kernel drains the worker's `syncQueue` at a bounded sync point. Results carry a **tick sequence**; out-of-window results are dropped (`lagged`), never misapplied.
 - **Gate (default):** main thread still simulates; worker results are compared bit-for-bit. **Zero mismatches** at ≤40 entities (`tests/05`), proving determinism.
 - **Apply (experimental flag):** main-thread MovementSystem+PhysicsSystem disabled; worker is authoritative. Exact integration verified (`tests/06`).
-- **Benchmark finding (`measure_pipeline.php`):** at 1000 entities the JSON-snapshot transport is the bottleneck — worker per-tick latency exceeds the 10 ms drain window, so most results are correctly dropped as `lagged`. Correctness is proven; **the next optimization is the transport** (binary-packed snapshots / batch diffs / double-buffered handoff) before 9.2-9.4.
+- **Transport (9.2a, done):** JSON snapshots replaced with a compact **binary protocol** — one message per tick per region (not one per entity), each entity 52 bytes (id + 6 little-endian doubles). Floats round-trip bit-exactly. At 1000 entities the gate now receives **100,000/100,000 results in-window with 0 lagged and 0 mismatches** (was 3,000 in-window / 69,000 lagged), and gate tick time dropped from 130.9 ms to **10.1 ms**.
+- **Archetype reconciliation (9.2b, done):** per-entity dirty flag (`Entity::set/remove`) lets `World::reconcileArchetypes` skip untouched entities with a single bool check — steady-state per-tick cost is O(entities) field reads instead of array_keys+sort per entity.
+- **Benchmark (`measure_pipeline.php`):** off 5.4 ms / gate 10.1 ms / apply 10.5 ms at 1000 entities, 0 mismatches, 0 lagged. The remaining ~5 ms is the mirror+drain cost of 1000 snapshots/tick — a diff-only mirror is the next tuning lever.
 
 ### Phase 10 — Complete the data & API layer
 
@@ -190,8 +192,11 @@ bin/php7/bin/php measure_baseline.php      # benchmark (writes docs/BASELINE.md)
 | 7 | ✅ | Struct-of-arrays, query caching, memory pooling, batching, benchmarks |
 | 8 | ✅ | Complete API rewrite; 1,100+ legacy files removed; PHPStan clean |
 | 8.5 | ✅ | `Level` API renamed to `World` |
-| 9.1 | ✅ | **Lockstep region pipeline wired** — mirror → worker integrate (movement+gravity) → seq-tagged merge; determinism gate 0 mismatches; apply mode behind flag; `measure_pipeline.php` benchmark (JSON transport = next bottleneck) |
-| 9.2-9.5 | 🔄 next | NetworkThread batching, async chunk gen, migration/load balancing, scaling proof |
+| 9.1 | ✅ | **Lockstep region pipeline wired** — mirror → worker integrate (movement+gravity) → seq-tagged merge; determinism gate 0 mismatches; apply mode behind flag; `measure_pipeline.php` benchmark |
+| 9.2a | ✅ | **Binary snapshot transport** — 52-byte/entity, one batched message per tick; gate 100,000/100,000 in-window, 0 lagged, 0 mismatches at 1000 entities; 13× faster gate |
+| 9.2b | ✅ | **Archetype reconcile dirty-flag** — steady-state per-tick cost is O(entities) bool reads |
+| 9.2c-9.5 | 🔄 next | NetworkThread batching, async chunk gen, migration/load balancing, scaling proof |
 | 10 | ✅ (mostly) | Real data layer: ChunkStore, BlockRegistry, ItemRegistry, WorldConfig; zero stubs |
 | 11.1-11.2 | ✅ | **`tests/` framework** (no deps, per-process isolation): 6 files, 21 tests, 277 assertions — incl. pipeline determinism + apply-mode correctness |
+| 10.2 | ✅ | **ItemStack unification** — api `Inventory`/`Block`/`World::dropItem`/`ItemEntity` speak `api\inventory\ItemStack` exclusively; `toCore()`/`fromCore()` convert at the boundary; core component type stays in the storage layer only |
 | 11.3-12 | ⏳ | Memory profiling; gameplay depth |

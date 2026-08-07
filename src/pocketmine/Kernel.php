@@ -302,6 +302,10 @@ final class Kernel {
         $this->pipelineTickSeq++;
         $this->pipelineMirroredThisTick = 0;
         $currentIds = [];
+        /** @var array<int, list<array{entityId: int, position: array{x: float, y: float, z: float}, velocity: array{x: float, y: float, z: float}}>> $updatesByRegion */
+        $updatesByRegion = [];
+        /** @var array<int, list<int>> $despawnsByRegion */
+        $despawnsByRegion = [];
         foreach ($this->world->getEntities() as $entity) {
             $pos = $entity->get(PositionComponent::class);
             $vel = $entity->get(VelocityComponent::class);
@@ -311,17 +315,13 @@ final class Kernel {
             $currentIds[] = $entity->id;
             $chunkX = (int)floor($pos->x / 16);
             $chunkZ = (int)floor($pos->z / 16);
-            $snapshot = [
-                'type' => 'update',
-                'entityId' => $entity->id,
-                'snapshot' => [
-                    'position' => ['x' => $pos->x, 'y' => $pos->y, 'z' => $pos->z],
-                    'velocity' => ['x' => $vel->x, 'y' => $vel->y, 'z' => $vel->z],
-                ],
-            ];
             foreach ($this->regionThreads as $regionId => $region) {
                 if ($region->ownsChunk($chunkX, $chunkZ)) {
-                    $region->getCommandQueue()[] = json_encode($snapshot);
+                    $updatesByRegion[$regionId][] = [
+                        'entityId' => $entity->id,
+                        'position' => ['x' => $pos->x, 'y' => $pos->y, 'z' => $pos->z],
+                        'velocity' => ['x' => $vel->x, 'y' => $vel->y, 'z' => $vel->z],
+                    ];
                     $this->pipelineMirroredIds[$entity->id] = $regionId;
                     $this->pipelineStats['mirrored']++;
                     $this->pipelineMirroredThisTick++;
@@ -338,19 +338,24 @@ final class Kernel {
         $currentIdsSet = array_flip($currentIds); // O(1) lookups instead of in_array
         foreach ($this->pipelineMirroredIds as $id => $regionId) {
             if (!isset($currentIdsSet[$id])) {
-                $region = $this->regionThreads[$regionId] ?? null;
-                if ($region !== null) {
-                    $region->getCommandQueue()[] = json_encode(['type' => 'despawn', 'entityId' => $id]);
-                    $this->pipelineStats['despawned']++;
-                }
+                $despawnsByRegion[$regionId][] = $id;
+                $this->pipelineStats['despawned']++;
                 unset($this->pipelineMirroredIds[$id]);
             }
         }
 
-        // Lockstep tick: after all updates/despawns are queued, tell each
-        // region to integrate its stored snapshots exactly once.
-        foreach ($this->regionThreads as $region) {
-            $region->getCommandQueue()[] = json_encode(['type' => 'tick', 'seq' => $this->pipelineTickSeq]);
+        // Emit one binary batch per region: updates, despawns, then the
+        // lockstep tick (the worker integrates stored snapshots exactly once
+        // per tick command).
+        foreach ($this->regionThreads as $regionId => $region) {
+            $queue = $region->getCommandQueue();
+            if (!empty($updatesByRegion[$regionId])) {
+                $queue[] = RegionThread::encodeUpdate($this->pipelineTickSeq, $updatesByRegion[$regionId]);
+            }
+            if (!empty($despawnsByRegion[$regionId])) {
+                $queue[] = RegionThread::encodeDespawns($despawnsByRegion[$regionId]);
+            }
+            $queue[] = RegionThread::encodeTick($this->pipelineTickSeq);
         }
     }
 
@@ -381,46 +386,56 @@ final class Kernel {
                     usleep(200);
                     continue;
                 }
-                $decoded = json_decode($msg, true);
-                if (!is_array($decoded)) {
+                if (!is_string($msg) || $msg === '') {
                     continue;
                 }
-                if ((int)($decoded['seq'] ?? -1) === $this->pipelineTickSeq) {
-                    $synced = true; // worker finished this tick's integration
+                $tag = $msg[0];
+                if ($tag === RegionThread::MSG_ACK) {
+                    if (RegionThread::decodeHeaderSeq($msg) === $this->pipelineTickSeq) {
+                        $synced = true; // worker finished this tick's integration
+                    }
+                } elseif ($tag === RegionThread::MSG_RESULTS) {
+                    if (RegionThread::decodeHeaderSeq($msg) === $this->pipelineTickSeq) {
+                        $synced = true;
+                    }
+                    $this->processPipelineResults($msg);
                 }
-                $this->processPipelineMessage($decoded);
             } while (true);
 
             // Drain anything that arrived just after the sync point.
             while (($msg = $queue->shift()) !== null) {
-                $decoded = json_decode($msg, true);
-                if (is_array($decoded)) {
-                    $this->processPipelineMessage($decoded);
+                if (is_string($msg) && strlen($msg) >= 9 && $msg[0] === RegionThread::MSG_RESULTS) {
+                    $this->processPipelineResults($msg);
                 }
             }
         }
     }
 
     /**
-     * Process a single worker message. Only 'snapshots' batches tagged with
-     * the current tick seq are compared/applied; older batches are dropped as
-     * 'lagged'. The gate's drift check relies on bit-exact float equality
-     * between worker and main-thread integration (identical operations on the
-     * same values; JSON round-trips are exact with serialize_precision=-1),
-     * so the epsilon only guards against future variable-timestep drift.
+     * Process one binary results batch from a region worker. Only batches
+     * tagged with the current tick seq are compared/applied; older batches
+     * are dropped as 'lagged'. The gate's drift check relies on bit-exact
+     * float equality between worker and main-thread integration (identical
+     * operations on the same values; binary doubles round-trip exactly), so
+     * the epsilon only guards against future variable-timestep drift.
      */
-    private function processPipelineMessage(array $decoded): void {
-        if (($decoded['type'] ?? '') !== 'snapshots') {
+    private function processPipelineResults(string $blob): void {
+        if (strlen($blob) < 9 || $blob[0] !== RegionThread::MSG_RESULTS) {
             return;
         }
-        if ((int)($decoded['seq'] ?? -1) !== $this->pipelineTickSeq) {
-            $this->pipelineStats['lagged'] += count($decoded['entities'] ?? []);
+        $hdr = unpack('Nseq/Ncount', substr($blob, 1, 8));
+        if ($hdr['seq'] !== $this->pipelineTickSeq) {
+            $this->pipelineStats['lagged'] += $hdr['count'];
             return;
         }
-        foreach ($decoded['entities'] ?? [] as $entry) {
-            $entityId = (int)$entry['entityId'];
-            $snapshot = $entry['snapshot'];
-            $entity = $this->world->getEntity($entityId);
+        $off = 9;
+        for ($i = 0; $i < $hdr['count']; $i++) {
+            if ($off + RegionThread::ENTITY_BYTES > strlen($blob)) {
+                break; // truncated/malformed batch: drop the remainder
+            }
+            $e = RegionThread::decodeEntity(substr($blob, $off, RegionThread::ENTITY_BYTES));
+            $off += RegionThread::ENTITY_BYTES;
+            $entity = $this->world->getEntity($e['entityId']);
             if ($entity === null) {
                 $this->pipelineStats['stale']++;
                 continue;
@@ -430,18 +445,18 @@ final class Kernel {
                 continue;
             }
             $this->pipelineStats['received']++;
-            $wx = (float)$snapshot['position']['x'];
-            $wy = (float)$snapshot['position']['y'];
-            $wz = (float)$snapshot['position']['z'];
+            $wx = $e['position']['x'];
+            $wy = $e['position']['y'];
+            $wz = $e['position']['z'];
             if ($this->regionPipelineApply) {
                 $pos->x = $wx;
                 $pos->y = $wy;
                 $pos->z = $wz;
                 $vel = $entity->get(VelocityComponent::class);
                 if ($vel !== null) {
-                    $vel->x = (float)$snapshot['velocity']['x'];
-                    $vel->y = (float)$snapshot['velocity']['y'];
-                    $vel->z = (float)$snapshot['velocity']['z'];
+                    $vel->x = $e['velocity']['x'];
+                    $vel->y = $e['velocity']['y'];
+                    $vel->z = $e['velocity']['z'];
                 }
                 $this->pipelineStats['applied']++;
             } else {
