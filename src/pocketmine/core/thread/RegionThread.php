@@ -50,10 +50,13 @@ final class RegionThread extends Thread {
      *  the kernel can drop stale (out-of-window) results. */
     private int $currentTickSeq = 0;
     private int $regionId;
-    private int $minChunkX;
-    private int $maxChunkX;
-    private int $minChunkZ;
-    private int $maxChunkZ;
+    /**
+     * Chunk bounds, held in a ThreadSafe so the kernel can resize a region
+     * after the thread has started (dynamic split/merge). Only the main
+     * thread reads them (ownsChunk() is called from the kernel mirror), so
+     * there is no contention with the worker.
+     */
+    private ThreadSafe $bounds;
 
     public function __construct(
         int $regionId,
@@ -63,10 +66,11 @@ final class RegionThread extends Thread {
         int $maxChunkZ,
     ) {
         $this->regionId = $regionId;
-        $this->minChunkX = $minChunkX;
-        $this->maxChunkX = $maxChunkX;
-        $this->minChunkZ = $minChunkZ;
-        $this->maxChunkZ = $maxChunkZ;
+        $this->bounds = new ThreadSafe();
+        $this->bounds->minX = $minChunkX;
+        $this->bounds->maxX = $maxChunkX;
+        $this->bounds->minZ = $minChunkZ;
+        $this->bounds->maxZ = $maxChunkZ;
         $this->commandQueue = new ThreadSafeArray();
         $this->syncQueue = new ThreadSafeArray();
         $this->migrationQueue = new ThreadSafeArray();
@@ -187,8 +191,39 @@ final class RegionThread extends Thread {
     }
 
     public function ownsChunk(int $chunkX, int $chunkZ): bool {
-        return $chunkX >= $this->minChunkX && $chunkX <= $this->maxChunkX
-            && $chunkZ >= $this->minChunkZ && $chunkZ <= $this->maxChunkZ;
+        return $chunkX >= $this->bounds->minX && $chunkX <= $this->bounds->maxX
+            && $chunkZ >= $this->bounds->minZ && $chunkZ <= $this->bounds->maxZ;
+    }
+
+    public function getMinChunkX(): int {
+        return $this->bounds->minX;
+    }
+
+    public function getMaxChunkX(): int {
+        return $this->bounds->maxX;
+    }
+
+    public function getMinChunkZ(): int {
+        return $this->bounds->minZ;
+    }
+
+    public function getMaxChunkZ(): int {
+        return $this->bounds->maxZ;
+    }
+
+    /** Shrink the eastern edge of this region's column (dynamic split). */
+    public function shrinkMaxX(int $newMaxX): void {
+        $this->bounds->maxX = $newMaxX;
+    }
+
+    /** Expand the eastern edge of this region's column (dynamic merge). */
+    public function expandMaxX(int $newMaxX): void {
+        $this->bounds->maxX = $newMaxX;
+    }
+
+    /** Expand the western edge of this region's column (dynamic merge). */
+    public function expandMinX(int $newMinX): void {
+        $this->bounds->minX = $newMinX;
     }
 
     public function run(): void {

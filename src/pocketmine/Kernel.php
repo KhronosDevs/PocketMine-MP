@@ -54,6 +54,13 @@ final class Kernel {
 
     private bool $running = false;
     private bool $shutdownComplete = false;
+    /**
+     * When true (default) a bounded run() shuts the worker threads down on
+     * exit. Disable to make run() resumable (threads stay alive so a later
+     * run() call continues where it left off); call shutdown() explicitly to
+     * clean up afterwards.
+     */
+    private bool $autoShutdownOnRun = true;
     private array $tickDurations = [];
 
     private CoordinationThread $coordinationThread;
@@ -81,6 +88,15 @@ final class Kernel {
      */
     private array $pipelineStored = [];
     private int $pipelineTickSeq = 0;
+    /** Next region id for dynamically split regions (9.4b). */
+    private int $nextRegionId = 0;
+    /** @var array<int, int> regionId => entities owned after this tick's mirror */
+    private array $regionEntityCounts = [];
+    /** @var array<int, list<int>> regionId => chunk X of each owned entity (for split medians) */
+    private array $regionEntityChunkXs = [];
+    /** Region ids created by a split during the current balance pass - never
+     *  merged back in the same pass (they are empty until entities migrate). */
+    private array $freshlySplitRegions = [];
     private array $pipelineStats = [
         'enabled' => false,
         'applyMode' => false,
@@ -95,6 +111,8 @@ final class Kernel {
         'lagged' => 0,
         'stale' => 0,
         'lastTickMismatches' => 0,
+        'splits' => 0,
+        'merges' => 0,
     ];
 
     private PlayerJoinService $playerJoinService;
@@ -130,6 +148,7 @@ final class Kernel {
         private readonly ComponentRegistry $componentRegistry,
         private readonly ResourceRegistry $resourceRegistry,
         private readonly int $regionCount = 1,
+        private readonly ?int $maxEntitiesPerRegion = null,
     ) {
         $this->playerJoinService = new PlayerJoinService($world, $networkPort, $storagePort, $worldGenPort);
         $this->playerLeaveService = new PlayerLeaveService($world, $networkPort, $storagePort);
@@ -207,11 +226,25 @@ final class Kernel {
             $this->regionThreads[$i] = $regionThread;
             $this->coordinationThread->addRegion($i, $regionThread->getCommandQueue());
         }
+        $this->nextRegionId = $this->regionCount;
+    }
+
+    public function setAutoShutdownOnRun(bool $autoShutdown): void {
+        $this->autoShutdownOnRun = $autoShutdown;
     }
 
     public function run(int $maxTicks = -1): void {
         if ($this->running) {
             return;
+        }
+        // Footgun guard: with auto-shutdown on (the default) a bounded run()
+        // joins the workers, so a second run() would mirror into queues with
+        // no consumer and stall every drain. Require the caller to opt out of
+        // auto-shutdown before resuming.
+        if ($this->threadsStarted && $this->autoShutdownOnRun) {
+            throw new \RuntimeException(
+                'run() already shut down its worker threads; call setAutoShutdownOnRun(false) to make run() resumable'
+            );
         }
         $this->running = true;
         $tick = 0;
@@ -245,6 +278,13 @@ final class Kernel {
                 $this->drainRegionResults();
             }
 
+            // 0c. Dynamic region load balancing (splits/merges). Runs after
+            // the drain so this tick's integration is coherent; its effects
+            // take hold from the next mirror via the migration path.
+            if ($this->regionPipelineEnabled && $this->threadsStarted) {
+                $this->balanceRegions();
+            }
+
             // 1. Main thread acts as coordinator - process global events
             $this->processGlobalCoordination();
 
@@ -272,7 +312,7 @@ final class Kernel {
         }
 
         $this->running = false;
-        if ($ownsThreads) {
+        if ($ownsThreads && $this->autoShutdownOnRun) {
             $this->shutdown();
         }
     }
@@ -315,11 +355,6 @@ final class Kernel {
     }
 
     /**
-     * Serialize every entity with Position+Velocity into the command queue of
-     * the region that owns its chunk, and send 'despawn' for entities that no
-     * longer qualify so the worker store stays in sync.
-     */
-    /**
      * Predict the worker's stored snapshot after one lockstep integration -
      * exactly the operations RegionThread::tickSnapshots performs on the
      * worker side (and bit-for-bit the main thread's MovementSystem +
@@ -354,6 +389,8 @@ final class Kernel {
      */
     private function mirrorEntitiesToRegions(): void {
         $this->pipelineTickSeq++;
+        $this->regionEntityCounts = [];
+        $this->regionEntityChunkXs = [];
         $currentIds = [];
         /** @var array<int, list<array{entityId: int, position: array{x: float, y: float, z: float}, velocity: array{x: float, y: float, z: float}}>> $updatesByRegion */
         $updatesByRegion = [];
@@ -396,6 +433,8 @@ final class Kernel {
                     $this->pipelineStored[$entity->id] = $this->integrateOnce($state);
                     $this->pipelineRegion[$entity->id] = $regionId;
                     $this->pipelineMirroredIds[$entity->id] = $regionId;
+                    $this->regionEntityCounts[$regionId] = ($this->regionEntityCounts[$regionId] ?? 0) + 1;
+                    $this->regionEntityChunkXs[$regionId][] = $chunkX;
                     break;
                 }
                 $this->pipelineRegion[$entity->id] = $regionId;
@@ -421,6 +460,8 @@ final class Kernel {
                 // next mirror.
                 $this->pipelineStored[$entity->id] = $this->integrateOnce($state);
                 $this->pipelineMirroredIds[$entity->id] = $regionId;
+                $this->regionEntityCounts[$regionId] = ($this->regionEntityCounts[$regionId] ?? 0) + 1;
+                $this->regionEntityChunkXs[$regionId][] = $chunkX;
                 break;
             }
         }
@@ -516,6 +557,193 @@ final class Kernel {
                 }
             }
         }
+    }
+
+    /**
+     * Dynamic region load balancing (9.4b).
+     *
+     * Runs after the drain so this tick's integration is coherent, and its
+     * effects (resized bounds, new regions) take hold from the NEXT mirror:
+     * entities whose owning region changed are picked up by the existing
+     * cross-region migration path (despawn old + snapshot to new), so no
+     * entity is ever integrated twice or lost.
+     */
+    private function balanceRegions(): void {
+        if ($this->maxEntitiesPerRegion === null) {
+            return;
+        }
+        $this->freshlySplitRegions = [];
+
+        // 1. Splits: regions over the threshold split at their entity-weighted
+        //    median column so both halves are roughly equal. Counts come from
+        //    this tick's mirror, so a freshly split region (empty until its
+        //    entities migrate in) is only eligible from the next pass.
+        foreach (array_keys($this->regionThreads) as $regionId) {
+            $count = $this->regionEntityCounts[$regionId] ?? 0;
+            if ($count <= $this->maxEntitiesPerRegion) {
+                continue;
+            }
+            $chunkXs = $this->regionEntityChunkXs[$regionId] ?? [];
+            if (count($chunkXs) >= 2) {
+                $this->splitRegion($regionId, $chunkXs);
+            }
+        }
+
+        // 2. Merges: regions far below the threshold are folded into an
+        //    adjacent region. Only regions that existed before this pass may
+        //    be merged, and a region that absorbed another this pass is not
+        //    merged again (its post-merge count is not known until the next
+        //    mirror).
+        $minEntities = max(1, (int)($this->maxEntitiesPerRegion / 5));
+        $eligible = array_diff(array_keys($this->regionThreads), $this->freshlySplitRegions);
+        $absorbedInto = [];
+        foreach ($eligible as $regionId) {
+            if (count($this->regionThreads) <= 1) {
+                break;
+            }
+            if (!isset($this->regionThreads[$regionId]) || in_array($regionId, $absorbedInto, true)) {
+                continue;
+            }
+            $count = $this->regionEntityCounts[$regionId] ?? 0;
+            if ($count >= $minEntities) {
+                continue;
+            }
+            $absorber = $this->mergeRegion($regionId);
+            if ($absorber !== null) {
+                $absorbedInto[] = $absorber;
+            }
+        }
+    }
+
+    /**
+     * Split a region into two columns at the entity-weighted median chunk X.
+     * The western half keeps the region id (shrunk bounds); the eastern half
+     * becomes a new region thread. Entities in the east still point at the old
+     * region in pipelineRegion, so the next mirror migrates them through the
+     * standard despawn+migrate path.
+     *
+     * The split column is constrained so BOTH resulting halves hold at least
+     * the merge floor of entities (minEntities). Without this, a split can
+     * isolate a tiny sliver (a chunk with a handful of entities) that falls
+     * straight back under the merge floor next pass and merges - a
+     * split/merge oscillation that churns workers without reducing work.
+     *
+     * @param list<int> $chunkXs
+     */
+    private function splitRegion(int $regionId, array $chunkXs): void {
+        $region = $this->regionThreads[$regionId];
+        $minX = $region->getMinChunkX();
+        $maxX = $region->getMaxChunkX();
+        if ($maxX - $minX < 1) {
+            return; // a single-column region cannot split
+        }
+        $total = count($chunkXs);
+        $minSplit = max(1, (int)($this->maxEntitiesPerRegion / 5)); // same floor as mergeRegion
+
+        // Per-chunk entity counts, then scan for split columns where both
+        // halves stay above the floor. Prefer the column closest to the
+        // entity-weighted median so the halves stay balanced.
+        $perChunk = array_count_values($chunkXs);
+        ksort($perChunk);
+        $cumulative = 0;
+        $medianTarget = $total / 2;
+        $bestColumn = null;
+        $bestDistance = PHP_INT_MAX;
+        foreach ($perChunk as $chunk => $count) {
+            $cumulative += $count;
+            if ($chunk <= $minX || $chunk >= $maxX) {
+                continue; // cannot use a boundary chunk as the split column
+            }
+            $west = $cumulative;
+            $east = $total - $west;
+            if ($west < $minSplit || $east < $minSplit) {
+                continue; // would create a region under the merge floor
+            }
+            $distance = abs($west - $medianTarget);
+            if ($distance < $bestDistance) {
+                $bestDistance = $distance;
+                $bestColumn = $chunk;
+            }
+        }
+        if ($bestColumn === null) {
+            return; // every viable split column would strand a sub-floor half
+        }
+
+        $newId = $this->nextRegionId++;
+        $eastRegion = new RegionThread(
+            $newId,
+            $bestColumn + 1,
+            $maxX,
+            $region->getMinChunkZ(),
+            $region->getMaxChunkZ(),
+        );
+        $region->shrinkMaxX($bestColumn);
+        $this->regionThreads[$newId] = $eastRegion;
+        $this->coordinationThread->addRegion($newId, $eastRegion->getCommandQueue());
+        if ($this->threadsStarted) {
+            $eastRegion->start(Thread::INHERIT_ALL);
+        }
+        $this->freshlySplitRegions[] = $newId;
+        $this->pipelineStats['splits']++;
+    }
+
+    /**
+     * Fold a nearly-empty region into its adjacent neighbor: the neighbor's
+     * bounds absorb this region's column, the diff-only bookkeeping for the
+     * entities we own is reset (so the next mirror re-mirrors them to the
+     * absorber instead of despawning from a dying region), and the worker
+     * thread is shut down.
+     *
+     * @return int|null the absorbing region id, or null if none was found
+     */
+    private function mergeRegion(int $regionId): ?int {
+        $region = $this->regionThreads[$regionId];
+        $minX = $region->getMinChunkX();
+        $maxX = $region->getMaxChunkX();
+
+        // Prefer the directly-west neighbor; fall back to the directly-east one.
+        $absorber = null;
+        foreach ($this->regionThreads as $otherId => $other) {
+            if ($otherId !== $regionId && $other->getMaxChunkX() + 1 === $minX) {
+                $absorber = $otherId;
+                break;
+            }
+        }
+        if ($absorber === null) {
+            foreach ($this->regionThreads as $otherId => $other) {
+                if ($otherId !== $regionId && $other->getMinChunkX() - 1 === $maxX) {
+                    $absorber = $otherId;
+                    break;
+                }
+            }
+        }
+        if ($absorber === null) {
+            return null;
+        }
+
+        $absorberRegion = $this->regionThreads[$absorber];
+        if ($absorberRegion->getMaxChunkX() < $minX) {
+            $absorberRegion->expandMaxX($maxX); // absorber is west: absorb our column to the east
+        } else {
+            $absorberRegion->expandMinX($minX); // absorber is east
+        }
+
+        // The entities we own must be re-mirrored to the absorber from a
+        // clean slate: reset the diff-only prediction so the next mirror sends
+        // a fresh snapshot, and forget the old owner so no despawn is sent to
+        // this (dying) region.
+        foreach ($this->pipelineRegion as $id => $owner) {
+            if ($owner === $regionId) {
+                unset($this->pipelineStored[$id]);
+                unset($this->pipelineRegion[$id]);
+            }
+        }
+
+        unset($this->regionThreads[$regionId]);
+        $region->shutdown();
+        $region->join();
+        $this->pipelineStats['merges']++;
+        return $absorber;
     }
 
     /**
@@ -812,7 +1040,7 @@ final class Kernel {
     }
 }
 
-function createKernel(int $regionCount = 1): Kernel {
+function createKernel(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): Kernel {
     $threadingPort = createThreadingPort();
     $networkPort = createNetworkPort();
     $storagePort = createStoragePort();
@@ -848,6 +1076,7 @@ function createKernel(int $regionCount = 1): Kernel {
         $componentRegistry,
         $resourceRegistry,
         $regionCount,
+        $maxEntitiesPerRegion,
     );
 }
 
@@ -918,6 +1147,6 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     $scheduler->register(new \pocketmine\core\system\ChunkUpdateSystem(), \pocketmine\core\ecs\SystemPhase::CHUNK_PARALLEL);
 }
 
-function bootstrap(int $regionCount = 1): Kernel {
-    return createKernel($regionCount);
+function bootstrap(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): Kernel {
+    return createKernel($regionCount, $maxEntitiesPerRegion);
 }
