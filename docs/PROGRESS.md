@@ -20,7 +20,7 @@
 | 5: Archetype Parallelism | ✅ Done | multithread-archetype-parallelism | #23 | Movement, Effect, Physics, AI parallel execution |
 | 6: Region-Based Architecture | ✅ Done | region-based-architecture | #24 | RegionWorld, RegionThread, coordination, network threads |
 | 7: Polish & Optimize | ✅ Done | polish-optimize | #25 | Storage, queries, memory, network batching, benchmarks |
-| 8: **API ECS Rewrite** | 🔄 In Progress | api-ecs-rewrite | #26 | **Complete ECS-based API rewrite** — Entity, Level, Server, Inventory, Block, Scheduler, Command, Permission, Event, Plugin, World |
+| 8: **API ECS Rewrite** | ✅ Done | api-ecs-rewrite | #26 | **Complete ECS-based API rewrite** — Entity, Level, Server, Inventory, Block, Scheduler, Command, Permission, Event, Plugin, World; PHPStan clean, legacy code fully removed |
 
 ---
 
@@ -208,4 +208,8 @@
 13. ✅ Implement Event API (EventBus, typed events, attributes)
 14. ✅ Implement Plugin API (Plugin, PluginManager, Logger, Config)
 14. ✅ Implement World API (WorldAccessor)
-14. ✅ Update docs, commit, push, open PR #26
+15. ✅ Remove all legacy PocketMine code (1,100+ files: Player, Server, Entity, blocks, items, plugins, dead packets)
+16. ✅ Fix threading layer for pmmpthread v6.3 (ThreadSafe-based FutureImpl, synchronous pool submit)
+17. ✅ Fix runtime landmines (Info constants, Binary ENDIANNESS/bcmath, spawn() EntityRef, service layer)
+18. ✅ PHPStan 0 errors (was 142); lint clean; boot/full/API tests pass; benchmark mean 0.077 ms
+19. ✅ Update docs, commit, push, open PR #26

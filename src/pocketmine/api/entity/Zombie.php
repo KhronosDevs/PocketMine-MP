@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace pocketmine\api\entity;
 
-use pocketmine\domain\ecs\EntityRef;
-use pocketmine\domain\ecs\World;
-use pocketmine\domain\component\MetadataComponent;
+use pocketmine\core\ecs\EntityRef;
+use pocketmine\core\ecs\World;
+use pocketmine\core\component\MetadataComponent;
 
 class Zombie extends Monster {
-    public function __construct(EntityRef $ref, \pocketmine\domain\ecs\World $world) {
+    public function __construct(EntityRef $ref, \pocketmine\core\ecs\World $world) {
         parent::__construct($ref, $world);
     }
 

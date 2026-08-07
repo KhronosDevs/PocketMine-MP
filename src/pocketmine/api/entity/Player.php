@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace pocketmine\api\entity;
 
-use pocketmine\domain\ecs\EntityRef;
-use pocketmine\domain\ecs\World;
-use pocketmine\domain\component\InventoryComponent;
-use pocketmine\domain\component\MetadataComponent;
-use pocketmine\domain\component\AttributeComponent;
-use pocketmine\domain\component\EffectComponent;
-use pocketmine\domain\component\tags\PlayerTag;
+use pocketmine\core\ecs\EntityRef;
+use pocketmine\core\ecs\World;
+use pocketmine\core\component\InventoryComponent;
+use pocketmine\core\component\MetadataComponent;
+use pocketmine\core\component\AttributeComponent;
+use pocketmine\core\component\EffectComponent;
+use pocketmine\core\component\tags\PlayerTag;
 
 class Player extends Entity {
     public function __construct(EntityRef $ref, World $world) {
@@ -117,7 +117,9 @@ class Player extends Entity {
     }
 
     public function hasPermission(string $permission): bool {
-        return $this->hasPermission($permission);
+        $metadata = $this->getMetadata();
+        $perms = $metadata->get('permissions', []);
+        return in_array($permission, $perms) || in_array('*', $perms) || in_array('pocketmine.op', $perms);
     }
 
     public function sendMessage(string $message): void {
@@ -133,14 +135,14 @@ class Player extends Entity {
     }
 
     public function getInventory(): InventoryComponent {
-        return $this->getInventory();
+        return parent::getInventory();
     }
 
     public function getEnderChestInventory(): InventoryComponent {
         $metadata = $this->getMetadata();
         $enderChest = $metadata->get('enderChestInventory');
         if (!$enderChest) {
-            $enderChest = new \pocketmine\domain\component\InventoryComponent(27);
+            $enderChest = new \pocketmine\core\component\InventoryComponent(27);
             $metadata->set('enderChestInventory', $enderChest);
         }
         return $enderChest;
@@ -148,7 +150,7 @@ class Player extends Entity {
 
     public function getExperienceProgress(): float {
         $attributes = $this->getAttributes();
-        $level = $attributes->get('experience_level');
+        $level = (int)$attributes->get('experience_level');
         if ($level <= 0) return 0;
         $xp = $attributes->get('experience');
         $required = $this->getXpRequiredForLevel($level);
@@ -173,24 +175,10 @@ class Player extends Entity {
         $this->setLevel(max(0, $this->getLevel() - $levels));
     }
 
-    public function getHealth(): float {
-        return $this->getHealth()->current;
-    }
-
     public function setHealth(float $health): void {
-        $healthComp = $this->getHealth();
-        $healthComp->current = max(0, min($healthComp->max, $health));
-    }
-
-    public function getMaxHealth(): float {
-        return $this->getHealth()->max;
-    }
-
-    public function setMaxHealth(float $health): void {
-        $healthComp = $this->getHealth();
-        $healthComp->max = max(1, $health);
-        if ($healthComp->current > $healthComp->max) {
-            $healthComp->current = $healthComp->max;
+        $healthComp = $this->getHealthComponent();
+        if ($healthComp) {
+            $healthComp->current = max(0, min($healthComp->max, $health));
         }
     }
 
@@ -235,14 +223,9 @@ class Player extends Entity {
         $this->giveExperience($amount);
     }
 
-    public function setExperience(int $exp): void {
-        $this->setExperience($exp);
-    }
-
     public function getAbsorption(): float {
-        $effects = $this->getEffects();
-        $absorption = $effects->get(\pocketmine\entity\Effect::ABSORPTION);
-        return $absorption ? ($absorption->getAmplifier() + 1) * 4 : 0;
+        $metadata = $this->getMetadata();
+        return (float)$metadata->get('absorption', 0);
     }
 
     public function setAbsorption(float $amount): void {

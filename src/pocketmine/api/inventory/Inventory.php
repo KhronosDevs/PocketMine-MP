@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace pocketmine\api\inventory;
 
-use pocketmine\domain\component\InventoryComponent;
-use pocketmine\domain\component\ItemStack;
-use pocketmine\domain\ecs\EntityRef;
-use pocketmine\domain\ecs\World;
+use pocketmine\core\component\InventoryComponent;
+use pocketmine\core\component\ItemStack;
+use pocketmine\core\ecs\EntityRef;
+use pocketmine\core\ecs\World;
 use pocketmine\api\entity\Player;
 
 class Inventory {
@@ -19,10 +19,10 @@ class Inventory {
         $this->holder = $holder;
         $this->world = $world;
         
-        $inventory = $holder->get(InventoryComponent::class);
+        $inventory = $holder->getInventory();
         if (!$inventory) {
-            $inventory = new \pocketmine\domain\component\InventoryComponent();
-            $holder->setComponent(\pocketmine\domain\component\InventoryComponent::class, $inventory);
+            $inventory = new \pocketmine\core\component\InventoryComponent();
+            $holder->setComponent(\pocketmine\core\component\InventoryComponent::class, $inventory);
         }
         $this->inventory = $inventory;
     }

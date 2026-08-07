@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace pocketmine\api\permission;
 
 class Permission {
-    public const int DEFAULT_OP = 1;
-    public const int DEFAULT_NOT_OP = 2;
-    public const int DEFAULT_TRUE = 3;
-    public const int DEFAULT_FALSE = 4;
+    public const DEFAULT_OP = 1;
+    public const DEFAULT_NOT_OP = 2;
+    public const DEFAULT_TRUE = 3;
+    public const DEFAULT_FALSE = 4;
 
     public function __construct(
         public readonly string $name,
@@ -83,7 +83,7 @@ class PermissionManager {
         $entity = $player->getInternalRef()->getEntity();
         if (!$entity) return false;
         
-        $metadata = $entity->get(\pocketmine\domain\component\MetadataComponent::class);
+        $metadata = $entity->get(\pocketmine\core\component\MetadataComponent::class);
         if (!$metadata) return false;
         
         $permissions = $metadata->get('permissions', []);

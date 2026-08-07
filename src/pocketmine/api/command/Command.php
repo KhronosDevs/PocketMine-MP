@@ -49,10 +49,10 @@ class PluginCommand extends Command {
     public function __construct(
         string $name,
         Plugin $owner,
-        public readonly string $description = "",
-        public readonly string $usage = "",
-        public readonly array $aliases = [],
-        public readonly ?string $permission = null,
+        string $description = "",
+        string $usage = "",
+        array $aliases = [],
+        ?string $permission = null,
     ) {
         parent::__construct($name, $description, $usage, $aliases, $permission);
     }

@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace pocketmine\adapter\driven\network;
 
-use pocketmine\network\protocol\DataPacket;
-use pocketmine\network\protocol\DisconnectPacket;
-use pocketmine\network\protocol\Info;
+use pocketmine\core\thread\NetworkThread;
+use pocketmine\protocol\DataPacket;
+use pocketmine\protocol\DisconnectPacket;
+use pocketmine\protocol\Info;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\PlayerRef;
-use pocketmine\ThreadSafe;
-use pocketmine\Thread;
+use pmmp\thread\Thread;
+use pmmp\thread\ThreadSafeArray;
 use function socket_create;
 use function socket_bind;
 use function socket_set_nonblock;
@@ -18,35 +19,47 @@ use function socket_recvfrom;
 use function socket_sendto;
 use function socket_close;
 use function socket_select;
-use function inet_ntop;
 use function strlen;
 use function ord;
 use function chr;
-use function bin2hex;
-use function hex2bin;
+use function pack;
+use function base64_encode;
+use function base64_decode;
+use function json_encode;
+use function json_decode;
+use function explode;
 
+/**
+ * Protocol 84 network adapter.
+ *
+ * Owns the UDP socket on the main thread; all socket I/O (recv/send) and all
+ * protocol encode/decode happens here. Outbound frames are handed to a
+ * NetworkThread worker for batch compression through thread-safe queues
+ * (scalar payloads only), then flushed to the socket by the main thread.
+ */
 final class Protocol84NetworkAdapter implements NetworkPort {
     private const MTU = 1460;
     private const RAKLIB_MAGIC = "\x00\xff\xff\x00\xfe\xfe\xfe\xfe\xfd\xfd\xfd\xfd\x12\x34\x56\x78";
 
-    private ?int $socket = null;
+    private ?object $socket = null;
     private string $bindAddress = "0.0.0.0";
     private int $bindPort = 19132;
-    private ThreadSafe $inboundQueue;
-    private ThreadSafe $outboundQueue;
-    private array $connectedPlayers = []; // address:port => PlayerRef
+    /** @var ThreadSafeArray<int, string> compressed frames ready to send: [addrKey, payload] */
+    private ThreadSafeArray $outboundQueue;
+    /** @var ThreadSafeArray<int, string> decoded inbound events: json_encode([addrKey, packetId, payload]) */
+    private ThreadSafeArray $inboundQueue;
+    /** @var array<string, PlayerRef> address:port => PlayerRef */
+    private array $connectedPlayers = [];
     private bool $running = false;
-    private ?Thread $networkThread = null;
+    private ?NetworkThread $networkThread = null;
     private string $serverName = "Khronos Server";
     private int $serverId;
-    private ThreadSafe $commandQueue;
 
     public function __construct(string $bindAddress = "0.0.0.0", int $bindPort = 19132) {
         $this->bindAddress = $bindAddress;
         $this->bindPort = $bindPort;
-        $this->inboundQueue = new ThreadSafe();
-        $this->outboundQueue = new ThreadSafe();
-        $this->commandQueue = new ThreadSafe();
+        $this->outboundQueue = new ThreadSafeArray();
+        $this->inboundQueue = new ThreadSafeArray();
         $this->serverId = random_int(1, PHP_INT_MAX);
     }
 
@@ -61,31 +74,22 @@ final class Protocol84NetworkAdapter implements NetworkPort {
         }
 
         socket_set_nonblock($this->socket);
-        
+
         if (!socket_bind($this->socket, $this->bindAddress, $this->bindPort)) {
             throw new \RuntimeException("Failed to bind socket: " . socket_strerror(socket_last_error()));
         }
 
-        $this->running = true;
-        $this->networkThread = new class($this) extends Thread {
-            private Protocol84NetworkAdapter $adapter;
-            
-            public function __construct(Protocol84NetworkAdapter $adapter) {
-                $this->adapter = $adapter;
-            }
-            
-            public function run(): void {
-                $this->registerClassLoader();
-                $this->adapter->networkLoop();
-            }
-        };
-        $this->networkThread->setClassLoader(\pocketmine\Server::getInstance()->getLoader());
+        // Start the packet pipeline worker (compression). Socket I/O stays here.
+        $this->networkThread = new NetworkThread();
         $this->networkThread->start(Thread::INHERIT_ALL);
+
+        $this->running = true;
     }
 
     public function shutdown(): void {
         $this->running = false;
         if ($this->networkThread !== null) {
+            $this->networkThread->shutdown();
             $this->networkThread->join();
             $this->networkThread = null;
         }
@@ -95,95 +99,163 @@ final class Protocol84NetworkAdapter implements NetworkPort {
         }
     }
 
-    private function networkLoop(): void {
-        $read = [$this->socket];
-        $write = [];
-        $except = [];
+    /**
+     * Called from the kernel main loop: receive inbound datagrams and decode
+     * them into scalar events, then flush compressed outbound frames.
+     */
+    public function processPendingCommands(): void {
+        $this->handleIncoming();
+        $this->drainCompressedOutbound();
+    }
 
-        while ($this->running) {
-            $readCopy = $read;
-            $writeCopy = $write;
-            $exceptCopy = $except;
-
-            $numChanged = @socket_select($readCopy, $writeCopy, $exceptCopy, 0, 50000); // 50ms timeout
-            
-            if ($numChanged === false) {
-                continue;
-            }
-
-            // Handle inbound packets
-            if (in_array($this->socket, $readCopy)) {
-                $this->handleIncoming();
-            }
-
-            // Handle outbound packets
-            $this->handleOutgoing();
-
-            // Process commands
-            $this->processCommands();
-        }
+    public function flushOutboundPackets(): void {
+        $this->drainCompressedOutbound();
     }
 
     private function handleIncoming(): void {
-        $buffer = "";
-        $address = "";
-        $port = 0;
-        
-        $bytes = @socket_recvfrom($this->socket, $buffer, self::MTU, 0, $address, $port);
-        
-        if ($bytes === false || $bytes === 0) {
+        if ($this->socket === null) {
             return;
         }
-
-        $addrKey = $address . ":" . $port;
-        
-        // Handle RakLib protocol
-        if ($bytes >= 1) {
-            $packetId = ord($buffer[0]);
-            
-            switch ($packetId) {
-                case Info::UNCONNECTED_PING:
-                    $this->handleUnconnectedPing($buffer, $address, $port);
-                    break;
-                case Info::UNCONNECTED_PING_OPEN_CONNECTIONS:
-                    $this->handleOpenConnections($buffer, $address, $port);
-                    break;
-                case Info::OPEN_CONNECTION_REQUEST_1:
-                    $this->handleOpenConnectionRequest1($buffer, $address, $port);
-                    break;
-                case Info::OPEN_CONNECTION_REQUEST_2:
-                    $this->handleOpenConnectionRequest2($buffer, $address, $port);
-                    break;
-                default:
-                    // Connected session packets
-                    if ($bytes > 1) {
-                        $this->inboundQueue[] = [$addrKey, $buffer];
-                    }
+        while (true) {
+            $buffer = "";
+            $address = "";
+            $port = 0;
+            $bytes = @socket_recvfrom($this->socket, $buffer, self::MTU, 0, $address, $port);
+            if ($bytes === false || $bytes === 0) {
+                break;
             }
+
+            $addrKey = $address . ":" . $port;
+            $packetId = ord($buffer[0]);
+
+            // RakLib handshake packets are handled directly (stateless replies).
+            if ($packetId === Info::UNCONNECTED_PING) {
+                $this->handleUnconnectedPing($buffer, $address, $port);
+                continue;
+            }
+            if ($packetId === Info::UNCONNECTED_PING_OPEN_CONNECTIONS) {
+                $this->handleUnconnectedPing($buffer, $address, $port);
+                continue;
+            }
+            if ($packetId === Info::OPEN_CONNECTION_REQUEST_1) {
+                $this->handleOpenConnectionRequest1($buffer, $address, $port);
+                continue;
+            }
+            if ($packetId === Info::OPEN_CONNECTION_REQUEST_2) {
+                $this->handleOpenConnectionRequest2($buffer, $address, $port);
+                continue;
+            }
+
+            // Game packets: decode on the main thread, emit scalar event.
+            $this->inboundQueue[] = json_encode([$addrKey, $packetId, base64_encode($buffer)]);
         }
     }
 
-    private function handleOutgoing(): void {
-        while (true) {
-            $item = $this->outboundQueue->shift();
-            if ($item === null) {
-                break;
-            }
-            
-            [$playerRef, $packet] = $item;
-            
-            // Find address for this player
-            $addrKey = $this->findAddressByPlayerRef($playerRef);
-            if ($addrKey === null) {
+    private function drainCompressedOutbound(): void {
+        if ($this->networkThread === null || $this->socket === null) {
+            return;
+        }
+        while (($frame = $this->networkThread->getSendQueue()->shift()) !== null) {
+            $decoded = json_decode($frame, true);
+            if (!is_array($decoded) || count($decoded) < 2) {
                 continue;
             }
-            
-            [$address, $port] = explode(":", $addrKey, 2);
-            $port = (int)$port;
-            
-            $encoded = $this->encodePacket($packet);
-            @socket_sendto($this->socket, $encoded, strlen($encoded), 0, $address, $port);
+            [$addrKey, $payload] = $decoded;
+            if (!is_string($addrKey) || !is_string($payload)) {
+                continue;
+            }
+            $parts = explode(":", $addrKey, 2);
+            if (count($parts) !== 2) {
+                continue;
+            }
+            [$address, $port] = $parts;
+            @socket_sendto($this->socket, $payload, strlen($payload), 0, $address, (int)$port);
         }
+    }
+
+    private function handleUnconnectedPing(string $buffer, string $address, int $port): void {
+        if ($this->socket === null || strlen($buffer) < 17) {
+            return;
+        }
+        $timestamp = substr($buffer, 1, 8);
+        $response = chr(Info::UNCONNECTED_PONG) . $timestamp . self::RAKLIB_MAGIC . $this->getServerInfo();
+        @socket_sendto($this->socket, $response, strlen($response), 0, $address, $port);
+    }
+
+    private function handleOpenConnectionRequest1(string $buffer, string $address, int $port): void {
+        if ($this->socket === null || strlen($buffer) < 19) {
+            return;
+        }
+        $protocol = ord($buffer[17]);
+        $mtuSize = (ord($buffer[18]) << 8) | ord($buffer[19]);
+        if ($protocol !== Info::CURRENT_PROTOCOL) {
+            return;
+        }
+        $reply = chr(Info::OPEN_CONNECTION_REPLY_1) . self::RAKLIB_MAGIC;
+        $reply .= pack("J", 0);
+        $reply .= pack("C", 0);
+        $reply .= pack("n", $mtuSize);
+        @socket_sendto($this->socket, $reply, strlen($reply), 0, $address, $port);
+    }
+
+    private function handleOpenConnectionRequest2(string $buffer, string $address, int $port): void {
+        if ($this->socket === null) {
+            return;
+        }
+        $reply = chr(Info::OPEN_CONNECTION_REPLY_2) . self::RAKLIB_MAGIC;
+        $reply .= pack("J", $this->serverId);
+        $reply .= pack("C", 0);
+        @socket_sendto($this->socket, $reply, strlen($reply), 0, $address, $port);
+    }
+
+    private function getServerInfo(): string {
+        $info = pack("J", $this->serverId);
+        $info .= chr(strlen($this->serverName)) . $this->serverName;
+        $info .= pack("v", Info::CURRENT_PROTOCOL);
+        $info .= "1.0.0";
+        $info .= pack("v", count($this->connectedPlayers));
+        $info .= pack("v", 100);
+        $info .= pack("J", 123456789);
+        return $info;
+    }
+
+    public function sendPacket(PlayerRef $player, DataPacket $packet): void {
+        $addrKey = $this->findAddressByPlayerRef($player);
+        if ($addrKey === null || $this->networkThread === null) {
+            return;
+        }
+        $packet->encode();
+        $this->networkThread->queueOutboundFrame($addrKey, $packet->getBuffer());
+    }
+
+    public function broadcastPacket(iterable $players, DataPacket $packet): void {
+        foreach ($players as $player) {
+            $this->sendPacket($player, $packet);
+        }
+    }
+
+    public function disconnect(PlayerRef $player, string $reason): void {
+        $pk = new DisconnectPacket();
+        $pk->message = $reason;
+        $pk->hideDisconnectionScreen = false;
+        $this->sendPacket($player, $pk);
+        $this->removePlayer($player);
+    }
+
+    /**
+     * Pop decoded inbound events for the kernel to dispatch as domain commands.
+     * @return array<int, array{0: string, 1: int, 2: string}>
+     */
+    public function pollInboundEvents(): array {
+        $events = [];
+        while (($item = $this->inboundQueue->shift()) !== null) {
+            $decoded = json_decode($item, true);
+            if (!is_array($decoded) || count($decoded) < 3) {
+                continue;
+            }
+            $events[] = [$decoded[0], (int)$decoded[1], base64_decode((string)$decoded[2])];
+        }
+        return $events;
     }
 
     private function findAddressByPlayerRef(PlayerRef $playerRef): ?string {
@@ -195,90 +267,6 @@ final class Protocol84NetworkAdapter implements NetworkPort {
         return null;
     }
 
-    private function processCommands(): void {
-        while (true) {
-            $cmd = $this->commandQueue->shift();
-            if ($cmd === null) {
-                break;
-            }
-            // Handle internal commands
-        }
-    }
-
-    private function handleUnconnectedPing(string $buffer, string $address, int $port): void {
-        // Respond with UNCONNECTED_PONG
-        if (strlen($buffer) < 17) return; // Magic + timestamp + clientId
-        
-        $timestamp = substr($buffer, 17); // 16 bytes magic + clientId
-        $response = chr(Info::UNCONNECTED_PONG) . self::RAKLIB_MAGIC . $timestamp . $this->getServerInfo();
-        @socket_sendto($this->socket, $response, strlen($response), 0, $address, $port);
-    }
-
-    private function handleOpenConnections(string $buffer, string $address, int $port): void {
-        // Similar to ping but for open connections
-        $this->handleUnconnectedPing($buffer, $address, $port);
-    }
-
-    private function handleOpenConnectionRequest1(string $buffer, string $address, int $port): void {
-        if (strlen($buffer) < 19) return; // 1 + 16 magic + 1 protocol + 1 MTU
-        
-        $protocol = ord($buffer[17]);
-        $mtuSize = (ord($buffer[18]) << 8) | ord($buffer[19]);
-        
-        if ($protocol !== Info::CURRENT_PROTOCOL) {
-            // Send incompatible protocol version
-            return;
-        }
-        
-        $reply = chr(Info::OPEN_CONNECTION_REPLY_1) . self::RAKLIB_MAGIC;
-        $reply .= pack("J", 0); // serverId
-        $reply .= pack("C", 0); // useSecurity
-        $reply .= pack("n", $mtuSize); // mtuSize
-        
-        @socket_sendto($this->socket, $reply, strlen($reply), 0, $address, $port);
-    }
-
-    private function handleOpenConnectionRequest2(string $buffer, string $address, int $port): void {
-        // Client has sent its cookie, we reply with our cookie
-        $reply = chr(Info::OPEN_CONNECTION_REPLY_2) . self::RAKLIB_MAGIC;
-        $reply .= pack("J", $this->serverId);
-        $reply .= pack("C", 0); // useSecurity
-        
-        @socket_sendto($this->socket, $reply, strlen($reply), 0, $address, $port);
-    }
-
-    private function getServerInfo(): string {
-        // Format: serverId + serverName + protocol + version + playerCount + maxPlayers + gameId
-        $info = pack("J", $this->serverId);
-        $info .= chr(strlen($this->serverName)) . $this->serverName;
-        $info .= pack("v", Info::CURRENT_PROTOCOL);
-        $info .= "1.0.0"; // version
-        $info .= pack("v", count($this->connectedPlayers));
-        $info .= pack("v", 100); // max players
-        $info .= pack("J", 123456789); // gameId
-        return $info;
-    }
-
-    public function sendPacket(PlayerRef $player, DataPacket $packet): void {
-        $this->outboundQueue[] = [$player, $packet];
-    }
-
-    public function broadcastPacket(iterable $players, DataPacket $packet): void {
-        foreach ($players as $player) {
-            $this->outboundQueue[] = [$player, $packet];
-        }
-    }
-
-    public function disconnect(PlayerRef $player, string $reason): void {
-        $pk = new DisconnectPacket();
-        $pk->message = $reason;
-        $pk->hideDisconnectionScreen = false;
-        $this->sendPacket($player, $pk);
-        
-        // Remove from connected players
-        $this->removePlayer($player);
-    }
-
     private function removePlayer(PlayerRef $player): void {
         foreach ($this->connectedPlayers as $addrKey => $ref) {
             if ($ref->entityId === $player->entityId) {
@@ -286,75 +274,6 @@ final class Protocol84NetworkAdapter implements NetworkPort {
                 break;
             }
         }
-    }
-
-    public function processPendingCommands(): void {
-        // Process inbound packets into domain events
-        while (true) {
-            $item = $this->inboundQueue->shift();
-            if ($item === null) {
-                break;
-            }
-            
-            [$addrKey, $buffer] = $item;
-            $this->processInboundPacket($addrKey, $buffer);
-        }
-    }
-
-    private function processInboundPacket(string $addrKey, string $buffer): void {
-        if (strlen($buffer) < 1) return;
-        
-        $packetId = ord($buffer[0]);
-        
-        // Skip RakLib internal packets
-        if ($packetId < Info::DATA_PACKET_0 || $packetId > Info::DATA_PACKET_F) {
-            return;
-        }
-        
-        // Create PlayerRef if new
-        if (!isset($this->connectedPlayers[$addrKey])) {
-            $playerRef = new PlayerRef(
-                $addrKey, // uniqueId from address
-                $this->generateEntityId(),
-                "Player_" . substr($addrKey, 0, 8)
-            );
-            $this->connectedPlayers[$addrKey] = $playerRef;
-        }
-        
-        $playerRef = $this->connectedPlayers[$addrKey];
-        
-        // Decode packet
-        $packet = $this->decodePacket($buffer);
-        if ($packet !== null) {
-            $this->commandQueue[] = ["packet", $playerRef, $packet];
-        }
-    }
-
-    private function decodePacket(string $buffer): ?DataPacket {
-        $packetId = ord($buffer[0]);
-        $className = "pocketmine\\network\\protocol\\" . Info::PACKET_NAMES[$packetId] ?? null;
-        
-        if ($className === null || !class_exists($className)) {
-            return null;
-        }
-        
-        $packet = new $className();
-        $packet->setBuffer($buffer);
-        $packet->decode();
-        return $packet;
-    }
-
-    private function encodePacket(DataPacket $packet): string {
-        $packet->encode();
-        return $packet->getBuffer();
-    }
-
-    private function generateEntityId(): int {
-        return random_int(1, PHP_INT_MAX);
-    }
-
-    public function flushOutboundPackets(): void {
-        // Handled in networkLoop
     }
 
     public function setServerName(string $name): void {

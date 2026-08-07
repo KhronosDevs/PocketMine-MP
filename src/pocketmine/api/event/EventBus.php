@@ -26,12 +26,12 @@ class CancellableEvent extends Event {
 
 #[\Attribute(\Attribute::TARGET_CLASS)]
 final class EventPriority {
-    public const int LOWEST = 0;
-    public const int LOW = 1;
-    public const int NORMAL = 2;
-    public const int HIGH = 3;
-    public const int HIGHEST = 4;
-    public const int MONITOR = 5;
+    public const LOWEST = 0;
+    public const LOW = 1;
+    public const NORMAL = 2;
+    public const HIGH = 3;
+    public const HIGHEST = 4;
+    public const MONITOR = 5;
 }
 
 #[\Attribute(\Attribute::TARGET_METHOD)]
@@ -105,7 +105,7 @@ class EventBus {
 
 final class ListenerEntry {
     public function __construct(
-        public readonly callable $handler,
+        public readonly mixed $handler,
         public readonly int $priority,
         public bool $ignoreCancelled = false,
     ) {}

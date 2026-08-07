@@ -28,7 +28,6 @@ declare(strict_types=1);
 
 namespace pocketmine\utils;
 
-use pocketmine\pmmp\thread\ThreadManager;
 use function array_merge;
 use function bin2hex;
 use function chunk_split;
@@ -339,7 +338,7 @@ class Utils{
 		}
 		//TODO: more OS
 
-		return count(ThreadManager::getInstance()->getAll()) + 3; //RakLib + MainLogger + Main Thread
+		return 1; // fallback: main thread only
 	}
 
 	public static function getCoreCount(bool $recalculate = false) : int{
