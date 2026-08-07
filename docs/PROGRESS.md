@@ -2,9 +2,9 @@
 
 **Plan Version:** docs/PLAN.md
 **Last Updated:** 2026-08-07
-**Current Phase:** 7 (Polish & Optimize)
-**Current Branch:** polish-optimize
-**Base Commit:** 942082e (master after PR #24 merge)
+**Current Phase:** 8 (API ECS Rewrite)
+**Current Branch:** api-ecs-rewrite
+**Base Commit:** 1cfc650 (master after PR #25 merge)
 
 ---
 
@@ -19,7 +19,8 @@
 | 4: **New Plugin API** | ✅ Done | api-ecs-plugin | #22 | **BREAKING** — EntityRef, Query, System, Event, Command, Scheduler |
 | 5: Archetype Parallelism | ✅ Done | multithread-archetype-parallelism | #23 | Movement, Effect, Physics, AI parallel execution |
 | 6: Region-Based Architecture | ✅ Done | region-based-architecture | #24 | RegionWorld, RegionThread, coordination, network threads |
-| 7: Polish & Optimize | 🔄 In Progress | polish-optimize | — | Storage, queries, memory, network batching, benchmarks |
+| 7: Polish & Optimize | ✅ Done | polish-optimize | #25 | Storage, queries, memory, network batching, benchmarks |
+| 8: **API ECS Rewrite** | 🔄 In Progress | api-ecs-rewrite | #26 | **Complete ECS-based API rewrite** — Entity, Level, Server, Inventory, Block, Scheduler, Command, Permission, Event, Plugin, World |
 
 ---
 
@@ -135,7 +136,27 @@
 | 7.3 | `optimize-memory-layout` — Struct-of-arrays, reduce object allocation | ✅ | 04f0ea3 | Flat arrays, object pooling, weak refs |
 | 7.4 | `optimize-network-batching` — Batch NetworkSyncComponent flushes across regions | ✅ | 04f0ea3 | Cross-region packet batching |
 | 7.5 | `benchmark-profile` — Full profiling, tick rate analysis, scalability testing | ✅ | 04f0ea3 | Load testing, flame graphs, regression tests |
-| 7.6 | Update PROGRESS.md | 🔄 | — | Track progress |
+| 7.6 | Update PROGRESS.md | ✅ | — | Track progress |
+
+---
+
+## Phase 8: API ECS Rewrite — Detailed Steps
+
+| Step | Task | Status | Commit | Notes |
+|------|------|--------|--------|-------|
+| 8.0 | Create branch `api-ecs-rewrite` with rollback anchor | ✅ | 29b5081 | `git checkout -b api-ecs-rewrite && git commit --allow-empty -m "chore: rollback anchor for api-ecs-rewrite"` |
+| 8.1 | Entity API: Entity, Player, Living, Monster, Animal, Zombie, Skeleton, Creeper, Pig, ItemEntity, EntityFactory | ✅ | 2079019 | EntityRef-based with component accessors |
+| 8.2 | Level API: Level with chunk/entity management via ECS services | ✅ | 2079019 | ChunkLoadService, EntitySpawnService, etc. |
+| 8.3 | Server API: Server singleton with ECS integration, service access | ✅ | 2079019 | 18 services accessible via KernelAccessor |
+| 8.4 | Inventory API: Inventory, ItemStack with full inventory management | ✅ | 2079019 | Stacking, NBT, enchantments |
+| 8.5 | Block API: Block with level integration | ✅ | 2079019 | Block operations via Level |
+| 8.6 | Scheduler API: Scheduler with task management and system registration | ✅ | 2079019 | Task management + System registration |
+| 8.7 | Command API: Command, CommandMap, CommandSender, attributes | ✅ | 2079019 | Attribute-based commands |
+| 8.8 | Permission API: Permission, PermissionManager with inheritance | ✅ | 2079019 | EntityRef metadata-based checks |
+| 8.9 | Event API: EventBus, typed events (Player, Block, Entity), attributes | ✅ | 2079019 | Typed events with EventHandler attribute |
+| 8.10 | Plugin API: Plugin base, PluginManager, PluginDescription, Logger, Config | ✅ | 2079019 | KernelAccessor provides full ECS/services/ports |
+| 8.11 | World API: WorldAccessor with ECS query integration | ✅ | 2079019 | QueryBuilder integration |
+| 8.12 | Update PROGRESS.md | ✅ | — | Track progress |
 
 ---
 
@@ -152,6 +173,7 @@
 | D007 | **New Plugin API = breaking changes, no legacy compat** | 2026-08-07 | Clean ECS-based API (EntityRef, Query, System) |
 | D008 | **Double-buffered components for parallel writes** | 2026-08-07 | PositionComponent, VelocityComponent, AIStateComponent |
 | D009 | **Region size: 16×16 chunks (256×256 blocks)** | 2026-08-07 | Balance between parallelism and migration overhead |
+| D010 | **Struct-of-arrays layout for archetype storage** | 2026-08-07 | Flat arrays for cache performance |
 
 ---
 
@@ -166,17 +188,24 @@
 | api-ecs-plugin | 8f3a171 | fc1c65d | #22 | ✅ Merged |
 | multithread-archetype-parallelism | 43996ce | 33f6ff6 | #23 | ✅ Merged |
 | region-based-architecture | c7e445f | 1c1baf4 | #24 | ✅ Merged |
-| polish-optimize | 942082e | 04f0ea3 | #25 | 🔄 Active (PR opened) |
+| polish-optimize | 942082e | 582c377 | #25 | ✅ Merged |
+| api-ecs-rewrite | 1cfc650 | 2079019 | #26 | 🔄 Active (PR opened) |
 
 ---
 
 ## Next Actions
 
-1. ✅ Phase 0, 1, 2, 3, 4, 5, 6 complete (PRs #18, #19, #20, #21, #22, #23, #24 merged)
-2. ✅ Create `polish-optimize` branch with rollback anchor
-3. ✅ Implement archetype storage optimization (struct-of-arrays)
-4. ✅ Implement query performance optimization (caching, indexing)
-5. ✅ Implement memory layout optimization (flat arrays, pooling)
-6. ✅ Implement network batching optimization
-7. ✅ Run full profiling and benchmarking
-8. ✅ Update docs, commit, push, open PR #25
+1. ✅ Phase 0, 1, 2, 3, 4, 5, 6, 7 complete (PRs #18, #19, #20, #21, #22, #23, #24, #25 merged)
+2. ✅ Create `api-ecs-rewrite` branch with rollback anchor
+3. ✅ Implement Entity API (Entity, Player, Living, Monster, Animal, Zombie, Skeleton, Creeper, Pig, ItemEntity, EntityFactory)
+4. ✅ Implement Level API (Level with ECS services)
+6. ✅ Implement Server API (Server singleton with ECS integration)
+7. ✅ Implement Inventory API (Inventory, ItemStack)
+8. ✅ Implement Block API (Block with level integration)
+9. ✅ Implement Scheduler API (Scheduler with task management)
+10. ✅ Implement Command API (Command, CommandMap, attributes)
+11. ✅ Implement Permission API (Permission, PermissionManager)
+13. ✅ Implement Event API (EventBus, typed events, attributes)
+14. ✅ Implement Plugin API (Plugin, PluginManager, Logger, Config)
+14. ✅ Implement World API (WorldAccessor)
+14. ✅ Update docs, commit, push, open PR #26
