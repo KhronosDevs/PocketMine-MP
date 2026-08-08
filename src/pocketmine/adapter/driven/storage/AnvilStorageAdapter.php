@@ -83,12 +83,65 @@ final class AnvilStorageAdapter implements StoragePort {
         $this->writeChunkToRegion($regionFile, $chunkX, $chunkZ, $chunkBytes);
     }
 
+    /** Magic prefix of the per-entity (player) data files. */
+    private const PLAYER_MAGIC = 'KRONPLR1';
+
     public function loadEntity(string $entityId): EntitySnapshot {
-        return new EntitySnapshot($entityId, '', 0.0, 0.0, 0.0, 0.0, 0.0, []);
+        $raw = @file_get_contents($this->entityFile($entityId));
+        if ($raw === false || $raw === '') {
+            return $this->emptyEntitySnapshot($entityId);
+        }
+        $data = json_decode($raw, true);
+        if (!is_array($data) || ($data['magic'] ?? null) !== self::PLAYER_MAGIC) {
+            return $this->emptyEntitySnapshot($entityId);
+        }
+        return new EntitySnapshot(
+            $entityId,
+            (string)($data['type'] ?? ''),
+            (float)($data['x'] ?? 0.0),
+            (float)($data['y'] ?? 0.0),
+            (float)($data['z'] ?? 0.0),
+            (float)($data['yaw'] ?? 0.0),
+            (float)($data['pitch'] ?? 0.0),
+            is_array($data['components'] ?? null) ? $data['components'] : [],
+        );
     }
 
     public function saveEntity(EntitySnapshot $snapshot): void {
-        // Entity persistence is handled via chunk snapshots for now.
+        $dir = $this->worldFolder() . 'players/';
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        try {
+            $payload = json_encode([
+                'magic' => self::PLAYER_MAGIC,
+                'id' => $snapshot->id,
+                'type' => $snapshot->type,
+                'x' => $snapshot->x,
+                'y' => $snapshot->y,
+                'z' => $snapshot->z,
+                'yaw' => $snapshot->yaw,
+                'pitch' => $snapshot->pitch,
+                'components' => $snapshot->components,
+            ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        } catch (\JsonException) {
+            return; // un-serializable component data: keep the last good save
+        }
+        // Atomic write: temp file + rename so a crash mid-write cannot
+        // corrupt the last good save (same pattern as the region timestamps).
+        $file = $this->entityFile($snapshot->id);
+        file_put_contents($file . '.tmp', $payload);
+        @rename($file . '.tmp', $file);
+    }
+
+    /** A per-entity data file, id-sanitized to prevent path traversal. */
+    private function entityFile(string $entityId): string {
+        $safe = preg_replace('/[^A-Za-z0-9_.-]/', '_', $entityId);
+        return $this->worldFolder() . 'players/' . ($safe !== null && $safe !== '' ? $safe : 'unknown') . '.dat';
+    }
+
+    private function emptyEntitySnapshot(string $entityId): EntitySnapshot {
+        return new EntitySnapshot($entityId, '', 0.0, 0.0, 0.0, 0.0, 0.0, []);
     }
 
     /** Magic + version header of the level.dat-style world meta file. */

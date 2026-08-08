@@ -1130,6 +1130,17 @@ final class Kernel {
                 'difficulty' => (string)$config->difficulty,
             ]);
         }
+        // 14.4b: persist every online player (position/health/inventory/
+        // metadata) on the same interval so a crash loses at most the
+        // autosave window - clean disconnects save immediately on leave.
+        foreach ($this->networkSessionService->getOnlinePlayers() as $player) {
+            $entity = $this->world->getEntity($player['entityId']);
+            if ($entity !== null) {
+                $this->playerLeaveService->savePlayer(
+                    \pocketmine\core\ecs\EntityRef::create($player['entityId'], $this->world)
+                );
+            }
+        }
     }
 
     public function getWorld(): World {

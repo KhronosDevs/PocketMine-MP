@@ -55,9 +55,11 @@ final class ChunkSendService {
     }
 
     private function findPlayerEntity(PlayerRef $playerRef): ?\pocketmine\core\ecs\EntityRef {
+        // withTag takes a COMPONENT class here (no tag-name map like
+        // EntityBuilder): the literal 'player' would match no entity.
         $query = $this->world->query()
             ->with(\pocketmine\core\component\MetadataComponent::class)
-            ->withTag('player')
+            ->withTag(\pocketmine\core\component\tags\PlayerTag::class)
             ->build();
         
         foreach ($query as $entity) {

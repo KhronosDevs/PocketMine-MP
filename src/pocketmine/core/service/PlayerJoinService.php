@@ -30,14 +30,12 @@ final class PlayerJoinService {
     ) {}
 
     public function handleJoin(PlayerRef $playerRef, string $username): EntityRef {
-        // Create or load player entity
+        // Create or load player entity (returning players are restored from
+        // their persisted snapshot inside createOrLoadPlayer).
         $entityRef = $this->createOrLoadPlayer($playerRef, $username);
         
         // Send join packets (spawn position, inventory, etc.)
         $this->sendJoinPackets($entityRef);
-        
-        // Load player data from storage
-        $this->loadPlayerData($entityRef);
         
         // Notify other players
         $this->broadcastPlayerJoin($entityRef);
@@ -49,8 +47,11 @@ final class PlayerJoinService {
         // Try to load existing player data
         $savedData = $this->storagePort->loadEntity($playerRef->uniqueId);
         
-        if ($savedData !== null && $savedData->type === 'Player') {
-            // Recreate from saved data
+        if ($savedData->type === 'Player') {
+            // Returning player: rebuild from the persisted snapshot - the
+            // position/rotation come from the snapshot top-level fields, and
+            // health/inventory/metadata are restored below (the load branch
+            // never hands out the fresh-spawn starter kit).
             $entityRef = $this->world->spawn(
                 (new EntityBuilder())
                     ->with(new PositionComponent($savedData->x, $savedData->y, $savedData->z))
@@ -60,11 +61,21 @@ final class PlayerJoinService {
                     ->with(new InventoryComponent(36))
                     ->with(new MetadataComponent())
                     ->withTag('player')
-                    
             );
             
-            // Restore components from saved data
-            $this->restoreComponents($entityRef, $savedData);
+            $entity = $entityRef->getEntity();
+            if ($entity) {
+                // Identity first so restoreComponents can merge on top (and a
+                // save without those keys still yields a named, owned player).
+                $meta = $entity->get(MetadataComponent::class);
+                if ($meta) {
+                    $meta->set('username', $username);
+                    $meta->set('uniqueId', $playerRef->uniqueId);
+                }
+                
+                // Restore components from saved data
+                $this->restoreComponents($entityRef, $savedData);
+            }
             
             return $entityRef;
         }
@@ -220,52 +231,50 @@ final class PlayerJoinService {
         }
     }
 
-    private function loadPlayerData(EntityRef $entityRef): void {
-        $entity = $entityRef->getEntity();
-        if (!$entity) return;
-        
-        $metadata = $entity->get(MetadataComponent::class);
-        $uniqueId = $metadata?->get('uniqueId');
-        
-        if ($uniqueId) {
-            $savedData = $this->storagePort->loadEntity($uniqueId);
-            if ($savedData) {
-                $this->restoreComponents($entityRef, $savedData);
-            }
-        }
-    }
-
+    /**
+     * Restore the persisted player components (the explicit shape written by
+     * PlayerLeaveService::savePlayer): health, inventory slots + held slot,
+     * and the metadata data bag. Position/rotation were already applied when
+     * the entity spawned from the snapshot's top-level fields.
+     */
     private function restoreComponents(EntityRef $entityRef, \pocketmine\port\driven\EntitySnapshot $savedData): void {
         $entity = $entityRef->getEntity();
         if (!$entity) return;
+        $components = $savedData->components;
         
-        // Restore health
+        // Restore health. A player that disconnected mid-death (corpse) must
+        // rejoin alive: the death screen is a session state, not a login one.
         $health = $entity->get(\pocketmine\core\component\HealthComponent::class);
-        if ($health && isset($savedData->components['pocketmine\core\component\HealthComponent'])) {
-            $healthData = $savedData->components['pocketmine\core\component\HealthComponent'];
-            $health->current = $healthData['current'] ?? 20;
-            $health->max = $healthData['max'] ?? 20;
-        }
-        
-        // Restore inventory
-        $inventory = $entity->get(\pocketmine\core\component\InventoryComponent::class);
-        if ($inventory && isset($savedData->components['pocketmine\core\component\InventoryComponent'])) {
-            $invData = $savedData->components['pocketmine\core\component\InventoryComponent'];
-            if (isset($invData['slots'])) {
-                foreach ($invData['slots'] as $slot => $itemData) {
-                    $inventory->set($slot, \pocketmine\core\component\ItemStack::fromArray($itemData));
-                }
+        if ($health && isset($components['health'])) {
+            $health->current = (float)($components['health']['current'] ?? 20);
+            $health->max = (float)($components['health']['max'] ?? 20);
+            if ($health->current <= 0) {
+                $health->current = $health->max;
             }
         }
         
-        // Restore metadata
-        $metadata = $entity->get(\pocketmine\core\component\MetadataComponent::class);
-        if ($metadata && isset($savedData->components['pocketmine\core\component\MetadataComponent'])) {
-            $metaData = $savedData->components['pocketmine\core\component\MetadataComponent'];
-            if (isset($metaData['data'])) {
-                foreach ($metaData['data'] as $key => $value) {
-                    $metadata->set($key, $value);
+        // Restore inventory: slot => item array (id/meta/count/nbt) plus the
+        // held slot so the hotbar selection survives a restart.
+        $inventory = $entity->get(\pocketmine\core\component\InventoryComponent::class);
+        if ($inventory && isset($components['inventory'])) {
+            $slots = $components['inventory']['slots'] ?? [];
+            if (is_array($slots)) {
+                foreach ($slots as $slot => $itemData) {
+                    if (is_array($itemData)) {
+                        $inventory->set((int)$slot, \pocketmine\core\component\ItemStack::fromArray($itemData));
+                    }
                 }
+            }
+            if (isset($components['inventory']['heldSlot'])) {
+                $inventory->setHeldSlot((int)$components['inventory']['heldSlot']);
+            }
+        }
+        
+        // Restore metadata (username, uniqueId, keepInventory, effects...).
+        $metadata = $entity->get(\pocketmine\core\component\MetadataComponent::class);
+        if ($metadata && isset($components['metadata']['data']) && is_array($components['metadata']['data'])) {
+            foreach ($components['metadata']['data'] as $key => $value) {
+                $metadata->set((string)$key, $value);
             }
         }
     }

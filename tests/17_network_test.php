@@ -23,6 +23,7 @@ use pocketmine\protocol\UseItemPacket;
 use pocketmine\utils\BinaryStream;
 use raklib\protocol\ACK;
 use raklib\protocol\CLIENT_CONNECT_DataPacket;
+use raklib\protocol\CLIENT_DISCONNECT_DataPacket;
 use raklib\protocol\CLIENT_HANDSHAKE_DataPacket;
 use raklib\protocol\DATA_PACKET_4;
 use raklib\protocol\EncapsulatedPacket;
@@ -177,6 +178,15 @@ final class FakeClient {
     public function sendGamePacket(\pocketmine\protocol\DataPacket $packet): void {
         $packet->encode();
         $this->sendRawBuffer($packet->getBuffer());
+    }
+
+    /**
+     * Send a raw RakNet control payload (e.g. CLIENT_DISCONNECT 0x15) in a
+     * reliable frame WITHOUT the 0xfe game prefix - the server's Session
+     * routes control ids before the game-data path.
+     */
+    public function sendControl(string $buffer): void {
+        $this->sendEncapsulated($buffer, PacketReliability::RELIABLE_ORDERED);
     }
 
     public function sendLogin(string $username, string $uuid): void {
@@ -1662,6 +1672,87 @@ test('a client that disconnects is removed from the session service', function (
         usleep(50000);
     }
     ok(false, 'disconnected player removed within timeout');
+});
+
+// --- Player persistence over the wire (14.4b) ------------------------------
+// A real client's data must survive a disconnect + reconnect: Rita picks up
+// items (or has them placed server-side), disconnects cleanly (RakNet
+// CLIENT_DISCONNECT -> leave service saves her), and her next login burst
+// carries the restored inventory instead of the starter kit.
+test('a disconnecting player is saved and a reconnect restores the inventory', function () use ($kernel, $port, $client): void {
+    $ritaUuid = 'cccc3333-2222-3333-4444-555555555555';
+
+    // Rita joins with her own client and waits for her login burst.
+    $rita = new FakeClient($port);
+    $rita->handshake(fn() => $kernel->run(1));
+    $rita->connect(fn() => $kernel->run(1));
+    $rita->sendLogin('Rita', $ritaUuid);
+    $kernel->run(2);
+
+    $deadline = microtime(true) + 5.0;
+    $ritaId = 0;
+    while (microtime(true) < $deadline && $ritaId === 0) {
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            if ($p['username'] === 'Rita') {
+                $ritaId = $p['entityId'];
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($ritaId !== 0, 'Rita joined');
+    $rita->readGamePackets(); // drain her join burst
+
+    // The stored uniqueId is the login uuid NORMALIZED by UUID::fromString
+    // (variant nibble rewritten: '4444' -> '8444') - that is the id used for
+    // the save file and the reconnect lookup, so capture it from her entity.
+    $ritaSavedId = $kernel->getWorld()->getEntity($ritaId)?->get(\pocketmine\core\component\MetadataComponent::class)?->get('uniqueId');
+    ok(is_string($ritaSavedId) && $ritaSavedId !== '', 'Rita entity carries a persisted uniqueId');
+
+    // Server-side inventory change: slot 5 gets 3 iron ingots, held slot 5.
+    $inv = $kernel->getWorld()->getEntity($ritaId)?->get(\pocketmine\core\component\InventoryComponent::class);
+    $inv?->set(5, new \pocketmine\core\component\ItemStack(266, 0, 3));
+    $inv?->setHeldSlot(5);
+
+    // Clean RakNet disconnect: the server closes the session, which saves
+    // Rita's data through the leave service.
+    $rita->sendControl(chr(CLIENT_DISCONNECT_DataPacket::$ID));
+    $deadline = microtime(true) + 5.0;
+    $gone = false;
+    while (microtime(true) < $deadline && !$gone) {
+        $kernel->run(1);
+        $client->readGamePackets(); // keep Alice's session alive
+        $names = array_column($kernel->getNetworkSessionService()->getOnlinePlayers(), 'username');
+        if (!in_array('Rita', $names, true)) {
+            $gone = true;
+        }
+        usleep(20000);
+    }
+    ok($gone, 'Rita disconnected (session closed)');
+    ok($ritaSavedId !== null && file_exists(dirname(__DIR__) . '/worlds/world/players/' . $ritaSavedId . '.dat'), 'Rita data file written on disconnect');
+
+    // Reconnect with the same UUID: the login burst must carry her saved
+    // inventory (slot 5 = 3 iron ingots), not the starter kit.
+    $rita2 = new FakeClient($port);
+    $rita2->handshake(fn() => $kernel->run(1));
+    $rita2->connect(fn() => $kernel->run(1));
+    $rita2->sendLogin('Rita', $ritaUuid);
+    $kernel->run(2);
+
+    $deadline = microtime(true) + 5.0;
+    $sawRestored = false;
+    while (microtime(true) < $deadline && !$sawRestored) {
+        foreach ($rita2->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::CONTAINER_SET_CONTENT_PACKET) {
+                $csc = cscFields($buffer);
+                if (isset($csc['slots'][5]) && $csc['slots'][5][0] === 266 && $csc['slots'][5][1] === 3) {
+                    $sawRestored = true;
+                }
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawRestored, 'Rita reconnects with her saved inventory (3 iron ingots in slot 5)');
+    $rita2->close();
 });
 
 // Teardown runs as a real test so it executes AFTER the other cases (the

@@ -22,7 +22,7 @@ final class PlayerLeaveService {
         if (!$entity) return;
         
         // Save player data before removing
-        $this->savePlayerData($entityRef);
+        $this->savePlayer($entityRef);
         
         // Broadcast player removal to nearby players
         $this->broadcastPlayerLeave($entityRef);
@@ -40,9 +40,12 @@ final class PlayerLeaveService {
     }
 
     private function findEntityByUniqueId(string $uniqueId): ?EntityRef {
+        // withTag takes a COMPONENT class here (QueryBuilder has no tag-name
+        // map like EntityBuilder): 'player' as a literal would match nothing
+        // - real players carry the PlayerTag component class.
         $query = $this->world->query()
             ->with(\pocketmine\core\component\MetadataComponent::class)
-            ->withTag('player')
+            ->withTag(\pocketmine\core\component\tags\PlayerTag::class)
             ->build();
         
         foreach ($query as $entity) {
@@ -55,7 +58,13 @@ final class PlayerLeaveService {
         return null;
     }
 
-    private function savePlayerData(EntityRef $entityRef): void {
+    /**
+     * Persist a player's position, health, inventory (+ held slot) and
+     * metadata (username/uniqueId/settings) through the storage port.
+     * Public so the kernel can flush online players on the autosave interval
+     * and the session service can save them on shutdown.
+     */
+    public function savePlayer(EntityRef $entityRef): void {
         $entity = $entityRef->getEntity();
         if (!$entity) return;
         
@@ -64,16 +73,35 @@ final class PlayerLeaveService {
         
         if (!$uniqueId) return;
         
-        // Serialize entity components
+        // Explicit, restorable shape (NOT raw ComponentSerializer output - its
+        // deserialize cannot rebuild object components like ItemStacks, so the
+        // join path would read back broken data).
         $components = [];
-        foreach ($entity->getComponents() as $type => $component) {
-            $components[$type] = \pocketmine\core\ecs\ComponentSerializer::serialize($component);
+        
+        $health = $entity->get(\pocketmine\core\component\HealthComponent::class);
+        if ($health !== null) {
+            $components['health'] = ['current' => $health->current, 'max' => $health->max];
+        }
+        
+        $inventory = $entity->get(\pocketmine\core\component\InventoryComponent::class);
+        if ($inventory !== null) {
+            $slots = [];
+            foreach ($inventory->getContents() as $slot => $item) {
+                if ($item instanceof \pocketmine\core\component\ItemStack) {
+                    $slots[$slot] = $item->toArray();
+                }
+            }
+            $components['inventory'] = ['slots' => $slots, 'heldSlot' => $inventory->heldSlot];
+        }
+        
+        if ($metadata !== null) {
+            $components['metadata'] = ['data' => $metadata->data];
         }
         
         $position = $entity->get(\pocketmine\core\component\PositionComponent::class);
         $rotation = $entity->get(\pocketmine\core\component\RotationComponent::class);
         
-        $snapshot = new \pocketmine\port\driven\EntitySnapshot(
+        $this->storagePort->saveEntity(new \pocketmine\port\driven\EntitySnapshot(
             $uniqueId,
             'Player',
             $position?->x ?? 0,
@@ -82,9 +110,7 @@ final class PlayerLeaveService {
             $rotation?->yaw ?? 0,
             $rotation?->pitch ?? 0,
             $components
-        );
-        
-        $this->storagePort->saveEntity($snapshot);
+        ));
     }
 
     private function broadcastPlayerLeave(EntityRef $entityRef): void {
