@@ -36,6 +36,8 @@ final class NetworkThread extends Thread {
     /** @var ThreadSafeArray<int, string> batched frames ready for the adapter to send */
     private ThreadSafeArray $sendQueue;
     private ThreadSafe $state;
+    /** Wait/notify condvar: sleep between polls instead of busy-waiting. */
+    private SnoozeHandle $sleeper;
 
     public function __construct() {
         $this->inboundQueue = new ThreadSafeArray();
@@ -43,14 +45,21 @@ final class NetworkThread extends Thread {
         $this->sendQueue = new ThreadSafeArray();
         $this->state = new ThreadSafe();
         $this->state->running = true;
+        $this->sleeper = new SnoozeHandle();
     }
 
     public function queueOutboundFrame(string $addrKey, string $payload): void {
-        $this->outboundQueue[] = json_encode([$addrKey, $payload]);
+        // Payloads are raw packet buffers (zlib-compressed batches): arbitrary
+        // binary that json_encode() would reject as invalid UTF-8 (returning
+        // false and crashing the consumer). Base64 keeps every queue frame a
+        // valid JSON string.
+        $this->outboundQueue[] = json_encode([$addrKey, base64_encode($payload)]);
+        $this->sleeper->wakeup();
     }
 
     public function queueInboundFrame(string $addrKey, string $payload): void {
-        $this->inboundQueue[] = json_encode([$addrKey, $payload]);
+        $this->inboundQueue[] = json_encode([$addrKey, base64_encode($payload)]);
+        $this->sleeper->wakeup();
     }
 
     public function getSendQueue(): ThreadSafeArray {
@@ -67,9 +76,13 @@ final class NetworkThread extends Thread {
 
     public function run(): void {
         while ($this->state->running) {
+            // Block until frames arrive (the adapter wakes us on every queue
+            // push). The 5ms timeout is a shutdown/edge-case safety net, not
+            // the steady-state path - an idle thread burns ~zero CPU.
+            $this->sleeper->sleep(5_000);
+            $this->sleeper->consumeWakeups();
             $this->processInbound();
             $this->processOutbound();
-            usleep(1000);
         }
     }
 
@@ -81,6 +94,8 @@ final class NetworkThread extends Thread {
             if (!is_array($decoded)) {
                 continue;
             }
+            // Payload stays base64 (ASCII) so the batch json_encode below
+            // never sees raw binary.
             $batch[] = $decoded;
             $total += strlen((string)$decoded[1]);
             if (count($batch) >= self::BATCH_MAX_PACKETS || $total >= self::BATCH_THRESHOLD) {
@@ -116,19 +131,24 @@ final class NetworkThread extends Thread {
             if (!is_string($addrKey) || !is_string($payload)) {
                 continue;
             }
+            $payload = base64_decode($payload, true);
+            if ($payload === false) {
+                continue;
+            }
             $processed++;
             $batches[$addrKey] = ($batches[$addrKey] ?? '') . pack('n', strlen($payload)) . $payload;
             if (strlen($batches[$addrKey]) >= self::BATCH_THRESHOLD) {
-                $this->sendQueue[] = json_encode([$addrKey, $batches[$addrKey]]);
+                $this->sendQueue[] = json_encode([$addrKey, base64_encode($batches[$addrKey])]);
                 unset($batches[$addrKey]);
             }
         }
         foreach ($batches as $addrKey => $payload) {
-            $this->sendQueue[] = json_encode([$addrKey, $payload]);
+            $this->sendQueue[] = json_encode([$addrKey, base64_encode($payload)]);
         }
     }
 
     public function shutdown(): void {
         $this->state->running = false;
+        $this->sleeper->wakeup(); // break the worker out of sleep() immediately
     }
 }

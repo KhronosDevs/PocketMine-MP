@@ -162,6 +162,14 @@ core, then parallelism behind the seams. **Phase 9 wires the seams.**
 | 12.2 | Combat + damage integration across services/systems; death/drops/loot tables. | ✅ done — see status below. |
 | 12.3 | Crafting/container recipes via registry data. | ✅ done — see status below. |
 | 12.4 | Plugin loading (`plugin.yml` + base class, directory + `.phar`, never `.jar`) + unified server-wide command registration (`Server::dispatchCommand`). | ✅ done — see status below. |
+| 12.5 | **Networking end-to-end** — real client login → spawn burst → chunk streaming → movement round-trip over the protocol-84 UDP path. | ✅ done — see status below. |
+| 12.6 | **Permissions wired** — `plugin.yml` `permissions:` parsed into the `PermissionManager` and enforced by `Player::hasPermission` / command gating. | ✅ done — see status below. |
+
+### Phase 13 — Performance push
+
+| Step | Task |
+|------|------|
+| 13.1 | **No busy-waiting + ECS hot paths** — snooze (wait/notify) worker threads, world-map archetype resolution, archetype-array apply; 5000-entity tick <15ms. | ✅ done — see status below. |
 
 ## 6. Thread-safety & ownership model
 
@@ -178,7 +186,7 @@ core, then parallelism behind the seams. **Phase 9 wires the seams.**
 | Metric | Current | Phase 9 target | Phase 12 target |
 |--------|---------|----------------|-----------------|
 | Tick time (20 players, terrain world) | ~0.08 ms mean (empty world) | <5 ms | <5 ms |
-| Entity tick (5000 entities) | main-thread 17.3 ms | region-parallel 15.7–17.4 ms (from 26.9) | <15 ms |
+| Entity tick (5000 entities) | main-thread 17.3 ms | region-parallel 15.7–17.4 ms (from 26.9) | **hot 7.0 ms / apply 1.95 ms** (<15 ✓) |
 | Chunk generation (16 chunks) | 15 ms main-thread | parallel: 5.5 ms (4.6× vs sequential) | <10 ms |
 | Scalability (cores) | 1 | 4-8 | 16+ |
 | API stubs | 0 (this session) | 0 | 0 |
@@ -219,4 +227,7 @@ bin/php7/bin/php measure_baseline.php      # benchmark (writes docs/BASELINE.md)
 | 10.3 | ✅ | **Held-slot single source of truth** — `InventoryComponent::$heldSlot` was declared but never used; all consumers read the metadata `heldSlot` key. Now the component property is the single source: the API facade, `InventoryService`, `BlockBreakService`, and `EntityInteractionService` all read/write it (metadata key gone). Policy centralized in a bound-checked `InventoryComponent::setHeldSlot(int): bool` (validated against inventory size) that both the facade and service call — the facade was previously unbounded while the service enforced a hotbar bound. Bonus: held slot now persists with the component via `ComponentSerializer` (it was metadata-only before). `tests/03` asserts the facade writes the component property and metadata has no `heldSlot`. **Phase 10 now complete.** |
 | 11.3 | ✅ | **Memory profiling & budget** — loaded-chunk budget now *enforced* (was a dead constant + stub): `ChunkLoadService` enforces a configurable cap after every bulk load, `ChunkUnloadService::unloadUnusedChunks` evicts the **oldest** resident chunks FIFO (persisted to disk first, so nothing is lost — `tests/11` proves a marker block survives eviction + reload); `ChunkStore` gains `getOldestLoadedChunk()`/`getMemoryEstimate()`; **Archetype free-list leak fixed** (indices were tracked per-component-type but only the first type's list was ever popped → every other list accumulated duplicate stale entries forever; one shared flat list is correct); `getMemoryProfile()` on the kernel + `measure_memory.php` profiler (per-entity ~1–2 KB, ~160 KB/chunk, index high-water stays flat across despawn/respawn churn, 200 loaded chunks → exactly 64 resident at the 64-chunk budget). 4 tests / 20 assertions added |
 | 12.x | ✅ | Gameplay depth (AI, combat, crafting, plugins) |
+| 12.5 | ✅ | **Networking end-to-end** — `NetworkSessionService` drives login (protocol/version checks → spawn burst), radius ack + distance-sorted chunk streaming (with **heightmap-derived sky light** via `ChunkSerializer` — the old wire sent pitch-black zeros), and movement round-trip; adapter hands its loop to the kernel's single `NetworkThread`; `bootstrap.php` enables networking. `tests/17`: 11 tests / 53 assertions against a real UDP loopback client |
+| 12.6 | ✅ | **Permissions wired** — `plugin.yml` `permissions:` parsed into `PermissionManager` (`parseYaml`, inheritance, defaults, **op-check bug fixed**), registered on enable / unregistered on disable, `Player::hasPermission` + command gating delegate through the manager; `KernelAccessor`/`Plugin` expose `getPermissionManager()`. `tests/18`: 7 tests / 25 assertions |
+| 13.1 | ✅ | **No busy-waiting + ECS hot paths** — `SnoozeHandle` (ThreadSafe wait/notify condvar) replaces RegionThread's 200µs poll (5000 wakeups/sec idle) and NetworkThread's 1ms poll; `Query::archetypes()` uses the world's maintained entityArchetypes map; `applyPendingComponents` iterates archetype arrays (one `method_exists` per type). Raw 5000-entity tick 10.5 → **7.0 ms**; hot off-mode 7.04 ms, apply-mode 1.95 ms (pipeline offloads ~5ms/tick off the main thread). `measure_pipeline` now reports hot + cold ticks — the cold-vs-hot gap is a **CPU frequency-scaling artifact**, not code |
 | 10.1 | ✅ | **Full block registry coverage** — all 189 real protocol-84 block IDs registered with 0.15 data (hardness/resistance/tool/flags/drops/XP), 191 explicit entries; block-state metadata layer for slabs/stairs/doors (variants, top bit, facing, open/half bits) with `applyPlacementMeta` wired into block placement; api Block facade state accessors |

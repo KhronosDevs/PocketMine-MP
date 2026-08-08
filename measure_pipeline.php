@@ -54,11 +54,33 @@ $kernel->setPhaseProfiling(true);
 $kernel->run($ticks);
 
 $stats = $kernel->getTickStats();
+
+// Hot-tick measurement: sustained-load cost. The run() loop above sleeps up
+// to 35ms per tick to hold 20 TPS, which lets the CPU governor drop the core
+// to a low clock during idle and inflates the next tick's wall time (the
+// cold-vs-hot gap is a frequency-scaling artifact, not code). Ticking
+// back-to-back gives the true per-tick CPU cost at saturation.
+$hotTicks = max(20, min(200, $ticks));
+$world->tick(0.05);
+$world->tick(0.05); // warm-up
+$t0 = microtime(true);
+for ($t = 0; $t < $hotTicks; $t++) {
+    $world->tick(0.05);
+}
+$hotMeanMs = (microtime(true) - $t0) / $hotTicks * 1000;
+
+$worldStats = [
+    'entities' => count($world->getEntities()),
+    'archetypes' => count($kernel->getWorld()->getComponentRegistry()->getArchetypes()),
+];
+
 echo json_encode([
     'mode' => $mode,
     'entities' => $entities,
     'ticks' => $ticks,
     'stats' => $stats,
+    'hot_tick_mean_ms' => round($hotMeanMs, 3),
     'phases' => $kernel->getPhaseStats(),
     'pipeline' => $kernel->getRegionPipelineStats(),
+    'world' => $worldStats,
 ], JSON_PRETTY_PRINT) . "\n";

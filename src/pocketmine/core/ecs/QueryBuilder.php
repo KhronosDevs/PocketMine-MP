@@ -132,7 +132,7 @@ final class QueryBuilder {
         // Re-index
         $entities = array_values($entities);
 
-        $query = new Query($entities);
+        $query = new Query($entities, $this->world);
 
         // Cache if no runtime filter or sort
         if ($this->where === null && $this->orderBy === null) {

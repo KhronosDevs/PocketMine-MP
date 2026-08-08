@@ -124,4 +124,8 @@ class KernelAccessor {
     public function getPluginPort(): \pocketmine\port\driving\PluginPort {
         return $this->kernel->getPluginPort();
     }
+
+    public function getPermissionManager(): \pocketmine\api\permission\PermissionManager {
+        return $this->kernel->getPermissionManager();
+    }
 }

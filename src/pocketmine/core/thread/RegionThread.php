@@ -46,6 +46,12 @@ final class RegionThread extends Thread {
     /** @var ThreadSafeArray<int, string> entityId => 52-byte binary snapshot */
     private ThreadSafeArray $entityData;
     private ThreadSafe $state;
+    /**
+     * Wait/notify condvar: the worker sleeps on it between polls instead of
+     * busy-waiting at 200us (5000 wakeups/sec per idle region). The kernel
+     * wakes it after pushing commands, so idle regions burn ~zero CPU.
+     */
+    private SnoozeHandle $sleeper;
     /** Sequence of the last processed 'tick' command, echoed back on results so
      *  the kernel can drop stale (out-of-window) results. */
     private int $currentTickSeq = 0;
@@ -77,6 +83,7 @@ final class RegionThread extends Thread {
         $this->entityData = new ThreadSafeArray();
         $this->state = new ThreadSafe();
         $this->state->running = true;
+        $this->sleeper = new SnoozeHandle();
     }
 
     // --- Binary protocol helpers (shared with the kernel) -----------------
@@ -191,6 +198,15 @@ final class RegionThread extends Thread {
         return $this->migrationQueue;
     }
 
+    /**
+     * Wake the worker after pushing commands to its queues. Safe to call from
+     * the main thread; the worker re-checks its queues instead of sleeping
+     * through the new work.
+     */
+    public function wakeup(): void {
+        $this->sleeper->wakeup();
+    }
+
     public function ownsChunk(int $chunkX, int $chunkZ): bool {
         return $chunkX >= $this->bounds->minX && $chunkX <= $this->bounds->maxX
             && $chunkZ >= $this->bounds->minZ && $chunkZ <= $this->bounds->maxZ;
@@ -229,6 +245,16 @@ final class RegionThread extends Thread {
 
     public function run(): void {
         while ($this->state->running) {
+            // Block on the condvar instead of busy-polling: the kernel wakes
+            // us after every command batch, so an idle region sleeps (near)
+            // zero CPU instead of spinning 5000x/sec. The 10ms timeout is a
+            // safety net for shutdown/edge cases, not the steady-state path.
+            $this->sleeper->sleep(10_000);
+            // Consume the wakeup that woke us (or that arrived while we were
+            // sleeping) so the next sleep() blocks; any wakeup that arrives
+            // DURING processing stays in the count and makes the next sleep()
+            // return immediately - no lost wakeups, no busy spin.
+            $this->sleeper->consumeWakeups();
             $this->processCommands();
             $this->processMigrations();
 
@@ -236,7 +262,6 @@ final class RegionThread extends Thread {
             // 'tick' command after mirroring entity snapshots. The worker does
             // NOT advance snapshots on its own timer, so results are exactly
             // one integration per kernel tick - deterministic by construction.
-            usleep(200); // low-latency command polling
         }
     }
 
@@ -344,5 +369,6 @@ final class RegionThread extends Thread {
     public function shutdown(): void {
         $this->state->running = false;
         $this->commandQueue[] = self::encodeShutdown();
+        $this->sleeper->wakeup(); // break the worker out of sleep() immediately
     }
 }
