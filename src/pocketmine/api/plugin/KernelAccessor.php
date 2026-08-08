@@ -4,18 +4,8 @@ declare(strict_types=1);
 
 namespace pocketmine\api\plugin;
 
-use pocketmine\api\command\Command;
-use pocketmine\api\command\CommandMap;
-use pocketmine\api\command\CommandExecutor;
-use pocketmine\api\command\ConsoleCommandSender;
-use pocketmine\api\command\PlayerCommandSender;
-use pocketmine\api\event\EventBus;
-use pocketmine\api\event\Event;
-use pocketmine\api\permission\PermissionManager;
 use pocketmine\api\scheduler\Scheduler;
-use pocketmine\api\world\WorldAccessor;
 use pocketmine\core\ecs\World;
-use pocketmine\core\ecs\EntityRef;
 use pocketmine\Kernel;
 
 class KernelAccessor {

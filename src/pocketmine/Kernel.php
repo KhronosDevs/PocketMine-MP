@@ -8,8 +8,7 @@ use pocketmine\adapter\driven\network\Protocol84NetworkAdapter;
 use pocketmine\adapter\driven\storage\AnvilStorageAdapter;
 use pocketmine\adapter\driven\threading\PmmpThreadPool;
 use pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter;
-use pocketmine\adapter\driving\console\ConsoleCommandAdapter;
-use pocketmine\adapter\driving\plugin\PluginManagerAdapter;
+
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\ecs\ComponentRegistry;
@@ -50,6 +49,11 @@ use pocketmine\port\driving\PluginPort;
 use pmmp\thread\Thread;
 
 final class Kernel {
+    /**
+     * Current API version. plugin.yml "api" declares the minimum API a plugin
+     * requires; a plugin is rejected when its api exceeds this version.
+     */
+    public const API_VERSION = '2.0.0';
     private static ?self $instance = null;
 
     private bool $running = false;
@@ -206,6 +210,11 @@ final class Kernel {
         $this->dataPath = getcwd() . DIRECTORY_SEPARATOR;
         $this->startTime = time();
         self::$instance = $this;
+
+        // Plugins are created before the kernel exists; wire them now.
+        if ($this->pluginPort instanceof \pocketmine\api\plugin\PluginManager) {
+            $this->pluginPort->setKernel($this);
+        }
 
         // Initialize region-based architecture
         $this->initializeRegions();
@@ -1101,6 +1110,17 @@ final class Kernel {
         return $this->pluginPort;
     }
 
+    /**
+     * The stable, server-wide plugin manager (the same instance exposed as
+     * the plugin port).
+     */
+    public function getPluginManager(): \pocketmine\api\plugin\PluginManager {
+        if (!$this->pluginPort instanceof \pocketmine\api\plugin\PluginManager) {
+            throw new \LogicException('Plugin port is not backed by the api PluginManager');
+        }
+        return $this->pluginPort;
+    }
+
     public function getCoordinationThread(): CoordinationThread {
         return $this->coordinationThread;
     }
@@ -1214,8 +1234,8 @@ function createKernel(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): 
     $networkPort = createNetworkPort();
     $storagePort = createStoragePort();
     $worldGenPort = createWorldGenPort($threadingPort);
-    $commandPort = createCommandPort();
     $eventPort = createEventPort();
+    $commandPort = createCommandPort($eventPort);
     $pluginPort = createPluginPort($commandPort, $eventPort);
 
     $componentRegistry = new ComponentRegistry();
@@ -1269,16 +1289,16 @@ function createWorldGenPort(ThreadingPort $threadingPort): WorldGenPort {
     return new ParallelGeneratorAdapter($threadingPort);
 }
 
-function createCommandPort(): CommandPort {
-    return new ConsoleCommandAdapter();
+function createCommandPort(EventPort $eventPort): CommandPort {
+    return new \pocketmine\api\command\CommandMap($eventPort);
 }
 
 function createEventPort(): EventPort {
-    return new \pocketmine\adapter\driving\plugin\PluginEventAdapter();
+    return new \pocketmine\api\event\EventBus();
 }
 
 function createPluginPort(CommandPort $commandPort, EventPort $eventPort): PluginPort {
-    return new PluginManagerAdapter($commandPort, $eventPort);
+    return new \pocketmine\api\plugin\PluginManager($commandPort, $eventPort);
 }
 
 function registerBuiltinComponents(ComponentRegistry $registry): void {

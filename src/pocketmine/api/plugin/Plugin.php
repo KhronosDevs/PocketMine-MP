@@ -5,65 +5,54 @@ declare(strict_types=1);
 namespace pocketmine\api\plugin;
 
 use pocketmine\api\command\Command;
-use pocketmine\api\command\CommandMap;
-use pocketmine\api\command\CommandExecutor;
-use pocketmine\api\command\ConsoleCommandSender;
-use pocketmine\api\command\PlayerCommandSender;
-use pocketmine\api\event\EventBus;
-use pocketmine\api\event\Event;
-use pocketmine\api\permission\PermissionManager;
+use pocketmine\api\command\CommandSender;
 use pocketmine\api\scheduler\Scheduler;
 use pocketmine\api\world\WorldAccessor;
 use pocketmine\core\ecs\World;
-use pocketmine\core\ecs\EntityRef;
-use pocketmine\Kernel;
 
+/**
+ * Base class for plugins. Plugin authors subclass this and implement the
+ * lifecycle hooks (onLoad/onEnable/onDisable); the PluginManager instantiates
+ * it from the plugin.yml "main" field and injects the kernel accessor,
+ * descriptor and file path. All ECS-facing access (world, query, systems,
+ * services, ports) is available through getKernel().
+ */
 abstract class Plugin {
-    private ?string $name = null;
-    private ?string $version = null;
-    private ?string $author = null;
-    private array $depend = [];
-    private array $softDepend = [];
-    private bool $enabled = false;
     private ?PluginDescription $description = null;
-    private ?Config $config = null;
-    private \pocketmine\api\command\CommandMap $commandMap;
-
-    final public function __construct() {
-        $this->commandMap = new \pocketmine\api\command\CommandMap();
-    }
-    
-    // Injected by PluginManager
+    private ?string $file = null;
+    private bool $enabled = false;
     private ?KernelAccessor $kernelAccessor = null;
+    private ?Config $config = null;
+    /** @var list<Command> commands registered by this plugin, unregistered on disable */
+    private array $registeredCommands = [];
 
-    // Kernel access (injected by PluginManager)
+    final public function __construct() {}
+
+    // ---- Kernel access (injected by PluginManager) ----
+
     final public function setKernelAccessor(KernelAccessor $accessor): void {
         $this->kernelAccessor = $accessor;
     }
 
     final protected function getKernel(): KernelAccessor {
-        if (!$this->kernelAccessor) {
-            throw new \RuntimeException("Plugin not initialized - kernel accessor not set");
+        if ($this->kernelAccessor === null) {
+            throw new \RuntimeException('Plugin is not initialized: kernel accessor not set');
         }
         return $this->kernelAccessor;
     }
 
-    // World access (ECS World for queries)
     final protected function getWorld(): World {
         return $this->getKernel()->getWorld();
     }
 
-    // ECS Query API
     final protected function query(): \pocketmine\core\ecs\QueryBuilder {
         return $this->getWorld()->query();
     }
 
-    // System registration
     final protected function registerSystem(\pocketmine\core\ecs\System $system, \pocketmine\core\ecs\SystemPhase $phase = \pocketmine\core\ecs\SystemPhase::SEQUENTIAL): void {
         $this->getKernel()->getSystemScheduler()->register($system, $phase);
     }
 
-    // Service access
     final protected function getPlayerJoinService(): \pocketmine\core\service\PlayerJoinService {
         return $this->getKernel()->getPlayerJoinService();
     }
@@ -136,7 +125,6 @@ abstract class Plugin {
         return $this->getKernel()->getContainerService();
     }
 
-    // Port access
     final protected function getNetworkPort(): \pocketmine\port\driven\NetworkPort {
         return $this->getKernel()->getNetworkPort();
     }
@@ -165,114 +153,99 @@ abstract class Plugin {
         return $this->getKernel()->getPluginPort();
     }
 
-    // Lifecycle
+    // ---- Lifecycle hooks ----
+
+    public function onLoad(): void {}
+
     public function onEnable(): void {}
+
     public function onDisable(): void {}
 
-    // Metadata
+    /**
+     * Handler for commands declared in plugin.yml's "commands" section.
+     * Return true to signal the command was handled.
+     */
+    public function onCommand(CommandSender $sender, string $label, array $args): bool {
+        return false;
+    }
+
+    // ---- Metadata (from plugin.yml) ----
+
     final public function getName(): string {
-        return $this->name ?? get_class($this);
+        return $this->description?->getName() ?? get_class($this);
     }
 
     final public function getVersion(): string {
-        return $this->version ?? "1.0.0";
+        return $this->description?->getVersion() ?? '1.0.0';
     }
 
     final public function getAuthor(): string {
-        return $this->author ?? "Unknown";
+        return $this->description?->getAuthor() ?? 'Unknown';
     }
 
     final public function getDepend(): array {
-        return $this->depend;
+        return $this->description?->getDepend() ?? [];
     }
 
     final public function getSoftDepend(): array {
-        return $this->softDepend;
+        return $this->description?->getSoftDepend() ?? [];
+    }
+
+    final public function getDescription(): PluginDescription {
+        if ($this->description === null) {
+            throw new \RuntimeException('Plugin is not initialized: description not set');
+        }
+        return $this->description;
+    }
+
+    final public function getFile(): string {
+        return $this->file ?? '';
     }
 
     final public function isEnabled(): bool {
         return $this->enabled;
     }
 
-    final public function getDescription(): PluginDescription {
-        if (!$this->description) {
-            $this->description = new PluginDescription(
-                $this->getName(),
-                $this->getVersion(),
-                $this->getAuthor(),
-                $this->depend,
-                $this->softDepend,
-                [], // commands
-                []  // permissions
-            );
-        }
-        return $this->description;
+    // ---- Internal setters (called by PluginManager) ----
+
+    final public function setDescription(PluginDescription $description): void {
+        $this->description = $description;
     }
 
-    // Internal setters (called by PluginManager)
-    final public function setName(string $name): void {
-        $this->name = $name;
-    }
-
-    final public function setVersion(string $version): void {
-        $this->version = $version;
-    }
-
-    final public function setAuthor(string $author): void {
-        $this->author = $author;
-    }
-
-    final public function setDepend(array $depend): void {
-        $this->depend = $depend;
-    }
-
-    final public function setSoftDepend(array $softDepend): void {
-        $this->softDepend = $softDepend;
+    final public function setFile(string $file): void {
+        $this->file = $file;
     }
 
     final public function setEnabled(bool $enabled): void {
         $this->enabled = $enabled;
     }
 
-    // Convenience methods
-    final protected function getServer(): \pocketmine\api\server\Server {
-        return \pocketmine\api\server\Server::getInstance();
+    // ---- Command registration (into the shared server-wide map) ----
+
+    final protected function registerCommand(Command $command): void {
+        $this->registeredCommands[] = $command;
+        $this->getCommandPort()->register($command);
     }
 
-    final protected function getLogger(): \pocketmine\api\plugin\Logger {
-        return new \pocketmine\api\plugin\Logger($this->getName());
+    /**
+     * Internal: called by PluginManager::disablePlugin to remove every command
+     * this plugin registered from the shared map.
+     */
+    final public function unregisterCommands(): void {
+        foreach ($this->registeredCommands as $command) {
+            $this->getCommandPort()->unregister($command->getName());
+        }
+        $this->registeredCommands = [];
+    }
+
+    // ---- Convenience ----
+
+    final protected function getLogger(): Logger {
+        return new Logger($this->getName());
     }
 
     final protected function getDataFolder(): string {
-        return \pocketmine\Kernel::getInstance()->getDataPath() . "plugins/" . $this->getName() . "/";
-    }
-
-    final protected function getFile(): string {
-        return $this->getDataFolder() . "plugin.yml";
-    }
-
-    final protected function saveResource(string $resource, bool $replace = false): void {
-        $target = $this->getDataFolder() . $resource;
-        if (!$replace && file_exists($target)) {
-            return;
-        }
-        $source = $this->getResource($resource);
-        if ($source !== null) {
-            $dir = dirname($target);
-            if (!is_dir($dir)) {
-                mkdir($dir, 0755, true);
-            }
-            file_put_contents($target, $source);
-        }
-    }
-
-    final protected function getResource(string $resource): ?string {
-        $path = $this->getDataFolder() . $resource;
-        if (!is_file($path)) {
-            return null;
-        }
-        $content = file_get_contents($path);
-        return $content !== false ? $content : null;
+        return \pocketmine\Kernel::getInstance()->getDataPath() . 'plugins/' . $this->getName() . '/';
     }
 
     final protected function saveConfig(): void {
@@ -283,33 +256,25 @@ abstract class Plugin {
         $this->getConfig()->reload();
     }
 
-    final protected function getConfig(): \pocketmine\api\plugin\Config {
+    final protected function getConfig(): Config {
         if ($this->config === null) {
-            $this->config = new \pocketmine\api\plugin\Config($this->getDataFolder() . "config.yml");
+            $this->config = new Config($this->getDataFolder() . 'config.yml');
         }
         return $this->config;
     }
 
-    // Event registration
+    // ---- Event registration ----
+
     final protected function registerEvent(string $eventClass, callable $handler, int $priority = \pocketmine\api\event\EventPriority::NORMAL): void {
-        $this->getKernel()->getEventPort()->subscribe($eventClass, $handler, $priority);
+        $this->getEventPort()->subscribe($eventClass, $handler, $priority);
     }
 
     final protected function unregisterEvent(string $eventClass, callable $handler): void {
-        $this->getKernel()->getEventPort()->unsubscribe($eventClass, $handler);
+        $this->getEventPort()->unsubscribe($eventClass, $handler);
     }
 
-    // Command registration (also exposes commands to the server-wide dispatch map)
-    final protected function registerCommand(\pocketmine\api\command\Command $command): void {
-        $this->commandMap->register($command);
-        \pocketmine\api\server\Server::getInstance()->registerCommand($command);
-    }
+    // ---- Scheduler access ----
 
-    final protected function getCommandMap(): \pocketmine\api\command\CommandMap {
-        return $this->commandMap;
-    }
-
-    // Scheduler access
     final protected function getScheduler(): Scheduler {
         return $this->getKernel()->getScheduler();
     }
@@ -330,13 +295,9 @@ abstract class Plugin {
         $this->getScheduler()->scheduleAsyncTask($callback);
     }
 
-    // Permission checks (server-side plugins run with console-level permissions)
-    final protected function hasPermission(string $permission): bool {
-        return true;
-    }
+    // ---- World access (typed WorldAccessor facade) ----
 
-    // World access (typed WorldAccessor facade)
-    final protected function getWorldAccessor(): \pocketmine\api\world\WorldAccessor {
-        return new \pocketmine\api\world\WorldAccessor($this->getWorld());
+    final protected function getWorldAccessor(): WorldAccessor {
+        return new WorldAccessor($this->getWorld());
     }
 }

@@ -1,0 +1,11 @@
+name: Demo
+version: 1.0.0
+author: Khronos
+description: Directory plugin fixture
+main: Khronos\DemoPlugin\Main
+api: 2.0.0
+commands:
+  demo:
+    description: Runs the demo command
+    usage: /demo [text]
+    aliases: [d]

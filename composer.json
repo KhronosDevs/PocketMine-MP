@@ -8,7 +8,9 @@
         "ext-zlib": "*",
         "ext-json": "*",
         "ext-mbstring": "*",
-        "ext-sockets": "*"
+        "ext-sockets": "*",
+        "ext-phar": "*",
+        "ext-yaml": "*"
     },
     "autoload": {
         "psr-4": {

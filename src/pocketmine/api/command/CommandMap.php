@@ -4,11 +4,22 @@ declare(strict_types=1);
 
 namespace pocketmine\api\command;
 
-use pocketmine\api\entity\Player;
-use pocketmine\api\entity\EntityRef;
+use pocketmine\api\event\PlayerCommandPreprocessEvent;
+use pocketmine\port\driving\CommandPort;
+use pocketmine\port\driving\EventPort;
 
-class CommandMap {
+/**
+ * The single server-wide command map. Owned by the Kernel (it implements
+ * CommandPort), so the Server facade, the console and plugins all share one
+ * registry. Player commands pass through a cancellable preprocess event.
+ */
+class CommandMap implements CommandPort {
+    /** @var array<string, Command> */
     private array $commands = [];
+
+    public function __construct(
+        private readonly EventPort $eventPort,
+    ) {}
 
     public function register(Command $command): void {
         $this->commands[$command->getName()] = $command;
@@ -36,6 +47,16 @@ class CommandMap {
     }
 
     public function execute(CommandSender $sender, string $commandLine): bool {
+        // Player commands are cancellable before execution.
+        if ($sender->isPlayer() && $sender->getPlayer() !== null) {
+            $event = new PlayerCommandPreprocessEvent($sender->getPlayer(), $commandLine);
+            $this->eventPort->emit($event);
+            if ($event->isCancelled()) {
+                return false;
+            }
+            $commandLine = $event->getCommand();
+        }
+
         $parts = explode(' ', trim($commandLine));
         if (empty($parts)) {
             return false;
@@ -43,7 +64,7 @@ class CommandMap {
 
         $name = array_shift($parts);
         $command = $this->getCommand($name);
-        
+
         if (!$command) {
             $sender->sendMessage("Unknown command: $name");
             return false;

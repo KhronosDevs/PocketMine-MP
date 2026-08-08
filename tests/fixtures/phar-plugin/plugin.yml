@@ -1,0 +1,11 @@
+name: PharDemo
+version: 1.0.0
+author: Khronos
+description: Phar plugin fixture
+main: Khronos\PharDemoPlugin\Main
+api: 2.0.0
+commands:
+  pdemo:
+    description: Runs the phar demo
+    usage: /pdemo
+    aliases: [pd]
