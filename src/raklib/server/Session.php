@@ -146,11 +146,24 @@ class Session{
 
 	public function getPort() : int{
 		return $this->port;
-	}
+	}    public function getID() : int{
+        return $this->id;
+    }
 
-	public function getID() : int{
-		return $this->id;
-	}
+    /**
+     * Trace one encapsulated payload id (only while KHRONOS_WIRE_TRACE=1).
+     * The handshake payloads (CLIENT_CONNECT 0x09, CLIENT_HANDSHAKE 0x13)
+     * and every connected-phase game payload id are logged with the session
+     * state so a stalled real-client flow can be read from the log alone.
+     */
+    private function trace(string $stateName, int $id, int $len) : void{
+        if($this->sessionManager !== null && $this->sessionManager->isWireTrace()){
+            $this->sessionManager->getLogger()->debug(
+                'enc ' . $this->address . ':' . $this->port . ' state=' . $stateName
+                . ' pid=0x' . str_pad(dechex($id), 2, '0', STR_PAD_LEFT) . ' len=' . $len
+            );
+        }
+    }
 
 	public function update(float $time) : void{
 		if(!$this->isActive && ($this->lastUpdate + 10) < $time){
@@ -395,9 +408,12 @@ class Session{
 				$this->handleSplit($packet);
 			}
 			return;
-		}
-
-		$id = ord($packet->buffer[0]);
+		}        $id = ord($packet->buffer[0]);
+        $this->trace(match ($this->state) {
+            self::STATE_CONNECTING_2 => 'connecting2',
+            self::STATE_CONNECTED => 'connected',
+            default => 'preconnect',
+        }, $id, strlen($packet->buffer));
 
 		// Connected sessions: every payload except the RakNet control packets
 		// is game data and goes straight to the main thread. Note that the

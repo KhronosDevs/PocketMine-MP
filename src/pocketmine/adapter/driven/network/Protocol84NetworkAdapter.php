@@ -252,6 +252,16 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
         $this->serverHandler->sendEncapsulated($identifier, $pk);
     }
 
+    /**
+     * Send a raw game-layer frame (already protocol-84 wrapped, i.e. either a
+     * 0xfe-prefixed single packet or a 0xfe-prefixed compressed batch) as one
+     * reliable-ordered encapsulated packet. This mirrors the legacy
+     * RakLibInterface::putPacket wire behaviour exactly.
+     */
+    public function sendGameFrame(string $identifier, string $buffer): void {
+        $this->sendEncapsulatedBuffer($identifier, $buffer);
+    }
+
     private function findAddressByPlayerRef(PlayerRef $playerRef): ?string {
         foreach ($this->connectedPlayers as $addrKey => $ref) {
             if ($ref->entityId === $playerRef->entityId) {

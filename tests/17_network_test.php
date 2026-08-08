@@ -155,15 +155,16 @@ final class FakeClient {
     // --- RakNet transport --------------------------------------------------
 
     /**
-     * Wrap a raw game-packet body (id byte + fields) in a BatchPacket and
-     * send it as a reliable-ordered encapsulated frame.
+     * Send a raw game-packet body (id byte + fields) the way a real protocol-84
+     * client does: wrapped in a compressed BatchPacket, then prefixed with the
+     * 0xfe wire marker the server's RakLibInterface expects on every frame.
      */
     public function sendRawBuffer(string $buffer): void {
         $inner = pack('N', strlen($buffer)) . $buffer;
         $batch = new BatchPacket();
         $batch->payload = zlib_encode($inner, ZLIB_ENCODING_DEFLATE, 7);
         $batch->encode();
-        $this->sendEncapsulated($batch->getBuffer(), PacketReliability::RELIABLE_ORDERED);
+        $this->sendEncapsulated(chr(0xfe) . $batch->getBuffer(), PacketReliability::RELIABLE_ORDERED);
     }
 
     /** Send a game packet (encode + batch-wrap + reliable frame). */
@@ -333,7 +334,9 @@ final class FakeClient {
             $this->gotHandshake = true;
         }
         if ($this->collectGame) {
-            $this->gameBuffer[] = $buffer;
+            // Protocol-84 wire: the server 0xfe-prefixes every game frame;
+            // strip it so readGamePackets sees the raw packet (id + body).
+            $this->gameBuffer[] = (ord($buffer[0]) === 0xfe && strlen($buffer) > 1) ? substr($buffer, 1) : $buffer;
         }
     }
 
