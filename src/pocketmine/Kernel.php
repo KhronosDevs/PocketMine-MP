@@ -201,9 +201,21 @@ final class Kernel {
         $this->playerLeaveService = new PlayerLeaveService($world, $networkPort, $storagePort);
         $this->playerRespawnService = new PlayerRespawnService($world, $storagePort);
         $this->chunkSendService = new ChunkSendService($world, $networkPort);
-        $this->networkSessionService = new NetworkSessionService($networkPort, $world, $this->playerJoinService, $this->playerLeaveService, $this->chunkLoadService, $this->resourceRegistry);
+        // Block services are built before the session service: the network
+        // layer must be able to translate client block actions (break/place)
+        // straight into the ECS services.
         $this->blockBreakService = new BlockBreakService($world, $storagePort);
         $this->blockPlaceService = new BlockPlaceService($world);
+        $this->networkSessionService = new NetworkSessionService(
+            $networkPort,
+            $world,
+            $this->playerJoinService,
+            $this->playerLeaveService,
+            $this->chunkLoadService,
+            $this->blockBreakService,
+            $this->blockPlaceService,
+            $this->resourceRegistry,
+        );
         $this->blockUpdateService = new BlockUpdateService($world, $storagePort);
         $this->entitySpawnService = new EntitySpawnService($world, $storagePort);
         $this->entityDespawnService = new EntityDespawnService($world, $storagePort);

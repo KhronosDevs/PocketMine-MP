@@ -90,6 +90,18 @@ final class PlayerJoinService {
             $entity->get(MetadataComponent::class)?->set('username', $username);
             $entity->get(MetadataComponent::class)?->set('uniqueId', $playerRef->uniqueId);
         }
+
+        // Starter kit (hotbar): a few placeable blocks so block placement
+        // (14.1) is demoable straight off spawn. The hotbar slots 0-8 map to
+        // the first 9 inventory slots; slot 0 is held by default.
+        $inventory = $entity?->get(InventoryComponent::class);
+        if ($inventory !== null) {
+            $inventory->set(0, new \pocketmine\core\component\ItemStack(5, 0, 32));   // planks
+            $inventory->set(1, new \pocketmine\core\component\ItemStack(4, 0, 32));   // cobblestone
+            $inventory->set(2, new \pocketmine\core\component\ItemStack(3, 0, 32));   // dirt
+            $inventory->set(3, new \pocketmine\core\component\ItemStack(50, 0, 16));  // torches
+            $inventory->set(4, new \pocketmine\core\component\ItemStack(58, 0, 1));   // crafting table
+        }
         
         return $entityRef;
     }
