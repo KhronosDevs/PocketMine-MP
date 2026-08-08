@@ -7,14 +7,21 @@ namespace pocketmine\core\service;
 use pocketmine\adapter\driven\network\Protocol84NetworkAdapter;
 use pocketmine\core\component\HealthComponent;
 use pocketmine\core\component\InventoryComponent;
+use pocketmine\core\component\ItemStack;
+use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\RotationComponent;
+use pocketmine\core\component\VelocityComponent;
+use pocketmine\core\ecs\Entity;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\ResourceRegistry;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\ServerConfig;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\PlayerRef;
+use pocketmine\protocol\AddEntityPacket;
+use pocketmine\protocol\AddItemEntityPacket;
+use pocketmine\protocol\AddPlayerPacket;
 use pocketmine\protocol\AdventureSettingsPacket;
 use pocketmine\protocol\BatchPacket;
 use pocketmine\protocol\ChunkRadiusUpdatedPacket;
@@ -26,10 +33,12 @@ use pocketmine\protocol\FullChunkDataPacket;
 use pocketmine\protocol\Info;
 use pocketmine\protocol\LoginPacket;
 use pocketmine\protocol\MobEquipmentPacket;
+use pocketmine\protocol\MoveEntityPacket;
 use pocketmine\protocol\MovePlayerPacket;
 use pocketmine\protocol\PlayStatusPacket;
 use pocketmine\protocol\PlayerActionPacket;
 use pocketmine\protocol\PlayerListPacket;
+use pocketmine\protocol\RemoveEntityPacket;
 use pocketmine\protocol\RequestChunkRadiusPacket;
 use pocketmine\protocol\SetDifficultyPacket;
 use pocketmine\protocol\SetHealthPacket;
@@ -103,16 +112,35 @@ final class NetworkSessionService {
      *   entityRef: EntityRef,
      *   username: string,
      *   uuid: UUID,
+     *   skin: string,
      *   radius: int,
      *   chunkQueue: list<array{0: int, 1: int}>,
      *   chunkQueueIndex: int,
      *   chunksSent: array<string, bool>,
-     *   spawned: bool
+     *   spawned: bool,
+     *   knownEntities: array<int, array{0: float, 1: float, 2: float}>
      * }>
      */
     private array $sessions = [];
     /** @var array<string, list<DataPacket>> addrKey => packets awaiting this poll's flush */
     private array $outbound = [];
+
+    /**
+     * Mob type name -> protocol-84 AddEntityPacket network id. These are the
+     * legacy Entity::NETWORK_ID values (authoritative for 0.15.x clients).
+     */
+    private const MOB_NETWORK_IDS = [
+        'Zombie' => 32,
+        'Skeleton' => 34,
+        'Creeper' => 33,
+        'Spider' => 35,
+        'Cow' => 11,
+        'Pig' => 12,
+        'Sheep' => 13,
+        'Chicken' => 10,
+    ];
+    /** Movement packets are only re-sent when an entity moves this far. */
+    private const MOVE_EPSILON = 0.01;
 
     public function __construct(
         NetworkPort $networkPort,
@@ -153,6 +181,9 @@ final class NetworkSessionService {
             // 'open' is transport-level only: the login game packet drives
             // session setup.
         }
+        // 14.2: mirror live entities to every session (add/move/remove) so
+        // other players, mobs and dropped items are visible on the wire.
+        $this->broadcastEntityStates();
         // Flush the response burst BEFORE streaming chunks: a full chunk is
         // large enough that it must ride its own datagram, and sharing a
         // batch with the burst would blow past the UDP payload ceiling.
@@ -169,6 +200,21 @@ final class NetworkSessionService {
         $session = $this->sessions[$addrKey] ?? null;
         if ($session === null) {
             return;
+        }
+        // 14.2: everyone else forgets the leaving player (entity + list entry).
+        foreach ($this->sessions as $otherKey => $other) {
+            if ($otherKey === $addrKey) {
+                continue;
+            }
+            $rm = new RemoveEntityPacket();
+            $rm->eid = $session['playerRef']->entityId;
+            $this->queuePacket($other['playerRef'], $rm);
+            $list = new PlayerListPacket();
+            $list->type = PlayerListPacket::TYPE_REMOVE;
+            $list->entries = [[$session['uuid']]];
+            $this->queuePacket($other['playerRef'], $list);
+            unset($other['knownEntities'][$session['playerRef']->entityId]);
+            $this->sessions[$otherKey] = $other;
         }
         $this->playerLeaveService->handleDisconnect($session['playerRef'], $reason);
         unset($this->sessions[$addrKey], $this->outbound[$addrKey]);
@@ -343,15 +389,21 @@ final class NetworkSessionService {
             'entityRef' => $entityRef,
             'username' => $username,
             'uuid' => $uuid,
+            'skin' => $pk->skin ?? '',
             'radius' => self::DEFAULT_RADIUS,
             'chunkQueue' => [],
             'chunkQueueIndex' => 0,
             'chunksSent' => [],
             'spawned' => false,
+            'knownEntities' => [],
         ];
 
-        // Broadcast the new player to everyone (including themselves).
+        // Broadcast the new player to everyone (including themselves) and
+        // hand the newcomer the list entries of everyone already online so
+        // their skins/names render (they see the players as entities on the
+        // next per-tick sync).
         $this->broadcastPlayerListAdd($uuid, $playerRef->entityId, $username, $pk->skin ?? '');
+        $this->sendExistingPlayerList($addrKey);
         $this->sendLoginBurst($addrKey);
         $this->queueChunks($addrKey);
     }
@@ -630,6 +682,218 @@ final class NetworkSessionService {
         foreach ($this->sessions as $s) {
             $this->queuePacket($s['playerRef'], clone $list);
         }
+    }
+
+    /**
+     * Hand the newcomer the player-list entries of everyone already online
+     * (their own entry was broadcast by broadcastPlayerListAdd). The client
+     * needs these before the per-tick entity sync adds the other players as
+     * entities, or their skins/names would not render.
+     */
+    private function sendExistingPlayerList(string $newAddrKey): void {
+        $entries = [];
+        foreach ($this->sessions as $addrKey => $session) {
+            if ($addrKey === $newAddrKey) {
+                continue;
+            }
+            $entries[] = [$session['uuid'], $session['playerRef']->entityId, $session['username'], '0', $session['skin']];
+        }
+        if (empty($entries)) {
+            return;
+        }
+        $list = new PlayerListPacket();
+        $list->type = PlayerListPacket::TYPE_ADD;
+        $list->entries = $entries;
+        $this->queuePacket($this->sessions[$newAddrKey]['playerRef'], $list);
+    }
+
+    // --- Entity broadcasting (14.2) -----------------------------------------
+
+    /**
+     * Per-tick mirror of live world entities to every session. For each
+     * viewer we keep a knownEntities set (entityId => last broadcast
+     * position); an entity that enters view range is added (AddPlayerPacket /
+     * AddEntityPacket / AddItemEntityPacket), one that moves is followed
+     * (MovePlayerPacket / MoveEntityPacket), and one that leaves range or
+     * despawns is removed (RemoveEntityPacket). This is the classic legacy
+     * spawnTo/despawnFrom pattern expressed against the ECS.
+     */
+    private function broadcastEntityStates(): void {
+        $worldEntities = $this->world->getEntities();
+        // entityId => session: players use AddPlayerPacket/MovePlayerPacket
+        // and their identity comes from session state, not ECS metadata.
+        $playerSessions = [];
+        foreach ($this->sessions as $addrKey => $session) {
+            $playerSessions[$session['playerRef']->entityId] = $addrKey;
+        }
+
+        foreach ($this->sessions as $addrKey => $session) {
+            $center = $session['entityRef']->getPosition();
+            if ($center === null) {
+                continue;
+            }
+            $rangeSq = ($session['radius'] * 16) ** 2; // view distance in blocks
+            $known = $session['knownEntities'];
+            $selfId = $session['playerRef']->entityId;
+
+            // Visible set for this viewer: all entities within range except self.
+            $visible = [];
+            foreach ($worldEntities as $entityId => $entity) {
+                if ($entityId === $selfId) {
+                    continue;
+                }
+                $pos = $entity->get(PositionComponent::class);
+                if ($pos === null) {
+                    continue;
+                }
+                $dx = $pos->x - $center->x;
+                $dy = $pos->y - $center->y;
+                $dz = $pos->z - $center->z;
+                if ($dx * $dx + $dy * $dy + $dz * $dz <= $rangeSq) {
+                    $visible[$entityId] = $entity;
+                }
+            }
+
+            // Removals: left view range or despawned from the world.
+            foreach ($known as $entityId => $lastPos) {
+                if (!isset($visible[$entityId])) {
+                    $rm = new RemoveEntityPacket();
+                    $rm->eid = $entityId;
+                    $this->queuePacket($session['playerRef'], $rm);
+                    unset($known[$entityId]);
+                }
+            }
+
+            // Adds + moves.
+            foreach ($visible as $entityId => $entity) {
+                $pos = $entity->get(PositionComponent::class);
+                if (!isset($known[$entityId])) {
+                    $pk = $this->buildAddPacket($entityId, $entity, $playerSessions);
+                    if ($pk !== null) {
+                        $this->queuePacket($session['playerRef'], $pk);
+                    }
+                    $known[$entityId] = [$pos->x, $pos->y, $pos->z];
+                } else {
+                    $lastPos = $known[$entityId];
+                    if (abs($pos->x - $lastPos[0]) > self::MOVE_EPSILON
+                        || abs($pos->y - $lastPos[1]) > self::MOVE_EPSILON
+                        || abs($pos->z - $lastPos[2]) > self::MOVE_EPSILON
+                    ) {
+                        $this->queuePacket($session['playerRef'], $this->buildMovePacket($entityId, $entity, $playerSessions));
+                        $known[$entityId] = [$pos->x, $pos->y, $pos->z];
+                    }
+                }
+            }
+
+            $session['knownEntities'] = $known;
+            $this->sessions[$addrKey] = $session;
+        }
+    }
+
+    /**
+     * The right Add packet for an entity, or null for an entity type we do
+     * not know how to represent (so we never leak garbage ids to clients).
+     */
+    private function buildAddPacket(int $entityId, Entity $entity, array $playerSessions): ?DataPacket {
+        if (isset($playerSessions[$entityId])) {
+            return $this->buildAddPlayerPacket($playerSessions[$entityId]);
+        }
+        $meta = $entity->get(MetadataComponent::class);
+        $item = $meta?->get('item');
+        if ($item instanceof ItemStack) {
+            $pk = new AddItemEntityPacket();
+            $pk->eid = $entityId;
+            $pk->item = [$item->itemId, $item->count, $item->meta, $item->nbt];
+            $pos = $entity->get(PositionComponent::class);
+            $vel = $entity->get(VelocityComponent::class);
+            $pk->x = $pos?->x ?? 0.0;
+            $pk->y = $pos?->y ?? 0.0;
+            $pk->z = $pos?->z ?? 0.0;
+            $pk->speedX = $vel?->x ?? 0.0;
+            $pk->speedY = $vel?->y ?? 0.0;
+            $pk->speedZ = $vel?->z ?? 0.0;
+            return $pk;
+        }
+        $type = $meta?->get('mobType') ?? $meta?->get('entityType');
+        $networkId = self::MOB_NETWORK_IDS[$type] ?? null;
+        if ($networkId === null) {
+            return null;
+        }
+        $pk = new AddEntityPacket();
+        $pk->eid = $entityId;
+        $pk->type = $networkId;
+        $pos = $entity->get(PositionComponent::class);
+        $rot = $entity->get(RotationComponent::class);
+        $vel = $entity->get(VelocityComponent::class);
+        $pk->x = $pos?->x ?? 0.0;
+        $pk->y = $pos?->y ?? 0.0;
+        $pk->z = $pos?->z ?? 0.0;
+        $pk->speedX = $vel?->x ?? 0.0;
+        $pk->speedY = $vel?->y ?? 0.0;
+        $pk->speedZ = $vel?->z ?? 0.0;
+        $pk->yaw = $rot?->yaw ?? 0.0;
+        $pk->pitch = $rot?->pitch ?? 0.0;
+        $pk->metadata = [
+            0 => [\pocketmine\utils\Binary::DATA_TYPE_BYTE, 0],          // DATA_FLAGS
+            2 => [\pocketmine\utils\Binary::DATA_TYPE_STRING, (string)$type], // DATA_NAMETAG
+        ];
+        return $pk;
+    }
+
+    private function buildAddPlayerPacket(string $addrKey): AddPlayerPacket {
+        $session = $this->sessions[$addrKey];
+        $entity = $session['entityRef']->getEntity();
+        $pos = $session['entityRef']->getPosition();
+        $rot = $session['entityRef']->getRotation();
+        $vel = $session['entityRef']->getVelocity();
+        $inv = $entity?->get(InventoryComponent::class);
+        $held = $inv?->get($inv->heldSlot);
+        $pk = new AddPlayerPacket();
+        $pk->uuid = $session['uuid'];
+        $pk->username = $session['username'];
+        $pk->eid = $session['playerRef']->entityId;
+        $pk->x = $pos?->x ?? 0.0;
+        $pk->y = $pos?->y ?? 0.0;
+        $pk->z = $pos?->z ?? 0.0;
+        $pk->speedX = $vel?->x ?? 0.0;
+        $pk->speedY = $vel?->y ?? 0.0;
+        $pk->speedZ = $vel?->z ?? 0.0;
+        $pk->yaw = $rot?->yaw ?? 0.0;
+        $pk->pitch = $rot?->pitch ?? 0.0;
+        $pk->item = $held !== null ? [$held->itemId, $held->count, $held->meta, $held->nbt] : [0, 0, 0, null];
+        $pk->metadata = [
+            0 => [\pocketmine\utils\Binary::DATA_TYPE_BYTE, 0],                    // DATA_FLAGS
+            2 => [\pocketmine\utils\Binary::DATA_TYPE_STRING, $session['username']], // DATA_NAMETAG
+        ];
+        return $pk;
+    }
+
+    /** The right Move packet for an entity (players vs mobs/items). */
+    private function buildMovePacket(int $entityId, Entity $entity, array $playerSessions): DataPacket {
+        $pos = $entity->get(PositionComponent::class);
+        $rot = $entity->get(RotationComponent::class);
+        if (isset($playerSessions[$entityId])) {
+            $pk = new MovePlayerPacket();
+            $pk->eid = $entityId;
+            $pk->x = $pos?->x ?? 0.0;
+            $pk->y = $pos?->y ?? 0.0;
+            $pk->z = $pos?->z ?? 0.0;
+            $pk->yaw = $rot?->yaw ?? 0.0;
+            $pk->bodyYaw = $rot?->yaw ?? 0.0;
+            $pk->pitch = $rot?->pitch ?? 0.0;
+            $pk->mode = MovePlayerPacket::MODE_NORMAL;
+            $pk->onGround = true;
+            return $pk;
+        }
+        $pk = new MoveEntityPacket();
+        $pk->eid = $entityId;
+        $pk->x = $pos?->x ?? 0.0;
+        $pk->y = $pos?->y ?? 0.0;
+        $pk->z = $pos?->z ?? 0.0;
+        $pk->yaw = $rot?->yaw ?? 0.0;
+        $pk->headYaw = $rot?->yaw ?? 0.0;
+        $pk->pitch = $rot?->pitch ?? 0.0;
+        return $pk;
     }
 
     private function queueChunks(string $addrKey): void {
