@@ -11,7 +11,15 @@ use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\WorldGenPort;
 
 final class ChunkLoadService {
-    public const DEFAULT_MAX_LOADED_CHUNKS = 10000;
+    /**
+     * Default loaded-chunk budget, sized to the server's 512M memory floor
+     * (see Kernel::bootstrap): each resident chunk holds ~196KB of binary
+     * payload strings (blocks + meta + sky/block light + biomes), so ~2048
+     * chunks cost ~400MB. The old 10000 default (~2GB worst case) could
+     * outgrow the floor before eviction ever triggered with a handful of
+     * far-apart players.
+     */
+    public const DEFAULT_MAX_LOADED_CHUNKS = 2048;
 
     private int $maxLoadedChunks;
 

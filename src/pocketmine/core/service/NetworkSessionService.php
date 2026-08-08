@@ -198,7 +198,9 @@ final class NetworkSessionService {
             $batch = new BatchPacket();
             $batch->setBuffer($buffer, 1);
             $batch->decode();
-            $payload = zlib_decode($batch->payload);
+            // Cap the decompressed size like the legacy Network::processBatch
+            // (64MB): a hostile frame must not be able to balloon memory.
+            $payload = zlib_decode($batch->payload, 64 * 1024 * 1024);
             if ($payload === false) {
                 return;
             }
