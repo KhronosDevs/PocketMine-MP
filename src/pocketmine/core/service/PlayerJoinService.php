@@ -101,15 +101,10 @@ final class PlayerJoinService {
         $spawnZ = $config instanceof \pocketmine\core\resource\ServerConfig ? $config->spawnZ : 0;
 
         // Safe spawn (legacy Level::getSafeSpawn): stand ON TOP of the highest
-        // block at the spawn column. The old fixed (0, 64, 0) default lands
-        // players INSIDE the terrain (hills are 64-96 blocks tall) and the
-        // client suffocates them in a grass block.
-        $chunkX = (int)floor($spawnX / 16);
-        $chunkZ = (int)floor($spawnZ / 16);
-        $this->chunkLoadService->loadChunk($chunkX, $chunkZ);
-        $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
-        $top = $store instanceof ChunkStore ? $store->getHighestBlockAt($spawnX, $spawnZ) : 64;
-        $spawnY = $top + 1;
+        // block at a dry column near the configured spawn. The old fixed
+        // (0, 64, 0) default lands players INSIDE the terrain (hills are
+        // 64-96 blocks tall) and the client suffocates them in a grass block.
+        [$spawnX, $spawnY, $spawnZ] = $this->findSafeSpawn($spawnX, $spawnZ);
 
         // Persist the resolved spawn so respawn (and anything else reading
         // the config) lands on the same spot, not the un-resolved default.
@@ -120,6 +115,82 @@ final class PlayerJoinService {
         }
 
         return new PositionComponent($spawnX, $spawnY, $spawnZ);
+    }
+
+    /**
+     * Find a safe place to stand: the nearest column with a dry surface
+     * (top block at or above sea level and not water) to the configured
+     * spawn, scanning the 3x3 chunk area around it. Falls back to standing
+     * on the water surface if the whole area is ocean - the player swims
+     * instead of spawning inside a block.
+     *
+     * @return array{0: int, 1: int, 2: int} [x, y, z]
+     */
+    private function findSafeSpawn(int $spawnX, int $spawnZ): array {
+        $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
+        $store = $store instanceof ChunkStore ? $store : null;
+        $seaLevel = \pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter::SEA_LEVEL;
+        $water = \pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter::WATER_BLOCK;
+
+        $isDry = static function (int $x, int $z) use ($store, $seaLevel, $water): bool {
+            if ($store === null) {
+                return false;
+            }
+            $top = $store->getHighestBlockAt($x, $z);
+            return $top >= $seaLevel && $store->getBlock($x, $top, $z) !== $water;
+        };
+
+        $chunkX = (int)floor($spawnX / 16);
+        $chunkZ = (int)floor($spawnZ / 16);
+
+        // Fast path (the common case): the configured spawn column is dry
+        // land, so stand exactly on it and the world spawn never moves. Only
+        // load one chunk here; the 8-neighbour scan below is the rare path.
+        $this->chunkLoadService->loadChunk($chunkX, $chunkZ);
+        if ($isDry($spawnX, $spawnZ)) {
+            return [$spawnX, $store->getHighestBlockAt($spawnX, $spawnZ) + 1, $spawnZ];
+        }
+
+        // Slow path: the configured spawn is underwater - scan the 8
+        // surrounding chunks for the nearest dry column (Manhattan distance)
+        // so the player lands on the closest beach instead of swimming.
+        $best = null;
+        $bestDist = PHP_INT_MAX;
+        for ($dx = -1; $dx <= 1; $dx++) {
+            for ($dz = -1; $dz <= 1; $dz++) {
+                if ($dx === 0 && $dz === 0) {
+                    continue; // spawn chunk already checked
+                }
+                $cx = $chunkX + $dx;
+                $cz = $chunkZ + $dz;
+                $this->chunkLoadService->loadChunk($cx, $cz);
+                $wx0 = $cx * 16;
+                $wz0 = $cz * 16;
+                for ($bz = 0; $bz < 16; $bz++) {
+                    for ($bx = 0; $bx < 16; $bx++) {
+                        $x = $wx0 + $bx;
+                        $z = $wz0 + $bz;
+                        if (!$isDry($x, $z)) {
+                            continue; // underwater column or open ocean
+                        }
+                        $dist = abs($x - $spawnX) + abs($z - $spawnZ);
+                        if ($dist < $bestDist) {
+                            $bestDist = $dist;
+                            $best = [$x, $store->getHighestBlockAt($x, $z) + 1, $z];
+                        }
+                    }
+                }
+            }
+        }
+        if ($best !== null) {
+            return $best;
+        }
+
+        // No dry land in the area: stand on the water surface at the
+        // configured spawn so the player at least doesn't spawn inside a
+        // block (they will swim).
+        $top = $store !== null ? $store->getHighestBlockAt($spawnX, $spawnZ) : $seaLevel;
+        return [$spawnX, max($top + 1, $seaLevel + 1), $spawnZ];
     }
 
     private function sendJoinPackets(EntityRef $entityRef): void {
