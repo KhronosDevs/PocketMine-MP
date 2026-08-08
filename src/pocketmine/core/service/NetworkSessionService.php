@@ -72,6 +72,8 @@ final class NetworkSessionService {
     private readonly PlayerLeaveService $playerLeaveService;
     private readonly ChunkLoadService $chunkLoadService;
     private readonly ResourceRegistry $resourceRegistry;
+    /** Trace game-layer packet handling while KHRONOS_WIRE_TRACE=1. */
+    private bool $wireTrace = false;
 
     /**
      * @var array<string, array{
@@ -104,6 +106,7 @@ final class NetworkSessionService {
         $this->playerLeaveService = $playerLeaveService;
         $this->chunkLoadService = $chunkLoadService;
         $this->resourceRegistry = $resourceRegistry;
+        $this->wireTrace = getenv('KHRONOS_WIRE_TRACE') === '1';
     }
 
     /**
@@ -181,6 +184,16 @@ final class NetworkSessionService {
     // --- Inbound -----------------------------------------------------------
 
     private function handleInbound(string $addrKey, int $packetId, string $buffer): void {
+        // Protocol-84 wire (legacy RakLibInterface::getPacket): every game
+        // frame is prefixed with a single 0xfe marker byte, then the packet
+        // buffer proper (id byte + body) follows. The client sends either a
+        // 0xfe-prefixed single packet or a 0xfe-prefixed compressed batch
+        // (0x06) of length-prefixed packets. Drop only the marker so the
+        // buffer still starts with the packet id byte.
+        if ($packetId === 0xfe && strlen($buffer) >= 2) {
+            $packetId = ord($buffer[1]);
+            $buffer = substr($buffer, 1);
+        }
         if ($packetId === Info::BATCH_PACKET) {
             $batch = new BatchPacket();
             $batch->setBuffer($buffer, 1);
@@ -209,6 +222,10 @@ final class NetworkSessionService {
 
     private function handleGamePacket(string $addrKey, string $buffer): void {
         $id = ord($buffer[0]);
+        if ($this->wireTrace) {
+            fwrite(STDERR, '[game] from ' . $addrKey . ' pid=0x'
+                . str_pad(dechex($id), 2, '0', STR_PAD_LEFT) . ' len=' . strlen($buffer) . PHP_EOL);
+        }
         switch ($id) {
             case Info::LOGIN_PACKET:
                 $pk = new LoginPacket();
@@ -238,6 +255,10 @@ final class NetworkSessionService {
     }
 
     private function handleLogin(string $addrKey, LoginPacket $pk): void {
+        if ($this->wireTrace) {
+            fwrite(STDERR, '[game] login from ' . $addrKey . ' protocol=' . $pk->protocol
+                . ' user=' . $pk->username . ' uuid=' . $pk->clientUUID . PHP_EOL);
+        }
         if (isset($this->sessions[$addrKey])) {
             return; // already logged in from this address
         }
@@ -447,7 +468,7 @@ final class NetworkSessionService {
                 $chunk->chunkZ = $chunkZ;
                 $chunk->order = FullChunkDataPacket::ORDER_LAYERED;
                 $chunk->data = ChunkSerializer::serialize($chunkData);
-                $this->sendChunkBatch($session['playerRef'], $chunk);
+                $this->sendChunkBatch($addrKey, $chunk);
 
                 $session['chunksSent'][$key] = true;
                 $sent++;
@@ -462,32 +483,51 @@ final class NetworkSessionService {
         }
     }
 
+    /**
+     * Legacy Network::$BATCH_THRESHOLD: packets at/above this encoded size are
+     * sent as a 0xfe-prefixed compressed batch (full chunks); smaller packets
+     * ride their own 0xfe-prefixed frame, exactly like the old
+     * RakLibInterface::putPacket.
+     */
+    private const BATCH_THRESHOLD = 512;
+
     private function flushOutbound(): void {
         if ($this->adapter === null) {
             return;
         }
         foreach ($this->outbound as $addrKey => $packets) {
             $session = $this->sessions[$addrKey] ?? null;
-            if ($session === null) {
+            if ($session === null || empty($packets)) {
                 continue;
             }
-            $inner = '';
+            $small = [];
+            $large = [];
             foreach ($packets as $packet) {
                 $packet->encode();
                 $buffer = $packet->getBuffer();
-                $inner .= pack('N', strlen($buffer)) . $buffer;
+                if (strlen($buffer) >= self::BATCH_THRESHOLD) {
+                    $large[] = $buffer;
+                } else {
+                    $small[] = $buffer;
+                }
             }
-            if ($inner === '') {
-                continue;
+            // Small packets: one 0xfe-prefixed frame each (RELIABLE_ORDERED).
+            foreach ($small as $buffer) {
+                $this->adapter->sendGameFrame($addrKey, chr(0xfe) . $buffer);
             }
-            $compressed = zlib_encode($inner, ZLIB_ENCODING_DEFLATE, 7);
-            if ($compressed === false) {
-                continue;
+            // Large packets: a 0xfe-prefixed compressed batch per packet so a
+            // full chunk survives RakNet fragmentation in one logical frame.
+            foreach ($large as $buffer) {
+                $inner = pack('N', strlen($buffer)) . $buffer;
+                $compressed = zlib_encode($inner, ZLIB_ENCODING_DEFLATE, 7);
+                if ($compressed === false) {
+                    continue;
+                }
+                $batch = new BatchPacket();
+                $batch->payload = $compressed;
+                $batch->encode();
+                $this->adapter->sendGameFrame($addrKey, chr(0xfe) . $batch->getBuffer());
             }
-            $batch = new BatchPacket();
-            $batch->payload = $compressed;
-            $batch->encode();
-            $this->adapter->sendPacket($session['playerRef'], $batch);
         }
         $this->outbound = [];
     }
@@ -505,7 +545,7 @@ final class NetworkSessionService {
      * Send a full chunk as its own batch at max compression so it always
      * fits in a single UDP datagram, independent of the burst flush.
      */
-    private function sendChunkBatch(PlayerRef $player, FullChunkDataPacket $chunk): void {
+    private function sendChunkBatch(string $addrKey, FullChunkDataPacket $chunk): void {
         if ($this->adapter === null) {
             return;
         }
@@ -519,24 +559,17 @@ final class NetworkSessionService {
         $batch = new BatchPacket();
         $batch->payload = $compressed;
         $batch->encode();
-        $this->adapter->sendPacket($player, $batch);
+        // A chunk is large: 0xfe-prefixed compressed batch (legacy parity).
+        $this->adapter->sendGameFrame($addrKey, chr(0xfe) . $batch->getBuffer());
     }
 
-    /** Immediate (unbatched) send to an address, for pre-session replies. */
+    /** Immediate send to an address, for pre-session replies (login failed). */
     private function sendDirectToAddress(string $addrKey, DataPacket $packet): void {
         if ($this->adapter === null) {
             return;
         }
         $packet->encode();
-        $inner = pack('N', strlen($packet->getBuffer())) . $packet->getBuffer();
-        $compressed = zlib_encode($inner, ZLIB_ENCODING_DEFLATE, 7);
-        if ($compressed === false) {
-            return;
-        }
-        $batch = new BatchPacket();
-        $batch->payload = $compressed;
-        $batch->encode();
-        $this->adapter->sendRawPacket($addrKey, $batch);
+        $this->adapter->sendGameFrame($addrKey, chr(0xfe) . $packet->getBuffer());
     }
 
     private function addrKeyForPlayer(PlayerRef $player): ?string {

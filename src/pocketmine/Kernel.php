@@ -1271,9 +1271,24 @@ final class Kernel {
         // inbound datagrams, let the session service respond to game packets,
         // then flush the compressed outbound frames to the socket.
         if ($this->networkPort instanceof \pocketmine\adapter\driven\network\Protocol84NetworkAdapter) {
-            $this->networkPort->processPendingCommands();
-            $this->networkSessionService->poll();
-            $this->networkPort->flushOutboundPackets();
+            try {
+                $this->networkPort->processPendingCommands();
+                $this->networkSessionService->poll();
+                $this->networkPort->flushOutboundPackets();
+            } catch (\Throwable $e) {
+                // A hostile/foreign game packet must not take down the whole
+                // server: surface the error and keep ticking.
+                fwrite(STDERR, '[net] poll error: ' . $e->getMessage()
+                    . ' @ ' . $e->getFile() . ':' . $e->getLine() . PHP_EOL);
+            }
+            // Surface RakLib thread logs: critical lines always (a thread
+            // crash would otherwise be silent), everything when tracing.
+            $traceOn = getenv('KHRONOS_WIRE_TRACE') === '1';
+            foreach ($this->networkPort->drainLogLines() as $line) {
+                if ($traceOn || str_starts_with($line, 'critical')) {
+                    fwrite(STDERR, '[raknet] ' . $line . PHP_EOL);
+                }
+            }
         }
     }
 }

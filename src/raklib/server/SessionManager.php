@@ -86,6 +86,13 @@ class SessionManager {
 
     protected bool $shutdown = false;
 
+    /**
+     * When KHRONOS_WIRE_TRACE=1, every inbound/outbound packet id (and a hex
+     * dump of the small handshake packets) is logged through the thread
+     * logger. Off by default: the hot loop pays nothing.
+     */
+    private bool $wireTrace = false;
+
     protected int $ticks = 0;
     protected float $lastMeasure;
 
@@ -114,6 +121,11 @@ class SessionManager {
         $this->rakLibTimePerTick = 1 / 100;
         $this->packetLimit = 250;
         $this->portChecking = false;
+        $this->wireTrace = getenv('KHRONOS_WIRE_TRACE') === '1';
+    }
+
+    public function isWireTrace(): bool {
+        return $this->wireTrace;
     }
 
     public function getPort(): int {
@@ -132,16 +144,23 @@ class SessionManager {
         $this->lastMeasure = microtime(true);
 
         while (!$this->shutdown) {
-            $start = microtime(true);
-            while ($this->receivePacket()) {
+            try {
+                $start = microtime(true);
+                while ($this->receivePacket()) {
+                }
+                while ($this->receiveStream()) {
+                }
+                $time = microtime(true) - $start;
+                if ($time < $this->rakLibTimePerTick) {
+                    time_sleep_until(microtime(true) + $this->rakLibTimePerTick - $time);
+                }
+                $this->tick();
+            } catch (\Throwable $e) {
+                // A packet handling error must never silently kill the wire
+                // thread: log it, drop the offending session, keep serving.
+                $this->getLogger()->critical('RakLib loop error: ' . $e->getMessage()
+                    . ' @ ' . $e->getFile() . ':' . $e->getLine());
             }
-            while ($this->receiveStream()) {
-            }
-            $time = microtime(true) - $start;
-            if ($time < $this->rakLibTimePerTick) {
-                time_sleep_until(microtime(true) + $this->rakLibTimePerTick - $time);
-            }
-            $this->tick();
         }
     }
 
@@ -212,6 +231,7 @@ class SessionManager {
 
             if ($len > 0) {
                 $pid = ord($buffer[0]);
+                $this->tracePacket($source, $port, $pid, $len, $buffer);
 
                 if ($pid === UNCONNECTED_PING::$ID) {
                     // No need to create a session for just pings.
@@ -228,7 +248,19 @@ class SessionManager {
                     // ignored
                 } elseif (($packet = $this->getPacketFromPool($pid)) !== null) {
                     $packet->buffer = $buffer;
-                    $this->getSession($source, $port)->handlePacket($packet);
+                    try {
+                        $this->getSession($source, $port)->handlePacket($packet);
+                    } catch (\Throwable $e) {
+                        // Hostile/foreign input must not kill the thread or
+                        // wedge a session: log, drop, move on.
+                        $this->getLogger()->critical('Error handling 0x' . dechex($pid)
+                            . ' from ' . $source . ':' . $port . ': ' . $e->getMessage()
+                            . ' @ ' . $e->getFile() . ':' . $e->getLine());
+                        $session = $this->sessions[$source . ':' . $port] ?? null;
+                        if ($session !== null) {
+                            $this->removeSession($session, 'packet error');
+                        }
+                    }
                 } else {
                     if (substr($buffer, 0, 2) !== "\xfe\xfd") {
                         return true; // not even RakNet-shaped; drop
@@ -244,7 +276,30 @@ class SessionManager {
 
     public function sendPacket(Packet $packet, string $dest, int $port): void {
         $packet->encode();
+        if ($this->wireTrace) {
+            $buf = $packet->buffer ?? '';
+            $hex = strlen($buf) > 0 ? ' hex=' . bin2hex(substr($buf, 0, 64)) : '';
+            $this->getLogger()->debug('snd ' . $dest . ':' . $port . ' pid=0x'
+                . str_pad(dechex(ord($buf[0])), 2, '0', STR_PAD_LEFT) . ' len=' . strlen($buf) . $hex);
+        }
         $this->sendBytes += $this->socket->writePacket($packet->buffer, $dest, $port);
+    }
+
+    /**
+     * Trace an inbound packet when KHRONOS_WIRE_TRACE=1: always the id/len,
+     * plus a hex dump for the small handshake packets (pings, open-connection
+     * requests, connected control packets) so a real client's exact bytes can
+     * be inspected. Data packets (0x80-0x8f) are only id/len to keep the
+     * trace readable.
+     */
+    private function tracePacket(string $source, int $port, int $pid, int $len, string $buffer): void {
+        if (!$this->wireTrace) {
+            return;
+        }
+        $isData = $pid >= 0x80 && $pid <= 0x8f;
+        $hex = (!$isData && $len > 0) ? ' hex=' . bin2hex(substr($buffer, 0, 96)) : '';
+        $this->getLogger()->debug('rcv ' . $source . ':' . $port . ' pid=0x'
+            . str_pad(dechex($pid), 2, '0', STR_PAD_LEFT) . ' len=' . $len . $hex);
     }
 
     public function streamEncapsulated(Session $session, EncapsulatedPacket $packet, int $flags = RakLib::PRIORITY_NORMAL): void {
