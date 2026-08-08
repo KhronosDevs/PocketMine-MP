@@ -596,13 +596,19 @@ test('login produces the full protocol-84 burst', function () use ($client, $ker
     $sg = sgFields($byId[Info::START_GAME_PACKET]);
     same(0, $sg['eid'], 'start game eid is 0 (protocol 84 self id)');
     same(0, $sg['spawnX'], 'spawn x');
-    same(64, $sg['spawnY'], 'spawn y');
     same(0, $sg['spawnZ'], 'spawn z');
     same(0, $sg['gamemode'], 'survival gamemode');
+    // Spawn Y is terrain-derived (safe spawn: highest block + 1), not the old
+    // fixed 64 that dropped the player inside a hill and suffocated them.
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $top = $store instanceof \pocketmine\core\resource\ChunkStore ? $store->getHighestBlockAt(0, 0) : 64;
+    same($top + 1, $sg['spawnY'], 'spawn y is above the surface');
+    ok($sg['spawnY'] > 64, 'spawn y clears the old fixed default');
 
     ok(isset($byId[Info::SET_TIME_PACKET]), 'set time sent');
     ok(isset($byId[Info::SET_SPAWN_POSITION_PACKET]), 'set spawn sent');
-    same(64, sspFields($byId[Info::SET_SPAWN_POSITION_PACKET])['y'], 'spawn position y');
+    // SetSpawnPosition mirrors the safe spawn (highest block + 1).
+    same($top + 1, sspFields($byId[Info::SET_SPAWN_POSITION_PACKET])['y'], 'spawn position y matches safe spawn');
 
     ok(isset($byId[Info::SET_HEALTH_PACKET]), 'set health sent');
     same(20, shFields($byId[Info::SET_HEALTH_PACKET]), 'health 20');

@@ -190,13 +190,16 @@ final class Kernel {
         private readonly int $regionCount = 1,
         private readonly ?int $maxEntitiesPerRegion = null,
     ) {
-        $this->playerJoinService = new PlayerJoinService($world, $networkPort, $storagePort, $worldGenPort);
-        $this->playerLeaveService = new PlayerLeaveService($world, $networkPort, $storagePort);
-        $this->playerRespawnService = new PlayerRespawnService($world, $storagePort);
         // The load service enforces the loaded-chunk budget by evicting via
-        // the unload service, so the unload service is constructed first.
+        // the unload service, so the unload service is constructed first. The
+        // load service is built before the join service: a new player's spawn
+        // point must be derived from the actual terrain (safe spawn), which
+        // requires loading the spawn chunk.
         $this->chunkUnloadService = new ChunkUnloadService($world, $storagePort);
         $this->chunkLoadService = new ChunkLoadService($world, $storagePort, $worldGenPort, $this->chunkUnloadService);
+        $this->playerJoinService = new PlayerJoinService($world, $networkPort, $storagePort, $worldGenPort, $this->chunkLoadService);
+        $this->playerLeaveService = new PlayerLeaveService($world, $networkPort, $storagePort);
+        $this->playerRespawnService = new PlayerRespawnService($world, $storagePort);
         $this->chunkSendService = new ChunkSendService($world, $networkPort);
         $this->networkSessionService = new NetworkSessionService($networkPort, $world, $this->playerJoinService, $this->playerLeaveService, $this->chunkLoadService, $this->resourceRegistry);
         $this->blockBreakService = new BlockBreakService($world, $storagePort);
