@@ -19,7 +19,7 @@ if(-not (Test-Path $file)){
 }
 
 function StartServer{
-	$command = $binary + " " + $file + " --enable-ansi"
+	$command = $binary + " -d memory_limit=512M " + $file + " --enable-ansi"
 	iex $command
 }
 

@@ -704,6 +704,31 @@ test('chunk radius request is acknowledged', function () use ($client, $kernel):
     ok(false, 'chunk radius ack received');
 });
 
+// --- Large view distance (regression) --------------------------------------
+// A real client joins at view distance 8-12, so the server generates hundreds
+// of chunks (~200KB resident each in the ChunkStore). This used to blow the
+// 128M PHP CLI default at the first big chunk batch; bootstrap() now raises
+// the floor to 512M (legacy PocketMine parity) so the stream must survive.
+test('a large view distance request streams many chunks without exhausting memory', function () use ($client, $kernel): void {
+    // Request the maximum radius (12) - what a real client does on join.
+    $radiusBody = chr(Info::REQUEST_CHUNK_RADIUS_PACKET) . pack('N', 12);
+    $client->sendRawBuffer($radiusBody);
+    $kernel->run(1);
+
+    $chunkCount = 0;
+    $deadline = microtime(true) + 6.0;
+    while (microtime(true) < $deadline && $chunkCount < 60) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::FULL_CHUNK_DATA_PACKET) {
+                $chunkCount++;
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($chunkCount >= 60, "streamed $chunkCount chunks at radius 12 without OOM");
+    ok(memory_get_usage(true) < 512 * 1024 * 1024, 'memory stays under the raised limit');
+});
+
 // --- Movement --------------------------------------------------------------
 test('client movement is applied to the ECS entity', function () use ($client, $kernel): void {
     $move = new MovePlayerPacket();

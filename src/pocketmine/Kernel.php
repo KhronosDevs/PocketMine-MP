@@ -1471,5 +1471,31 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
 }
 
 function bootstrap(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): Kernel {
+    // Raise the PHP memory floor: a real 0.15.10 client joins at view
+    // distance 8-12, which generates ~625 chunks (each ~200KB resident in
+    // the ChunkStore) - far past the 128M CLI default. Legacy PocketMine
+    // launched with -d memory_limit=512M for exactly this reason; the
+    // server enforces the same floor itself (start scripts also pass it),
+    // so direct `php bootstrap.php` and the test suite are covered too.
+    $current = (string) ini_get('memory_limit');
+    if ($current !== '-1' && parseIniBytes($current) < 512 * 1024 * 1024) {
+        ini_set('memory_limit', '512M');
+    }
     return createKernel($regionCount, $maxEntitiesPerRegion);
+}
+
+/** Parse a PHP ini byte-size value ("128M", "1G", "512") into bytes. */
+function parseIniBytes(string $value): int {
+    $value = trim($value);
+    if ($value === '' || $value === '-1') {
+        return PHP_INT_MAX;
+    }
+    $unit = strtoupper(substr($value, -1));
+    $number = (int) $value;
+    return match ($unit) {
+        'G' => $number * 1024 * 1024 * 1024,
+        'M' => $number * 1024 * 1024,
+        'K' => $number * 1024,
+        default => (int) $value,
+    };
 }
