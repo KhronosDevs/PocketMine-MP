@@ -34,13 +34,31 @@ class CLIENT_HANDSHAKE_DataPacket extends Packet{
 	public int $port = 0;
 
 	/** @var array[] */
-	public array $systemAddresses = [];
+	public array $systemAddresses = [
+		["0.0.0.0", 0, 4],
+		["0.0.0.0", 0, 4],
+		["0.0.0.0", 0, 4],
+		["0.0.0.0", 0, 4],
+		["0.0.0.0", 0, 4],
+		["0.0.0.0", 0, 4],
+		["0.0.0.0", 0, 4],
+		["0.0.0.0", 0, 4],
+		["0.0.0.0", 0, 4],
+		["0.0.0.0", 0, 4]
+	];
 
 	public int $sendPing = 0;
 	public int $sendPong = 0;
 
 	public function encode() : void{
-
+		parent::encode();
+		$this->putAddress($this->address, $this->port, 4);
+		for($i = 0; $i < 10; ++$i){
+			$addr = $this->systemAddresses[$i] ?? ["0.0.0.0", 0, 4];
+			$this->putAddress($addr[0], (int) $addr[1], (int) $addr[2]);
+		}
+		$this->putLong($this->sendPing);
+		$this->putLong($this->sendPong);
 	}
 
 	public function decode() : void{

@@ -42,7 +42,8 @@ src/pocketmine/
 │   ├── system/                 #   Movement, Physics, Effect, AI, ChunkUpdate
 │   ├── service/                #   18 application services (join, chunk, block, combat, ...)
 │   ├── region/                 #   RegionWorld (spatial ECS slice)
-│   └── thread/                 #   CoordinationThread, RegionThread, NetworkThread
+│   └── thread/                 #   CoordinationThread, RegionThread, SnoozeHandle
+│                               #   (NetworkThread removed in 13.2 — the adapter owns the RakNet thread)
 ├── port/                       # PORT INTERFACES (no implementations)
 │   ├── driven/                 #   Network, Storage, WorldGen, Threading + DTOs
 │   └── driving/                #   Command, Event, Plugin
@@ -88,9 +89,11 @@ src/pocketmine/
 ## 4. Multithreading — honest status
 
 ### Built (infrastructure)
-- Three real `pmmp\thread\Thread` workers: **CoordinationThread** (routes commands
-  between regions), **RegionThread** (owns a snapshot store + sim tick), **NetworkThread**
-  (batch compression pipeline).
+- Real `pmmp\thread\Thread` workers: **CoordinationThread** (routes commands
+  between regions), **RegionThread** (owns a snapshot store + sim tick), and the
+  **RakLibServer thread** owned by `Protocol84NetworkAdapter` (since 13.2, the
+  kernel's `NetworkThread` was removed — the network adapter now owns its own
+  RakNet thread and speaks the full connected protocol).
 - Thread-safe queues (`ThreadSafeArray`) for command/migration/sync flows; `Future`/
   `ThreadingPort` abstraction; region partition model (`RegionWorld`, 16×16 chunks).
 
@@ -170,7 +173,7 @@ core, then parallelism behind the seams. **Phase 9 wires the seams.**
 | Step | Task |
 |------|------|
 | 13.1 | **No busy-waiting + ECS hot paths** — snooze (wait/notify) worker threads, world-map archetype resolution, archetype-array apply; 5000-entity tick <15ms. | ✅ done — see status below. |
-| 13.2 | **RakNet connected-session layer (real-client joinability)** — the server speaks the RakNet *offline* handshake (ping/pong, open-connection 1/2) and the full game flow (login → spawn burst → chunk streaming → movement) is proven against a fake client (`tests/17`), but a **real 0.15.10 client cannot connect yet**: the adapter never answers `CONNECTION_REQUEST` (0x09)/`CONNECTION_REQUEST_ACCEPTED` (0x10)/`NEW_INCOMING_CONNECTION` (0x13), and it expects raw game-packet datagrams while real clients send everything inside RakNet `DATA_PACKET_0–F` frames with reliability, sequence numbers, ACK/NACK and fragmentation (chunks > MTU). The complete RakNet implementation already sits in `src/raklib/` (SessionManager, Session with reliable windows, EncapsulatedPacket, ACK/NACK — all registered in `registerPackets()`); it was orphaned by the Phase-8 rewrite and is currently **not thread-safe for pmmpthread v6.3** (Thread subclass with plain `$shutdown`/`$mainPath` props) and references deleted legacy classes (`\ThreadedLogger`, `\ClassLoader`, old `Config`). Plan: port SessionManager/Session into the new architecture (ThreadSafe-ify, swap legacy deps, keep `DATA_PACKET_*`/ACK/NACK/EncapsulatedPacket verbatim), run it on the existing `NetworkThread`, and feed decoded game packets into `NetworkSessionService` — then a real client joins. | ⏳ next |
+| 13.2 | **RakNet connected-session layer (real-client joinability)** — the legacy `src/raklib/` codebase (SessionManager, Session with reliability windows, `DATA_PACKET_0–F`, ACK/NACK, EncapsulatedPacket, split reassembly) was **ported into the new architecture**: ThreadSafe-ified for pmmpthread v6.3 (RakLibServer is a `Thread` with only ThreadSafe properties; a new `ThreadSafeLogger` replaces `\ThreadedLogger`; all `\ClassLoader`/old `Config` deps dropped), cleaned up (strict types, no load-time exit, `registerPackets` table, `sessionLimit` enforcement), and rewired so the `Protocol84NetworkAdapter` is now a **`ServerInstance` bridge**: it owns the RakLibServer thread, answers the connected handshake (`CONNECTION_REQUEST` → `CONNECTION_REQUEST_ACCEPTED` → `NEW_INCOMING_CONNECTION`), decodes encapsulated game packets, and feeds them into `NetworkSessionService` (with proper disconnect handling). The kernel's `NetworkThread` is **gone** — the adapter owns its RakNet thread (preloads every raklib class the worker touches before `start()`, since pmmpthread v6.3 workers can't autoload). `tests/17` was rewritten: the fake client is now a **real RakNet client** (connected handshake, `DATA_PACKET_*` framing, reliability + message-index ordering, split reassembly) and proves the full flow end-to-end. | ✅ done — see status below. |
 
 ## 6. Thread-safety & ownership model
 
@@ -231,4 +234,5 @@ bin/php7/bin/php measure_baseline.php      # benchmark (writes docs/BASELINE.md)
 | 12.5 | ✅ | **Networking end-to-end** — `NetworkSessionService` drives login (protocol/version checks → spawn burst), radius ack + distance-sorted chunk streaming (with **heightmap-derived sky light** via `ChunkSerializer` — the old wire sent pitch-black zeros), and movement round-trip; adapter hands its loop to the kernel's single `NetworkThread`; `bootstrap.php` enables networking. `tests/17`: 11 tests / 53 assertions against a real UDP loopback client |
 | 12.6 | ✅ | **Permissions wired** — `plugin.yml` `permissions:` parsed into `PermissionManager` (`parseYaml`, inheritance, defaults, **op-check bug fixed**), registered on enable / unregistered on disable, `Player::hasPermission` + command gating delegate through the manager; `KernelAccessor`/`Plugin` expose `getPermissionManager()`. `tests/18`: 7 tests / 25 assertions |
 | 13.1 | ✅ | **No busy-waiting + ECS hot paths** — `SnoozeHandle` (ThreadSafe wait/notify condvar) replaces RegionThread's 200µs poll (5000 wakeups/sec idle) and NetworkThread's 1ms poll; `Query::archetypes()` uses the world's maintained entityArchetypes map; `applyPendingComponents` iterates archetype arrays (one `method_exists` per type). Raw 5000-entity tick 10.5 → **7.0 ms**; hot off-mode 7.04 ms, apply-mode 1.95 ms (pipeline offloads ~5ms/tick off the main thread). `measure_pipeline` now reports hot + cold ticks — the cold-vs-hot gap is a **CPU frequency-scaling artifact**, not code |
+| 13.2 | ✅ | **RakNet connected-session layer ported** — legacy `src/raklib/` made thread-safe and clean (ThreadSafe-only RakLibServer thread, `ThreadSafeLogger`, no legacy deps, strict types, `registerPackets` table, `sessionLimit`); `Protocol84NetworkAdapter` is now a `ServerInstance` bridge owning its RakNet thread (preloading worker classes before `start()`) that answers the connected handshake and routes decoded game packets into `NetworkSessionService` with disconnect handling; kernel `NetworkThread` deleted; `tests/17` rewritten as a **real RakNet client** (handshake, `DATA_PACKET_*` framing, reliability/ordering, split reassembly) — **12 tests / 53 assertions, 0 failures**, stable across repeated runs; full suite 18 files / 104 tests / 1336 assertions, PHPStan 0 errors, boot smoke healthy. **The server is now joinable by a real 0.15.10 client** (pending the user's real-client verification) |
 | 10.1 | ✅ | **Full block registry coverage** — all 189 real protocol-84 block IDs registered with 0.15 data (hardness/resistance/tool/flags/drops/XP), 191 explicit entries; block-state metadata layer for slabs/stairs/doors (variants, top bit, facing, open/half bits) with `applyPlacementMeta` wired into block placement; api Block facade state accessors |

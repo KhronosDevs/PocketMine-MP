@@ -56,8 +56,9 @@ use const ZLIB_ENCODING_DEFLATE;
  * BatchPacket (zlib-deflated, length-prefixed) and flushed once per poll so a
  * burst of small packets rides a single datagram.
  *
- * This is the "game" half of networking; the adapter owns the UDP socket and
- * RakNet handshake, the NetworkThread does transport-level compression.
+ * This is the "game" half of networking; the adapter owns the RakLibServer
+ * thread which speaks the RakNet wire protocol (handshake, framing,
+ * reliability) and feeds decoded game packets here.
  */
 final class NetworkSessionService {
     /** Max full chunks pushed to a client per poll (tick). */
@@ -68,6 +69,7 @@ final class NetworkSessionService {
     private ?Protocol84NetworkAdapter $adapter;
     private readonly World $world;
     private readonly PlayerJoinService $playerJoinService;
+    private readonly PlayerLeaveService $playerLeaveService;
     private readonly ChunkLoadService $chunkLoadService;
     private readonly ResourceRegistry $resourceRegistry;
 
@@ -92,12 +94,14 @@ final class NetworkSessionService {
         NetworkPort $networkPort,
         World $world,
         PlayerJoinService $playerJoinService,
+        PlayerLeaveService $playerLeaveService,
         ChunkLoadService $chunkLoadService,
         ResourceRegistry $resourceRegistry,
     ) {
         $this->adapter = $networkPort instanceof Protocol84NetworkAdapter ? $networkPort : null;
         $this->world = $world;
         $this->playerJoinService = $playerJoinService;
+        $this->playerLeaveService = $playerLeaveService;
         $this->chunkLoadService = $chunkLoadService;
         $this->resourceRegistry = $resourceRegistry;
     }
@@ -113,12 +117,35 @@ final class NetworkSessionService {
         foreach ($this->adapter->pollInboundEvents() as $event) {
             $this->handleInbound($event[0], $event[1], $event[2]);
         }
+        foreach ($this->adapter->pollConnectionEvents() as $event) {
+            if ($event[0] === 'close') {
+                $this->handleSessionClosed($event[1], $event[2]);
+            }
+            // 'open' is transport-level only: the login game packet drives
+            // session setup.
+        }
         // Flush the response burst BEFORE streaming chunks: a full chunk is
         // large enough that it must ride its own datagram, and sharing a
         // batch with the burst would blow past the UDP payload ceiling.
         $this->flushOutbound();
         $this->streamChunks();
         $this->flushOutbound();
+    }
+
+    /**
+     * A RakNet session closed (client disconnect, timeout, or kick): tear
+     * down the game session and persist the player through the leave service.
+     */
+    private function handleSessionClosed(string $addrKey, string $reason): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $this->playerLeaveService->handleDisconnect($session['playerRef'], $reason);
+        unset($this->sessions[$addrKey], $this->outbound[$addrKey]);
+        if ($this->adapter !== null) {
+            $this->adapter->unregisterPlayer($session['playerRef']);
+        }
     }
 
     public function shutdown(): void {

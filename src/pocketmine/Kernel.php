@@ -16,7 +16,6 @@ use pocketmine\core\ecs\ResourceRegistry;
 use pocketmine\core\ecs\SystemScheduler;
 use pocketmine\core\ecs\World;
 use pocketmine\core\thread\CoordinationThread;
-use pocketmine\core\thread\NetworkThread;
 use pocketmine\core\thread\RegionThread;
 use pocketmine\core\service\PlayerJoinService;
 use pocketmine\core\service\PlayerLeaveService;
@@ -80,7 +79,6 @@ final class Kernel {
     private array $phaseTimes = ['mirror' => [], 'tick' => [], 'drain' => [], 'balance' => [], 'rest' => []];
 
     private CoordinationThread $coordinationThread;
-    private NetworkThread $networkThread;
     private array $regionThreads = [];
     private bool $threadsStarted = false;
     private string $dataPath;
@@ -200,7 +198,7 @@ final class Kernel {
         $this->chunkUnloadService = new ChunkUnloadService($world, $storagePort);
         $this->chunkLoadService = new ChunkLoadService($world, $storagePort, $worldGenPort, $this->chunkUnloadService);
         $this->chunkSendService = new ChunkSendService($world, $networkPort);
-        $this->networkSessionService = new NetworkSessionService($networkPort, $world, $this->playerJoinService, $this->chunkLoadService, $this->resourceRegistry);
+        $this->networkSessionService = new NetworkSessionService($networkPort, $world, $this->playerJoinService, $this->playerLeaveService, $this->chunkLoadService, $this->resourceRegistry);
         $this->blockBreakService = new BlockBreakService($world, $storagePort);
         $this->blockPlaceService = new BlockPlaceService($world);
         $this->blockUpdateService = new BlockUpdateService($world, $storagePort);
@@ -257,15 +255,6 @@ final class Kernel {
     private function initializeRegions(): void {
         // Create coordination thread (thread-safe values only)
         $this->coordinationThread = new CoordinationThread();
-
-        // Create the single network pipeline worker (compression + outbound
-        // batching; socket I/O stays on the main thread). The adapter is
-        // pointed at it so real outbound frames flow through this thread and
-        // its sendQueue is drained by the adapter's flush path.
-        $this->networkThread = new NetworkThread();
-        if ($this->networkPort instanceof Protocol84NetworkAdapter) {
-            $this->networkPort->setNetworkThread($this->networkThread);
-        }
 
         // Create region threads: the world is split into regionCount columns
         // along the X axis so entities crossing chunk boundaries exercise the
@@ -335,7 +324,6 @@ final class Kernel {
         $ownsThreads = !$this->threadsStarted;
         if ($ownsThreads) {
             $this->coordinationThread->start(Thread::INHERIT_ALL);
-            $this->networkThread->start(Thread::INHERIT_ALL);
             foreach ($this->regionThreads as $regionThread) {
                 $regionThread->start(Thread::INHERIT_ALL);
             }
@@ -343,8 +331,8 @@ final class Kernel {
         }
 
         // Bind the UDP socket and start serving clients (opt-in: off by
-        // default so headless tests never touch the network). The adapter is
-        // already pointed at the kernel's NetworkThread, so it reuses it.
+        // default so headless tests never touch the network). The adapter
+        // starts its own RakLibServer thread, which owns the socket.
         if ($this->networkingEnabled && $this->networkPort instanceof Protocol84NetworkAdapter) {
             $this->networkPort->start();
         }
@@ -1060,14 +1048,12 @@ final class Kernel {
         // Shutdown threads (only if they were actually started)
         if ($this->threadsStarted) {
             $this->coordinationThread->shutdown();
-            $this->networkThread->shutdown();
             foreach ($this->regionThreads as $regionThread) {
                 $regionThread->shutdown();
             }
             
             // Wait for threads to finish
             $this->coordinationThread->join();
-            $this->networkThread->join();
             foreach ($this->regionThreads as $regionThread) {
                 $regionThread->join();
             }
@@ -1076,9 +1062,8 @@ final class Kernel {
         // Disconnect all sessions before the socket closes.
         $this->networkSessionService->shutdown();
 
-        // Stop the chunk-generation pool (real worker threads) and close the
-        // adapter's UDP socket. The adapter does not touch the injected
-        // NetworkThread - that was joined above.
+        // Stop the chunk-generation pool (real worker threads) and shut down
+        // the adapter's RakLibServer thread (which owns the UDP socket).
         if ($this->worldGenPort instanceof ParallelGeneratorAdapter) {
             $this->worldGenPort->shutdown();
         }
@@ -1181,10 +1166,6 @@ final class Kernel {
 
     public function getCoordinationThread(): CoordinationThread {
         return $this->coordinationThread;
-    }
-
-    public function getNetworkThread(): NetworkThread {
-        return $this->networkThread;
     }
 
     public function getRegionThreads(): array {
