@@ -97,14 +97,24 @@ src/pocketmine/
 - Thread-safe queues (`ThreadSafeArray`) for command/migration/sync flows; `Future`/
   `ThreadingPort` abstraction; region partition model (`RegionWorld`, 16×16 chunks).
 
-### Not wired (the actual data path)
-- The ECS world, all entities, services, and ports run on the **main thread**.
-- `PmmpThreadPool::submit()` executes tasks **inline** — workers are not used.
-- Worker outputs (region `syncQueue`, network `sendQueue`) are **never consumed**.
-
-The scaffold was built first because pmmpthread v6.3 forbids non-thread-safe
-properties on `Thread` subclasses — the safe order was a correct single-threaded
-core, then parallelism behind the seams. **Phase 9 wires the seams.**
+### Honest status — what runs where
+- **Main thread owns:** the ECS world, all entities, components, resources, and
+  services. The kernel's tick loop drives: mirror → world tick → drain → balance
+  → network flush.
+- **RegionThread workers** (real `pmmp\thread\Thread`s): receive binary
+  snapshots (diff-only mirror), integrate movement+gravity in lockstep, and
+  stream results back through a seq-tagged sync queue — consumed by the kernel's
+  drain (gate-compare or apply mode). Dynamic splits/merges and cross-region
+  migration are wired (Phase 9, verified by `tests/05–09`).
+- **RakLibServer thread** (owned by `Protocol84NetworkAdapter` since 13.2): full
+  RakNet wire protocol — offline + connected handshake, `DATA_PACKET_*` framing,
+  reliability windows, ACK/NACK, split reassembly. Decoded game packets stream to
+  the main-thread `NetworkSessionService`; outbound game packets go back as
+  reliable encapsulated frames.
+- **Async chunk generation**: pure deterministic generator runs as `Runnable`s on
+  a real pmmpthread `Pool` (Phase 9.4).
+- `PmmpThreadPool::submit()` remains an inline executor (no caller currently
+  needs parallel task offload beyond the region/chunkgen paths).
 
 ## 5. Roadmap
 
@@ -154,7 +164,7 @@ core, then parallelism behind the seams. **Phase 9 wires the seams.**
 | Step | Task |
 |------|------|
 | 11.1 | Unit tests: ChunkStore, BlockRegistry, ItemRegistry, Inventory, services. | ✅ done — see status below. |
-| 11.2 | Threading determinism tests (9.1 merge == main-thread result). |
+| 11.2 | Threading determinism tests (9.1 merge == main-thread result). | ✅ done — `tests/05` (gate bit-exact at ≤40 entities), `tests/06` (apply mode exact), `tests/07` (1000-entity scale, 0 mismatches/lagged). |
 | 11.3 | Memory profiling (loaded-chunk budget, archetype arrays) + load tests. | ✅ done — see status below. |
 
 ### Phase 12 — Gameplay depth
