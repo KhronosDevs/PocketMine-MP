@@ -566,6 +566,73 @@ function cssFields(string $buf): array {
     ];
 }
 
+function apFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    return [
+        'uuid' => $s->getUUID()->toString(),
+        'username' => $s->getString(),
+        'eid' => $s->getLong(),
+        'x' => $s->getFloat(),
+        'y' => $s->getFloat(),
+        'z' => $s->getFloat(),
+    ];
+}
+
+function aeFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    return [
+        'eid' => $s->getLong(),
+        'type' => $s->getInt(),
+        'x' => $s->getFloat(),
+        'y' => $s->getFloat(),
+        'z' => $s->getFloat(),
+    ];
+}
+
+function aieFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    return [
+        'eid' => $s->getLong(),
+        'item' => $s->getSlot(),
+        'x' => $s->getFloat(),
+        'y' => $s->getFloat(),
+        'z' => $s->getFloat(),
+    ];
+}
+
+function meFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    return [
+        'eid' => $s->getLong(),
+        'x' => $s->getFloat(),
+        'y' => $s->getFloat(),
+        'z' => $s->getFloat(),
+        'pitch' => $s->getByte() * (360.0 / 256),
+        'yaw' => $s->getByte() * (360.0 / 256),
+        'headYaw' => $s->getByte() * (360.0 / 256),
+    ];
+}
+
+function mpFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    return [
+        'eid' => $s->getLong(),
+        'x' => $s->getFloat(),
+        'y' => $s->getFloat(),
+        'z' => $s->getFloat(),
+        'yaw' => $s->getFloat(),
+        'bodyYaw' => $s->getFloat(),
+        'pitch' => $s->getFloat(),
+        'mode' => $s->getByte(),
+        'onGround' => $s->getByte(),
+    ];
+}
+
+function reFields(string $buf): int {
+    $s = new BinaryStream($buf, 1);
+    return $s->getLong();
+}
+
 // Boot against a pristine world: region files persist in worlds/ across runs,
 // and a stale chunk (from an older generator/seed) would fail the terrain
 // consistency assertions below. Remove them so every run regenerates.
@@ -1108,6 +1175,195 @@ test('a second client can join and sees the same world', function () use ($kerne
     }
     $client2->close();
     ok(false, 'Alice received Bob chat');
+});
+
+// --- Entity broadcasting (14.2) ---------------------------------------------
+// A second player stays online for the whole section: it is the peer that
+// Alice sees (and that sees Alice) as a wire entity.
+$clientBob2 = null;
+$bob2Eid = 0;
+
+test('two players see each other as AddPlayerPacket entities', function () use ($kernel, $port, $client, &$clientBob2, &$bob2Eid): void {
+    $clientBob2 = new FakeClient($port);
+    $clientBob2->handshake(fn() => $kernel->run(1));
+    $clientBob2->connect(fn() => $kernel->run(1));
+    $clientBob2->sendLogin('Bob2', 'bbbbbbbb-aaaa-9999-8888-777777777777');
+    $kernel->run(2);
+
+    // Both directions: Bob2 receives Alice as an entity, Alice receives Bob2.
+    $deadline = microtime(true) + 5.0;
+    $bobSawAlice = false;
+    $aliceSawBob = false;
+    while (microtime(true) < $deadline && (!$bobSawAlice || !$aliceSawBob)) {
+        foreach ($clientBob2->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::ADD_PLAYER_PACKET) {
+                $ap = apFields($buffer);
+                if ($ap['username'] === 'Alice') {
+                    $bobSawAlice = true;
+                    // Protocol 84 reserves eid 0 as the client's own self id;
+                    // every OTHER player must have a real non-zero entity id.
+                    ok($ap['eid'] !== 0, 'Alice broadcast with a non-zero entity id');
+                }
+            }
+        }
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::ADD_PLAYER_PACKET) {
+                $ap = apFields($buffer);
+                if ($ap['username'] === 'Bob2') {
+                    $aliceSawBob = true;
+                    $bob2Eid = $ap['eid'];
+                }
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($bobSawAlice, 'Bob sees Alice as an AddPlayerPacket entity');
+    ok($aliceSawBob, 'Alice sees Bob as an AddPlayerPacket entity');
+    ok($bob2Eid !== 0, 'Bob has a real (non-zero) entity id');
+});
+
+test('player movement is relayed to other players via MovePlayerPacket', function () use ($kernel, $client, &$clientBob2, &$bob2Eid): void {
+    // Bob2 walks to a new spot (eid 0 is the client's own entity).
+    $move = new MovePlayerPacket();
+    $move->eid = 0;
+    $move->x = 30.5;
+    $move->y = 66.0;
+    $move->z = 5.5;
+    $move->yaw = 90.0;
+    $move->bodyYaw = 90.0;
+    $move->pitch = 0.0;
+    $move->mode = MovePlayerPacket::MODE_NORMAL;
+    $move->onGround = true;
+    $clientBob2->sendGamePacket($move);
+
+    $deadline = microtime(true) + 5.0;
+    while (microtime(true) < $deadline) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::MOVE_PLAYER_PACKET) {
+                $mp = mpFields($buffer);
+                if ($mp['eid'] === $bob2Eid && abs($mp['x'] - 30.5) < 0.01) {
+                    near(30.5, $mp['x'], 0.01, 'Alice sees Bob moved x');
+                    near(5.5, $mp['z'], 0.01, 'Alice sees Bob moved z');
+                    return;
+                }
+            }
+        }
+        $kernel->run(1);
+    }
+    ok(false, 'Alice received Bob move packet');
+});
+
+test('a spawned mob is broadcast as AddEntityPacket and followed with move/remove', function () use ($kernel, $client): void {
+    // Alice's current position (the peer for the mob broadcast).
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+
+    // Spawn a zombie near Alice.
+    $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', $alice['x'] + 3, $alice['y'] + 1, $alice['z']);
+    $mobEid = $mob->getId();
+
+    $deadline = microtime(true) + 5.0;
+    $sawAdd = false;
+    while (microtime(true) < $deadline && !$sawAdd) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::ADD_ENTITY_PACKET) {
+                $ae = aeFields($buffer);
+                if ($ae['eid'] === $mobEid && $ae['type'] === 32) { // 32 = Zombie
+                    $sawAdd = true;
+                }
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawAdd, 'Alice received AddEntityPacket for the zombie');
+
+    // Move the mob in the ECS and expect a MoveEntityPacket relay.
+    $entity = $kernel->getWorld()->getEntity($mobEid);
+    if ($entity === null) {
+        ok(false, 'mob entity exists');
+        return;
+    }
+    $pos = $entity->get(\pocketmine\core\component\PositionComponent::class);
+    if ($pos !== null) {
+        $pos->x += 5.0;
+    }
+    $kernel->run(1);
+
+    $deadline = microtime(true) + 5.0;
+    $sawMove = false;
+    while (microtime(true) < $deadline && !$sawMove) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::MOVE_ENTITY_PACKET && meFields($buffer)['eid'] === $mobEid) {
+                $sawMove = true;
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawMove, 'Alice received MoveEntityPacket for the moved zombie');
+
+    // Despawn and expect RemoveEntityPacket.
+    $kernel->getEntityDespawnService()->despawn($mob);
+    $kernel->run(1);
+
+    $deadline = microtime(true) + 5.0;
+    $sawRemove = false;
+    while (microtime(true) < $deadline && !$sawRemove) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::REMOVE_ENTITY_PACKET && reFields($buffer) === $mobEid) {
+                $sawRemove = true;
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawRemove, 'Alice received RemoveEntityPacket for the despawned zombie');
+});
+
+test('a dropped item entity is broadcast as AddItemEntityPacket', function () use ($kernel, $client): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+
+    // Drop 3 planks next to Alice.
+    $item = $kernel->getEntitySpawnService()->spawnItem(
+        $alice['x'] + 4,
+        $alice['y'] + 1,
+        $alice['z'],
+        new \pocketmine\core\component\ItemStack(5, 0, 3),
+    );
+    $itemEid = $item->getId();
+
+    $deadline = microtime(true) + 5.0;
+    while (microtime(true) < $deadline) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::ADD_ITEM_ENTITY_PACKET) {
+                $aie = aieFields($buffer);
+                if ($aie['eid'] === $itemEid) {
+                    same(5, $aie['item'][0], 'item id broadcast');
+                    same(3, $aie['item'][1], 'item count broadcast');
+                    $kernel->getEntityDespawnService()->despawn($item);
+                    return;
+                }
+            }
+        }
+        $kernel->run(1);
+    }
+    $kernel->getEntityDespawnService()->despawn($item);
+    ok(false, 'Alice received AddItemEntityPacket for the dropped item');
 });
 
 // --- Protocol rejection ----------------------------------------------------

@@ -82,6 +82,11 @@ final class EntityDespawnService {
         
         $components = [];
         foreach ($entity->getComponents() as $type => $component) {
+            // String-keyed entries are boolean tag markers (withTag('item')),
+            // not real components - skip them or serialization would choke.
+            if (!is_object($component)) {
+                continue;
+            }
             $components[$type] = \pocketmine\core\ecs\ComponentSerializer::serialize($component);
         }
         
