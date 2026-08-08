@@ -7,13 +7,19 @@ require __DIR__ . '/helpers.php';
 
 use pocketmine\adapter\driven\network\Protocol84NetworkAdapter;
 use pocketmine\protocol\BatchPacket;
+use pocketmine\protocol\ContainerSetContentPacket;
+use pocketmine\protocol\ContainerSetSlotPacket;
 use pocketmine\protocol\FullChunkDataPacket;
 use pocketmine\protocol\Info;
 use pocketmine\protocol\LoginPacket;
+use pocketmine\protocol\MobEquipmentPacket;
 use pocketmine\protocol\MovePlayerPacket;
 use pocketmine\protocol\PlayStatusPacket;
+use pocketmine\protocol\PlayerActionPacket;
 use pocketmine\protocol\RequestChunkRadiusPacket;
 use pocketmine\protocol\TextPacket;
+use pocketmine\protocol\UpdateBlockPacket;
+use pocketmine\protocol\UseItemPacket;
 use pocketmine\utils\BinaryStream;
 use raklib\protocol\ACK;
 use raklib\protocol\CLIENT_CONNECT_DataPacket;
@@ -528,6 +534,38 @@ function heightAt(string $payload, int $x, int $z): int {
     return ord($payload[$base + $z * 16 + $x]);
 }
 
+function ubFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    return [
+        'x' => $s->getInt(),
+        'z' => $s->getInt(),
+        'y' => $s->getByte(),
+        'blockId' => $s->getByte(),
+        'flagsData' => $s->getByte(),
+    ];
+}
+
+function cscFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    $out = ['windowid' => $s->getByte()];
+    $count = $s->getShort();
+    $out['slots'] = [];
+    for ($i = 0; $i < $count; $i++) {
+        $out['slots'][] = $s->getSlot();
+    }
+    return $out;
+}
+
+function cssFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    return [
+        'windowid' => $s->getByte(),
+        'slot' => $s->getShort(),
+        'hotbarSlot' => $s->getShort(),
+        'item' => $s->getSlot(),
+    ];
+}
+
 // Boot against a pristine world: region files persist in worlds/ across runs,
 // and a stale chunk (from an older generator/seed) would fail the terrain
 // consistency assertions below. Remove them so every run regenerates.
@@ -565,10 +603,11 @@ test('login produces the full protocol-84 burst', function () use ($client, $ker
     $client->sendLogin('Alice', $uuidA);
     $kernel->run(2);
 
-    // Gather packets until the burst essentials are all seen.
+    // Gather packets until the burst essentials are all seen (9 distinct
+    // ids: the inventory content packet joined the login burst in 14.1).
     $deadline = microtime(true) + 5.0;
     $seen = [];
-    while (microtime(true) < $deadline && count($seen) < 8) {
+    while (microtime(true) < $deadline && count($seen) < 9) {
         foreach ($client->readGamePackets() as [$id, $buffer]) {
             $seen[$id] = true;
             $loginPackets[] = [$id, $buffer];
@@ -631,6 +670,17 @@ test('login produces the full protocol-84 burst', function () use ($client, $ker
     $entries = plEntries($byId[Info::PLAYER_LIST_PACKET]);
     same(1, count($entries), 'player list has one entry');
     same('Alice', $entries[0]['name'], 'player list names the joiner');
+
+    // 14.1: the login burst now carries the full inventory (window 0) so the
+    // client renders the starter kit hotbar.
+    ok(isset($byId[Info::CONTAINER_SET_CONTENT_PACKET]), 'inventory content sent on login');
+    $csc = cscFields($byId[Info::CONTAINER_SET_CONTENT_PACKET]);
+    same(0, $csc['windowid'], 'inventory window id 0');
+    same(36, count($csc['slots']), '36 inventory slots');
+    // Starter kit: planks in slot 0 (held), cobblestone in slot 1.
+    same(5, $csc['slots'][0][0], 'slot 0 holds planks');
+    same(32, $csc['slots'][0][1], '32 planks in slot 0');
+    same(4, $csc['slots'][1][0], 'slot 1 holds cobblestone');
 });
 
 // --- Chunk streaming -------------------------------------------------------
@@ -775,6 +825,195 @@ test('client movement is applied to the ECS entity', function () use ($client, $
         usleep(10000);
     }
     ok(false, 'movement applied to the ECS entity');
+});
+
+// --- Block interaction (14.1) ----------------------------------------------
+/**
+ * Find a surface column near the world spawn that has an AIR cell to its
+ * east (so both the break and place tests get deterministic targets). Returns
+ * [blockX, blockY, blockZ] of the surface block. The spawn is terrain-derived
+ * and seed-random per boot, so the search scans outward until it finds one.
+ * @return array{0: int, 1: int, 2: int}
+ */
+function findSurfaceBlockNearSpawn(\pocketmine\Kernel $kernel): array {
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+    $sea = \pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter::SEA_LEVEL;
+    $water = \pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter::WATER_BLOCK;
+    $config = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
+    $cx = $config instanceof \pocketmine\core\resource\ServerConfig ? $config->spawnX : 0;
+    $cz = $config instanceof \pocketmine\core\resource\ServerConfig ? $config->spawnZ : 0;
+    for ($r = 0; $r <= 32; $r += 4) {
+        for ($dz = -$r; $dz <= $r; $dz += 2) {
+            for ($dx = -$r; $dx <= $r; $dx += 2) {
+                $x = $cx + $dx;
+                $z = $cz + $dz;
+                if ($store === null) {
+                    continue;
+                }
+                $top = $store->getHighestBlockAt($x, $z);
+                if ($top < $sea || $store->getBlock($x, $top, $z) === $water) {
+                    continue; // underwater column
+                }
+                // The east neighbor must be air at the same height: the
+                // placement test targets it (clicking the surface's east face).
+                if ($store->getBlock($x + 1, $top, $z) === 0) {
+                    return [$x, $top, $z];
+                }
+            }
+        }
+    }
+    return [$cx, $sea + 1, $cz];
+}
+
+/**
+ * Teleport Alice to stand on top of a surface block and wait for it to land.
+ * Throws on timeout so a stuck teleport fails the test with a clear cause
+ * instead of silently continuing with Alice somewhere else.
+ */
+function teleportAliceOnto(\pocketmine\Kernel $kernel, FakeClient $client, int $x, int $y, int $z): void {
+    $move = new MovePlayerPacket();
+    $move->eid = 0;
+    $move->x = $x + 0.5;
+    $move->y = $y + 1;
+    $move->z = $z + 0.5;
+    $move->yaw = 0.0;
+    $move->bodyYaw = 0.0;
+    $move->pitch = 0.0;
+    $move->mode = MovePlayerPacket::MODE_NORMAL;
+    $move->onGround = true;
+    $client->sendGamePacket($move);
+
+    $deadline = microtime(true) + 3.0;
+    while (microtime(true) < $deadline) {
+        $kernel->run(1);
+        $online = $kernel->getNetworkSessionService()->getOnlinePlayers();
+        if (isset($online[0]) && abs($online[0]['x'] - ($x + 0.5)) < 1e-6) {
+            return;
+        }
+        usleep(10000);
+    }
+    throw new RuntimeException('teleport to (' . $x . ', ' . $y . ', ' . $z . ') did not land');
+}
+
+test('held item change (MobEquipment) updates the ECS held slot', function () use ($client, $kernel): void {
+    // Alice selects hotbar slot 1 (cobblestone from the starter kit).
+    $me = new MobEquipmentPacket();
+    $me->eid = 0;
+    $me->item = [4, 32, 0, null];
+    $me->slot = 1;
+    $me->selectedSlot = 1;
+    $client->sendGamePacket($me);
+
+    $deadline = microtime(true) + 3.0;
+    while (microtime(true) < $deadline) {
+        $kernel->run(1);
+        $online = $kernel->getNetworkSessionService()->getOnlinePlayers();
+        if (isset($online[0])) {
+            $entity = $kernel->getWorld()->getEntity($online[0]['entityId']);
+            $inv = $entity?->get(\pocketmine\core\component\InventoryComponent::class);
+            if ($inv !== null && $inv->heldSlot === 1) {
+                same(1, $inv->heldSlot, 'held slot updated to 1');
+                return;
+            }
+        }
+        usleep(10000);
+    }
+    ok(false, 'held slot updated to 1');
+});
+
+test('breaking a block updates the world and broadcasts UpdateBlockPacket', function () use ($client, $kernel): void {
+    [$bx, $by, $bz] = findSurfaceBlockNearSpawn($kernel);
+    teleportAliceOnto($kernel, $client, $bx, $by, $bz);
+
+    // Break the surface block under Alice's feet (ACTION_START_BREAK).
+    $action = new PlayerActionPacket();
+    $action->eid = 0;
+    $action->action = PlayerActionPacket::ACTION_START_BREAK;
+    $action->x = $bx;
+    $action->y = $by;
+    $action->z = $bz;
+    $action->face = 1;
+    $client->sendGamePacket($action);
+
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+
+    $deadline = microtime(true) + 3.0;
+    $sawUpdate = false;
+    while (microtime(true) < $deadline && (!$sawUpdate || ($store !== null && $store->getBlock($bx, $by, $bz) !== 0))) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::UPDATE_BLOCK_PACKET) {
+                $ub = ubFields($buffer);
+                if ($ub['x'] === $bx && $ub['y'] === $by && $ub['z'] === $bz && $ub['blockId'] === 0) {
+                    $sawUpdate = true;
+                }
+            }
+        }
+        usleep(10000);
+    }
+    ok($store !== null && $store->getBlock($bx, $by, $bz) === 0, 'broken block is air in the world');
+    ok($sawUpdate, 'UpdateBlockPacket broadcast for the broken block');
+});
+
+test('placing a block consumes inventory and broadcasts UpdateBlockPacket', function () use ($client, $kernel): void {
+    // Ensure Alice holds planks (hotbar slot 0 of the starter kit).
+    $me = new MobEquipmentPacket();
+    $me->eid = 0;
+    $me->item = [5, 32, 0, null];
+    $me->slot = 0;
+    $me->selectedSlot = 0;
+    $client->sendGamePacket($me);
+    $kernel->run(1);
+
+    [$bx, $by, $bz] = findSurfaceBlockNearSpawn($kernel);
+    teleportAliceOnto($kernel, $client, $bx, $by, $bz);
+
+    // Place planks into the air cell east of the surface block: click the
+    // surface block's east face (5).
+    $use = new UseItemPacket();
+    $use->x = $bx;
+    $use->y = $by;
+    $use->z = $bz;
+    $use->face = 5; // east
+    $use->fx = 0.0;
+    $use->fy = 0.0;
+    $use->fz = 0.0;
+    $use->posX = $bx + 0.5;
+    $use->posY = $by + 1.0;
+    $use->posZ = $bz + 0.5;
+    $use->slot = 0;
+    $use->item = [5, 32, 0, null];
+    $client->sendGamePacket($use);
+
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+
+    $deadline = microtime(true) + 3.0;
+    $sawUpdate = false;
+    $sawSlot = false;
+    while (microtime(true) < $deadline && (!$sawUpdate || !$sawSlot || ($store !== null && $store->getBlock($bx + 1, $by, $bz) !== 5))) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::UPDATE_BLOCK_PACKET) {
+                $ub = ubFields($buffer);
+                if ($ub['x'] === $bx + 1 && $ub['y'] === $by && $ub['z'] === $bz && $ub['blockId'] === 5) {
+                    $sawUpdate = true;
+                }
+            }
+            if ($id === Info::CONTAINER_SET_SLOT_PACKET) {
+                $css = cssFields($buffer);
+                if ($css['slot'] === 0 && $css['item'][0] === 5 && $css['item'][1] === 31) {
+                    $sawSlot = true; // one plank consumed
+                }
+            }
+        }
+        usleep(10000);
+    }
+    ok($store !== null && $store->getBlock($bx + 1, $by, $bz) === 5, 'placed block is planks in the world');
+    ok($sawUpdate, 'UpdateBlockPacket broadcast for the placed block');
+    ok($sawSlot, 'inventory slot synced back with 31 planks (one consumed)');
 });
 
 // --- Chat ------------------------------------------------------------------

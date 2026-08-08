@@ -6,6 +6,7 @@ namespace pocketmine\core\service;
 
 use pocketmine\adapter\driven\network\Protocol84NetworkAdapter;
 use pocketmine\core\component\HealthComponent;
+use pocketmine\core\component\InventoryComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\RotationComponent;
 use pocketmine\core\ecs\EntityRef;
@@ -18,12 +19,16 @@ use pocketmine\protocol\AdventureSettingsPacket;
 use pocketmine\protocol\BatchPacket;
 use pocketmine\protocol\ChunkRadiusUpdatedPacket;
 use pocketmine\protocol\ChunkSerializer;
+use pocketmine\protocol\ContainerSetContentPacket;
+use pocketmine\protocol\ContainerSetSlotPacket;
 use pocketmine\protocol\DataPacket;
 use pocketmine\protocol\FullChunkDataPacket;
 use pocketmine\protocol\Info;
 use pocketmine\protocol\LoginPacket;
+use pocketmine\protocol\MobEquipmentPacket;
 use pocketmine\protocol\MovePlayerPacket;
 use pocketmine\protocol\PlayStatusPacket;
+use pocketmine\protocol\PlayerActionPacket;
 use pocketmine\protocol\PlayerListPacket;
 use pocketmine\protocol\RequestChunkRadiusPacket;
 use pocketmine\protocol\SetDifficultyPacket;
@@ -32,6 +37,8 @@ use pocketmine\protocol\SetSpawnPositionPacket;
 use pocketmine\protocol\SetTimePacket;
 use pocketmine\protocol\StartGamePacket;
 use pocketmine\protocol\TextPacket;
+use pocketmine\protocol\UpdateBlockPacket;
+use pocketmine\protocol\UseItemPacket;
 use pocketmine\utils\Binary;
 use pocketmine\utils\UUID;
 use function count;
@@ -71,7 +78,22 @@ final class NetworkSessionService {
     private readonly PlayerJoinService $playerJoinService;
     private readonly PlayerLeaveService $playerLeaveService;
     private readonly ChunkLoadService $chunkLoadService;
+    private readonly BlockBreakService $blockBreakService;
+    private readonly BlockPlaceService $blockPlaceService;
     private readonly ResourceRegistry $resourceRegistry;
+
+    /**
+     * MCPE block-face -> placement offset: the block a player places when
+     * clicking face N of a block is the neighbor in this direction.
+     */
+    private const FACE_OFFSETS = [
+        0 => [0, -1, 0], // down
+        1 => [0, 1, 0],  // up
+        2 => [0, 0, -1], // north
+        3 => [0, 0, 1],  // south
+        4 => [-1, 0, 0], // west
+        5 => [1, 0, 0],  // east
+    ];
     /** Trace game-layer packet handling while KHRONOS_WIRE_TRACE=1. */
     private bool $wireTrace = false;
 
@@ -98,6 +120,8 @@ final class NetworkSessionService {
         PlayerJoinService $playerJoinService,
         PlayerLeaveService $playerLeaveService,
         ChunkLoadService $chunkLoadService,
+        BlockBreakService $blockBreakService,
+        BlockPlaceService $blockPlaceService,
         ResourceRegistry $resourceRegistry,
     ) {
         $this->adapter = $networkPort instanceof Protocol84NetworkAdapter ? $networkPort : null;
@@ -105,6 +129,8 @@ final class NetworkSessionService {
         $this->playerJoinService = $playerJoinService;
         $this->playerLeaveService = $playerLeaveService;
         $this->chunkLoadService = $chunkLoadService;
+        $this->blockBreakService = $blockBreakService;
+        $this->blockPlaceService = $blockPlaceService;
         $this->resourceRegistry = $resourceRegistry;
         $this->wireTrace = getenv('KHRONOS_WIRE_TRACE') === '1';
     }
@@ -253,6 +279,24 @@ final class NetworkSessionService {
                 $pk->decode();
                 $this->handleChat($addrKey, $pk);
                 break;
+            case Info::PLAYER_ACTION_PACKET:
+                $pk = new PlayerActionPacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handlePlayerAction($addrKey, $pk);
+                break;
+            case Info::USE_ITEM_PACKET:
+                $pk = new UseItemPacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handleUseItem($addrKey, $pk);
+                break;
+            case Info::MOB_EQUIPMENT_PACKET:
+                $pk = new MobEquipmentPacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handleMobEquipment($addrKey, $pk);
+                break;
         }
     }
 
@@ -361,6 +405,161 @@ final class NetworkSessionService {
         }
     }
 
+    /**
+     * Block interaction (14.1): ACTION_START_BREAK breaks the clicked block
+     * through BlockBreakService and broadcasts the new (air) state to every
+     * session so clients render the change. Other actions (sprint, sneak,
+     * jump...) carry no world effect yet and are ignored.
+     */
+    private function handlePlayerAction(string $addrKey, PlayerActionPacket $pk): void {
+        if ($pk->action !== PlayerActionPacket::ACTION_START_BREAK) {
+            return;
+        }
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        if ($this->blockBreakService->breakBlock($session['entityRef'], $pk->x, $pk->y, $pk->z, $pk->face)) {
+            $this->broadcastBlockState($pk->x, $pk->y, $pk->z);
+        }
+    }
+
+    /**
+     * Block interaction (14.1): USE_ITEM places the held block into the cell
+     * adjacent to the clicked face (BlockPlaceService validates reach + the
+     * player actually holds that block). On success the new block state is
+     * broadcast and the consumed stack is reflected back to the actor's
+     * inventory window so the client's hotbar count stays correct.
+     */
+    private function handleUseItem(string $addrKey, UseItemPacket $pk): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $entity = $session['entityRef']->getEntity();
+        $inventory = $entity?->get(InventoryComponent::class);
+        if ($inventory === null) {
+            return;
+        }
+        $held = $inventory->get($inventory->heldSlot);
+        if ($held === null || $held->count <= 0) {
+            return;
+        }
+        $blockId = $held->itemId;
+        // Item ids 1..255 are placeable blocks in the protocol-84 era; item
+        // ids above that (tools, food...) are not placeable.
+        if ($blockId <= 0 || $blockId > 255) {
+            return;
+        }
+        [$dx, $dy, $dz] = self::FACE_OFFSETS[$pk->face] ?? self::FACE_OFFSETS[1];
+        $targetX = $pk->x + $dx;
+        $targetY = $pk->y + $dy;
+        $targetZ = $pk->z + $dz;
+        if ($this->blockPlaceService->placeBlock($session['entityRef'], $targetX, $targetY, $targetZ, $pk->face, $blockId, $held->meta)) {
+            // Broadcast the AUTHORITATIVE state: placeBlock may resolve a
+            // different meta internally (e.g. slab top/bottom from the face),
+            // so the client must see exactly what the world now holds.
+            $this->broadcastBlockState($targetX, $targetY, $targetZ);
+            $this->sendInventorySlot($session['playerRef'], $inventory->heldSlot);
+        }
+    }
+
+    /**
+     * Held-item change: the client selected a different hotbar slot. Update
+     * the ECS held slot (validated against the inventory size) and broadcast
+     * the new held item to the OTHER players so their view of this player's
+     * hands stays in sync.
+     */
+    private function handleMobEquipment(string $addrKey, MobEquipmentPacket $pk): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $entity = $session['entityRef']->getEntity();
+        $inventory = $entity?->get(InventoryComponent::class);
+        if ($inventory === null || !$inventory->setHeldSlot($pk->selectedSlot)) {
+            return;
+        }
+        $held = $inventory->get($inventory->heldSlot);
+        foreach ($this->sessions as $otherKey => $s) {
+            if ($otherKey === $addrKey) {
+                continue; // the actor already knows their selection
+            }
+            $echo = new MobEquipmentPacket();
+            $echo->eid = $session['playerRef']->entityId;
+            $echo->item = $held !== null ? [$held->itemId, $held->count, $held->meta, $held->nbt] : [0, 0, 0, null];
+            $echo->slot = $pk->selectedSlot;
+            $echo->selectedSlot = $pk->selectedSlot;
+            $this->queuePacket($s['playerRef'], $echo);
+        }
+    }
+
+    /**
+     * Broadcast the authoritative block state at a position to every session.
+     * Reads the state from the ChunkStore so whatever the services actually
+     * set (including placement-meta resolution) is what the client receives.
+     */
+    private function broadcastBlockState(int $x, int $y, int $z): void {
+        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+        if (!$store instanceof \pocketmine\core\resource\ChunkStore) {
+            return;
+        }
+        $pk = new UpdateBlockPacket();
+        $pk->x = $x;
+        $pk->y = $y;
+        $pk->z = $z;
+        $pk->blockId = $store->getBlock($x, $y, $z);
+        $pk->blockData = $store->getBlockMeta($x, $y, $z);
+        $pk->flags = UpdateBlockPacket::FLAG_ALL_PRIORITY;
+        foreach ($this->sessions as $s) {
+            $this->queuePacket($s['playerRef'], clone $pk);
+        }
+    }
+
+    /** Send one inventory slot (window 0 = the player's own inventory). */
+    private function sendInventorySlot(PlayerRef $player, int $slot): void {
+        $addrKey = $this->addrKeyForPlayer($player);
+        $session = $addrKey !== null ? ($this->sessions[$addrKey] ?? null) : null;
+        if ($session === null) {
+            return;
+        }
+        $inventory = $session['entityRef']->getEntity()?->get(InventoryComponent::class);
+        if ($inventory === null) {
+            return;
+        }
+        $item = $inventory->get($slot);
+        $pk = new ContainerSetSlotPacket();
+        $pk->windowid = ContainerSetContentPacket::SPECIAL_INVENTORY;
+        $pk->slot = $slot;
+        // For the player's own window the hotbar mapping is the identity for
+        // hotbar slots 0-8 (all current callers use held hotbar slots); main
+        // inventory slots (9+) would need the real hotbar mapping.
+        $pk->hotbarSlot = $slot;
+        $pk->item = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
+        $this->queuePacket($player, $pk);
+    }
+
+    /** Send the full inventory contents (window 0) to the player. */
+    private function sendInventoryContents(PlayerRef $player): void {
+        $addrKey = $this->addrKeyForPlayer($player);
+        $session = $addrKey !== null ? ($this->sessions[$addrKey] ?? null) : null;
+        if ($session === null) {
+            return;
+        }
+        $inventory = $session['entityRef']->getEntity()?->get(InventoryComponent::class);
+        if ($inventory === null) {
+            return;
+        }
+        $pk = new ContainerSetContentPacket();
+        $pk->windowid = ContainerSetContentPacket::SPECIAL_INVENTORY;
+        $pk->slots = [];
+        for ($i = 0; $i < $inventory->size; $i++) {
+            $item = $inventory->get($i);
+            $pk->slots[] = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
+        }
+        $this->queuePacket($player, $pk);
+    }
+
     // --- Outbound ----------------------------------------------------------
 
     private function sendLoginBurst(string $addrKey): void {
@@ -418,6 +617,10 @@ final class NetworkSessionService {
         $settings->userPermission = 2;
         $settings->globalPermission = 2;
         $this->queuePacket($playerRef, $settings);
+
+        // Full inventory contents (window 0) so the client renders the
+        // hotbar with the player's actual items (starter kit for new players).
+        $this->sendInventoryContents($playerRef);
     }
 
     private function broadcastPlayerListAdd(UUID $uuid, int $entityId, string $username, string $skin): void {
