@@ -151,7 +151,135 @@ final class BlockRegistry {
         129 => ['name' => 'Emerald Ore', 'hardness' => 3.0, 'resistance' => 15.0, 'tool' => 'pickaxe', 'toolLevel' => 2, 'xp' => 4],
         133 => ['name' => 'Emerald Block', 'hardness' => 5.0, 'resistance' => 30.0, 'tool' => 'pickaxe'],
         137 => ['name' => 'Command Block', 'hardness' => -1.0, 'resistance' => 3600000.0],
+        36 => ['name' => 'Piston Arm', 'hardness' => 0.5, 'resistance' => 3.0, 'solid' => false, 'transparent' => true, 'silkTouch' => false],
+        96 => ['name' => 'Trapdoor', 'hardness' => 3.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe', 'solid' => false, 'transparent' => true],
+        99 => ['name' => 'Huge Brown Mushroom', 'hardness' => 0.2, 'resistance' => 1.0],
+        100 => ['name' => 'Huge Red Mushroom', 'hardness' => 0.2, 'resistance' => 1.0],
+        101 => ['name' => 'Iron Bars', 'hardness' => 5.0, 'resistance' => 30.0, 'opacity' => 0, 'transparent' => true, 'tool' => 'pickaxe'],
+        102 => ['name' => 'Glass Pane', 'hardness' => 0.3, 'resistance' => 1.5, 'opacity' => 0, 'transparent' => true, 'silkTouch' => true],
+        104 => ['name' => 'Pumpkin Stem', 'hardness' => 0.0, 'resistance' => 0.0, 'opacity' => 0, 'solid' => false, 'transparent' => true, 'replaceable' => true, 'silkTouch' => false],
+        105 => ['name' => 'Melon Stem', 'hardness' => 0.0, 'resistance' => 0.0, 'opacity' => 0, 'solid' => false, 'transparent' => true, 'replaceable' => true, 'silkTouch' => false],
+        109 => ['name' => 'Stone Brick Stairs', 'hardness' => 1.5, 'resistance' => 30.0, 'opacity' => 0, 'tool' => 'pickaxe'],
+        115 => ['name' => 'Nether Wart', 'hardness' => 0.0, 'resistance' => 0.0, 'opacity' => 0, 'solid' => false, 'transparent' => true, 'replaceable' => true, 'silkTouch' => false],
+        117 => ['name' => 'Brewing Stand', 'hardness' => 0.5, 'resistance' => 2.5, 'opacity' => 0, 'solid' => false, 'transparent' => true],
+        118 => ['name' => 'Cauldron', 'hardness' => 2.0, 'resistance' => 10.0, 'solid' => false, 'transparent' => true],
+        119 => ['name' => 'End Portal', 'hardness' => -1.0, 'resistance' => 3600000.0, 'opacity' => 0, 'light' => 15, 'solid' => false, 'transparent' => true, 'replaceable' => true, 'silkTouch' => false],
+        122 => ['name' => 'Dragon Egg', 'hardness' => -1.0, 'resistance' => 3600000.0, 'opacity' => 0, 'light' => 1, 'transparent' => true, 'silkTouch' => false],
+        123 => ['name' => 'Redstone Lamp', 'hardness' => 0.3, 'resistance' => 1.5],
+        124 => ['name' => 'Redstone Lamp', 'hardness' => 0.3, 'resistance' => 1.5, 'light' => 15],
+        125 => ['name' => 'Double Wooden Slab', 'hardness' => 2.0, 'resistance' => 15.0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
+        126 => ['name' => 'Wooden Slab', 'hardness' => 2.0, 'resistance' => 15.0, 'opacity' => 0, 'transparent' => true, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
+        127 => ['name' => 'Cocoa', 'hardness' => 0.2, 'resistance' => 1.0, 'opacity' => 0, 'solid' => false, 'transparent' => true, 'silkTouch' => false],
+        128 => ['name' => 'Sandstone Stairs', 'hardness' => 0.8, 'resistance' => 4.0, 'opacity' => 0, 'tool' => 'pickaxe'],
+        130 => ['name' => 'Ender Chest', 'hardness' => 22.5, 'resistance' => 6000.0, 'opacity' => 0, 'transparent' => true, 'tool' => 'pickaxe'],
+        131 => ['name' => 'Tripwire Hook', 'hardness' => 0.0, 'resistance' => 0.0, 'opacity' => 0, 'solid' => false, 'transparent' => true, 'replaceable' => true, 'silkTouch' => false],
+        132 => ['name' => 'Tripwire', 'hardness' => 0.0, 'resistance' => 0.0, 'opacity' => 0, 'solid' => false, 'transparent' => true, 'replaceable' => true, 'silkTouch' => false],
+        134 => ['name' => 'Spruce Wood Stairs', 'hardness' => 2.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
+        135 => ['name' => 'Birch Wood Stairs', 'hardness' => 2.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
+        136 => ['name' => 'Jungle Wood Stairs', 'hardness' => 2.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
+        138 => ['name' => 'Beacon', 'hardness' => 3.0, 'resistance' => 15.0, 'opacity' => 0, 'light' => 15, 'transparent' => true],
+        139 => ['name' => 'Cobblestone Wall', 'hardness' => 2.0, 'resistance' => 30.0, 'opacity' => 0, 'tool' => 'pickaxe'],
+        140 => ['name' => 'Flower Pot', 'hardness' => 0.0, 'resistance' => 0.0, 'solid' => false, 'transparent' => true, 'replaceable' => true, 'silkTouch' => false],
+        141 => ['name' => 'Carrots', 'hardness' => 0.0, 'resistance' => 0.0, 'opacity' => 0, 'solid' => false, 'transparent' => true, 'replaceable' => true, 'silkTouch' => false],
+        142 => ['name' => 'Potatoes', 'hardness' => 0.0, 'resistance' => 0.0, 'opacity' => 0, 'solid' => false, 'transparent' => true, 'replaceable' => true, 'silkTouch' => false],
+        143 => ['name' => 'Wooden Button', 'hardness' => 0.5, 'resistance' => 2.5, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'solid' => false, 'transparent' => true, 'replaceable' => true],
+        144 => ['name' => 'Skull', 'hardness' => 1.0, 'resistance' => 5.0, 'solid' => false, 'transparent' => true],
+        145 => ['name' => 'Anvil', 'hardness' => 5.0, 'resistance' => 6000.0, 'tool' => 'pickaxe'],
+        146 => ['name' => 'Trapped Chest', 'hardness' => 2.5, 'resistance' => 12.5, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
+        147 => ['name' => 'Light Weighted Pressure Plate', 'hardness' => 0.5, 'resistance' => 2.5, 'solid' => false, 'transparent' => true, 'replaceable' => true],
+        148 => ['name' => 'Heavy Weighted Pressure Plate', 'hardness' => 0.5, 'resistance' => 2.5, 'solid' => false, 'transparent' => true, 'replaceable' => true],
+        149 => ['name' => 'Redstone Comparator', 'hardness' => 0.0, 'resistance' => 0.0, 'opacity' => 0, 'solid' => false, 'transparent' => true, 'replaceable' => true, 'silkTouch' => false],
+        150 => ['name' => 'Redstone Comparator', 'hardness' => 0.0, 'resistance' => 0.0, 'opacity' => 0, 'light' => 9, 'solid' => false, 'transparent' => true, 'replaceable' => true, 'silkTouch' => false],
+        151 => ['name' => 'Daylight Sensor', 'hardness' => 0.2, 'resistance' => 1.0, 'opacity' => 0, 'solid' => false, 'transparent' => true],
+        152 => ['name' => 'Redstone Block', 'hardness' => 5.0, 'resistance' => 30.0, 'tool' => 'pickaxe'],
+        153 => ['name' => 'Quartz Ore', 'hardness' => 3.0, 'resistance' => 15.0, 'tool' => 'pickaxe', 'xp' => 2],
+        154 => ['name' => 'Hopper', 'hardness' => 3.0, 'resistance' => 24.0, 'tool' => 'pickaxe'],
+        155 => ['name' => 'Quartz Block', 'hardness' => 0.8, 'resistance' => 4.0, 'tool' => 'pickaxe'],
+        156 => ['name' => 'Quartz Stairs', 'hardness' => 0.8, 'resistance' => 4.0, 'opacity' => 0, 'tool' => 'pickaxe'],
+        157 => ['name' => 'Activator Rail', 'hardness' => 0.7, 'resistance' => 3.0, 'solid' => false, 'transparent' => true, 'replaceable' => true, 'silkTouch' => false],
+        158 => ['name' => 'Dropper', 'hardness' => 3.5, 'resistance' => 30.0, 'tool' => 'pickaxe'],
+        159 => ['name' => 'Stained Clay', 'hardness' => 1.25, 'resistance' => 21.0],
+        160 => ['name' => 'Stained Glass Pane', 'hardness' => 0.3, 'resistance' => 1.5, 'opacity' => 0, 'transparent' => true, 'silkTouch' => true],
+        161 => ['name' => 'Leaves', 'hardness' => 0.2, 'resistance' => 1.0, 'opacity' => 1, 'flammable' => true, 'flamability' => 30, 'burnTime' => 5, 'tool' => 'shears', 'silkTouch' => true],
+        162 => ['name' => 'Log', 'hardness' => 2.0, 'resistance' => 15.0, 'flammable' => true, 'flamability' => 5, 'burnTime' => 5, 'tool' => 'axe'],
+        163 => ['name' => 'Acacia Wood Stairs', 'hardness' => 2.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
+        164 => ['name' => 'Dark Oak Wood Stairs', 'hardness' => 2.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
+        165 => ['name' => 'Slime Block', 'hardness' => 0.0, 'resistance' => 0.0],
+        166 => ['name' => 'Barrier', 'hardness' => -1.0, 'resistance' => 3600000.0, 'opacity' => 0, 'transparent' => true, 'silkTouch' => false],
+        167 => ['name' => 'Iron Trapdoor', 'hardness' => 5.0, 'resistance' => 30.0, 'opacity' => 0, 'tool' => 'pickaxe', 'solid' => false, 'transparent' => true],
+        168 => ['name' => 'Prismarine', 'hardness' => 1.5, 'resistance' => 30.0, 'tool' => 'pickaxe'],
+        169 => ['name' => 'Sea Lantern', 'hardness' => 0.3, 'resistance' => 1.5, 'opacity' => 0, 'light' => 15, 'transparent' => true],
+        170 => ['name' => 'Hay Bale', 'hardness' => 0.5, 'resistance' => 2.5, 'flammable' => true, 'flamability' => 60, 'burnTime' => 5],
+        171 => ['name' => 'Carpet', 'hardness' => 0.1, 'resistance' => 0.5, 'opacity' => 0, 'flammable' => true, 'flamability' => 60, 'burnTime' => 5, 'solid' => false, 'transparent' => true, 'replaceable' => true],
+        172 => ['name' => 'Hardened Clay', 'hardness' => 1.25, 'resistance' => 21.0],
+        173 => ['name' => 'Coal Block', 'hardness' => 5.0, 'resistance' => 30.0, 'tool' => 'pickaxe'],
+        174 => ['name' => 'Packed Ice', 'hardness' => 0.5, 'resistance' => 2.5, 'opacity' => 3, 'transparent' => true, 'silkTouch' => true],
+        175 => ['name' => 'Double Plant', 'hardness' => 0.0, 'resistance' => 0.0, 'opacity' => 0, 'solid' => false, 'transparent' => true, 'replaceable' => true, 'silkTouch' => false],
+        178 => ['name' => 'Inverted Daylight Sensor', 'hardness' => 0.2, 'resistance' => 1.0, 'opacity' => 0, 'solid' => false, 'transparent' => true],
+        179 => ['name' => 'Red Sandstone', 'hardness' => 0.8, 'resistance' => 4.0, 'tool' => 'pickaxe'],
+        180 => ['name' => 'Red Sandstone Stairs', 'hardness' => 0.8, 'resistance' => 4.0, 'opacity' => 0, 'tool' => 'pickaxe'],
+        181 => ['name' => 'Double Red Sandstone Slab', 'hardness' => 2.0, 'resistance' => 30.0, 'tool' => 'pickaxe'],
+        182 => ['name' => 'Red Sandstone Slab', 'hardness' => 2.0, 'resistance' => 30.0, 'opacity' => 0, 'transparent' => true, 'tool' => 'pickaxe'],
+        183 => ['name' => 'Spruce Fence Gate', 'hardness' => 2.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'solid' => false, 'transparent' => true, 'tool' => 'axe'],
+        184 => ['name' => 'Birch Fence Gate', 'hardness' => 2.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'solid' => false, 'transparent' => true, 'tool' => 'axe'],
+        185 => ['name' => 'Jungle Fence Gate', 'hardness' => 2.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'solid' => false, 'transparent' => true, 'tool' => 'axe'],
+        186 => ['name' => 'Dark Oak Fence Gate', 'hardness' => 2.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'solid' => false, 'transparent' => true, 'tool' => 'axe'],
+        187 => ['name' => 'Acacia Fence Gate', 'hardness' => 2.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'solid' => false, 'transparent' => true, 'tool' => 'axe'],
+        193 => ['name' => 'Spruce Door', 'hardness' => 3.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
+        194 => ['name' => 'Birch Door', 'hardness' => 3.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
+        195 => ['name' => 'Jungle Door', 'hardness' => 3.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
+        196 => ['name' => 'Acacia Door', 'hardness' => 3.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
+        197 => ['name' => 'Dark Oak Door', 'hardness' => 3.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
     ];
+
+    /**
+     * Block-state metadata (protocol 84): how a block's meta encodes its
+     * visual/placement state.
+     *
+     * - slab/double_slab: meta & 0x7 = material variant, 0x8 = top half
+     * - stairs: meta & 0x3 = facing (0 south, 1 west, 2 north, 3 east),
+     *   0x4 = corner shape, 0x8 = upside-down
+     * - door: meta & 0x3 = facing, 0x4 = open, 0x8 = top half
+     */
+    private const STATES = [
+        43 => ['kind' => 'double_slab', 'variants' => [0 => 'Stone', 1 => 'Sandstone', 2 => 'Wooden', 3 => 'Cobblestone', 4 => 'Brick', 5 => 'Stone Brick', 6 => 'Quartz', 7 => 'Nether Brick']],
+        44 => ['kind' => 'slab', 'variants' => [0 => 'Stone', 1 => 'Sandstone', 2 => 'Wooden', 3 => 'Cobblestone', 4 => 'Brick', 5 => 'Stone Brick', 6 => 'Quartz', 7 => 'Nether Brick']],
+        125 => ['kind' => 'double_slab', 'variants' => [0 => 'Oak Wood', 1 => 'Spruce Wood', 2 => 'Birch Wood', 3 => 'Jungle Wood', 4 => 'Acacia Wood', 5 => 'Dark Oak Wood']],
+        126 => ['kind' => 'slab', 'variants' => [0 => 'Oak Wood', 1 => 'Spruce Wood', 2 => 'Birch Wood', 3 => 'Jungle Wood', 4 => 'Acacia Wood', 5 => 'Dark Oak Wood']],
+        181 => ['kind' => 'double_slab', 'variants' => [0 => 'Red Sandstone']],
+        182 => ['kind' => 'slab', 'variants' => [0 => 'Red Sandstone']],
+        53 => ['kind' => 'stairs'],
+        67 => ['kind' => 'stairs'],
+        108 => ['kind' => 'stairs'],
+        109 => ['kind' => 'stairs'],
+        114 => ['kind' => 'stairs'],
+        128 => ['kind' => 'stairs'],
+        134 => ['kind' => 'stairs'],
+        135 => ['kind' => 'stairs'],
+        136 => ['kind' => 'stairs'],
+        156 => ['kind' => 'stairs'],
+        163 => ['kind' => 'stairs'],
+        164 => ['kind' => 'stairs'],
+        180 => ['kind' => 'stairs'],
+        64 => ['kind' => 'door'],
+        71 => ['kind' => 'door'],
+        193 => ['kind' => 'door'],
+        194 => ['kind' => 'door'],
+        195 => ['kind' => 'door'],
+        196 => ['kind' => 'door'],
+        197 => ['kind' => 'door'],
+    ];
+
+    public function has(int $id): bool {
+        return isset(self::BLOCKS[$id]);
+    }
+
+    /**
+     * @return array<int> all explicitly registered block ids.
+     */
+    public function getIds(): array {
+        return array_keys(self::BLOCKS);
+    }
 
     public function get(int $id): array {
         return array_merge(self::DEFAULTS, self::BLOCKS[$id] ?? []);
@@ -218,6 +346,120 @@ final class BlockRegistry {
     }
 
     /**
+     * Block-state metadata accessors (slab/stairs/doors).
+     */
+
+    /**
+     * The block's state kind: 'slab' | 'double_slab' | 'stairs' | 'door', or
+     * null for plain blocks whose meta carries no state.
+     */
+    public function getStateKind(int $id): ?string {
+        return self::STATES[$id]['kind'] ?? null;
+    }
+
+    /**
+     * @return array<int, string> meta => material/variant name for the block's
+     *                             variants (empty for plain stairs/doors).
+     */
+    public function getStateVariants(int $id): array {
+        return self::STATES[$id]['variants'] ?? [];
+    }
+
+    /**
+     * Display name for a block at a given meta, including its state variant
+     * (e.g. slab meta 1 -> "Sandstone Slab"). Falls back to the plain name.
+     */
+    public function getStateName(int $id, int $meta): string {
+        $state = self::STATES[$id] ?? null;
+        if ($state === null) {
+            return $this->getName($id);
+        }
+        $variant = $state['variants'][$meta & 0x7] ?? null;
+        if ($variant === null) {
+            return $this->getName($id);
+        }
+        return match ($state['kind']) {
+            'slab' => $variant . ' Slab',
+            'double_slab' => $variant . ' Double Slab',
+            default => $this->getName($id),
+        };
+    }
+
+    /**
+     * The slab's material variant name (meta & 0x7), or null if the block is
+     * not a slab.
+     */
+    public function getSlabMaterial(int $id, int $meta): ?string {
+        $state = self::STATES[$id] ?? null;
+        if ($state === null || ($state['kind'] !== 'slab' && $state['kind'] !== 'double_slab')) {
+            return null;
+        }
+        return $state['variants'][$meta & 0x7] ?? null;
+    }
+
+    /**
+     * Whether a slab is placed in the top half of its block space (meta bit 3).
+     */
+    public function isSlabTop(int $id, int $meta): ?bool {
+        $kind = $this->getStateKind($id);
+        if ($kind !== 'slab') {
+            return null;
+        }
+        return ($meta & 0x8) !== 0;
+    }
+
+    /**
+     * Stair facing from meta bits 0-1 (0 south, 1 west, 2 north, 3 east), or
+     * null if the block is not stairs.
+     */
+    public function getStairFacing(int $id, int $meta): ?int {
+        return $this->getStateKind($id) === 'stairs' ? $meta & 0x3 : null;
+    }
+
+    /**
+     * Whether stairs are upside-down (meta bit 3), or null if not stairs.
+     */
+    public function isStairUpsideDown(int $id, int $meta): ?bool {
+        if ($this->getStateKind($id) !== 'stairs') {
+            return null;
+        }
+        return ($meta & 0x8) !== 0;
+    }
+
+    /**
+     * Whether a door is open (meta bit 2), or null if not a door.
+     */
+    public function isDoorOpen(int $id, int $meta): ?bool {
+        if ($this->getStateKind($id) !== 'door') {
+            return null;
+        }
+        return ($meta & 0x4) !== 0;
+    }
+
+    /**
+     * Whether a door block is the top half (meta bit 3), or null if not a door.
+     */
+    public function isDoorTopHalf(int $id, int $meta): ?bool {
+        if ($this->getStateKind($id) !== 'door') {
+            return null;
+        }
+        return ($meta & 0x8) !== 0;
+    }
+
+    /**
+     * Resolve the meta a placed block should carry given the face it was
+     * placed against. Slabs get their top/bottom bit from the face (clicking
+     * the top face of a block places a bottom-half slab and vice versa); all
+     * other blocks keep the requested meta unchanged.
+     */
+    public function applyPlacementMeta(int $id, int $face, int $meta): int {
+        if ($this->getStateKind($id) !== 'slab') {
+            return $meta;
+        }
+        return $face === 0 ? ($meta | 0x8) : ($meta & ~0x8);
+    }
+
+    /**
      * Whether the block is breakable at all (bedrock, liquids, fire, air are not).
      */
     public function isBreakable(int $id): bool {
@@ -257,8 +499,9 @@ final class BlockRegistry {
             $id === 129 => [['id' => 388, 'meta' => 0, 'count' => 1]],         // emerald ore -> emerald
             $id === 73 || $id === 74 => [['id' => 331, 'meta' => 0, 'count' => mt_rand(4, 5)]], // redstone ore -> redstone dust
             $id === 21 => [['id' => 351, 'meta' => 4, 'count' => mt_rand(4, 8)]], // lapis ore -> lapis lazuli
+            $id === 153 => [['id' => 406, 'meta' => 0, 'count' => 1]],         // quartz ore -> quartz
             $id === 89 => [['id' => 348, 'meta' => 0, 'count' => mt_rand(2, 4)]], // glowstone -> glowstone dust
-            $id === 20 || $id === 79 || $id === 95 => [],                     // glass/ice/stained glass: nothing without silk touch
+            $id === 20 || $id === 79 || $id === 95 || $id === 102 || $id === 160 => [], // glass/ice/stained glass/panes: nothing without silk touch
             $id === 30 => [['id' => 287, 'meta' => 0, 'count' => 1]],          // cobweb -> string
             $id === 103 => [['id' => 360, 'meta' => 0, 'count' => mt_rand(3, 7)]], // melon -> melon slices
             $id === 18 => $this->leafDrops(),                                  // leaves -> sapling/apple

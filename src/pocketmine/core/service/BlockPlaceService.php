@@ -22,6 +22,8 @@ final class BlockPlaceService {
     public function placeBlock(EntityRef $playerRef, int $x, int $y, int $z, int $face, int $blockId, int $meta = 0): bool {
         $player = $playerRef->getEntity();
         if (!$player) return false;
+
+        $registry = $this->getBlockRegistry();
         
         // Check if player can reach the position
         if (!$this->canReach($playerRef, $x, $y, $z)) {
@@ -41,8 +43,12 @@ final class BlockPlaceService {
         // Consume block from inventory
         $this->consumeBlock($playerRef, $blockId, $meta);
         
+        // Resolve state meta (slab top/bottom from the placement face); the
+        // inventory keeps the plain item meta (e.g. slab material 0-7).
+        $placedMeta = $registry->applyPlacementMeta($blockId, $face, $meta);
+        
         // Place the block
-        $this->setBlock($x, $y, $z, $blockId, $meta);
+        $this->setBlock($x, $y, $z, $blockId, $placedMeta);
         
         // Play place effects
         $this->playPlaceEffects($x, $y, $z, $blockId);

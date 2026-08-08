@@ -125,6 +125,47 @@ class Block {
         return $this->getRegistry()->getToolLevel($this->getId());
     }
 
+    // ---- Block-state metadata (slab/stairs/doors) ----
+
+    /**
+     * State kind: 'slab' | 'double_slab' | 'stairs' | 'door', or null.
+     */
+    public function getStateKind(): ?string {
+        return $this->getRegistry()->getStateKind($this->getId());
+    }
+
+    /**
+     * Display name including the current meta's state variant (e.g. a stone
+     * slab at meta 1 -> "Sandstone Slab").
+     */
+    public function getStateName(): string {
+        return $this->getRegistry()->getStateName($this->getId(), $this->getMeta());
+    }
+
+    public function getSlabMaterial(): ?string {
+        return $this->getRegistry()->getSlabMaterial($this->getId(), $this->getMeta());
+    }
+
+    public function isSlabTop(): ?bool {
+        return $this->getRegistry()->isSlabTop($this->getId(), $this->getMeta());
+    }
+
+    public function getStairFacing(): ?int {
+        return $this->getRegistry()->getStairFacing($this->getId(), $this->getMeta());
+    }
+
+    public function isStairUpsideDown(): ?bool {
+        return $this->getRegistry()->isStairUpsideDown($this->getId(), $this->getMeta());
+    }
+
+    public function isDoorOpen(): ?bool {
+        return $this->getRegistry()->isDoorOpen($this->getId(), $this->getMeta());
+    }
+
+    public function isDoorTopHalf(): ?bool {
+        return $this->getRegistry()->isDoorTopHalf($this->getId(), $this->getMeta());
+    }
+
     /**
      * @return array<int, ItemStack> item drops for this block.
      */
