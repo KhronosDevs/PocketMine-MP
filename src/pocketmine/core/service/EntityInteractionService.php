@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\core\service;
 
+use pocketmine\core\component\ItemStack;
 use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\ecs\EntityRef;
@@ -32,13 +33,19 @@ final class EntityInteractionService {
         
         if (!$targetMeta || !$playerMeta) return false;
         
+        // Dropped item entities carry the 'item' stack in metadata but no
+        // entityType - route them to pickup before the type dispatch (they
+        // used to fall through to the no-op default interaction).
+        if ($targetMeta->get('item') instanceof ItemStack) {
+            return $this->pickup($playerRef, $targetRef);
+        }
+
         $targetType = $targetMeta->get('entityType') ?? 'unknown';
         
         // Handle interaction based on target type
         return match ($targetType) {
             'Villager' => $this->interactWithVillager($playerRef, $targetRef),
             'Animal' => $this->interactWithAnimal($playerRef, $targetRef),
-            'Item' => $this->pickupItem($playerRef, $targetRef),
             default => $this->defaultInteraction($playerRef, $targetRef),
         };
     }
@@ -89,29 +96,59 @@ final class EntityInteractionService {
         return $inventory?->heldSlot ?? 0;
     }
 
-    private function pickupItem(EntityRef $playerRef, EntityRef $itemRef): bool {
+    /**
+     * Collect a dropped item entity into the player's inventory. Shared by
+     * the right-click route (interact()) and the per-tick ItemPickupSystem
+     * (walk-over): distance check, non-mutating space check, then move the
+     * stack and despawn the entity. Returns false when the stack does not
+     * fit, the entity is out of reach, or the drop is still in its pickup
+     * delay.
+     */
+    public function pickup(EntityRef $playerRef, EntityRef $itemRef): bool {
         $player = $playerRef->getEntity();
         $itemEntity = $itemRef->getEntity();
         
         if (!$player || !$itemEntity) return false;
         
-        $itemMeta = $itemEntity->get(\pocketmine\core\component\MetadataComponent::class);
+        $itemMeta = $itemEntity->get(MetadataComponent::class);
         if (!$itemMeta) return false;
         
         $itemStack = $itemMeta->get('item');
-        if (!$itemStack) return false;
+        if (!$itemStack instanceof ItemStack) return false;
+        
+        // Freshly dropped items are uncollectable for a short time (legacy
+        // pickupDelay) so a drop cannot instantly re-enter the inventory.
+        if ((int)$itemMeta->get('pickupDelay', 0) > 0) {
+            return false;
+        }
+        
+        if (!$this->canInteract($playerRef, $itemRef)) {
+            return false;
+        }
         
         $playerInventory = $player->get(\pocketmine\core\component\InventoryComponent::class);
         if (!$playerInventory) return false;
         
-        // Try to add to inventory
-        if ($playerInventory->add($itemStack)) {
-            // Remove item entity
-            $this->world->despawn($itemEntity);
-            return true;
+        // Work on a clone: InventoryComponent::add() mutates the stack it is
+        // given (count -= added), and this instance is still referenced by the
+        // item entity's metadata until its despawn flush - a late broadcast
+        // must not read a zeroed count, and a caller reusing the stack they
+        // passed to spawnItem must not see it mutated.
+        $itemStack = clone $itemStack;
+        
+        // canAddItem FIRST: InventoryComponent::add() partially stacks onto
+        // existing slots before it can fail, so a blind add() would lose the
+        // portion it already stacked when the remainder does not fit.
+        if (!$playerInventory->canAddItem($itemStack)) {
+            return false;
+        }
+        if (!$playerInventory->add($itemStack)) {
+            return false;
         }
         
-        return false;
+        // Remove item entity
+        $this->world->despawn($itemEntity);
+        return true;
     }
 
     private function defaultInteraction(EntityRef $playerRef, EntityRef $targetRef): bool {

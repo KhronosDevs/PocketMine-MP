@@ -627,7 +627,26 @@ final class NetworkSessionService {
         }
 
         if ($pk->action === InteractPacket::ACTION_RIGHT_CLICK) {
-            $this->entityInteractionService->interact($session['entityRef'], $targetRef);
+            if ($this->entityInteractionService->interact($session['entityRef'], $targetRef)) {
+                // 14.5: the picked-up stack must appear in the actor's own
+                // inventory window (the walk-over path syncs through the
+                // public syncInventoryContents hook instead).
+                $this->syncInventoryContents($selfId);
+            }
+        }
+    }
+
+    /**
+     * 14.5: reflect an inventory change to the owning client. Public because
+     * the walk-over ItemPickupSystem has no session access - it resolves the
+     * session service lazily and calls this after a successful pickup.
+     */
+    public function syncInventoryContents(int $entityId): void {
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId === $entityId) {
+                $this->sendInventoryContents($session['playerRef']);
+                return;
+            }
         }
     }
 
