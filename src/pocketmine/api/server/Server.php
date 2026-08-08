@@ -12,7 +12,6 @@ class Server {
     private static ?self $instance = null;
     
     private array $worlds = [];
-    private \pocketmine\api\command\CommandMap $commandMap;
     private World $defaultWorld;
     private string $name = 'Khronos';
     private string $version = '2.0.0';
@@ -30,9 +29,7 @@ class Server {
     private bool $allowFlight = false;
     private string $language = 'eng';
 
-    private function __construct() {
-        $this->commandMap = new \pocketmine\api\command\CommandMap();
-    }
+    private function __construct() {}
 
     public static function getInstance(): self {
         if (self::$instance === null) {
@@ -352,19 +349,44 @@ class Server {
         }
     }
 
-    public function dispatchCommand(string $command, string $sender = 'CONSOLE'): bool {
-        return $this->commandMap->execute(new \pocketmine\api\command\ConsoleCommandSender(), $command);
+    /**
+     * Dispatch a command line through the single server-wide command map.
+     * The sender may be a CommandSender, a player name (resolved to that
+     * player), or null/'CONSOLE' for the console.
+     */
+    public function dispatchCommand(string $command, \pocketmine\api\command\CommandSender|string|null $sender = null): bool {
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel === null) {
+            throw new \RuntimeException("Kernel not initialized");
+        }
+        return $kernel->getCommandPort()->execute($this->resolveSender($sender), $command);
+    }
+
+    private function resolveSender(\pocketmine\api\command\CommandSender|string|null $sender): \pocketmine\api\command\CommandSender {
+        if ($sender instanceof \pocketmine\api\command\CommandSender) {
+            return $sender;
+        }
+        if ($sender === null || $sender === 'CONSOLE') {
+            return new \pocketmine\api\command\ConsoleCommandSender();
+        }
+        $player = $this->getPlayer($sender);
+        return $player !== null
+            ? new \pocketmine\api\command\PlayerCommandSender($player)
+            : new \pocketmine\api\command\ConsoleCommandSender();
     }
 
     /**
-     * Register a command into the server-wide command map (used by plugins).
+     * Register a command into the single server-wide command map.
      */
     public function registerCommand(\pocketmine\api\command\Command $command): void {
-        $this->commandMap->register($command);
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel !== null) {
+            $kernel->getCommandPort()->register($command);
+        }
     }
 
     public function getCommand(string $name): ?\pocketmine\api\command\Command {
-        return $this->commandMap->getCommand($name);
+        return \pocketmine\Kernel::getInstance()?->getCommandPort()->getCommand($name);
     }
 
     public function getPluginManager(): \pocketmine\api\plugin\PluginManager {
@@ -372,7 +394,7 @@ class Server {
         if ($kernel === null) {
             throw new \RuntimeException("Kernel not initialized");
         }
-        return new \pocketmine\api\plugin\PluginManager($kernel);
+        return $kernel->getPluginManager();
     }
 
     public function getScheduler(): \pocketmine\api\scheduler\Scheduler {

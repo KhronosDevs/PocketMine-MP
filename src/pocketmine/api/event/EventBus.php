@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\api\event;
 
-class EventBus {
+class EventBus implements \pocketmine\port\driving\EventPort {
     /** @var array<class-string<Event>, array<ListenerEntry>> */
     private array $listeners = [];
 
