@@ -75,9 +75,12 @@ final class EntityDespawnService {
         $meta = $entity->get(MetadataComponent::class);
         $uniqueId = $meta?->get('uniqueId');
         
+        // Only entities with a REAL persistent id (players, named entities)
+        // are saved. Ephemeral mobs get no file: nothing restores them yet,
+        // and writing 'entity_N.dat' per despawn would accumulate dead files
+        // forever (mob restore is a separate future feature).
         if (!$uniqueId) {
-            // Generate unique ID for non-player entities
-            $uniqueId = 'entity_' . $entity->id;
+            return;
         }
         
         $components = [];

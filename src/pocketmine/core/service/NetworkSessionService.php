@@ -240,6 +240,13 @@ final class NetworkSessionService {
     }
 
     public function shutdown(): void {
+        // 14.4b: players still online when the server stops (no clean
+        // disconnect ever fired) are persisted here, BEFORE the sessions are
+        // forgotten - the kernel's saveWorld loop sees an empty session list
+        // after this returns.
+        foreach ($this->sessions as $session) {
+            $this->playerLeaveService->savePlayer($session['entityRef']);
+        }
         if ($this->adapter !== null) {
             foreach ($this->sessions as $session) {
                 $this->adapter->unregisterPlayer($session['playerRef']);

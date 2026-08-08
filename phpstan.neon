@@ -36,7 +36,6 @@ parameters:
         - '#^Property .* is never read, only written#'
         - '#^Constant .* is unused#'
         - '#^Left side of && is always true#'
-        - '#^If condition is always true#'
         - '#^Comparison operation .* is always false#'
         - '#^Unreachable statement#'
         - '#^Expression on left side of \?\? is not nullable#'
