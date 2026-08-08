@@ -73,8 +73,11 @@ final class PlayerRespawnService {
         
         $kernel = \pocketmine\Kernel::getInstance();
         $config = $kernel?->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
+        // PlayerJoinService::getWorldSpawn() resolves the config spawn to a
+        // terrain-safe Y (highest block + 1) on first join and persists it, so
+        // respawn lands on the same spot - never inside a hill.
         if ($config !== null) {
-            $entityRef->teleport($config->spawnX, $config->spawnY + 1, $config->spawnZ, 0, 0);
+            $entityRef->teleport($config->spawnX, $config->spawnY, $config->spawnZ, 0, 0);
         }
     }
 

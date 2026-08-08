@@ -22,6 +22,13 @@ final class ServerConfig {
     ) {}
 
     public function getSeed(): int {
-        return $this->seed !== 0 ? $this->seed : random_int(1, PHP_INT_MAX);
+        // A 0 seed means "pick one". It must be picked ONCE and cached, not
+        // re-randomized per call: every chunk lookup (safe spawn, chunk
+        // streaming, persistence) reads getSeed(), and if each call returned
+        // a different value the terrain would differ between lookups.
+        if ($this->seed === 0) {
+            $this->seed = random_int(1, PHP_INT_MAX);
+        }
+        return $this->seed;
     }
 }

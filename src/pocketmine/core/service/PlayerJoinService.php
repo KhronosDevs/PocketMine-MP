@@ -14,6 +14,7 @@ use pocketmine\core\component\tags\PlayerTag;
 use pocketmine\core\ecs\EntityBuilder;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\ChunkStore;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\PlayerRef;
 use pocketmine\port\driven\StoragePort;
@@ -25,6 +26,7 @@ final class PlayerJoinService {
         private readonly NetworkPort $networkPort,
         private readonly StoragePort $storagePort,
         private readonly WorldGenPort $worldGenPort,
+        private readonly ChunkLoadService $chunkLoadService,
     ) {}
 
     public function handleJoin(PlayerRef $playerRef, string $username): EntityRef {
@@ -93,17 +95,31 @@ final class PlayerJoinService {
     }
 
     private function getWorldSpawn(): PositionComponent {
-        // World spawn is derived from the ECS resource config when present;
-        // otherwise fall back to the default spawn point (0, 64, 0).
         $kernel = \pocketmine\Kernel::getInstance();
-        if ($kernel !== null) {
-            $config = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
-            if ($config !== null && $config->spawnX !== 0 || $config->spawnY !== 0 || $config->spawnZ !== 0) {
-                return new PositionComponent($config->spawnX, $config->spawnY, $config->spawnZ);
-            }
+        $config = $kernel?->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
+        $spawnX = $config instanceof \pocketmine\core\resource\ServerConfig ? $config->spawnX : 0;
+        $spawnZ = $config instanceof \pocketmine\core\resource\ServerConfig ? $config->spawnZ : 0;
+
+        // Safe spawn (legacy Level::getSafeSpawn): stand ON TOP of the highest
+        // block at the spawn column. The old fixed (0, 64, 0) default lands
+        // players INSIDE the terrain (hills are 64-96 blocks tall) and the
+        // client suffocates them in a grass block.
+        $chunkX = (int)floor($spawnX / 16);
+        $chunkZ = (int)floor($spawnZ / 16);
+        $this->chunkLoadService->loadChunk($chunkX, $chunkZ);
+        $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
+        $top = $store instanceof ChunkStore ? $store->getHighestBlockAt($spawnX, $spawnZ) : 64;
+        $spawnY = $top + 1;
+
+        // Persist the resolved spawn so respawn (and anything else reading
+        // the config) lands on the same spot, not the un-resolved default.
+        if ($config instanceof \pocketmine\core\resource\ServerConfig) {
+            $config->spawnX = $spawnX;
+            $config->spawnY = $spawnY;
+            $config->spawnZ = $spawnZ;
         }
-        
-        return new PositionComponent(0, 64, 0);
+
+        return new PositionComponent($spawnX, $spawnY, $spawnZ);
     }
 
     private function sendJoinPackets(EntityRef $entityRef): void {
