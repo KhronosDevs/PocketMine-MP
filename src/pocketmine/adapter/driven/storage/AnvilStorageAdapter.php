@@ -13,6 +13,7 @@ use function ceil;
 use function chr;
 use function dirname;
 use function file_exists;
+use function file_get_contents;
 use function file_put_contents;
 use function fopen;
 use function fread;
@@ -88,6 +89,57 @@ final class AnvilStorageAdapter implements StoragePort {
 
     public function saveEntity(EntitySnapshot $snapshot): void {
         // Entity persistence is handled via chunk snapshots for now.
+    }
+
+    /** Magic + version header of the level.dat-style world meta file. */
+    private const WORLD_META_MAGIC = 0x4B524F4E; // 'KRON'
+    private const WORLD_META_VERSION = 1;
+
+    /** The per-world folder (basePath + levelName + '/'). */
+    private function worldFolder(): string {
+        return $this->basePath . $this->levelName . '/';
+    }
+
+    public function loadWorldMeta(): ?array {
+        $file = $this->worldFolder() . 'level.dat';
+        if (!file_exists($file)) {
+            return null;
+        }
+        $raw = @file_get_contents($file);
+        if ($raw === false || $raw === '') {
+            return null;
+        }
+        $stream = new BinaryStream($raw);
+        if ($stream->getInt() !== self::WORLD_META_MAGIC) {
+            return null; // not a file this adapter wrote
+        }
+        if ($stream->getByte() !== self::WORLD_META_VERSION) {
+            return null;
+        }
+        $count = $stream->getByte();
+        $meta = [];
+        for ($i = 0; $i < $count; $i++) {
+            $key = (string)$stream->getString();
+            $value = (string)$stream->getString();
+            $meta[$key] = $value;
+        }
+        return $meta;
+    }
+
+    public function saveWorldMeta(array $meta): void {
+        $dir = $this->worldFolder();
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        $stream = new BinaryStream();
+        $stream->putInt(self::WORLD_META_MAGIC);
+        $stream->putByte(self::WORLD_META_VERSION);
+        $stream->putByte(count($meta));
+        foreach ($meta as $key => $value) {
+            $stream->putString((string)$key);
+            $stream->putString((string)$value);
+        }
+        file_put_contents($dir . 'level.dat', $stream->getBuffer());
     }
 
     public function saveAll(): void {

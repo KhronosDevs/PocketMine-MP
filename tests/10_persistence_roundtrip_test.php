@@ -274,4 +274,88 @@ test('cross-kernel: mutation saved by kernel A is read by a fresh kernel B', fun
     }
 });
 
+// --- 14.4 world meta persistence -------------------------------------------
+test('world meta round-trips through the adapter (level.dat)', function (): void {
+    $dir = fresh_persist_dir();
+    try {
+        $adapterA = new AnvilStorageAdapter($dir, 'world');
+        $adapterA->saveWorldMeta([
+            'seed' => '123456789',
+            'spawnX' => '12',
+            'spawnY' => '71',
+            'spawnZ' => '-4',
+            'difficulty' => '2',
+        ]);
+
+        // A FRESH instance pointed at the same folder reads it back: the
+        // "restart" scenario.
+        $adapterB = new AnvilStorageAdapter($dir, 'world');
+        $meta = $adapterB->loadWorldMeta();
+        ok(is_array($meta), 'world meta loaded');
+        same('123456789', $meta['seed'] ?? null, 'seed persisted');
+        same('12', $meta['spawnX'] ?? null, 'spawnX persisted');
+        same('71', $meta['spawnY'] ?? null, 'spawnY persisted');
+        same('-4', $meta['spawnZ'] ?? null, 'spawnZ persisted');
+        same('2', $meta['difficulty'] ?? null, 'difficulty persisted');
+    } finally {
+        rmdir_recursive($dir);
+    }
+});
+
+test('applyPersistedWorldMeta restores the saved world config at boot', function (): void {
+    $dir = fresh_persist_dir();
+    try {
+        $adapter = new AnvilStorageAdapter($dir, 'world');
+        $adapter->saveWorldMeta([
+            'seed' => '987654321',
+            'spawnX' => '7',
+            'spawnY' => '68',
+            'spawnZ' => '-2',
+            'difficulty' => '3',
+        ]);
+
+        $registry = new \pocketmine\core\ecs\ResourceRegistry();
+        $registry->set(new \pocketmine\core\resource\ServerConfig());
+        \pocketmine\applyPersistedWorldMeta($adapter, $registry);
+
+        $config = $registry->get(\pocketmine\core\resource\ServerConfig::class);
+        same(987654321, $config->seed, 'seed restored');
+        same(7, $config->spawnX, 'spawnX restored');
+        same(68, $config->spawnY, 'spawnY restored');
+        same(-2, $config->spawnZ, 'spawnZ restored');
+        same(3, $config->difficulty, 'difficulty restored');
+    } finally {
+        rmdir_recursive($dir);
+    }
+});
+
+test('loaded chunks flush to disk via getLoadedChunkCoordinates and survive a fresh adapter', function (): void {
+    $dir = fresh_persist_dir();
+    try {
+        $adapter = new AnvilStorageAdapter($dir, 'world');
+        $store = new \pocketmine\core\resource\ChunkStore();
+        $store->load(sample_chunk(0, 0));
+        // Mutate a block so disk state provably differs from the input DTO.
+        $store->setBlock(7, 3, 5, 42); // iron at the sample's grass column
+
+        // The exact iteration Kernel::saveWorld() uses: every loaded chunk.
+        $coords = $store->getLoadedChunkCoordinates();
+        same(1, count($coords), 'one loaded chunk enumerated');
+        foreach ($coords as [$cx, $cz]) {
+            $data = $store->toChunkData($cx, $cz);
+            if ($data !== null) {
+                $adapter->saveChunk($cx, $cz, $data);
+            }
+        }
+
+        $adapterB = new AnvilStorageAdapter($dir, 'world');
+        $round = $adapterB->loadChunk(0, 0);
+        same(2, count($round->sections), 'both sections survived');
+        $idx = 3 * 256 + 5 * 16 + 7;
+        same(42, ord($round->sections[0]['blocks'][$idx]), 'mutated block persisted to disk');
+    } finally {
+        rmdir_recursive($dir);
+    }
+});
+
 exit(runTests());

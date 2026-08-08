@@ -633,6 +633,45 @@ function reFields(string $buf): int {
     return $s->getLong();
 }
 
+/** EntityEventPacket: eid (long) + event byte. */
+function eeFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    return ['eid' => $s->getLong(), 'event' => $s->getByte()];
+}
+
+/**
+ * SetEntityDataPacket: eid (long) + metadata blob (legacy writeMetadata
+ * format: per entry a (type<<5)|key byte + payload, terminated by 0x7f).
+ * Only the int/byte types we emit are parsed; the rest stops the scan.
+ */
+function sedFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    $eid = $s->getLong();
+    $rest = substr($s->getBuffer(), $s->getOffset());
+    $meta = [];
+    $i = 0;
+    $len = strlen($rest);
+    while ($i < $len) {
+        $b = ord($rest[$i]);
+        if ($b === 0x7f) {
+            break; // terminator
+        }
+        $key = $b & 0x1F;
+        $type = $b >> 5;
+        $i++;
+        if ($type === 2) { // DATA_TYPE_INT
+            $meta[$key] = \pocketmine\utils\Binary::readLInt(substr($rest, $i, 4));
+            $i += 4;
+        } elseif ($type === 0) { // DATA_TYPE_BYTE
+            $meta[$key] = \pocketmine\utils\Binary::readByte($rest[$i]);
+            $i += 1;
+        } else {
+            break;
+        }
+    }
+    return ['eid' => $eid, 'meta' => $meta];
+}
+
 // Boot against a pristine world: region files persist in worlds/ across runs,
 // and a stale chunk (from an older generator/seed) would fail the terrain
 // consistency assertions below. Remove them so every run regenerates.
@@ -646,6 +685,14 @@ $kernel = \pocketmine\bootstrap();
 $kernel->setNetworkingEnabled(true);
 $kernel->setBindPort($port);
 $kernel->setAutoShutdownOnRun(false);
+
+// 14.3: the builtin MobSpawnerSystem would otherwise populate hostile mobs
+// around Alice every 40 ticks, making her health/position non-deterministic
+// for the assertions below (the mob spawner has its own dedicated test).
+$worldCfg = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
+if ($worldCfg instanceof \pocketmine\core\resource\ServerConfig) {
+    $worldCfg->spawnMobs = false;
+}
 
 $kernel->run(1); // bind socket + start the RakNet thread + first tick
 
@@ -1364,6 +1411,132 @@ test('a dropped item entity is broadcast as AddItemEntityPacket', function () us
     }
     $kernel->getEntityDespawnService()->despawn($item);
     ok(false, 'Alice received AddItemEntityPacket for the dropped item');
+});
+
+// --- Combat (14.3) ---------------------------------------------------------
+test('attacking a mob via InteractPacket damages it and syncs health over the wire', function () use ($kernel, $client): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+
+    // A zombie 3 blocks from Alice: within the 3-block attack range.
+    $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', $alice['x'] + 3, $alice['y'], $alice['z']);
+    $mobEid = $mob->getId();
+    $mobEntity = $kernel->getWorld()->getEntity($mobEid);
+    $healthBefore = $mobEntity?->get(\pocketmine\core\component\HealthComponent::class)?->current;
+    ok($healthBefore !== null && $healthBefore > 0, 'mob alive before the attack');
+
+    // Wait until Alice has the mob in her known-entity set (the Add packet
+    // landed) so the following packets are the attack effects only.
+    $deadline = microtime(true) + 5.0;
+    while (microtime(true) < $deadline) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::ADD_ENTITY_PACKET && aeFields($buffer)['eid'] === $mobEid) {
+                break 2;
+            }
+        }
+        $kernel->run(1);
+    }
+
+    $interact = new \pocketmine\protocol\InteractPacket();
+    $interact->action = \pocketmine\protocol\InteractPacket::ACTION_LEFT_CLICK;
+    $interact->target = $mobEid;
+    $client->sendGamePacket($interact);
+
+    $deadline = microtime(true) + 5.0;
+    $sawHurt = false;
+    $sawHealthMeta = false;
+    while (microtime(true) < $deadline && (!$sawHurt || !$sawHealthMeta)) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::ENTITY_EVENT_PACKET) {
+                $ee = eeFields($buffer);
+                if ($ee['eid'] === $mobEid && $ee['event'] === \pocketmine\protocol\EntityEventPacket::HURT_ANIMATION) {
+                    $sawHurt = true;
+                }
+            }
+            if ($id === Info::SET_ENTITY_DATA_PACKET) {
+                $sed = sedFields($buffer);
+                if ($sed['eid'] === $mobEid && isset($sed['meta'][1]) && $sed['meta'][1] < $healthBefore) {
+                    $sawHealthMeta = true;
+                }
+            }
+        }
+        usleep(10000);
+    }
+
+    $healthAfter = $kernel->getWorld()->getEntity($mobEid)?->get(\pocketmine\core\component\HealthComponent::class)?->current;
+    ok($healthAfter !== null && $healthAfter < $healthBefore, 'mob health dropped after the attack');
+    ok($sawHurt, 'hurt animation broadcast via EntityEventPacket');
+    ok($sawHealthMeta, 'health metadata pushed via SetEntityDataPacket');
+    $kernel->getEntityDespawnService()->despawn($mob);
+});
+
+test('a dead player respawns via RespawnPacket (health restored, spawn burst sent)', function () use ($kernel, $client): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $aliceRef = \pocketmine\core\ecs\EntityRef::create($alice['entityId'], $kernel->getWorld());
+
+    // Kill Alice through the combat pipeline: players stay in the world as
+    // a dead corpse (DeadTag + 0 health) so respawn can revive them.
+    $kernel->getCombatService()->kill($aliceRef);
+    $kernel->run(1);
+    $aliceHealth = $kernel->getWorld()->getEntity($alice['entityId'])?->get(\pocketmine\core\component\HealthComponent::class);
+    ok($aliceHealth !== null && $aliceHealth->current === 0.0, 'Alice is dead (0 health)');
+
+    // Drain any death-burst packets so the assertions below see only the
+    // respawn response.
+    $client->readGamePackets();
+
+    $respawn = new \pocketmine\protocol\RespawnPacket();
+    $respawn->x = 0.0;
+    $respawn->y = 0.0;
+    $respawn->z = 0.0;
+    $client->sendGamePacket($respawn);
+
+    $deadline = microtime(true) + 5.0;
+    $sawSpawn = false;
+    $sawHealth = false;
+    $sawTeleport = false;
+    while (microtime(true) < $deadline && (!$sawSpawn || !$sawHealth || !$sawTeleport)) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::PLAY_STATUS_PACKET && psStatus($buffer) === PlayStatusPacket::PLAYER_SPAWN) {
+                $sawSpawn = true;
+            }
+            if ($id === Info::SET_HEALTH_PACKET && shFields($buffer) === 20) {
+                $sawHealth = true;
+            }
+            if ($id === Info::MOVE_PLAYER_PACKET) {
+                $mp = mpFields($buffer);
+                if ($mp['mode'] === MovePlayerPacket::MODE_RESET) {
+                    $sawTeleport = true;
+                }
+            }
+        }
+        usleep(10000);
+    }
+
+    $aliceHealth = $kernel->getWorld()->getEntity($alice['entityId'])?->get(\pocketmine\core\component\HealthComponent::class);
+    ok($aliceHealth !== null && $aliceHealth->current >= $aliceHealth->max, 'Alice is alive at full health after respawn');
+    ok($sawSpawn, 'PLAYER_SPAWN status sent on respawn');
+    ok($sawHealth, 'SetHealthPacket (20) sent on respawn');
+    ok($sawTeleport, 'MovePlayerPacket teleport (MODE_RESET) sent on respawn');
 });
 
 // --- Protocol rejection ----------------------------------------------------

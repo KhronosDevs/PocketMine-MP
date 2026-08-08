@@ -179,11 +179,13 @@ test('fatal AI damage kills the player through the combat pipeline', function ()
 
     for ($i = 0; $i < 30; $i++) {
         tickWorld($world);
-        if (!$player->isValid()) {
-            break;
-        }
     }
-    ok(!$player->isValid(), 'player died from AI attack');
+    // 14.3: players stay in the world as a corpse (DeadTag + 0 health) so
+    // PlayerRespawnService can revive them - only mobs despawn on death.
+    $playerHealth = $player->getEntity()?->get(HealthComponent::class);
+    ok($playerHealth !== null && $playerHealth->current <= 0, 'player died from AI attack');
+    $deadTag = $player->getEntity()?->has(\pocketmine\core\component\tags\DeadTag::class);
+    same(true, $deadTag, 'player carries DeadTag after AI death');
     ok($deathEvents >= 1, 'player death event fired: ' . $deathEvents);
 
     foreach ($world->getEntities() as $e) {

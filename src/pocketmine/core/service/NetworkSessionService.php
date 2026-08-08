@@ -29,8 +29,10 @@ use pocketmine\protocol\ChunkSerializer;
 use pocketmine\protocol\ContainerSetContentPacket;
 use pocketmine\protocol\ContainerSetSlotPacket;
 use pocketmine\protocol\DataPacket;
+use pocketmine\protocol\EntityEventPacket;
 use pocketmine\protocol\FullChunkDataPacket;
 use pocketmine\protocol\Info;
+use pocketmine\protocol\InteractPacket;
 use pocketmine\protocol\LoginPacket;
 use pocketmine\protocol\MobEquipmentPacket;
 use pocketmine\protocol\MoveEntityPacket;
@@ -40,7 +42,9 @@ use pocketmine\protocol\PlayerActionPacket;
 use pocketmine\protocol\PlayerListPacket;
 use pocketmine\protocol\RemoveEntityPacket;
 use pocketmine\protocol\RequestChunkRadiusPacket;
+use pocketmine\protocol\RespawnPacket;
 use pocketmine\protocol\SetDifficultyPacket;
+use pocketmine\protocol\SetEntityDataPacket;
 use pocketmine\protocol\SetHealthPacket;
 use pocketmine\protocol\SetSpawnPositionPacket;
 use pocketmine\protocol\SetTimePacket;
@@ -89,6 +93,11 @@ final class NetworkSessionService {
     private readonly ChunkLoadService $chunkLoadService;
     private readonly BlockBreakService $blockBreakService;
     private readonly BlockPlaceService $blockPlaceService;
+    // 14.3: combat routing (attack via InteractPacket) and respawn handling
+    // (RespawnPacket after death) reach the services directly.
+    private readonly CombatService $combatService;
+    private readonly PlayerRespawnService $playerRespawnService;
+    private readonly EntityInteractionService $entityInteractionService;
     private readonly ResourceRegistry $resourceRegistry;
 
     /**
@@ -118,7 +127,8 @@ final class NetworkSessionService {
      *   chunkQueueIndex: int,
      *   chunksSent: array<string, bool>,
      *   spawned: bool,
-     *   knownEntities: array<int, array{0: float, 1: float, 2: float}>
+     *   lastHealth: float,
+     *   knownEntities: array<int, array{0: float, 1: float, 2: float, 3: float}>
      * }>
      */
     private array $sessions = [];
@@ -150,6 +160,9 @@ final class NetworkSessionService {
         ChunkLoadService $chunkLoadService,
         BlockBreakService $blockBreakService,
         BlockPlaceService $blockPlaceService,
+        CombatService $combatService,
+        PlayerRespawnService $playerRespawnService,
+        EntityInteractionService $entityInteractionService,
         ResourceRegistry $resourceRegistry,
     ) {
         $this->adapter = $networkPort instanceof Protocol84NetworkAdapter ? $networkPort : null;
@@ -159,6 +172,9 @@ final class NetworkSessionService {
         $this->chunkLoadService = $chunkLoadService;
         $this->blockBreakService = $blockBreakService;
         $this->blockPlaceService = $blockPlaceService;
+        $this->combatService = $combatService;
+        $this->playerRespawnService = $playerRespawnService;
+        $this->entityInteractionService = $entityInteractionService;
         $this->resourceRegistry = $resourceRegistry;
         $this->wireTrace = getenv('KHRONOS_WIRE_TRACE') === '1';
     }
@@ -343,6 +359,18 @@ final class NetworkSessionService {
                 $pk->decode();
                 $this->handleMobEquipment($addrKey, $pk);
                 break;
+            case Info::INTERACT_PACKET:
+                $pk = new InteractPacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handleInteract($addrKey, $pk);
+                break;
+            case Info::RESPAWN_PACKET:
+                $pk = new RespawnPacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handleRespawn($addrKey, $pk);
+                break;
         }
     }
 
@@ -395,6 +423,7 @@ final class NetworkSessionService {
             'chunkQueueIndex' => 0,
             'chunksSent' => [],
             'spawned' => false,
+            'lastHealth' => $entityRef->getEntity()?->get(HealthComponent::class)?->current ?? 20.0,
             'knownEntities' => [],
         ];
 
@@ -543,6 +572,128 @@ final class NetworkSessionService {
             $echo->slot = $pk->selectedSlot;
             $echo->selectedSlot = $pk->selectedSlot;
             $this->queuePacket($s['playerRef'], $echo);
+        }
+    }
+
+    /**
+     * 14.3 combat: ACTION_LEFT_CLICK attacks the target entity through the
+     * full combat pipeline (damage event, armor, knockback, death + loot).
+     * On a landed hit every session that can see the target gets the
+     * hurt/death animation; the health drop itself is synced by the per-tick
+     * entity state pass (SetEntityDataPacket to viewers, SetHealthPacket to
+     * the victim's own HUD). ACTION_RIGHT_CLICK routes through the
+     * interaction service (item pickup, breeding hooks...).
+     */
+    private function handleInteract(string $addrKey, InteractPacket $pk): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $selfId = $session['playerRef']->entityId;
+        if ($pk->target === $selfId || $pk->target <= 0) {
+            return; // attacking yourself (or a bogus id) is a no-op
+        }
+        // Dead players (corpse waiting for respawn) cannot attack.
+        $attackerHealth = $session['entityRef']->getEntity()?->get(HealthComponent::class);
+        if ($attackerHealth === null || $attackerHealth->current <= 0) {
+            return;
+        }
+        $targetRef = EntityRef::create($pk->target, $this->world);
+
+        if ($pk->action === InteractPacket::ACTION_LEFT_CLICK) {
+            $target = $targetRef->getEntity();
+            $healthBefore = $target?->get(HealthComponent::class)?->current;
+            if ($healthBefore === null || $healthBefore <= 0) {
+                return; // corpse or non-living target: nothing to hit
+            }
+            if (!$this->entityInteractionService->attack($session['entityRef'], $targetRef)) {
+                return; // cancelled by a plugin damage event
+            }
+            $target = $targetRef->getEntity();
+            $healthAfter = $target?->get(HealthComponent::class)?->current;
+            $event = new EntityEventPacket();
+            $event->eid = $pk->target;
+            $event->event = $healthAfter !== null && $healthAfter <= 0
+                ? EntityEventPacket::DEATH_ANIMATION
+                : EntityEventPacket::HURT_ANIMATION;
+            // Only sessions that actually see the target (its Add packet was
+            // already sent) get the animation - never for an unknown entity.
+            foreach ($this->sessions as $s) {
+                if (isset($s['knownEntities'][$pk->target])) {
+                    $this->queuePacket($s['playerRef'], clone $event);
+                }
+            }
+            return;
+        }
+
+        if ($pk->action === InteractPacket::ACTION_RIGHT_CLICK) {
+            $this->entityInteractionService->interact($session['entityRef'], $targetRef);
+        }
+    }
+
+    /**
+     * 14.3 respawn: the client sends RespawnPacket from the death screen.
+     * Revive the player through PlayerRespawnService (clear DeadTag, restore
+     * health, teleport to the safe spawn) and send the respawn burst so the
+     * client leaves the death screen at the spawn point.
+     */
+    private function handleRespawn(string $addrKey, RespawnPacket $pk): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $health = $session['entityRef']->getEntity()?->get(HealthComponent::class);
+        if ($health !== null && $health->current > 0) {
+            return; // alive players do not respawn
+        }
+        $this->playerRespawnService->respawn($session['entityRef']);
+        $this->sendRespawnBurst($addrKey);
+    }
+
+    private function sendRespawnBurst(string $addrKey): void {
+        $session = $this->sessions[$addrKey];
+        $playerRef = $session['playerRef'];
+        $entity = $session['entityRef']->getEntity();
+        $pos = $session['entityRef']->getPosition();
+        $health = $entity?->get(HealthComponent::class);
+
+        // PLAYER_SPAWN status dismisses the death screen.
+        $status = new PlayStatusPacket();
+        $status->status = PlayStatusPacket::PLAYER_SPAWN;
+        $this->queuePacket($playerRef, $status);
+
+        // Teleport the client back to the (terrain-safe) spawn point.
+        $move = new MovePlayerPacket();
+        $move->eid = $playerRef->entityId;
+        $move->x = $pos?->x ?? 0.0;
+        $move->y = $pos?->y ?? 0.0;
+        $move->z = $pos?->z ?? 0.0;
+        $move->yaw = 0.0;
+        $move->bodyYaw = 0.0;
+        $move->pitch = 0.0;
+        $move->mode = MovePlayerPacket::MODE_RESET;
+        $move->onGround = true;
+        $this->queuePacket($playerRef, $move);
+
+        // Reset the HUD health bar (the per-tick pass also catches the jump).
+        $hp = new SetHealthPacket();
+        $hp->health = (int)($health?->current ?? 20);
+        $this->queuePacket($playerRef, $hp);
+
+        // Point the compass back at spawn.
+        $spawn = new SetSpawnPositionPacket();
+        $spawn->x = (int)floor($pos?->x ?? 0.0);
+        $spawn->y = (int)floor($pos?->y ?? 64.0);
+        $spawn->z = (int)floor($pos?->z ?? 0.0);
+        $this->queuePacket($playerRef, $spawn);
+
+        // Everyone else sees the player revive (RESPAWN event); the teleport
+        // itself is relayed by the per-tick entity state pass.
+        $event = new EntityEventPacket();
+        $event->eid = $playerRef->entityId;
+        $event->event = EntityEventPacket::RESPAWN;
+        foreach ($this->sessions as $s) {
+            $this->queuePacket($s['playerRef'], clone $event);
         }
     }
 
@@ -764,26 +915,49 @@ final class NetworkSessionService {
                 }
             }
 
-            // Adds + moves.
+            // Adds + moves + health changes (14.3): the last known health
+            // rides in the knownEntities tuple so the wire only carries a
+            // SetEntityDataPacket when the value actually moved.
             foreach ($visible as $entityId => $entity) {
                 $pos = $entity->get(PositionComponent::class);
+                if ($pos === null) {
+                    continue;
+                }
+                $hp = $entity->get(HealthComponent::class)?->current ?? 0.0;
                 if (!isset($known[$entityId])) {
                     $pk = $this->buildAddPacket($entityId, $entity, $playerSessions);
                     if ($pk !== null) {
                         $this->queuePacket($session['playerRef'], $pk);
                     }
-                    $known[$entityId] = [$pos->x, $pos->y, $pos->z];
+                    $known[$entityId] = [$pos->x, $pos->y, $pos->z, $hp];
                 } else {
-                    $lastPos = $known[$entityId];
-                    if (abs($pos->x - $lastPos[0]) > self::MOVE_EPSILON
-                        || abs($pos->y - $lastPos[1]) > self::MOVE_EPSILON
-                        || abs($pos->z - $lastPos[2]) > self::MOVE_EPSILON
-                    ) {
+                    $last = $known[$entityId];
+                    $moved = abs($pos->x - $last[0]) > self::MOVE_EPSILON
+                        || abs($pos->y - $last[1]) > self::MOVE_EPSILON
+                        || abs($pos->z - $last[2]) > self::MOVE_EPSILON;
+                    $healthChanged = abs($hp - $last[3]) > 0.01;
+                    if ($moved) {
                         $this->queuePacket($session['playerRef'], $this->buildMovePacket($entityId, $entity, $playerSessions));
-                        $known[$entityId] = [$pos->x, $pos->y, $pos->z];
+                    }
+                    if ($healthChanged) {
+                        $this->queuePacket($session['playerRef'], $this->buildHealthPacket($entityId, $hp));
+                    }
+                    if ($moved || $healthChanged) {
+                        $known[$entityId] = [$pos->x, $pos->y, $pos->z, $hp];
                     }
                 }
             }
+
+            // The player's own health bar: SetHealthPacket drives the HUD
+            // hearts (legacy protocol-84 behaviour), following damage/heal/
+            // respawn without waiting for a client re-sync.
+            $selfHealth = $session['entityRef']->getEntity()?->get(HealthComponent::class)?->current ?? 20.0;
+            if (abs($selfHealth - $session['lastHealth']) > 0.01) {
+                $hp = new SetHealthPacket();
+                $hp->health = (int)ceil($selfHealth);
+                $this->queuePacket($session['playerRef'], $hp);
+            }
+            $session['lastHealth'] = $selfHealth;
 
             $session['knownEntities'] = $known;
             $this->sessions[$addrKey] = $session;
@@ -865,6 +1039,18 @@ final class NetworkSessionService {
             0 => [\pocketmine\utils\Binary::DATA_TYPE_BYTE, 0],                    // DATA_FLAGS
             2 => [\pocketmine\utils\Binary::DATA_TYPE_STRING, $session['username']], // DATA_NAMETAG
         ];
+        return $pk;
+    }
+
+    /**
+     * 14.3 health sync: push an entity's current health as metadata so
+     * viewers' health bar (mobs) / entity state follows damage and healing.
+     * Key 1 is DATA_HEALTH in the protocol-84 client metadata table.
+     */
+    private function buildHealthPacket(int $entityId, float $health): SetEntityDataPacket {
+        $pk = new SetEntityDataPacket();
+        $pk->eid = $entityId;
+        $pk->metadata = [1 => [Binary::DATA_TYPE_INT, (int)ceil($health)]];
         return $pk;
     }
 

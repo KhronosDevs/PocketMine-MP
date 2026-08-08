@@ -206,6 +206,12 @@ final class Kernel {
         // straight into the ECS services.
         $this->blockBreakService = new BlockBreakService($world, $storagePort);
         $this->blockPlaceService = new BlockPlaceService($world);
+        // 14.3: combat + interaction services are built before the session
+        // service so client attack packets (InteractPacket) route straight
+        // into the combat pipeline.
+        $this->entitySpawnService = new EntitySpawnService($world, $storagePort);
+        $this->combatService = new CombatService($world, $eventPort, $this->entitySpawnService);
+        $this->entityInteractionService = new EntityInteractionService($world, $this->combatService);
         $this->networkSessionService = new NetworkSessionService(
             $networkPort,
             $world,
@@ -214,15 +220,15 @@ final class Kernel {
             $this->chunkLoadService,
             $this->blockBreakService,
             $this->blockPlaceService,
+            $this->combatService,
+            $this->playerRespawnService,
+            $this->entityInteractionService,
             $this->resourceRegistry,
         );
         $this->blockUpdateService = new BlockUpdateService($world, $storagePort);
-        $this->entitySpawnService = new EntitySpawnService($world, $storagePort);
         $this->entityDespawnService = new EntityDespawnService($world, $storagePort);
-        $this->combatService = new CombatService($world, $eventPort, $this->entitySpawnService);
         $this->damageService = new DamageService($world, $this->combatService);
         $this->knockbackService = new KnockbackService($world);
-        $this->entityInteractionService = new EntityInteractionService($world, $this->combatService);
         $this->inventoryService = new InventoryService($world);
         $this->craftingService = new CraftingService($world);
         $this->containerService = new ContainerService($world);
@@ -403,9 +409,10 @@ final class Kernel {
             // 2. Flush network sync from all regions
             $this->flushNetworkSync();
 
-            // 3. Storage autosave (periodic)
+            // 3. Storage autosave (periodic): flush resident chunks + world
+            // meta (14.4) so a crash or restart loses at most the interval.
             if ($tick % 6000 === 0) {
-                $this->storagePort->saveAll();
+                $this->saveWorld();
             }
 
             $end = hrtime(true);
@@ -1092,8 +1099,37 @@ final class Kernel {
             $this->networkPort->shutdown();
         }
         $this->threadingPort->shutdown();
+        // 14.4: persist everything before the process exits.
+        $this->saveWorld();
         $this->storagePort->saveAll();
         $this->shutdownComplete = true;
+    }
+
+    /**
+     * 14.4 persistence: flush every resident chunk to disk and write the
+     * world meta (seed/spawn/difficulty) so a restart reproduces the same
+     * terrain and spawn point. Called on the autosave interval and shutdown.
+     */
+    private function saveWorld(): void {
+        $store = $this->resourceRegistry->get(\pocketmine\core\resource\ChunkStore::class);
+        if ($store instanceof \pocketmine\core\resource\ChunkStore) {
+            foreach ($store->getLoadedChunkCoordinates() as [$chunkX, $chunkZ]) {
+                $chunkData = $store->toChunkData($chunkX, $chunkZ);
+                if ($chunkData !== null) {
+                    $this->storagePort->saveChunk($chunkX, $chunkZ, $chunkData);
+                }
+            }
+        }
+        $config = $this->resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
+        if ($config instanceof \pocketmine\core\resource\ServerConfig) {
+            $this->storagePort->saveWorldMeta([
+                'seed' => (string)$config->getSeed(),
+                'spawnX' => (string)$config->spawnX,
+                'spawnY' => (string)$config->spawnY,
+                'spawnZ' => (string)$config->spawnZ,
+                'difficulty' => (string)$config->difficulty,
+            ]);
+        }
     }
 
     public function getWorld(): World {
@@ -1334,6 +1370,11 @@ function createKernel(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): 
     // Register built-in systems
     registerBuiltinSystems($systemScheduler);
 
+    // 14.4: restore the persisted world (seed/spawn/difficulty) BEFORE the
+    // kernel exists so the first chunk generation (player join) and the safe
+    // spawn use the saved seed - never a fresh random one.
+    applyPersistedWorldMeta($storagePort, $resourceRegistry);
+
     return new Kernel(
         $networkPort,
         $storagePort,
@@ -1474,6 +1515,36 @@ function registerBuiltinRecipes(ResourceRegistry $registry): void {
     );
 }
 
+/**
+ * 14.4: apply a previously saved world's meta (seed, spawn, difficulty) onto
+ * the freshly created ServerConfig. Missing or empty values are left alone.
+ */
+function applyPersistedWorldMeta(StoragePort $storagePort, ResourceRegistry $resourceRegistry): void {
+    $meta = $storagePort->loadWorldMeta();
+    if ($meta === null) {
+        return;
+    }
+    $config = $resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
+    if (!$config instanceof \pocketmine\core\resource\ServerConfig) {
+        return;
+    }
+    if (isset($meta['seed']) && $meta['seed'] !== '' && (int)$meta['seed'] !== 0) {
+        $config->seed = (int)$meta['seed'];
+    }
+    if (isset($meta['spawnX']) && $meta['spawnX'] !== '') {
+        $config->spawnX = (int)$meta['spawnX'];
+    }
+    if (isset($meta['spawnY']) && $meta['spawnY'] !== '') {
+        $config->spawnY = (int)$meta['spawnY'];
+    }
+    if (isset($meta['spawnZ']) && $meta['spawnZ'] !== '') {
+        $config->spawnZ = (int)$meta['spawnZ'];
+    }
+    if (isset($meta['difficulty']) && $meta['difficulty'] !== '') {
+        $config->difficulty = (int)$meta['difficulty'];
+    }
+}
+
 function registerBuiltinSystems(SystemScheduler $scheduler): void {
     $scheduler->register(new \pocketmine\core\system\PhysicsSystem(), \pocketmine\core\ecs\SystemPhase::PARALLEL);
     $scheduler->register(new \pocketmine\core\system\MovementSystem(), \pocketmine\core\ecs\SystemPhase::PARALLEL);
@@ -1482,6 +1553,9 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // index, and cross-entity reads. Runs before parallel movement/physics so
     // the velocities it writes are integrated the same tick.
     $scheduler->register(new \pocketmine\core\system\AISystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // 14.3: periodic hostile-mob spawning near players. Registered after AI so
+    // fresh spawns do not act (target, move) the same tick they appear.
+    $scheduler->register(new \pocketmine\core\system\MobSpawnerSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     $scheduler->register(new \pocketmine\core\system\ChunkUpdateSystem(), \pocketmine\core\ecs\SystemPhase::CHUNK_PARALLEL);
 }
 
