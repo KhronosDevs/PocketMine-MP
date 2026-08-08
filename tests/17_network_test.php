@@ -559,8 +559,9 @@ $startGame = null;
 $chunkPayload = null;
 $sawSpawn = false; // shared with the chunk-streaming test (spawn fires mid-burst)
 $chunkCoords = []; // shared too: the login test may drain the first chunks
+$spawnChunk = [0, 0]; // resolved safe-spawn chunk, set by the login test
 
-test('login produces the full protocol-84 burst', function () use ($client, $kernel, $uuidA, &$loginPackets, &$startGame, &$sawSpawn, &$chunkCoords): void {
+test('login produces the full protocol-84 burst', function () use ($client, $kernel, $uuidA, &$loginPackets, &$startGame, &$sawSpawn, &$chunkCoords, &$spawnChunk): void {
     $client->sendLogin('Alice', $uuidA);
     $kernel->run(2);
 
@@ -595,20 +596,27 @@ test('login produces the full protocol-84 burst', function () use ($client, $ker
     ok(isset($byId[Info::START_GAME_PACKET]), 'start game sent');
     $sg = sgFields($byId[Info::START_GAME_PACKET]);
     same(0, $sg['eid'], 'start game eid is 0 (protocol 84 self id)');
-    same(0, $sg['spawnX'], 'spawn x');
-    same(0, $sg['spawnZ'], 'spawn z');
     same(0, $sg['gamemode'], 'survival gamemode');
-    // Spawn Y is terrain-derived (safe spawn: highest block + 1), not the old
-    // fixed 64 that dropped the player inside a hill and suffocated them.
+    // Spawn is terrain-derived (safe spawn: nearest dry column, highest block
+    // + 1), never the old fixed (0, 64, 0) that dropped the player inside a
+    // hill and suffocated them - and never underwater when the configured
+    // spawn lands in an ocean.
+    ok(abs($sg['spawnX']) <= 24 && abs($sg['spawnZ']) <= 24, 'spawn stays near the configured world spawn');
     $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
-    $top = $store instanceof \pocketmine\core\resource\ChunkStore ? $store->getHighestBlockAt(0, 0) : 64;
-    same($top + 1, $sg['spawnY'], 'spawn y is above the surface');
-    ok($sg['spawnY'] > 64, 'spawn y clears the old fixed default');
+    $top = $store instanceof \pocketmine\core\resource\ChunkStore ? $store->getHighestBlockAt($sg['spawnX'], $sg['spawnZ']) : 64;
+    same($top + 1, $sg['spawnY'], 'spawn y is one above the surface');
+    $spawnBlock = $store instanceof \pocketmine\core\resource\ChunkStore ? $store->getBlock($sg['spawnX'], $top, $sg['spawnZ']) : -1;
+    ok($spawnBlock !== 8 && $top >= 62, "spawn stands on dry land (surface block $spawnBlock at y=$top)");
+    $spawnChunk[0] = (int)floor($sg['spawnX'] / 16);
+    $spawnChunk[1] = (int)floor($sg['spawnZ'] / 16);
 
     ok(isset($byId[Info::SET_TIME_PACKET]), 'set time sent');
     ok(isset($byId[Info::SET_SPAWN_POSITION_PACKET]), 'set spawn sent');
-    // SetSpawnPosition mirrors the safe spawn (highest block + 1).
-    same($top + 1, sspFields($byId[Info::SET_SPAWN_POSITION_PACKET])['y'], 'spawn position y matches safe spawn');
+    // SetSpawnPosition mirrors the same safe spawn the player was placed at.
+    $ssp = sspFields($byId[Info::SET_SPAWN_POSITION_PACKET]);
+    same($sg['spawnX'], $ssp['x'], 'spawn position x matches start game');
+    same($sg['spawnY'], $ssp['y'], 'spawn position y matches start game');
+    same($sg['spawnZ'], $ssp['z'], 'spawn position z matches start game');
 
     ok(isset($byId[Info::SET_HEALTH_PACKET]), 'set health sent');
     same(20, shFields($byId[Info::SET_HEALTH_PACKET]), 'health 20');
@@ -626,7 +634,7 @@ test('login produces the full protocol-84 burst', function () use ($client, $ker
 });
 
 // --- Chunk streaming -------------------------------------------------------
-test('chunks stream with valid protocol-84 payloads and player spawn fires', function () use ($client, $kernel, &$chunkPayload, &$sawSpawn, &$chunkCoords): void {
+test('chunks stream with valid protocol-84 payloads and player spawn fires', function () use ($client, $kernel, &$chunkPayload, &$sawSpawn, &$chunkCoords, &$spawnChunk): void {
     $deadline = microtime(true) + 8.0;
     $chunkPayload = null;
     while (microtime(true) < $deadline && ($chunkPayload === null || !$sawSpawn)) {
@@ -638,7 +646,7 @@ test('chunks stream with valid protocol-84 payloads and player spawn fires', fun
                 // capture the first chunk payload we see and separately assert
                 // that the spawn chunk (0,0) is in the streamed set.
                 if ($chunkPayload === null) {
-                    ok(abs($fc['x']) <= 1 && abs($fc['z']) <= 1, 'first chunk is in the spawn neighbourhood');
+                    ok(abs($fc['x']) <= 2 && abs($fc['z']) <= 2, 'first chunk is in the spawn neighbourhood');
                     same(FullChunkDataPacket::ORDER_LAYERED, $fc['order'], 'layered chunk order');
                     $chunkPayload = $fc['data'];
                 }
@@ -650,7 +658,7 @@ test('chunks stream with valid protocol-84 payloads and player spawn fires', fun
     }
     ok($chunkPayload !== null, 'at least one full chunk delivered');
     ok($sawSpawn, 'PLAYER_SPAWN sent after chunk streaming began');
-    ok(isset($chunkCoords['0,0']), 'spawn chunk (0,0) is in the streamed set');
+    ok(isset($chunkCoords[$spawnChunk[0] . ',' . $spawnChunk[1]]), 'the resolved spawn chunk is in the streamed set');
 });
 
 test('chunk payload is well-formed terrain (id/data/light/heightmap/biomes/extra)', function () use (&$chunkPayload): void {

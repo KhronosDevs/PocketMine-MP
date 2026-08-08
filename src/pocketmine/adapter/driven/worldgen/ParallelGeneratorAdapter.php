@@ -11,7 +11,6 @@ use pocketmine\port\driven\ThreadingPort;
 use pocketmine\port\driven\WorldGenPort;
 use pmmp\thread\Pool;
 use function array_fill;
-use function ceil;
 use function chr;
 use function intdiv;
 use function max;
@@ -43,6 +42,9 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
     public const GRASS_BLOCK = 2;    // grass
     public const WATER_BLOCK = 8;    // still water
     public const BEDROCK_BLOCK = 7;  // bedrock
+
+    /** Columns whose surface is below this get filled with water up to it. */
+    public const SEA_LEVEL = 62;
 
     private const SECTION_Y_BLOCKS = 16;
     private const CHUNK_SECTION_COUNT = 16; // 0..15 = y 0..255
@@ -246,14 +248,17 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
             }
         }
 
+        // Keep enough sections for the tallest column AND for sea level, so
+        // valley water is never truncated by a low-max chunk.
         $maxHeight = max($heightmap);
-        $topSectionY = (int)ceil($maxHeight / 16);
+        $topSectionY = intdiv(max($maxHeight, self::SEA_LEVEL), 16);
 
         // Build each column's full-height block profile once using str_repeat
-        // runs: bedrock, stone down to h-3, 3 dirt, grass at h, 3 water above.
-        // This is a handful of allocations per column instead of ~37K chr()
-        // calls per chunk, which is what lets pool workers run concurrently
-        // without serializing on the allocator.
+        // runs: bedrock, stone down to h-3, 3 dirt, grass at h, then water up
+        // to sea level only when the surface dips below it. This is a handful
+        // of allocations per column instead of ~37K chr() calls per chunk,
+        // which is what lets pool workers run concurrently without
+        // serializing on the allocator.
         $bedrock = chr(self::BEDROCK_BLOCK);
         $stone = chr(self::STONE_BLOCK);
         $ground = chr(self::GROUND_BLOCK);
@@ -267,7 +272,12 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
             }
             $p .= str_repeat($ground, min(3, max(0, $h - 1)));
             $p .= $grass;
-            $p .= str_repeat($water, 3);
+            // Water fills the gap between the surface and sea level only:
+            // low valleys become lakes, hilltops stay dry. (The old code
+            // capped every column with 3 water blocks, flooding the hills.)
+            if ($h < self::SEA_LEVEL) {
+                $p .= str_repeat($water, self::SEA_LEVEL - $h);
+            }
             $profiles[] = $p;
         }
 
@@ -305,35 +315,80 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
     }
 
     private static function sampleHeight(int $x, int $z, int $seed): int {
-        // 2D value-noise approximation using pure integer hashing.
+        // Continentalness + two hill octaves of smooth value noise (bilinear
+        // + smoothstep interpolation, pure integer math).
         //
-        // CRITICAL: every intermediate must stay within 64-bit int range. The
-        // old implementation multiplied un-masked values past 2^63, which PHP
-        // silently converts to float; those float->int casts in &/>> are
-        // pathologically slow (and ~20x slower again when several pool
-        // workers run at once), serializing concurrent chunk generation.
-        // Masking to 31 bits before each multiply keeps the math int-only.
-        $n = $x * 374761393 + $z * 668265263 + $seed * 1103515245;
+        // The base octave (128-block cells) decides oceans vs land: its
+        // threshold sits between the base-noise p10 and p20, so roughly one
+        // column in eight falls below sea level and becomes a lake or ocean.
+        // The 16- and 4-block octaves add rolling hills and hillside texture,
+        // and their wobble makes coastlines wavy instead of straight.
+        $base = self::smoothNoise($x, $z, $seed, 7);                // cell 128
+        $mid = self::smoothNoise($x, $z, $seed ^ 0x27D4EB2F, 4);    // cell 16
+        $detail = self::smoothNoise($x, $z, $seed ^ 0x6D2B79F5, 2); // cell 4
+
+        // base is [0, 65535] with median ~32530; the 16384 threshold puts the
+        // coastline between base p10 and p20 (~12% water). Land slopes up to
+        // ~+45 blocks (mountains), seafloor slopes down to ~-20 (deep lakes).
+        $height = 62
+            + intdiv(($base - 16384) * 60, 65536)
+            + intdiv(($mid - 32768) * 14, 65536)
+            + intdiv(($detail - 32768) * 6, 65536);
+        return max(2, min(110, $height));
+    }
+
+    /**
+     * Smooth value noise: hash the four corners of the cell containing
+     * (x, z), then bilinear-interpolate with a smoothstep weight in each
+     * axis. Returns [0, 65535].
+     *
+     * CRITICAL: every intermediate stays within 64-bit int range. Masking to
+     * 31 bits before each multiply keeps the math int-only (floats here are
+     * pathologically slow, and ~20x worse with several pool workers at once).
+     */
+    private static function smoothNoise(int $x, int $z, int $seed, int $shift): int {
+        $cell = 1 << $shift;
+        // Arithmetic right shift = floor division for negative coordinates;
+        // the mask yields the matching non-negative remainder (x = cell*g + f
+        // holds for negatives too, unlike intdiv which truncates toward 0).
+        $gx = $x >> $shift;
+        $gz = $z >> $shift;
+        $fx = $x & ($cell - 1);
+        $fz = $z & ($cell - 1);
+
+        $v00 = self::noise2D($gx, $gz, $seed);
+        $v10 = self::noise2D($gx + 1, $gz, $seed);
+        $v01 = self::noise2D($gx, $gz + 1, $seed);
+        $v11 = self::noise2D($gx + 1, $gz + 1, $seed);
+
+        // Smoothstep weight in Q16 fixed point: w = 3u^2 - 2u^3, u = f/cell.
+        $u = intdiv($fx * 65536, $cell);
+        $u2 = intdiv($u * $u, 65536);
+        $u3 = intdiv($u2 * $u, 65536);
+        $tx = 3 * $u2 - 2 * $u3;
+
+        $u = intdiv($fz * 65536, $cell);
+        $u2 = intdiv($u * $u, 65536);
+        $u3 = intdiv($u2 * $u, 65536);
+        $tz = 3 * $u2 - 2 * $u3;
+
+        $top = $v00 + intdiv(($v10 - $v00) * $tx, 65536);
+        $bottom = $v01 + intdiv(($v11 - $v01) * $tx, 65536);
+        return $top + intdiv(($bottom - $top) * $tz, 65536);
+    }
+
+    /**
+     * Deterministic integer hash -> [0, 65535]. The seed is masked to 31
+     * bits so full-range seeds and far-from-origin coordinates cannot
+     * overflow 64-bit ints (PHP would silently widen to float).
+     */
+    private static function noise2D(int $x, int $z, int $seed): int {
+        $seed &= 0x7FFFFFFF;
+        $n = ($x * 374761393) ^ ($z * 668265263) ^ ($seed * 1103515245);
         $n &= 0x7FFFFFFF;
         $n = ($n ^ ($n >> 13)) * 1274126177; // <= 2^31 * 1.27e9 = 2.7e18, fits
         $n &= 0x7FFFFFFF;
         $n ^= $n >> 16;
-
-        // Combine two octaves for gentle hills.
-        $coarse = self::hash31(intdiv($x, 8), intdiv($z, 8), $seed);
-        $fine = self::hash31(intdiv($x, 2), intdiv($z, 2), $seed ^ 0x9E3779B9);
-
-        // $coarse/$fine in [0, 65535]; scale with int math, never floats.
-        $height = 64 + intdiv($coarse * 24, 65536) + intdiv($fine * 8, 65536);
-        return max(2, min(120, $height));
-    }
-
-    private static function hash31(int $x, int $z, int $seed): int {
-        $n = ($x * 73856093) ^ ($z * 19349663) ^ ($seed * 83492791);
-        $n &= 0x7FFFFFFF;
-        $n = (($n ^ ($n >> 13)) * 1274126177); // <= 2^31 * 1.27e9 = 2.7e18, fits
-        $n &= 0x7FFFFFFF;
-        $n = $n ^ ($n >> 16);
         return $n & 0xFFFF;
     }
 }
