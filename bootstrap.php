@@ -12,4 +12,10 @@ $kernel = bootstrap();
 // service processes the login/chunk/movement flows.
 $kernel->setNetworkingEnabled(true);
 
+$port = $kernel->getNetworkPort() instanceof \pocketmine\adapter\driven\network\Protocol84NetworkAdapter
+    ? $kernel->getNetworkPort()->getBindPort()
+    : 'unknown';
+echo '[Khronos] Listening on UDP ' . $port . PHP_EOL;
+echo '[Khronos] Server started - waiting for 0.15.10 clients (protocol 84)' . PHP_EOL;
+
 $kernel->run();

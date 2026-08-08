@@ -9,11 +9,10 @@ if(Test-Path "bin\php\php.exe"){
 	$binary = "php"
 }
 
-if(Test-Path "PocketMine-MP.phar"){
-	$file = "PocketMine-MP.phar"
-}elseif(Test-Path "src\pocketmine\PocketMine.php"){
-	$file = "src\pocketmine\PocketMine.php"
-}else{
+# The new ECS server entry point (the old PocketMine.php was removed in the
+# Phase-8 API rewrite).
+$file = "bootstrap.php"
+if(-not (Test-Path $file)){
 	echo "Couldn't find a valid PocketMine-MP installation"
 	pause
 	exit 1
