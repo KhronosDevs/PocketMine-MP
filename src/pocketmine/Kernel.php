@@ -1556,6 +1556,10 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // 14.3: periodic hostile-mob spawning near players. Registered after AI so
     // fresh spawns do not act (target, move) the same tick they appear.
     $scheduler->register(new \pocketmine\core\system\MobSpawnerSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // 14.5: dropped items are collected by nearby players (walk-over here,
+    // plus the right-click route inside EntityInteractionService). Runs after
+    // movement/AI so entity positions are current.
+    $scheduler->register(new \pocketmine\core\system\ItemPickupSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     $scheduler->register(new \pocketmine\core\system\ChunkUpdateSystem(), \pocketmine\core\ecs\SystemPhase::CHUNK_PARALLEL);
 }
 

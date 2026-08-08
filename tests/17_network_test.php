@@ -1413,6 +1413,64 @@ test('a dropped item entity is broadcast as AddItemEntityPacket', function () us
     ok(false, 'Alice received AddItemEntityPacket for the dropped item');
 });
 
+// --- Item pickup (14.5) ----------------------------------------------------
+test('a dropped item is collected by walk-over and the inventory syncs back', function () use ($kernel, $client, &$clientBob2): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+
+    // Drop 3 planks one block to the east, well inside walk-over reach (1.5).
+    $item = $kernel->getEntitySpawnService()->spawnItem(
+        $alice['x'] + 1,
+        $alice['y'],
+        $alice['z'],
+        new \pocketmine\core\component\ItemStack(5, 0, 3),
+    );
+    $itemEid = $item->getId();
+
+    // One loop waits for the whole wire lifecycle in order: the drop is
+    // broadcast (AddItemEntityPacket), held by the fresh-drop pickup delay,
+    // then collected by the per-tick walk-over system (RemoveEntityPacket +
+    // the inventory sync back - slot 0 holds 31 planks, the starter 32 minus
+    // the one consumed by the placement test, so +3 must make 34). Also pump
+    // Bob2's client so his RakNet session cannot hit the 10s server-side idle
+    // timeout during this test's polling.
+    $deadline = microtime(true) + 8.0;
+    $sawAdd = false;
+    $sawRemove = false;
+    $sawSlot = false;
+    while (microtime(true) < $deadline && (!$sawAdd || !$sawRemove || !$sawSlot)) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::ADD_ITEM_ENTITY_PACKET && aieFields($buffer)['eid'] === $itemEid) {
+                $sawAdd = true;
+            }
+            if ($id === Info::REMOVE_ENTITY_PACKET && reFields($buffer) === $itemEid) {
+                $sawRemove = true;
+            }
+            if ($id === Info::CONTAINER_SET_CONTENT_PACKET) {
+                $csc = cscFields($buffer);
+                if (isset($csc['slots'][0]) && $csc['slots'][0][0] === 5 && $csc['slots'][0][1] === 34) {
+                    $sawSlot = true;
+                }
+            }
+        }
+        if ($clientBob2 !== null) {
+            $clientBob2->readGamePackets(); // keep Bob2's session alive
+        }
+        $kernel->run(1);
+    }
+    ok($sawAdd, 'Alice received AddItemEntityPacket for the dropped item');
+    ok($sawRemove, 'Alice received RemoveEntityPacket for the collected item');
+    ok($sawSlot, 'Alice inventory synced with the picked-up planks (31+3=34)');
+});
+
 // --- Combat (14.3) ---------------------------------------------------------
 test('attacking a mob via InteractPacket damages it and syncs health over the wire', function () use ($kernel, $client): void {
     $alice = null;

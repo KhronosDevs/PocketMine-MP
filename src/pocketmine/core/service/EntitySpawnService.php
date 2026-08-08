@@ -104,6 +104,10 @@ final class EntitySpawnService {
             $meta = $entity->get(\pocketmine\core\component\MetadataComponent::class);
             if ($meta) {
                 $meta->set('item', $item);
+                // Legacy pickupDelay: a fresh drop is uncollectable for 10
+                // ticks so it cannot instantly re-enter the thrower's own
+                // inventory (the ItemPickupSystem honours this countdown).
+                $meta->set('pickupDelay', 10);
             }
         }
 
