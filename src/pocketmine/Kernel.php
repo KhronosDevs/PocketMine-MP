@@ -334,6 +334,12 @@ final class Kernel {
         // default so headless tests never touch the network). The adapter
         // starts its own RakLibServer thread, which owns the socket.
         if ($this->networkingEnabled && $this->networkPort instanceof Protocol84NetworkAdapter) {
+            // The motd's max-player field should reflect the world config,
+            // not the adapter's hardcoded default.
+            $worldConfig = $this->resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
+            if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+                $this->networkPort->setMaxPlayers($worldConfig->maxPlayers);
+            }
             $this->networkPort->start();
         }
 

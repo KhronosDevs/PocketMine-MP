@@ -6,6 +6,7 @@ namespace pocketmine\adapter\driven\network;
 
 use pocketmine\protocol\DataPacket;
 use pocketmine\protocol\DisconnectPacket;
+use pocketmine\protocol\Info;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\PlayerRef;
 use raklib\protocol\EncapsulatedPacket;
@@ -14,6 +15,9 @@ use raklib\server\RakLibServer;
 use raklib\server\ServerHandler;
 use raklib\server\ServerInstance;
 use pmmp\thread\Thread;
+use function addcslashes;
+use function count;
+use function rtrim;
 
 /**
  * Protocol 84 network adapter.
@@ -34,6 +38,7 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
     private int $bindPort = 19132;
     private bool $running = false;
     private string $serverName = "Khronos Server";
+    private int $maxPlayers = 20;
     /** @var array<string, PlayerRef> address:port => PlayerRef */
     private array $connectedPlayers = [];
     /** @var list<array{0: string, 1: int, 2: string}> [addrKey, packetId, buffer] */
@@ -63,6 +68,10 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
         return $this->running;
     }
 
+    public function getBindPort(): int {
+        return $this->bindPort;
+    }
+
     /** Create and start the RakLibServer thread (binds the UDP socket). */
     public function start(): void {
         if ($this->running) {
@@ -72,7 +81,9 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
         $this->rakLibServer = new RakLibServer($this->bindPort, $this->bindAddress);
         $this->serverHandler = new ServerHandler($this->rakLibServer, $this);
         // The session manager reads the server name for UNCONNECTED_PONG.
-        $this->serverHandler->sendOption('name', $this->serverName);
+        // Real 0.15.x clients parse a structured motd (MCPE;<name>;<protocol>;
+        // <version>;<online>;<max>) and will not list the server otherwise.
+        $this->sendMotd();
         $this->rakLibServer->start(Thread::INHERIT_ALL);
         $this->running = true;
     }
@@ -136,11 +147,13 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
     /** Bind a logged-in player's address to its PlayerRef for sends. */
     public function registerPlayer(string $addrKey, PlayerRef $playerRef): void {
         $this->connectedPlayers[$addrKey] = $playerRef;
+        $this->sendMotd();
     }
 
     /** Forget a player's address mapping (on disconnect/shutdown). */
     public function unregisterPlayer(PlayerRef $playerRef): void {
         $this->removePlayer($playerRef);
+        $this->sendMotd();
     }
 
     public function broadcastPacket(iterable $players, DataPacket $packet): void {
@@ -201,6 +214,7 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
     public function closeSession(string $identifier, string $reason): void {
         $this->removePlayerByIdentifier($identifier);
         $this->pendingConnections[] = ['close', $identifier, $reason];
+        $this->sendMotd();
     }
 
     public function handleEncapsulated(string $identifier, EncapsulatedPacket $packet, int $flags): void {
@@ -262,6 +276,31 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
 
     public function setServerName(string $name): void {
         $this->serverName = $name;
+        $this->sendMotd();
+    }
+
+    public function setMaxPlayers(int $maxPlayers): void {
+        $this->maxPlayers = $maxPlayers;
+        $this->sendMotd();
+    }
+
+    /**
+     * Build and push the RakNet motd a real client parses in UNCONNECTED_PONG:
+     * MCPE;<name>;<protocol>;<version>;<online>;<max> (same layout as the
+     * legacy RakLibInterface::setName).
+     */
+    private function sendMotd(): void {
+        if ($this->serverHandler === null) {
+            return;
+        }
+        // Same layout as the legacy RakLibInterface::setName (version field
+        // left empty there too). A real 0.15.10 client parses these fields.
+        $motd = 'MCPE;' . rtrim(addcslashes($this->serverName, ';'), '\\') . ';'
+            . Info::CURRENT_PROTOCOL . ';'
+            . ';' // version
+            . count($this->connectedPlayers) . ';'
+            . $this->maxPlayers;
+        $this->serverHandler->sendOption('name', $motd);
     }
 
     public function getConnectedPlayers(): array {
