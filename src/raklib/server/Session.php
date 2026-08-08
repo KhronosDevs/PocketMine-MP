@@ -267,9 +267,7 @@ class Session{
 			// Forces pending sends to go out now, rather than waiting to the next update interval
 			$this->sendQueue();
 		}
-	}
-
-	public function addEncapsulatedToQueue(EncapsulatedPacket $packet, int $flags = RakLib::PRIORITY_NORMAL) : void{
+	}    public function addEncapsulatedToQueue(EncapsulatedPacket $packet, int $flags = RakLib::PRIORITY_NORMAL) : void{
 
 		if(($packet->needACK = ($flags & RakLib::FLAG_NEED_ACK) > 0) === true){
 			$this->needACK[$packet->identifierACK] = [];
@@ -293,8 +291,7 @@ class Session{
 
 		if(strlen($packet->buffer) > $maxSize){
 			$buffers = str_split($packet->buffer, $maxSize);
-			$bufferCount = count($buffers);
-			$splitID = ++$this->splitID % 65536;
+			$bufferCount = count($buffers);            $splitID = ++$this->splitID % 65536;
 			foreach($buffers as $count => $buffer){
 				$pk = new EncapsulatedPacket();
 				$pk->splitID = $splitID;
@@ -388,9 +385,7 @@ class Session{
 
 	public function isTemporal() : bool{
 		return $this->isTemporal;
-	}
-
-	private function handleEncapsulatedPacketRoute(EncapsulatedPacket $packet) : void{
+	}    private function handleEncapsulatedPacketRoute(EncapsulatedPacket $packet) : void{
 		if($this->sessionManager === null){
 			return;
 		}
@@ -403,35 +398,14 @@ class Session{
 		}
 
 		$id = ord($packet->buffer[0]);
-		if($id < 0x80){ //internal data packet
-			if($this->state === self::STATE_CONNECTING_2){
-				if($id === CLIENT_CONNECT_DataPacket::$ID){
-					$dataPacket = new CLIENT_CONNECT_DataPacket;
-					$dataPacket->buffer = $packet->buffer;
-					$dataPacket->decode();
-					$pk = new SERVER_HANDSHAKE_DataPacket;
-					$pk->address = $this->address;
-					$pk->port = $this->port;
-					$pk->sendPing = $dataPacket->sendPing;
-					$pk->sendPong = (int) bcadd(strval($pk->sendPing), "100");
-					$pk->encode();
 
-					$sendPacket = new EncapsulatedPacket();
-					$sendPacket->reliability = PacketReliability::UNRELIABLE;
-					$sendPacket->buffer = $pk->buffer;
-					$this->addToQueue($sendPacket, RakLib::PRIORITY_IMMEDIATE);
-				}elseif($id === CLIENT_HANDSHAKE_DataPacket::$ID){
-					$dataPacket = new CLIENT_HANDSHAKE_DataPacket;
-					$dataPacket->buffer = $packet->buffer;
-					$dataPacket->decode();
-
-					if($dataPacket->port === $this->sessionManager->getPort() || !$this->sessionManager->portChecking){
-						$this->state = self::STATE_CONNECTED; //FINALLY!
-						$this->isTemporal = false;
-						$this->sessionManager->openSession($this);
-					}
-				}
-			}elseif($id === CLIENT_DISCONNECT_DataPacket::$ID){
+		// Connected sessions: every payload except the RakNet control packets
+		// is game data and goes straight to the main thread. Note that the
+		// MCPE protocol-84 batch packet id (0x06) is BELOW 0x80 - the old
+		// `$id >= 0x80` guard silently swallowed it, which is why the legacy
+		// code appeared to drop game traffic. (TODO: stream channels)
+		if($this->state === self::STATE_CONNECTED){
+			if($id === CLIENT_DISCONNECT_DataPacket::$ID){
 				$this->disconnect("client disconnect");
 			}elseif($id === PING_DataPacket::$ID){
 				$dataPacket = new PING_DataPacket;
@@ -446,13 +420,40 @@ class Session{
 				$sendPacket->reliability = PacketReliability::UNRELIABLE;
 				$sendPacket->buffer = $pk->buffer;
 				$this->addToQueue($sendPacket);
-			}//TODO: add PING/PONG (0x00/0x03) automatic latency measure
-		}elseif($this->state === self::STATE_CONNECTED){
-			$this->sessionManager->streamEncapsulated($this, $packet);
+			}else{
+				$this->sessionManager->streamEncapsulated($this, $packet);
+			}
+			return;
+		}
 
-			//TODO: stream channels
-		}else{
-			//$this->sessionManager->getLogger()->notice("Received packet before connection: " . bin2hex($packet->buffer));
+		// Handshake state (CONNECTING_2): RakNet internal control packets only.
+		if($this->state === self::STATE_CONNECTING_2){
+			if($id === CLIENT_CONNECT_DataPacket::$ID){
+				$dataPacket = new CLIENT_CONNECT_DataPacket;
+				$dataPacket->buffer = $packet->buffer;
+				$dataPacket->decode();
+				$pk = new SERVER_HANDSHAKE_DataPacket;
+				$pk->address = $this->address;
+				$pk->port = $this->port;
+				$pk->sendPing = $dataPacket->sendPing;
+				$pk->sendPong = (int) bcadd(strval($pk->sendPing), "100");
+				$pk->encode();
+
+				$sendPacket = new EncapsulatedPacket();
+				$sendPacket->reliability = PacketReliability::UNRELIABLE;
+				$sendPacket->buffer = $pk->buffer;
+				$this->addToQueue($sendPacket, RakLib::PRIORITY_IMMEDIATE);
+			}elseif($id === CLIENT_HANDSHAKE_DataPacket::$ID){
+				$dataPacket = new CLIENT_HANDSHAKE_DataPacket;
+				$dataPacket->buffer = $packet->buffer;
+				$dataPacket->decode();
+
+				if($dataPacket->port === $this->sessionManager->getPort() || !$this->sessionManager->portChecking){
+					$this->state = self::STATE_CONNECTED; //FINALLY!
+					$this->isTemporal = false;
+					$this->sessionManager->openSession($this);
+				}
+			}
 		}
 	}
 

@@ -15,17 +15,49 @@ use pocketmine\protocol\PlayStatusPacket;
 use pocketmine\protocol\RequestChunkRadiusPacket;
 use pocketmine\protocol\TextPacket;
 use pocketmine\utils\BinaryStream;
-
-const RAKNET_MAGIC = "\x00\xff\xff\x00\xfe\xfe\xfe\xfe\xfd\xfd\xfd\xfd\x12\x34\x56\x78";
+use raklib\protocol\ACK;
+use raklib\protocol\CLIENT_CONNECT_DataPacket;
+use raklib\protocol\CLIENT_HANDSHAKE_DataPacket;
+use raklib\protocol\DATA_PACKET_4;
+use raklib\protocol\EncapsulatedPacket;
+use raklib\protocol\OPEN_CONNECTION_REQUEST_1;
+use raklib\protocol\OPEN_CONNECTION_REQUEST_2;
+use raklib\protocol\PacketReliability;
+use raklib\protocol\SERVER_HANDSHAKE_DataPacket;
+use raklib\protocol\UNCONNECTED_PING;
+use raklib\protocol\UNCONNECTED_PONG;
+use raklib\RakLib;
 
 /**
- * Minimal protocol-84 client over a real UDP socket. Drives the RakNet
- * offline handshake, then sends game packets batch-wrapped exactly the way a
- * 0.16.x client would.
+ * Minimal protocol-84 client over a real UDP socket speaking REAL RakNet.
+ *
+ * Drives the offline handshake, the connected handshake (CONNECTION_REQUEST
+ * -> SERVER_HANDSHAKE -> NEW_INCOMING_CONNECTION) and then wraps game
+ * packets in BatchPackets inside reliable-ordered encapsulated frames - the
+ * same wire behaviour as a real MCPE 0.15.x client. Incoming DATA_PACKETs
+ * are acknowledged, split packets reassembled, and reliable packets
+ * reordered by message index.
  */
 final class FakeClient {
+    private const MTU = 1492;
+
     /** @var resource */
     private $socket;
+    private int $sendSeq = 0;
+    private int $messageIndex = 0;
+    private int $orderIndex = 0;
+    private int $splitId = 0;
+    /** @var list<int> server DATA_PACKET seqs awaiting an ACK */
+    private array $ackSeqs = [];
+    /** @var array<int, EncapsulatedPacket> reliable packets waiting for their predecessors */
+    private array $pending = [];
+    private int $lastMessageIndex = -1;
+    /** @var array<int, array<int, EncapsulatedPacket>> splitID => splitIndex => fragment */
+    private array $splits = [];
+    /** @var list<string> delivered game-packet buffers, in order */
+    private array $gameBuffer = [];
+    private bool $collectGame = false;
+    private bool $gotHandshake = false;
 
     public function __construct(private readonly int $port) {
         $this->socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
@@ -42,7 +74,7 @@ final class FakeClient {
     }
 
     /** @return list<string> all datagrams currently in the receive buffer */
-    public function readDatagrams(): array {
+    private function readDatagrams(): array {
         $out = [];
         while (true) {
             $buffer = '';
@@ -57,56 +89,87 @@ final class FakeClient {
         return $out;
     }
 
-    /**
-     * RakNet offline handshake. The $tick callback drives the kernel (the
-     * server only answers while its tick loop runs).
-     */
+    // --- RakNet offline handshake ------------------------------------------
+
     public function handshake(?callable $tick = null, float $timeoutSec = 4.0): void {
-        $this->sendDatagram(chr(0x01) . pack('J', time()) . RAKNET_MAGIC);
-        if (!$this->awaitDatagram(static fn(string $d): bool => strlen($d) > 0 && ord($d[0]) === 0x1c, $tick, $timeoutSec)) {
+        $ping = new UNCONNECTED_PING();
+        $ping->pingID = time();
+        $ping->encode();
+        $this->sendDatagram($ping->buffer);
+        if (!$this->awaitRaw(fn(string $d): bool => ord($d[0]) === UNCONNECTED_PONG::$ID, $tick, $timeoutSec)) {
             throw new RuntimeException('no UNCONNECTED_PONG from server');
         }
 
-        $this->sendDatagram(chr(0x05) . RAKNET_MAGIC . chr(84) . pack('n', 1024));
-        if (!$this->awaitDatagram(static fn(string $d): bool => strlen($d) > 0 && ord($d[0]) === 0x06, $tick, $timeoutSec)) {
+        $req1 = new OPEN_CONNECTION_REQUEST_1();
+        $req1->protocol = RakLib::PROTOCOL;
+        $req1->mtuSize = self::MTU;
+        $req1->encode();
+        $this->sendDatagram($req1->buffer);
+        if (!$this->awaitRaw(fn(string $d): bool => ord($d[0]) === 0x06, $tick, $timeoutSec)) {
             throw new RuntimeException('no OPEN_CONNECTION_REPLY_1 from server');
         }
 
-        $this->sendDatagram(chr(0x07) . RAKNET_MAGIC . pack('J', 1234) . pack('n', 1024));
-        if (!$this->awaitDatagram(static fn(string $d): bool => strlen($d) > 0 && ord($d[0]) === 0x08, $tick, $timeoutSec)) {
+        $req2 = new OPEN_CONNECTION_REQUEST_2();
+        $req2->clientID = random_int(1, PHP_INT_MAX);
+        $req2->serverAddress = '127.0.0.1';
+        $req2->serverPort = $this->port;
+        $req2->mtuSize = self::MTU;
+        $req2->encode();
+        $this->sendDatagram($req2->buffer);
+        if (!$this->awaitRaw(fn(string $d): bool => ord($d[0]) === 0x08, $tick, $timeoutSec)) {
             throw new RuntimeException('no OPEN_CONNECTION_REPLY_2 from server');
         }
     }
 
-    private function awaitDatagram(callable $pred, ?callable $tick, float $timeoutSec): bool {
-        $deadline = microtime(true) + $timeoutSec;
-        while (microtime(true) < $deadline) {
-            if ($tick !== null) {
-                $tick();
-            }
-            foreach ($this->readDatagrams() as $datagram) {
-                if ($pred($datagram)) {
-                    return true;
-                }
-            }
-            usleep(10000);
+    // --- RakNet connected handshake ----------------------------------------
+
+    /**
+     * CONNECTION_REQUEST -> (SERVER_HANDSHAKE) -> NEW_INCOMING_CONNECTION.
+     * After this returns the transport is fully connected and game packets
+     * can flow in both directions.
+     */
+    public function connect(?callable $tick = null, float $timeoutSec = 4.0): void {
+        $connect = new CLIENT_CONNECT_DataPacket();
+        $connect->clientID = random_int(1, PHP_INT_MAX);
+        $connect->sendPing = 0;
+        $connect->encode();
+        $this->sendEncapsulated($connect->buffer, PacketReliability::RELIABLE_ORDERED);
+
+        if (!$this->awaitPumped(fn(): bool => $this->gotHandshake, $tick, $timeoutSec)) {
+            throw new RuntimeException('no SERVER_HANDSHAKE from server');
         }
-        return false;
+        $this->gotHandshake = false;
+
+        $handshake = new CLIENT_HANDSHAKE_DataPacket();
+        $handshake->address = '127.0.0.1';
+        $handshake->port = $this->port;
+        $handshake->sendPing = 0;
+        $handshake->sendPong = 100;
+        $handshake->encode();
+        $this->sendEncapsulated($handshake->buffer, PacketReliability::RELIABLE_ORDERED);
+
+        // From here on, delivered payloads are game packets.
+        $this->collectGame = true;
     }
 
-    /** Send a game packet wrapped in a BatchPacket, like a real client. */
-    public function sendGamePacket(\pocketmine\protocol\DataPacket $packet): void {
-        $packet->encode();
-        $this->sendRawBuffer($packet->getBuffer());
-    }
+    // --- RakNet transport --------------------------------------------------
 
-    /** Send a raw game-packet body (id byte + fields) inside a batch. */
+    /**
+     * Wrap a raw game-packet body (id byte + fields) in a BatchPacket and
+     * send it as a reliable-ordered encapsulated frame.
+     */
     public function sendRawBuffer(string $buffer): void {
         $inner = pack('N', strlen($buffer)) . $buffer;
         $batch = new BatchPacket();
         $batch->payload = zlib_encode($inner, ZLIB_ENCODING_DEFLATE, 7);
         $batch->encode();
-        $this->sendDatagram($batch->getBuffer());
+        $this->sendEncapsulated($batch->getBuffer(), PacketReliability::RELIABLE_ORDERED);
+    }
+
+    /** Send a game packet (encode + batch-wrap + reliable frame). */
+    public function sendGamePacket(\pocketmine\protocol\DataPacket $packet): void {
+        $packet->encode();
+        $this->sendRawBuffer($packet->getBuffer());
     }
 
     public function sendLogin(string $username, string $uuid): void {
@@ -139,37 +202,155 @@ final class FakeClient {
     }
 
     private static function jwt(array $payload): string {
-        // Plain (non-url-safe) base64: LoginPacket's decodeToken strict-decodes
-        // the payload part without the strtr() it applies to the signature.
         $b64 = static fn(string $s): string => base64_encode($s);
-        // 97 zero bytes keeps LoginPacket's signature-shape reads in bounds; the
-        // signature still fails verification, which is fine for offline-mode login.
         return $b64('{"alg":"ES384"}') . '.' . $b64(json_encode($payload)) . '.' . $b64(str_repeat("\x00", 97));
     }
 
     /**
-     * Decode all datagrams into [packetId, rawBuffer] pairs (id byte intact).
-     * Handles the transport framing: each datagram is a length-prefixed run of
-     * BatchPacket buffers, and each batch payload a length-prefixed run of
-     * game packets.
+     * Enqueue one encapsulated payload (splitting oversized buffers like a
+     * real client) and flush it in a DATA_PACKET datagram immediately.
+     */
+    private function sendEncapsulated(string $buffer, int $reliability = PacketReliability::RELIABLE_ORDERED): void {
+        $pk = new EncapsulatedPacket();
+        $pk->reliability = $reliability;
+        $pk->buffer = $buffer;
+        if ($reliability >= PacketReliability::RELIABLE && $reliability !== PacketReliability::UNRELIABLE_WITH_ACK_RECEIPT) {
+            $pk->messageIndex = $this->messageIndex++;
+        }
+        if ($reliability === PacketReliability::RELIABLE_ORDERED || $reliability === PacketReliability::RELIABLE_SEQUENCED) {
+            $pk->orderIndex = $this->orderIndex++;
+            $pk->orderChannel = 0;
+        }
+
+        $max = 1200; // leave room for the datagram + frame headers
+        if (strlen($buffer) > $max) {
+            $splitId = $this->splitId++ % 65536;
+            $parts = str_split($buffer, $max);
+            foreach ($parts as $i => $part) {
+                $sp = new EncapsulatedPacket();
+                $sp->hasSplit = true;
+                $sp->splitCount = count($parts);
+                $sp->splitID = $splitId;
+                $sp->splitIndex = $i;
+                $sp->reliability = $reliability;
+                $sp->buffer = $part;
+                $sp->messageIndex = $i > 0 ? $this->messageIndex++ : $pk->messageIndex;
+                if ($reliability === PacketReliability::RELIABLE_ORDERED) {
+                    $sp->orderIndex = $pk->orderIndex;
+                    $sp->orderChannel = 0;
+                }
+                $this->sendDataPacket($sp);
+            }
+            return;
+        }
+        $this->sendDataPacket($pk);
+    }
+
+    private function sendDataPacket(EncapsulatedPacket $pk): void {
+        $dp = new DATA_PACKET_4();
+        $dp->seqNumber = $this->sendSeq++;
+        $dp->packets[] = $pk->toBinary();
+        $dp->encode();
+        $this->sendDatagram($dp->buffer);
+    }
+
+    private function flushAcks(): void {
+        if (empty($this->ackSeqs)) {
+            return;
+        }
+        $ack = new ACK();
+        $ack->packets = $this->ackSeqs;
+        $ack->encode();
+        $this->sendDatagram($ack->buffer);
+        $this->ackSeqs = [];
+    }
+
+    /** Read + parse all pending datagrams (DATA_PACKETs only; ACK/NACK ignored). */
+    private function pump(): void {
+        foreach ($this->readDatagrams() as $datagram) {
+            if ($datagram === '') {
+                continue;
+            }
+            $id = ord($datagram[0]);
+            if ($id >= 0x80 && $id <= 0x8f) {
+                $this->handleDataPacket($datagram);
+            }
+        }
+    }
+
+    private function handleDataPacket(string $datagram): void {
+        $dp = new DATA_PACKET_4();
+        $dp->buffer = $datagram;
+        $dp->decode();
+        if ($dp->seqNumber !== null) {
+            $this->ackSeqs[] = $dp->seqNumber;
+        }
+        foreach ($dp->packets as $pk) {
+            if ($pk instanceof EncapsulatedPacket) {
+                $this->handleEncapsulated($pk);
+            }
+        }
+    }
+
+    /**
+     * Ordered delivery runs on FRAGMENT message indexes, matching the
+     * server's reliable window: every reliable packet - split fragment or
+     * not - must arrive in message-index order. A split packet is delivered
+     * when its last fragment arrives (fragments of one packet carry
+     * consecutive indexes, so index order == fragment order).
+     */
+    private function handleEncapsulated(EncapsulatedPacket $pk): void {
+        if ($pk->messageIndex === null) {
+            $this->consume($pk->buffer); // unreliable: deliver immediately
+            return;
+        }
+        $this->pending[$pk->messageIndex] = $pk;
+        while (isset($this->pending[$this->lastMessageIndex + 1])) {
+            $this->lastMessageIndex++;
+            $pkt = $this->pending[$this->lastMessageIndex];
+            unset($this->pending[$this->lastMessageIndex]);
+            if ($pkt->hasSplit) {
+                $this->splits[$pkt->splitID][$pkt->splitIndex] = $pkt;
+                if (isset($pkt->splitCount) && count($this->splits[$pkt->splitID]) === $pkt->splitCount) {
+                    $joined = '';
+                    for ($i = 0; $i < $pkt->splitCount; $i++) {
+                        $joined .= $this->splits[$pkt->splitID][$i]->buffer;
+                    }
+                    unset($this->splits[$pkt->splitID]);
+                    $this->consume($joined);
+                }
+            } else {
+                $this->consume($pkt->buffer);
+            }
+        }
+    }
+
+    private function consume(string $buffer): void {
+        if ($buffer === '' || strlen($buffer) < 1) {
+            return;
+        }
+        if (ord($buffer[0]) === SERVER_HANDSHAKE_DataPacket::$ID) {
+            $this->gotHandshake = true;
+        }
+        if ($this->collectGame) {
+            $this->gameBuffer[] = $buffer;
+        }
+    }
+
+    /**
+     * Decode all delivered game packets: pump the transport, then unpack each
+     * BatchPacket into its inner length-prefixed packet bodies.
      * @return list<array{0: int, 1: string}>
      */
     public function readGamePackets(): array {
+        $this->pump();
+        $this->flushAcks();
         $packets = [];
-        foreach ($this->readDatagrams() as $datagram) {
-            $offset = 0;
-            $len = strlen($datagram);
-            while ($offset + 2 <= $len) {
-                $frameLen = unpack('n', substr($datagram, $offset, 2))[1];
-                $offset += 2;
-                if ($frameLen <= 0 || $offset + $frameLen > $len) {
-                    break;
-                }
-                $batchBuf = substr($datagram, $offset, $frameLen);
-                $offset += $frameLen;
-
+        while (($buffer = array_shift($this->gameBuffer)) !== null) {
+            $id = ord($buffer[0]);
+            if ($id === Info::BATCH_PACKET) {
                 $batch = new BatchPacket();
-                $batch->setBuffer($batchBuf, 1);
+                $batch->setBuffer($buffer, 1);
                 $batch->decode();
                 $payload = zlib_decode($batch->payload);
                 if ($payload === false) {
@@ -187,9 +368,45 @@ final class FakeClient {
                     $poff += $pkLen;
                     $packets[] = [ord($pkBuf[0]), $pkBuf];
                 }
+            } else {
+                $packets[] = [$id, $buffer];
             }
         }
         return $packets;
+    }
+
+    // --- Wait helpers ------------------------------------------------------
+
+    private function awaitRaw(callable $pred, ?callable $tick, float $timeoutSec): bool {
+        $deadline = microtime(true) + $timeoutSec;
+        while (microtime(true) < $deadline) {
+            if ($tick !== null) {
+                $tick();
+            }
+            foreach ($this->readDatagrams() as $datagram) {
+                if ($pred($datagram)) {
+                    return true;
+                }
+            }
+            usleep(10000);
+        }
+        return false;
+    }
+
+    private function awaitPumped(callable $pred, ?callable $tick, float $timeoutSec): bool {
+        $deadline = microtime(true) + $timeoutSec;
+        while (microtime(true) < $deadline) {
+            if ($tick !== null) {
+                $tick();
+            }
+            $this->pump();
+            $this->flushAcks();
+            if ($pred()) {
+                return true;
+            }
+            usleep(10000);
+        }
+        return false;
     }
 }
 
@@ -322,13 +539,14 @@ $kernel->setNetworkingEnabled(true);
 $kernel->setBindPort($port);
 $kernel->setAutoShutdownOnRun(false);
 
-$kernel->run(1); // bind socket + first tick
+$kernel->run(1); // bind socket + start the RakNet thread + first tick
 
 $client = new FakeClient($port);
 
-// --- RakNet offline handshake ---------------------------------------------
-test('offline handshake completes (ping -> pong, request1/2 -> reply1/2)', function () use ($client, $kernel): void {
+// --- RakNet handshake (offline + connected) --------------------------------
+test('real RakNet handshake completes (ping->pong, req1/2->reply1/2, connected)', function () use ($client, $kernel): void {
     $client->handshake(fn() => $kernel->run(1));
+    $client->connect(fn() => $kernel->run(1));
 });
 
 // --- Login flow ------------------------------------------------------------
@@ -424,8 +642,6 @@ test('chunks stream with valid protocol-84 payloads and player spawn fires', fun
     ok($chunkPayload !== null, 'at least one full chunk delivered');
     ok($sawSpawn, 'PLAYER_SPAWN sent after chunk streaming began');
     ok(isset($chunkCoords['0,0']), 'spawn chunk (0,0) is in the streamed set');
-    ok($chunkPayload !== null, 'at least one full chunk delivered');
-    ok($sawSpawn, 'PLAYER_SPAWN sent after chunk streaming began');
 });
 
 test('chunk payload is well-formed terrain (id/data/light/heightmap/biomes/extra)', function () use (&$chunkPayload): void {
@@ -468,8 +684,6 @@ test('chunk payload is well-formed terrain (id/data/light/heightmap/biomes/extra
 
 // --- Chunk radius ----------------------------------------------------------
 test('chunk radius request is acknowledged', function () use ($client, $kernel): void {
-    // RequestChunkRadiusPacket::encode() is empty in this codebase (it is a
-    // client->server packet), so build the wire body by hand: id + radius int.
     $radiusBody = chr(Info::REQUEST_CHUNK_RADIUS_PACKET) . pack('N', 3);
     $client->sendRawBuffer($radiusBody);
     $kernel->run(1);
@@ -500,15 +714,25 @@ test('client movement is applied to the ECS entity', function () use ($client, $
     $move->mode = MovePlayerPacket::MODE_NORMAL;
     $move->onGround = true;
     $client->sendGamePacket($move);
-    $kernel->run(1);
 
-    $online = $kernel->getNetworkSessionService()->getOnlinePlayers();
-    same(1, count($online), 'one online player');
-    $alice = $online[0];
-    same('Alice', $alice['username'], 'username');
-    near(12.5, $alice['x'], 1e-6, 'x applied');
-    near(65.0, $alice['y'], 1e-6, 'y applied');
-    near(-3.25, $alice['z'], 1e-6, 'z applied');
+    // The packet now travels client socket -> RakLib thread -> kernel, so a
+    // single tick may not be enough: poll until the position lands.
+    $deadline = microtime(true) + 3.0;
+    while (microtime(true) < $deadline) {
+        $kernel->run(1);
+        $online = $kernel->getNetworkSessionService()->getOnlinePlayers();
+        if (isset($online[0]) && abs($online[0]['x'] - 12.5) < 1e-6) {
+            same(1, count($online), 'one online player');
+            $alice = $online[0];
+            same('Alice', $alice['username'], 'username');
+            near(12.5, $alice['x'], 1e-6, 'x applied');
+            near(65.0, $alice['y'], 1e-6, 'y applied');
+            near(-3.25, $alice['z'], 1e-6, 'z applied');
+            return;
+        }
+        usleep(10000);
+    }
+    ok(false, 'movement applied to the ECS entity');
 });
 
 // --- Chat ------------------------------------------------------------------
@@ -540,6 +764,7 @@ test('chat is echoed back to the sender', function () use ($client, $kernel): vo
 test('a second client can join and sees the same world', function () use ($kernel, $port, $client): void {
     $client2 = new FakeClient($port);
     $client2->handshake(fn() => $kernel->run(1));
+    $client2->connect(fn() => $kernel->run(1));
 
     $client2->sendLogin('Bob', '99999999-8888-7777-6666-555555555555');
     $kernel->run(2);
@@ -608,6 +833,7 @@ test('a second client can join and sees the same world', function () use ($kerne
 test('wrong protocol version is rejected with LOGIN_FAILED', function () use ($kernel, $port): void {
     $client3 = new FakeClient($port);
     $client3->handshake(fn() => $kernel->run(1));
+    $client3->connect(fn() => $kernel->run(1));
 
     // Hand-rolled login buffer with protocol 999.
     $stream = new BinaryStream();
@@ -641,9 +867,46 @@ test('the adapter reports connected players after login', function () use ($kern
     ok(count($adapter->getConnectedPlayers()) >= 2, 'adapter tracks connected players');
 });
 
+// --- Disconnect handling ---------------------------------------------------
+test('a client that disconnects is removed from the session service', function () use ($kernel, $port): void {
+    $d = new FakeClient($port);
+    $d->handshake(fn() => $kernel->run(1));
+    $d->connect(fn() => $kernel->run(1));
+    $d->sendLogin('Dorian', 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
+    $kernel->run(2);
+
+    // Dorian joined (transport-level open + login).
+    $names = array_column($kernel->getNetworkSessionService()->getOnlinePlayers(), 'username');
+    ok(in_array('Dorian', $names, true), 'Dorian joined');
+
+    // Close the UDP socket: the RakNet session times out (10s) and the close
+    // event must remove the game session. (Other clients' sessions may time
+    // out around the same time, so only Dorian's removal is asserted.)
+    $d->close();
+    $deadline = microtime(true) + 14.0;
+    while (microtime(true) < $deadline) {
+        $kernel->run(1);
+        $names = array_column($kernel->getNetworkSessionService()->getOnlinePlayers(), 'username');
+        if (!in_array('Dorian', $names, true)) {
+            ok(true, 'disconnected player removed');
+            return;
+        }
+        usleep(50000);
+    }
+    ok(false, 'disconnected player removed within timeout');
+});
+
 // Teardown runs as a real test so it executes AFTER the other cases (the
 // runner calls test fns in registration order).
 test('server shuts down cleanly with active sessions', function () use ($kernel, $client): void {
+    $adapter = $kernel->getNetworkPort();
+    if ($adapter instanceof Protocol84NetworkAdapter) {
+        foreach ($adapter->drainLogLines() as $line) {
+            if (str_starts_with($line, 'critical')) {
+                fwrite(STDERR, "RakLib thread error: $line\n");
+            }
+        }
+    }
     $client->close();
     $kernel->shutdown();
     ok(true, 'shutdown completed');
