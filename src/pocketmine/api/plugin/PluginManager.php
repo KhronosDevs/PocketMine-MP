@@ -6,6 +6,7 @@ namespace pocketmine\api\plugin;
 
 use pocketmine\api\command\CommandSender;
 use pocketmine\api\command\PluginCommand;
+use pocketmine\api\permission\PermissionManager;
 use pocketmine\Kernel;
 use pocketmine\port\driving\CommandPort;
 use pocketmine\port\driving\EventPort;
@@ -24,7 +25,10 @@ class PluginManager implements PluginPort {
     private array $autoloaders = [];
     /** @var array<string, list<string>> plugin name => yml-declared command names */
     private array $pluginCommandNames = [];
+    /** @var array<string, list<string>> plugin name => registered permission names */
+    private array $pluginPermissionNames = [];
     private ?Kernel $kernel = null;
+    private ?PermissionManager $permissionManager = null;
 
     public function __construct(
         private readonly CommandPort $commandPort,
@@ -37,6 +41,14 @@ class PluginManager implements PluginPort {
      */
     public function setKernel(Kernel $kernel): void {
         $this->kernel = $kernel;
+    }
+
+    /**
+     * The server-wide permission registry that plugin.yml "permissions:"
+     * sections are registered into. Injected alongside the kernel.
+     */
+    public function setPermissionManager(PermissionManager $permissionManager): void {
+        $this->permissionManager = $permissionManager;
     }
 
     public function loadPlugin(string $path): ?Plugin {
@@ -120,6 +132,18 @@ class PluginManager implements PluginPort {
     }
 
     public function enablePlugin(Plugin $plugin): void {
+        // Register permissions declared in plugin.yml so hasPermission() and
+        // command gating (permission: on a command) resolve through the
+        // server-wide manager (defaults, children, op).
+        if ($this->permissionManager !== null) {
+            foreach ($plugin->getDescription()->getPermissions() as $name => $meta) {
+                $permission = PermissionManager::fromYaml((string)$name, is_array($meta) ? $meta : []);
+                if ($this->permissionManager->addPermission($permission)) {
+                    $this->pluginPermissionNames[$plugin->getName()][] = $permission->getName();
+                }
+            }
+        }
+
         // Register commands declared in plugin.yml, bound to the plugin's
         // onCommand() hook so metadata (permission, aliases) stays declarative.
         foreach ($plugin->getDescription()->getCommands() as $name => $meta) {
@@ -145,6 +169,15 @@ class PluginManager implements PluginPort {
 
     public function disablePlugin(Plugin $plugin): void {
         if (isset($this->plugins[$plugin->getName()])) {
+            // Remove the plugin's permissions from the server-wide manager so
+            // a disabled plugin leaves no permission traces behind.
+            if ($this->permissionManager !== null) {
+                foreach ($this->pluginPermissionNames[$plugin->getName()] ?? [] as $permissionName) {
+                    $this->permissionManager->removePermission($permissionName);
+                }
+            }
+            unset($this->pluginPermissionNames[$plugin->getName()]);
+
             // Remove the plugin's commands (yml-declared and class-based) from
             // the shared map so a disabled plugin leaves no traces.
             foreach ($this->pluginCommandNames[$plugin->getName()] ?? [] as $commandName) {

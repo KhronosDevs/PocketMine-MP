@@ -36,6 +36,7 @@ use pocketmine\core\service\KnockbackService;
 use pocketmine\core\service\InventoryService;
 use pocketmine\core\service\CraftingService;
 use pocketmine\core\service\ContainerService;
+use pocketmine\core\service\NetworkSessionService;
 use pocketmine\core\system\ChunkUpdateSystem;
 use pocketmine\core\system\MovementSystem;
 use pocketmine\core\system\PhysicsSystem;
@@ -58,6 +59,13 @@ final class Kernel {
 
     private bool $running = false;
     private bool $shutdownComplete = false;
+    /**
+     * When true, run() binds the network adapter socket and the session
+     * service processes real client connections. Off by default so headless
+     * tests that tick the kernel never open a UDP socket; the real server
+     * entrypoint (bootstrap.php) enables it.
+     */
+    private bool $networkingEnabled = false;
     /**
      * When true (default) a bounded run() shuts the worker threads down on
      * exit. Disable to make run() resumable (threads stay alive so a later
@@ -153,6 +161,7 @@ final class Kernel {
     private ChunkLoadService $chunkLoadService;
     private ChunkUnloadService $chunkUnloadService;
     private ChunkSendService $chunkSendService;
+    private NetworkSessionService $networkSessionService;
     private BlockBreakService $blockBreakService;
     private BlockPlaceService $blockPlaceService;
     private BlockUpdateService $blockUpdateService;
@@ -166,6 +175,7 @@ final class Kernel {
     private CraftingService $craftingService;
     private ContainerService $containerService;
     private \pocketmine\api\scheduler\Scheduler $scheduler;
+    private \pocketmine\api\permission\PermissionManager $permissionManager;
 
     public function __construct(
         private readonly NetworkPort $networkPort,
@@ -190,6 +200,7 @@ final class Kernel {
         $this->chunkUnloadService = new ChunkUnloadService($world, $storagePort);
         $this->chunkLoadService = new ChunkLoadService($world, $storagePort, $worldGenPort, $this->chunkUnloadService);
         $this->chunkSendService = new ChunkSendService($world, $networkPort);
+        $this->networkSessionService = new NetworkSessionService($networkPort, $world, $this->playerJoinService, $this->chunkLoadService, $this->resourceRegistry);
         $this->blockBreakService = new BlockBreakService($world, $storagePort);
         $this->blockPlaceService = new BlockPlaceService($world);
         $this->blockUpdateService = new BlockUpdateService($world, $storagePort);
@@ -207,6 +218,12 @@ final class Kernel {
         // so it must not be recreated per access.
         $this->scheduler = new \pocketmine\api\scheduler\Scheduler($world, $systemScheduler, $threadingPort);
 
+        $this->permissionManager = new \pocketmine\api\permission\PermissionManager();
+        // Override the default instance the resource registry was seeded with so
+        // plugins that look it up from the registry get the SAME instance the
+        // plugin manager registers plugin.yml permissions into.
+        $this->resourceRegistry->set($this->permissionManager);
+
         $this->dataPath = getcwd() . DIRECTORY_SEPARATOR;
         $this->startTime = time();
         self::$instance = $this;
@@ -214,6 +231,7 @@ final class Kernel {
         // Plugins are created before the kernel exists; wire them now.
         if ($this->pluginPort instanceof \pocketmine\api\plugin\PluginManager) {
             $this->pluginPort->setKernel($this);
+            $this->pluginPort->setPermissionManager($this->permissionManager);
         }
 
         // Initialize region-based architecture
@@ -272,6 +290,29 @@ final class Kernel {
         $this->autoShutdownOnRun = $autoShutdown;
     }
 
+    /** Opt into real client serving: binds the UDP socket in run(). */
+    public function setNetworkingEnabled(bool $enabled): void {
+        $this->networkingEnabled = $enabled;
+    }
+
+    public function isNetworkingEnabled(): bool {
+        return $this->networkingEnabled;
+    }
+
+    /**
+     * Override the adapter's bind port (before run()). Only meaningful when
+     * networking is enabled; used by tests to avoid port clashes.
+     */
+    public function setBindPort(int $port): void {
+        if ($this->networkPort instanceof Protocol84NetworkAdapter) {
+            $this->networkPort->setBindPort($port);
+        }
+    }
+
+    public function getNetworkSessionService(): NetworkSessionService {
+        return $this->networkSessionService;
+    }
+
     public function run(int $maxTicks = -1): void {
         if ($this->running) {
             return;
@@ -299,6 +340,13 @@ final class Kernel {
                 $regionThread->start(Thread::INHERIT_ALL);
             }
             $this->threadsStarted = true;
+        }
+
+        // Bind the UDP socket and start serving clients (opt-in: off by
+        // default so headless tests never touch the network). The adapter is
+        // already pointed at the kernel's NetworkThread, so it reuses it.
+        if ($this->networkingEnabled && $this->networkPort instanceof Protocol84NetworkAdapter) {
+            $this->networkPort->start();
         }
 
         // Profiling closure is created once (not per tick) so the hot loop
@@ -626,6 +674,9 @@ final class Kernel {
                 }
             }
             $queue[] = RegionThread::encodeTick($this->pipelineTickSeq);
+            // Wake the worker: it sleeps on a condvar between polls, so a
+            // pushed batch must notify it or the work sits until the timeout.
+            $region->wakeup();
         }
     }
 
@@ -1022,6 +1073,9 @@ final class Kernel {
             }
         }
         
+        // Disconnect all sessions before the socket closes.
+        $this->networkSessionService->shutdown();
+
         // Stop the chunk-generation pool (real worker threads) and close the
         // adapter's UDP socket. The adapter does not touch the injected
         // NetworkThread - that was joined above.
@@ -1046,6 +1100,10 @@ final class Kernel {
 
     public function getScheduler(): \pocketmine\api\scheduler\Scheduler {
         return $this->scheduler;
+    }
+
+    public function getPermissionManager(): \pocketmine\api\permission\PermissionManager {
+        return $this->permissionManager;
     }
 
     public function getComponentRegistry(): ComponentRegistry {
@@ -1216,14 +1274,18 @@ final class Kernel {
             $regionId = (int)($decoded['regionId'] ?? 0);
             if (isset($this->regionThreads[$regionId])) {
                 $this->regionThreads[$regionId]->getCommandQueue()[] = $cmd;
+                $this->regionThreads[$regionId]->wakeup();
             }
         }
     }
 
     private function flushNetworkSync(): void {
-        // Network adapter I/O happens on the main thread.
+        // Network adapter I/O happens on the main thread. Receive and decode
+        // inbound datagrams, let the session service respond to game packets,
+        // then flush the compressed outbound frames to the socket.
         if ($this->networkPort instanceof \pocketmine\adapter\driven\network\Protocol84NetworkAdapter) {
             $this->networkPort->processPendingCommands();
+            $this->networkSessionService->poll();
             $this->networkPort->flushOutboundPackets();
         }
     }
@@ -1322,6 +1384,7 @@ function registerBuiltinComponents(ComponentRegistry $registry): void {
 }
 
 function registerBuiltinResources(ResourceRegistry $registry): void {
+    $registry->set(new \pocketmine\api\permission\PermissionManager());
     $registry->set(new \pocketmine\core\resource\TickCounter());
     $registry->set(new \pocketmine\core\resource\ServerConfig());
     $registry->set(new \pocketmine\core\resource\SpatialIndex());

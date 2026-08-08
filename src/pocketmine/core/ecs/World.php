@@ -44,6 +44,16 @@ final class World {
         return $this->entities[$id] ?? null;
     }
 
+    /**
+     * The archetype an entity currently lives in, or null for a despawned or
+     * unknown entity. This is the authoritative map that reconcileArchetypes
+     * maintains; system queries use it to avoid recomputing an archetype key
+     * (array_keys + sort + implode) per entity on every tick.
+     */
+    public function getEntityArchetype(int $id): ?Archetype {
+        return $this->entityArchetypes[$id] ?? null;
+    }
+
     public function getEntities(): array {
         return $this->entities;
     }
@@ -135,14 +145,27 @@ final class World {
         }
     }
 
+    /** @var array<string, bool> component class => has applyPending() (memoized) */
+    private static array $pendingCapable = [];
+
     public function applyPendingComponents(): void {
-        // Double-buffer swap for parallel systems
-        foreach ($this->entities as $entity) {
-            foreach ($entity->getComponents() as $type => $component) {
-                // Tags and other non-object components (withTag stores `true`)
-                // have no pending state to apply.
-                if (is_object($component) && method_exists($component, 'applyPending')) {
-                    $component->applyPending();
+        // Double-buffer swap for parallel systems. Instead of iterating every
+        // entity x every component (with a method_exists per component), walk
+        // the archetypes' flat component arrays for the component TYPES that
+        // actually have applyPending() - one method_exists per type, and the
+        // archetype arrays already skip holes (nulled despawned slots).
+        foreach ($this->componentRegistry->getArchetypes() as $archetype) {
+            foreach ($archetype->componentTypes as $type) {
+                if (!isset(self::$pendingCapable[$type])) {
+                    self::$pendingCapable[$type] = is_object($type) || (class_exists($type) && method_exists($type, 'applyPending'));
+                }
+                if (!self::$pendingCapable[$type]) {
+                    continue;
+                }
+                foreach ($archetype->getComponentArray($type) as $component) {
+                    if ($component !== null) {
+                        $component->applyPending();
+                    }
                 }
             }
         }

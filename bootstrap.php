@@ -8,10 +8,8 @@ use function pocketmine\bootstrap;
 
 $kernel = bootstrap();
 
-// Start network adapter
-$networkPort = $kernel->getNetworkPort();
-if ($networkPort instanceof \pocketmine\adapter\driven\network\Protocol84NetworkAdapter) {
-    $networkPort->start();
-}
+// Real server: serve clients. run() binds the UDP socket and the session
+// service processes the login/chunk/movement flows.
+$kernel->setNetworkingEnabled(true);
 
 $kernel->run();

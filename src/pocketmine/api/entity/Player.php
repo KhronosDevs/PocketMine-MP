@@ -117,6 +117,12 @@ class Player extends Entity {
     }
 
     public function hasPermission(string $permission): bool {
+        // Route through the server-wide manager so plugin.yml defaults and
+        // child permissions resolve, not just explicit metadata grants.
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel !== null) {
+            return $kernel->getPermissionManager()->hasPermission($this, $permission);
+        }
         $metadata = $this->getMetadata();
         $perms = $metadata->get('permissions', []);
         return in_array($permission, $perms) || in_array('*', $perms) || in_array('pocketmine.op', $perms);

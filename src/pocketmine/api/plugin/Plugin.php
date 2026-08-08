@@ -153,6 +153,10 @@ abstract class Plugin {
         return $this->getKernel()->getPluginPort();
     }
 
+    final protected function getPermissionManager(): \pocketmine\api\permission\PermissionManager {
+        return $this->getKernel()->getPermissionManager();
+    }
+
     // ---- Lifecycle hooks ----
 
     public function onLoad(): void {}

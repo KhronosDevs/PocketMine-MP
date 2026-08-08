@@ -65,6 +65,21 @@ final class Protocol84NetworkAdapter implements NetworkPort {
         $this->serverId = random_int(1, PHP_INT_MAX);
     }
 
+    /**
+     * Override the bind port before start(). Only honored while the socket is
+     * not yet bound; used by tests to avoid clashing with the default port.
+     */
+    public function setBindPort(int $port): void {
+        if ($this->running) {
+            return;
+        }
+        $this->bindPort = $port;
+    }
+
+    public function isRunning(): bool {
+        return $this->running;
+    }
+
     public function start(): void {
         if ($this->running) {
             return;
@@ -185,6 +200,10 @@ final class Protocol84NetworkAdapter implements NetworkPort {
             if (!is_string($addrKey) || !is_string($payload)) {
                 continue;
             }
+            $payload = base64_decode($payload, true);
+            if ($payload === false) {
+                continue;
+            }
             $parts = explode(":", $addrKey, 2);
             if (count($parts) !== 2) {
                 continue;
@@ -247,6 +266,28 @@ final class Protocol84NetworkAdapter implements NetworkPort {
         }
         $packet->encode();
         $this->networkThread->queueOutboundFrame($addrKey, $packet->getBuffer());
+    }
+
+    /**
+     * Send a packet to a raw address (no PlayerRef registration required).
+     * Used for pre-session replies such as login-failed status.
+     */
+    public function sendRawPacket(string $addrKey, DataPacket $packet): void {
+        if ($this->networkThread === null) {
+            return;
+        }
+        $packet->encode();
+        $this->networkThread->queueOutboundFrame($addrKey, $packet->getBuffer());
+    }
+
+    /** Bind a logged-in player's address to its PlayerRef for sends. */
+    public function registerPlayer(string $addrKey, PlayerRef $playerRef): void {
+        $this->connectedPlayers[$addrKey] = $playerRef;
+    }
+
+    /** Forget a player's address mapping (on disconnect/shutdown). */
+    public function unregisterPlayer(PlayerRef $playerRef): void {
+        $this->removePlayer($playerRef);
     }
 
     public function broadcastPacket(iterable $players, DataPacket $packet): void {
