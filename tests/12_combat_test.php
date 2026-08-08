@@ -163,7 +163,11 @@ test('player death fires PlayerDeathEvent with death message and drops inventory
     same(true, $combat->applyDamage($player, 50.0), 'fatal damage applied');
     same(1, $playerDeathFired, 'player death event fired');
     flushWorld($world);
-    ok(!$player->isValid(), 'player despawned after death');
+    // 14.3: players stay in the world as a dead corpse (DeadTag + 0 health)
+    // so PlayerRespawnService can revive them; only mobs despawn on death.
+    ok($player->isValid(), 'player stays in the world after death (corpse for respawn)');
+    $deadTag = $player->getEntity()?->has(\pocketmine\core\component\tags\DeadTag::class);
+    same(true, $deadTag, 'player carries DeadTag after death');
 
     // Iron sword should be among the dropped item entities.
     $dropped = false;

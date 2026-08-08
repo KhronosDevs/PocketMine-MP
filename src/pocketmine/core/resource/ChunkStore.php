@@ -61,6 +61,20 @@ final class ChunkStore {
     }
 
     /**
+     * Every loaded chunk's coordinates, for full-world saves (14.4).
+     *
+     * @return list<array{0: int, 1: int}>
+     */
+    public function getLoadedChunkCoordinates(): array {
+        $out = [];
+        foreach (array_keys($this->chunks) as $key) {
+            $parts = explode(':', $key, 2);
+            $out[] = [(int)$parts[0], (int)$parts[1]];
+        }
+        return $out;
+    }
+
+    /**
      * Approximate resident memory of every loaded chunk's payload (block,
      * meta, light, biome binary strings). Each loaded chunk holds ~160KB of
      * strings, so this is the dominant term in the chunk-budget equation.

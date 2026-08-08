@@ -239,8 +239,12 @@ final class CombatService {
         // Drop loot (inventory contents + mob loot table)
         $this->dropLoot($targetRef);
 
-        // Despawn entity
-        $this->world->despawn($target);
+        // Mobs despawn on death; players stay in the world as a dead entity
+        // (DeadTag + 0 health) so PlayerRespawnService can revive them. This
+        // mirrors legacy: the corpse remains visible until respawn.
+        if (!$isPlayer) {
+            $this->world->despawn($target);
+        }
     }
 
     private function dropExperience(EntityRef $entityRef): void {
