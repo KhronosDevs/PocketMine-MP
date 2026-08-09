@@ -9,6 +9,7 @@ use pocketmine\adapter\driven\network\Protocol84NetworkAdapter;
 use pocketmine\protocol\BatchPacket;
 use pocketmine\protocol\ContainerSetContentPacket;
 use pocketmine\protocol\ContainerSetSlotPacket;
+use pocketmine\protocol\DropItemPacket;
 use pocketmine\protocol\FullChunkDataPacket;
 use pocketmine\protocol\Info;
 use pocketmine\protocol\LoginPacket;
@@ -1537,6 +1538,147 @@ test('a dropped item is collected by walk-over and the inventory syncs back', fu
     ok($sawAdd, 'Alice received AddItemEntityPacket for the dropped item');
     ok($sawRemove, 'Alice received RemoveEntityPacket for the collected item');
     ok($sawSlot, 'Alice inventory synced with the picked-up planks (31+3=34)');
+});
+
+// --- Inventory actions (14.7) ----------------------------------------------
+test('a player moves items between inventory slots via ContainerSetSlot', function () use ($kernel, $client): void {
+    // Alice holds 32 planks in slot 0 (starter kit). A move: the client sends
+    // the NEW content of the affected slots - slot 0 emptied, slot 5 = the
+    // planks. The server applies the authoritative state and mirrors the
+    // changed slot back (ContainerSetSlotPacket to the actor).
+    $css = new ContainerSetSlotPacket();
+    $css->windowid = ContainerSetContentPacket::SPECIAL_INVENTORY;
+    $css->slot = 0;
+    $css->hotbarSlot = 0;
+    $css->item = [0, 0, 0, null]; // slot 0 emptied
+    $client->sendGamePacket($css);
+
+    $css2 = new ContainerSetSlotPacket();
+    $css2->windowid = ContainerSetContentPacket::SPECIAL_INVENTORY;
+    $css2->slot = 5;
+    $css2->hotbarSlot = 5;
+    $css2->item = [5, 32, 0, null]; // 32 planks into slot 5
+    $client->sendGamePacket($css2);
+    $kernel->run(2);
+
+    // Server-side authoritative state.
+    $aliceId = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $aliceId = $p['entityId'];
+        }
+    }
+    ok($aliceId !== null, 'Alice is online');
+    $inv = $kernel->getWorld()->getEntity($aliceId)?->get(\pocketmine\core\component\InventoryComponent::class);
+    ok($inv !== null, 'Alice inventory present');
+    if ($inv === null) {
+        return;
+    }
+    ok($inv->get(0) === null, 'slot 0 emptied by the move');
+    $slot5 = $inv->get(5);
+    ok($slot5 !== null && $slot5->itemId === 5 && $slot5->count === 32, 'slot 5 holds the moved 32 planks');
+
+    // The actor window is mirrored back (server -> client ContainerSetSlot).
+    $deadline = microtime(true) + 5.0;
+    $sawEcho = false;
+    while (microtime(true) < $deadline && !$sawEcho) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::CONTAINER_SET_SLOT_PACKET) {
+                $sawEcho = true;
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawEcho, 'server echoes the changed slot back to the actor');
+});
+
+test('a hostile slot claim cannot conjure items the player never had', function () use ($kernel, $client): void {
+    // A malicious client claims 64 diamonds (id 57) into slot 8 with no
+    // matching move credit. The server must reject the claim and keep the
+    // authoritative slot state (null) unchanged.
+    $css = new ContainerSetSlotPacket();
+    $css->windowid = ContainerSetContentPacket::SPECIAL_INVENTORY;
+    $css->slot = 8;
+    $css->hotbarSlot = 8;
+    $css->item = [57, 64, 0, null]; // 64 diamonds
+    $client->sendGamePacket($css);
+    $kernel->run(2);
+
+    $aliceId = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $aliceId = $p['entityId'];
+        }
+    }
+    ok($aliceId !== null, 'Alice is online');
+    $inv = $kernel->getWorld()->getEntity($aliceId)?->get(\pocketmine\core\component\InventoryComponent::class);
+    ok($inv !== null, 'Alice inventory present');
+    if ($inv !== null) {
+        ok($inv->get(8) === null, 'conjured diamonds rejected (slot 8 still empty)');
+    }
+});
+
+test('a player drops an item with Q and it spawns as an item entity', function () use ($kernel, $client): void {
+    // Give Alice a fresh full stack in the held slot (server-side) so the
+    // drop has a deterministic source regardless of earlier tests.
+    $aliceId = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $aliceId = $p['entityId'];
+        }
+    }
+    ok($aliceId !== null, 'Alice is online');
+    $entity = $kernel->getWorld()->getEntity($aliceId);
+    $inv = $entity?->get(\pocketmine\core\component\InventoryComponent::class);
+    ok($inv !== null, 'Alice inventory present');
+    if ($inv === null) {
+        return;
+    }
+    $inv->set(0, new \pocketmine\core\component\ItemStack(5, 0, 10)); // 10 planks held
+    $inv->setHeldSlot(0);
+
+    // Q press: DropItemPacket with the held item (id 5, count 1).
+    $drop = new DropItemPacket();
+    $drop->type = 0;
+    $drop->item = [5, 1, 0, null];
+    $client->sendGamePacket($drop);
+
+    // The server removes one plank and spawns a real item entity that the
+    // per-tick broadcast adds to the viewer (AddItemEntityPacket id 5),
+    // while the actor's slot reflects 9 remaining.
+    $deadline = microtime(true) + 6.0;
+    $sawAdd = false;
+    $sawSlot9 = false;
+    while (microtime(true) < $deadline && (!$sawAdd || !$sawSlot9)) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::ADD_ITEM_ENTITY_PACKET) {
+                $aie = aieFields($buffer);
+                if ($aie['item'][0] === 5 && $aie['item'][1] === 1) {
+                    $sawAdd = true;
+                }
+            }
+            if ($id === Info::CONTAINER_SET_SLOT_PACKET) {
+                $css = cssFields($buffer);
+                if ($css['slot'] === 0 && $css['item'][0] === 5 && $css['item'][1] === 9) {
+                    $sawSlot9 = true;
+                }
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawAdd, 'dropped item spawned as an AddItemEntityPacket (1 plank)');
+    ok($sawSlot9, 'held slot synced back to 9 planks after the drop');
+    $heldAfter = $inv->get(0);
+    ok($heldAfter !== null && $heldAfter->count === 9, 'server inventory holds 9 planks after the drop');
+
+    // A bogus drop of an item the player does not hold is a no-op.
+    $before = $inv->get(0)?->count;
+    $drop2 = new DropItemPacket();
+    $drop2->type = 0;
+    $drop2->item = [266, 1, 0, null]; // iron ingot - Alice has none
+    $client->sendGamePacket($drop2);
+    $kernel->run(2);
+    ok($inv->get(0)?->count === $before, 'dropping an unheld item changes nothing');
 });
 
 // --- Combat (14.3) ---------------------------------------------------------
