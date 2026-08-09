@@ -19,10 +19,18 @@ class ContainerSetSlotPacket extends DataPacket {
     public int $hotbarSlot = 0;
 
     public function decode(): void {
-        // server->client only
+        // Bidirectional: the client sends this to move items between slots of
+        // its own inventory window (window 0). Legacy layout: windowid (byte),
+        // slot (short), hotbar slot (short), then the slot item.
+        $this->windowid = $this->getByte();
+        $this->slot = $this->getShort();
+        $this->hotbarSlot = $this->getShort();
+        $this->item = $this->getSlot();
     }
 
     public function encode(): void {
+        // Mirrors decode so the test client can send this packet over the
+        // wire; the server only ever decodes it.
         $this->reset();
         $this->putByte($this->windowid);
         $this->putShort($this->slot);

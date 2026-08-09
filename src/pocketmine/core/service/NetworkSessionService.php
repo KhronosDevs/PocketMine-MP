@@ -29,6 +29,7 @@ use pocketmine\protocol\ChunkRadiusUpdatedPacket;
 use pocketmine\protocol\ChunkSerializer;
 use pocketmine\protocol\ContainerSetContentPacket;
 use pocketmine\protocol\ContainerSetSlotPacket;
+use pocketmine\protocol\DropItemPacket;
 use pocketmine\protocol\DataPacket;
 use pocketmine\protocol\EntityEventPacket;
 use pocketmine\protocol\FullChunkDataPacket;
@@ -99,6 +100,7 @@ final class NetworkSessionService {
     private readonly CombatService $combatService;
     private readonly PlayerRespawnService $playerRespawnService;
     private readonly EntityInteractionService $entityInteractionService;
+    private readonly EntitySpawnService $entitySpawnService;
     private readonly ResourceRegistry $resourceRegistry;
 
     /**
@@ -129,7 +131,8 @@ final class NetworkSessionService {
      *   chunksSent: array<string, bool>,
      *   spawned: bool,
      *   lastHealth: float,
-     *   knownEntities: array<int, array{0: float, 1: float, 2: float, 3: float}>
+     *   knownEntities: array<int, array{0: float, 1: float, 2: float, 3: float}>,
+     *   moveCredit: array<string, int>
      * }>
      */
     private array $sessions = [];
@@ -164,6 +167,7 @@ final class NetworkSessionService {
         CombatService $combatService,
         PlayerRespawnService $playerRespawnService,
         EntityInteractionService $entityInteractionService,
+        EntitySpawnService $entitySpawnService,
         ResourceRegistry $resourceRegistry,
     ) {
         $this->adapter = $networkPort instanceof Protocol84NetworkAdapter ? $networkPort : null;
@@ -176,6 +180,7 @@ final class NetworkSessionService {
         $this->combatService = $combatService;
         $this->playerRespawnService = $playerRespawnService;
         $this->entityInteractionService = $entityInteractionService;
+        $this->entitySpawnService = $entitySpawnService;
         $this->resourceRegistry = $resourceRegistry;
         $this->wireTrace = getenv('KHRONOS_WIRE_TRACE') === '1';
     }
@@ -370,6 +375,18 @@ final class NetworkSessionService {
                 $pk->decode();
                 $this->handleMobEquipment($addrKey, $pk);
                 break;
+            case Info::CONTAINER_SET_SLOT_PACKET:
+                $pk = new ContainerSetSlotPacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handleContainerSetSlot($addrKey, $pk);
+                break;
+            case Info::DROP_ITEM_PACKET:
+                $pk = new DropItemPacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handleDropItem($addrKey, $pk);
+                break;
             case Info::INTERACT_PACKET:
                 $pk = new InteractPacket();
                 $pk->setBuffer($buffer, 1);
@@ -436,6 +453,8 @@ final class NetworkSessionService {
             'spawned' => false,
             'lastHealth' => $entityRef->getEntity()?->get(HealthComponent::class)?->current ?? 20.0,
             'knownEntities' => [],
+            // Backing for validated inventory moves (id:meta => released count).
+            'moveCredit' => [],
         ];
 
         // Broadcast the new player to everyone (including themselves) and
@@ -584,6 +603,145 @@ final class NetworkSessionService {
             $echo->selectedSlot = $pk->selectedSlot;
             $this->queuePacket($s['playerRef'], $echo);
         }
+    }
+
+    /**
+     * Inventory action (14.7): the client moved an item between slots of its
+     * own inventory window (window 0). Protocol 84's player inventory has no
+     * separate source/destination fields - the client sends the NEW contents
+     * of one slot per packet, so a drag produces several of these.
+     *
+     * We apply the authoritative state directly (the client is the source of
+     * truth for its own window layout) and mirror the change back to the
+     * actor so the window stays in lockstep. Only window 0 is wired so far;
+     * armor (0x78) and future container windows are ignored.
+     */
+    private function handleContainerSetSlot(string $addrKey, ContainerSetSlotPacket $pk): void {
+        if ($pk->windowid !== ContainerSetContentPacket::SPECIAL_INVENTORY) {
+            return; // armor/container windows are not wired yet
+        }
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $inventory = $session['entityRef']->getEntity()?->get(InventoryComponent::class);
+        if ($inventory === null || $pk->slot < 0 || $pk->slot >= $inventory->size) {
+            return;
+        }
+        $id = (int)($pk->item[0] ?? 0);
+        $count = (int)($pk->item[1] ?? 0);
+        $meta = (int)($pk->item[2] ?? 0);
+
+        // Window-0 ContainerSetSlot packets describe a *move*: the client
+        // reports the resulting contents of the affected slots one packet at
+        // a time (empty the source slot, then fill the destination). To keep
+        // the server authoritative we track per-session move credit: items
+        // released by emptying a slot can be re-placed elsewhere, but a claim
+        // can never exceed what was actually in the inventory. This makes
+        // moves work while a hostile client cannot conjure items it never had.
+        /** @var array<string, int> $credit */
+        $credit = $session['moveCredit'];
+        $creditKey = $id . ':' . $meta;
+        $credit[$creditKey] = $credit[$creditKey] ?? 0;
+
+        $current = $inventory->get($pk->slot);
+        $inSlot = ($current !== null && $current->itemId === $id && $current->meta === $meta)
+            ? $current->count
+            : 0;
+
+        if ($id <= 0 || $count <= 0) {
+            // Slot emptied: release whatever it held into move credit so a
+            // two-packet move (empty A, fill B) is accepted.
+            if ($current !== null) {
+                $heldKey = $current->itemId . ':' . $current->meta;
+                $credit[$heldKey] = ($credit[$heldKey] ?? 0) + $current->count;
+            }
+            $inventory->set($pk->slot, null);
+        } else {
+            // Claim a stack. It must be backed by the same item already in the
+            // slot plus credit released by earlier slot-empties this session.
+            $need = max(0, $count - $inSlot);
+            if ($need > $credit[$creditKey]) {
+                return; // hostile claim - reject and keep authoritative state
+            }
+            $credit[$creditKey] -= $need;
+            if ($inSlot > $count) {
+                // Reducing the stack in place: the surplus joins move credit.
+                $credit[$creditKey] += $inSlot - $count;
+            }
+            // Slot NBT arrives as raw bytes; parsed-NBT wiring is not done for
+            // slots yet, so item NBT is dropped here.
+            $inventory->set($pk->slot, new ItemStack($id, $meta, $count));
+        }
+        $session['moveCredit'] = $credit;
+        $this->sessions[$addrKey] = $session;
+        // Mirror the authoritative slot back (legacy PlayerInventory::sendSlot).
+        $this->sendInventorySlot($session['playerRef'], $pk->slot);
+    }
+
+    /**
+     * Drop item (14.7): the player pressed Q with an item selected. Drop one
+     * item from the held (or matching) stack, spawn a real item entity in
+     * front of the player that viewers see (AddItemEntityPacket via the
+     * per-tick entity broadcast), and refresh the actor's window.
+     */
+    private function handleDropItem(string $addrKey, DropItemPacket $pk): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $entity = $session['entityRef']->getEntity();
+        $inventory = $entity?->get(InventoryComponent::class);
+        if ($inventory === null) {
+            return;
+        }
+        // The client says which item it is dropping (id/count/damage). Only
+        // drop a single item per Q press regardless of the claimed count, so
+        // a hostile frame cannot empty a whole stack in one packet.
+        $id = (int)($pk->item[0] ?? 0);
+        if ($id <= 0) {
+            return; // air - nothing to drop
+        }
+        $meta = (int)($pk->item[2] ?? 0);
+
+        // Find a matching stack: the held slot first, then a scan (the client
+        // may drop from an inventory slot with an empty hand).
+        $slot = -1;
+        $held = $inventory->get($inventory->heldSlot);
+        if ($held !== null && $held->itemId === $id && $held->meta === $meta) {
+            $slot = $inventory->heldSlot;
+        } else {
+            foreach ($inventory->getContents() as $s => $item) {
+                if ($item->itemId === $id && $item->meta === $meta) {
+                    $slot = $s;
+                    break;
+                }
+            }
+        }
+        if ($slot < 0) {
+            return; // the player does not hold any matching item
+        }
+        $removed = $inventory->remove($slot, 1);
+        if ($removed === null) {
+            return;
+        }
+
+        // Spawn the dropped item entity in front of the player (eye height),
+        // thrown slightly toward the look direction. The per-tick entity
+        // broadcast will AddItemEntity it to every viewer.
+        $pos = $session['entityRef']->getPosition();
+        $rot = $session['entityRef']->getRotation();
+        if ($pos !== null) {
+            [$dx, $dy, $dz] = $rot !== null ? $rot->getForwardVector() : [0.0, 0.0, 1.0];
+            $this->entitySpawnService->spawnItem(
+                $pos->x + $dx * 0.6,
+                $pos->y + 1.2,
+                $pos->z + $dz * 0.6,
+                new ItemStack($removed->itemId, $removed->meta, 1, $removed->nbt),
+            );
+        }
+        // Reflect the consumed stack in the actor's own window.
+        $this->sendInventorySlot($session['playerRef'], $slot);
     }
 
     /**

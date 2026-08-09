@@ -223,6 +223,7 @@ final class Kernel {
             $this->combatService,
             $this->playerRespawnService,
             $this->entityInteractionService,
+            $this->entitySpawnService,
             $this->resourceRegistry,
         );
         $this->blockUpdateService = new BlockUpdateService($world, $storagePort);
