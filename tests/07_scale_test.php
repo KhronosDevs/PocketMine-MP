@@ -50,15 +50,15 @@ test('scale: 1000 entities apply-mode exact + diff-only mirror', function () use
 
     // Exact deterministic integration over 10 ticks:
     // x += vx*dt per tick (vx=1.0 -> +0.5), z += vz*dt (vz=0.5 -> +0.25),
-    // gravity: y drops by 0.08*dt^2 * (0+1+...+9) = 0.009.
+    // gravity: vy -= 0.08/tick; y drops by 0.08*dt * (0+1+...+9) = 0.18.
     foreach ([0, 1, 250, 500, 999] as $i) {
         $pos = $refs[$i]->getPosition();
         near(($i % 100) * 1.5 + 0.5, $pos->x, 1e-6, "entity $i x after 10 ticks");
         near((int)($i / 100) * 1.5 + 0.25, $pos->z, 1e-6, "entity $i z after 10 ticks");
-        near(64.0 - 0.009, $pos->y, 1e-6, "entity $i y with gravity over 10 ticks");
+        near(64.0 - 0.18, $pos->y, 1e-6, "entity $i y with gravity over 10 ticks");
     }
     $vel = $refs[0]->getVelocity();
-    near(-0.04, $vel->y, 1e-9, 'gravity accumulated to -0.04 over 10 ticks');
+    near(-0.8, $vel->y, 1e-9, 'gravity accumulated to -0.8 over 10 ticks');
 });
 
 // --- Kernel B: gate mode at scale (diff-only keeps the gate exact) --------

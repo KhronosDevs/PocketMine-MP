@@ -48,15 +48,16 @@ test('region balance: over-threshold region splits into balanced columns, gate s
 
     // Exact deterministic integration over 15 ticks. Velocity is in
     // blocks/second, so per tick dx = vx * dt (dt = 0.05): 15 ticks at
-    // vx = 0.5 => +0.375. Gravity accumulates to 0.08*dt^2*(0+..+14) = 0.021.
+    // vx = 0.5 => +0.375. Gravity: vy -= 1.6*dt = 0.08/tick, so y drops by
+    // 0.08*dt*(0+..+14) = 0.42 and vy accumulates to -1.2.
     foreach ([0, 1, 300, 999, 1499] as $i) {
         $pos = $spawned[$i]->getPosition();
         near(-768.0 + ($i % 50) * 32.0 + 0.5 * 0.05 * 15, $pos->x, 1e-6, "entity $i x after 15 ticks");
         near(-32.0 + intdiv($i, 50) * 2.0 + 0.3 * 0.05 * 15, $pos->z, 1e-6, "entity $i z after 15 ticks");
-        near(64.0 - 0.021, $pos->y, 1e-6, "entity $i y with gravity over 15 ticks");
+        near(64.0 - 0.42, $pos->y, 1e-6, "entity $i y with gravity over 15 ticks");
     }
     $vel = $spawned[0]->getVelocity();
-    near(-0.004 * 15, $vel->y, 1e-9, 'gravity accumulated to -0.06 over 15 ticks');
+    near(-0.08 * 15, $vel->y, 1e-9, 'gravity accumulated to -1.2 over 15 ticks');
 });
 
 // --- 2. Apply mode: worker authoritative stays exact across splits ---------
@@ -89,7 +90,7 @@ test('region balance: apply mode stays exact across dynamic splits', function ()
         $pos = $spawned[$i]->getPosition();
         near(-768.0 + ($i % 40) * 40.0 + 0.4 * 0.05 * 12, $pos->x, 1e-6, "apply entity $i x after 12 ticks");
         near(-40.0 + intdiv($i, 40) * 2.0 + 0.6 * 0.05 * 12, $pos->z, 1e-6, "apply entity $i z after 12 ticks");
-        near(70.0 - 0.08 * 0.0025 * 66, $pos->y, 1e-6, "apply entity $i y with gravity over 12 ticks");
+        near(70.0 - 0.08 * 0.05 * 66, $pos->y, 1e-6, "apply entity $i y with gravity over 12 ticks");
     }
 });
 

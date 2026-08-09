@@ -493,7 +493,14 @@ final class Kernel {
         $this->pipelineStoredY[$id] = $y + $vy * $dt;
         $this->pipelineStoredZ[$id] = $z + $vz * $dt;
         $this->pipelineStoredVX[$id] = $vx;
-        $this->pipelineStoredVY[$id] = $vy - RegionThread::GRAVITY_ACCELERATION * $dt;
+        // Terminal-velocity clamp - bit-identical to PhysicsSystem (same
+        // threshold and same gravity expression), which the gate's drift
+        // check and the diff-only mirror both rely on.
+        $vy -= RegionThread::GRAVITY_ACCELERATION * $dt;
+        if ($vy < -78.4) {
+            $vy = -78.4;
+        }
+        $this->pipelineStoredVY[$id] = $vy;
         $this->pipelineStoredVZ[$id] = $vz;
     }
 
@@ -1572,6 +1579,10 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // movement/AI so entity positions are current.
     $scheduler->register(new \pocketmine\core\system\ItemPickupSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     $scheduler->register(new \pocketmine\core\system\ChunkUpdateSystem(), \pocketmine\core\ecs\SystemPhase::CHUNK_PARALLEL);
+    // Post-movement block collision: clamps the pending positions written by
+    // the parallel systems against solid blocks before they are committed
+    // (mobs stop at walls, drops land on the ground).
+    $scheduler->setCollisionSystem(new \pocketmine\core\system\BlockCollisionSystem());
 }
 
 function bootstrap(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): Kernel {

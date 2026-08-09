@@ -71,6 +71,29 @@ if ($store instanceof ChunkStore) {
     }
 }
 
+// The world seed is random per boot, so the terrain around the found column
+// can be ocean - and the spawner only places mobs on dry land. Guarantee the
+// spawn annulus (8-24 blocks around the player) is dry by carving a flat
+// stone platform at the surface height around the player position.
+if ($store instanceof ChunkStore) {
+    $cx = (int)floor($px);
+    $cz = (int)floor($pz);
+    $radius = MobSpawnerSystem::SPAWN_RADIUS + 2;
+    for ($dx = -$radius; $dx <= $radius; $dx++) {
+        for ($dz = -$radius; $dz <= $radius; $dz++) {
+            if ($dx * $dx + $dz * $dz > $radius * $radius) {
+                continue;
+            }
+            $x = $cx + $dx;
+            $z = $cz + $dz;
+            // Only fill columns inside already-loaded chunks.
+            if ($store->isLoaded((int)floor($x / 16), (int)floor($z / 16))) {
+                $store->setBlock($x, $top, $z, 1); // stone surface
+            }
+        }
+    }
+}
+
 // A living player standing on the dry surface of the loaded terrain.
 $player = $world->spawn(
     (new EntityBuilder())

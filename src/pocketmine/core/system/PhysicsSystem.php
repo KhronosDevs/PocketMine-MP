@@ -34,8 +34,14 @@ final class PhysicsSystem implements ParallelSystem {
                 continue;
             }
 
-            // Apply gravity - write to pending velocity
-            $newVelY = $velocity->y - 0.08 * $deltaTime;
+            // Apply gravity - write to pending velocity. MC parity: 0.08
+            // blocks/tick^2 = 1.6 blocks/s^2 at 20 TPS (the old 0.08/s^2 made
+            // drops hover in the air for many seconds before landing).
+            $newVelY = $velocity->y - 1.6 * $deltaTime;
+            // Terminal velocity ~3.92 blocks/tick (78.4 blocks/s), like MC.
+            if ($newVelY < -78.4) {
+                $newVelY = -78.4;
+            }
 
             // Simple ground collision - check pending position
             $newY = $position->y + $velocity->y * $deltaTime;
@@ -55,8 +61,13 @@ final class PhysicsSystem implements ParallelSystem {
     }
 
     public function getTargetArchetypes(World $world): iterable {
+        // Players are excluded: their position (including Y) is
+        // client-authoritative and the client owns their gravity - server
+        // gravity would sink them through the terrain between movement
+        // packets (they are also skipped by BlockCollisionSystem).
         $query = $world->query()
             ->with(\pocketmine\core\component\PositionComponent::class, \pocketmine\core\component\VelocityComponent::class)
+            ->without(\pocketmine\core\component\tags\PlayerTag::class)
             ->build();
 
         $registry = $world->getComponentRegistry();
