@@ -470,6 +470,11 @@ function sdFields(string $buf): int {
     return $s->getInt();
 }
 
+function stTime(string $buf): int {
+    $s = new BinaryStream($buf, 1);
+    return $s->getInt();
+}
+
 function advFields(string $buf): array {
     $s = new BinaryStream($buf, 1);
     return ['flags' => $s->getInt(), 'user' => $s->getInt(), 'global' => $s->getInt()];
@@ -778,6 +783,11 @@ test('login produces the full protocol-84 burst', function () use ($client, $ker
     $spawnChunk[1] = (int)floor($sg['spawnZ'] / 16);
 
     ok(isset($byId[Info::SET_TIME_PACKET]), 'set time sent');
+    // 14.6: the login burst carries a real world-clock value (the day/night
+    // cycle), not a hardcoded 0 - and it is a valid day value. The exact
+    // number depends on how many ticks elapsed before the burst was queued.
+    $burstTime = stTime($byId[Info::SET_TIME_PACKET]);
+    ok($burstTime >= 0 && $burstTime < 24000, "set time is a valid day value ($burstTime)");
     ok(isset($byId[Info::SET_SPAWN_POSITION_PACKET]), 'set spawn sent');
     // SetSpawnPosition mirrors the same safe spawn the player was placed at.
     $ssp = sspFields($byId[Info::SET_SPAWN_POSITION_PACKET]);
@@ -1812,6 +1822,46 @@ test('a disconnecting player is saved and a reconnect restores the inventory', f
 
 // Teardown runs as a real test so it executes AFTER the other cases (the
 // runner calls test fns in registration order).
+test('the world clock advances and is broadcast each tick', function () use ($kernel, $port): void {
+    // 14.6 day/night: the client must receive advancing SetTime packets so
+    // the sun actually moves. Uses a FRESH client (earlier suite clients may
+    // have idled past the RakNet 10s transport timeout) that logs in, then
+    // waits for a SetTime whose value is LATER than the world clock at login.
+    $c = new FakeClient($port);
+    $c->handshake(fn() => $kernel->run(1));
+    $c->connect(fn() => $kernel->run(1));
+    $c->sendLogin('Terra', 'dddd3333-2222-3333-4444-666666666666');
+    $kernel->run(2);
+
+    // Let the login burst drain, then sample the clock AFTER login so the
+    // starting SetTime (which may ride the burst) is not the only one seen.
+    $c->readGamePackets();
+    $worldConfig = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
+    ok($worldConfig instanceof \pocketmine\core\resource\WorldConfig, 'world config present');
+    if (!$worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+        $c->close();
+        return;
+    }
+    $t0 = $worldConfig->time;
+    $kernel->run(5);
+    $deadline = microtime(true) + 5.0;
+    $latest = null;
+    while (microtime(true) < $deadline) {
+        foreach ($c->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::SET_TIME_PACKET) {
+                $latest = max($latest ?? 0, stTime($buffer));
+            }
+        }
+        if ($latest !== null && $latest > $t0) {
+            break;
+        }
+        $kernel->run(1);
+    }
+    $c->close();
+    ok($latest !== null, 'a SetTime broadcast arrives after login');
+    ok($latest !== null && $latest > $t0, "time advances on the wire (t0=$t0, latest=" . ($latest ?? 'none') . ')');
+});
+
 test('server shuts down cleanly with active sessions', function () use ($kernel, $client): void {
     $adapter = $kernel->getNetworkPort();
     if ($adapter instanceof Protocol84NetworkAdapter) {

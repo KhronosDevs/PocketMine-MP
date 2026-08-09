@@ -17,6 +17,7 @@ use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\ResourceRegistry;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\ServerConfig;
+use pocketmine\core\resource\WorldConfig;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\PlayerRef;
 use pocketmine\protocol\AddEntityPacket;
@@ -197,6 +198,9 @@ final class NetworkSessionService {
             // 'open' is transport-level only: the login game packet drives
             // session setup.
         }
+        // 14.6: every tick the client receives the current time of day so
+        // the sun/moon keep moving (the login burst sends the starting value).
+        $this->broadcastTime();
         // 14.2: mirror live entities to every session (add/move/remove) so
         // other players, mobs and dropped items are visible on the wire.
         $this->broadcastEntityStates();
@@ -823,7 +827,8 @@ final class NetworkSessionService {
         $this->queuePacket($playerRef, $startGame);
 
         $time = new SetTimePacket();
-        $time->time = 0;
+        $worldConfig = $this->resourceRegistry->get(WorldConfig::class);
+        $time->time = $worldConfig instanceof WorldConfig ? $worldConfig->time : 0;
         $time->started = true;
         $this->queuePacket($playerRef, $time);
 
@@ -850,6 +855,26 @@ final class NetworkSessionService {
         // Full inventory contents (window 0) so the client renders the
         // hotbar with the player's actual items (starter kit for new players).
         $this->sendInventoryContents($playerRef);
+    }
+
+    /**
+     * 14.6: push the current world time to every connected player so the
+     * day/night cycle renders on the client (sun set, moon rise, sky tint).
+     * Called every poll; SetTimePacket is tiny (5 bytes) and rides the
+     * existing per-session outbound batch.
+     */
+    private function broadcastTime(): void {
+        if (empty($this->sessions)) {
+            return;
+        }
+        $worldConfig = $this->resourceRegistry->get(WorldConfig::class);
+        $time = $worldConfig instanceof WorldConfig ? $worldConfig->time : 0;
+        $pk = new SetTimePacket();
+        $pk->time = $time;
+        $pk->started = true;
+        foreach ($this->sessions as $session) {
+            $this->queuePacket($session['playerRef'], clone $pk);
+        }
     }
 
     private function broadcastPlayerListAdd(UUID $uuid, int $entityId, string $username, string $skin): void {

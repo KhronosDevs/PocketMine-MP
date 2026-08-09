@@ -12,6 +12,7 @@ use pocketmine\core\ecs\System;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\ChunkStore;
 use pocketmine\core\resource\ServerConfig;
+use pocketmine\core\resource\WorldConfig;
 use pocketmine\core\service\EntitySpawnService;
 use function in_array;
 
@@ -54,6 +55,13 @@ final class MobSpawnerSystem implements System {
         $config = $kernel->getResourceRegistry()->get(ServerConfig::class);
         if ($config instanceof ServerConfig && !$config->spawnMobs) {
             return; // mob spawning disabled by configuration
+        }
+        // 14.6: hostile mobs only spawn after dusk (time >= 12000). During
+        // the day the world is quiet; the night gate makes day/night mean
+        // something in the game rather than mobs appearing 24/7.
+        $worldConfig = $world->getResourceRegistry()->get(WorldConfig::class);
+        if ($worldConfig instanceof WorldConfig && !TimeSystem::isNight($worldConfig->time)) {
+            return; // daylight: no hostile spawns
         }
         $spawnService = $kernel->getEntitySpawnService();
         if (!$spawnService instanceof EntitySpawnService) {
