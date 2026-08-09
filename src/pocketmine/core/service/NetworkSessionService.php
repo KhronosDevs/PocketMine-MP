@@ -941,35 +941,38 @@ final class NetworkSessionService {
                 }
             }
 
-            // Adds + moves + health changes (14.3): the last known health
-            // rides in the knownEntities tuple so the wire only carries a
-            // SetEntityDataPacket when the value actually moved.
+            // Adds + moves: a fresh entity is added once (with the legacy
+            // default metadata dict), then followed with movement packets
+            // only while it actually moves. Protocol 84 has no per-viewer
+            // health metadata - the player's own HUD is driven by
+            // SetHealthPacket below, and mob health bars are client-side.
             foreach ($visible as $entityId => $entity) {
                 $pos = $entity->get(PositionComponent::class);
                 if ($pos === null) {
                     continue;
                 }
-                $hp = $entity->get(HealthComponent::class)?->current ?? 0.0;
                 if (!isset($known[$entityId])) {
                     $pk = $this->buildAddPacket($entityId, $entity, $playerSessions);
                     if ($pk !== null) {
                         $this->queuePacket($session['playerRef'], $pk);
+                        // Legacy Item::spawnTo sent AddItemEntityPacket followed
+                        // by SetEntityDataPacket with the full default data dict.
+                        // The 0.15 client needs DATA_LEAD_HOLDER (23) and
+                        // DATA_LEAD (24) sent explicitly or it renders a
+                        // leash/rope attached to the dropped item.
+                        if ($pk instanceof AddItemEntityPacket) {
+                            $this->queuePacket($session['playerRef'], $this->buildEntityDataPacket($entityId, $this->legacyMetadataDefaults()));
+                        }
                     }
-                    $known[$entityId] = [$pos->x, $pos->y, $pos->z, $hp];
+                    $known[$entityId] = [$pos->x, $pos->y, $pos->z];
                 } else {
                     $last = $known[$entityId];
                     $moved = abs($pos->x - $last[0]) > self::MOVE_EPSILON
                         || abs($pos->y - $last[1]) > self::MOVE_EPSILON
                         || abs($pos->z - $last[2]) > self::MOVE_EPSILON;
-                    $healthChanged = abs($hp - $last[3]) > 0.01;
                     if ($moved) {
                         $this->queuePacket($session['playerRef'], $this->buildMovePacket($entityId, $entity, $playerSessions));
-                    }
-                    if ($healthChanged) {
-                        $this->queuePacket($session['playerRef'], $this->buildHealthPacket($entityId, $hp));
-                    }
-                    if ($moved || $healthChanged) {
-                        $known[$entityId] = [$pos->x, $pos->y, $pos->z, $hp];
+                        $known[$entityId] = [$pos->x, $pos->y, $pos->z];
                     }
                 }
             }
@@ -1033,10 +1036,10 @@ final class NetworkSessionService {
         $pk->speedZ = $vel?->z ?? 0.0;
         $pk->yaw = $rot?->yaw ?? 0.0;
         $pk->pitch = $rot?->pitch ?? 0.0;
-        $pk->metadata = [
-            0 => [\pocketmine\utils\Binary::DATA_TYPE_BYTE, 0],          // DATA_FLAGS
-            2 => [\pocketmine\utils\Binary::DATA_TYPE_STRING, (string)$type], // DATA_NAMETAG
-        ];
+        $pk->metadata = $this->legacyMetadataDefaults();
+        // Override the nametag with the mob's type name (legacy mobs carried
+        // their type as the nametag string).
+        $pk->metadata[2] = [\pocketmine\utils\Binary::DATA_TYPE_STRING, (string)$type];
         return $pk;
     }
 
@@ -1061,23 +1064,39 @@ final class NetworkSessionService {
         $pk->yaw = $rot?->yaw ?? 0.0;
         $pk->pitch = $rot?->pitch ?? 0.0;
         $pk->item = $held !== null ? [$held->itemId, $held->count, $held->meta, $held->nbt] : [0, 0, 0, null];
-        $pk->metadata = [
-            0 => [\pocketmine\utils\Binary::DATA_TYPE_BYTE, 0],                    // DATA_FLAGS
-            2 => [\pocketmine\utils\Binary::DATA_TYPE_STRING, $session['username']], // DATA_NAMETAG
-        ];
+        $pk->metadata = $this->legacyMetadataDefaults();
+        $pk->metadata[2] = [\pocketmine\utils\Binary::DATA_TYPE_STRING, $session['username']];
         return $pk;
     }
 
     /**
-     * 14.3 health sync: push an entity's current health as metadata so
-     * viewers' health bar (mobs) / entity state follows damage and healing.
-     * Key 1 is DATA_HEALTH in the protocol-84 client metadata table.
+     * A SetEntityDataPacket carrying an arbitrary metadata dict.
      */
-    private function buildHealthPacket(int $entityId, float $health): SetEntityDataPacket {
+    private function buildEntityDataPacket(int $entityId, array $metadata): SetEntityDataPacket {
         $pk = new SetEntityDataPacket();
         $pk->eid = $entityId;
-        $pk->metadata = [1 => [Binary::DATA_TYPE_INT, (int)ceil($health)]];
+        $pk->metadata = $metadata;
         return $pk;
+    }
+
+    /**
+     * The legacy default entity-data dict (old-src Entity::getDefaultData),
+     * sent with every Add* packet. Protocol 84 has NO health metadata key:
+     * key 1 is DATA_AIR (SHORT) - writing health there as an INT corrupts the
+     * entity's air. Keys 23/24 are the lead holder + leash flag; the 0.15
+     * client renders a rope on any entity that does not receive them
+     * explicitly, so legacy always shipped them (holder -1, leash 0).
+     *
+     * @return array<int, array{0: int, 1: mixed}>
+     */
+    private function legacyMetadataDefaults(): array {
+        return [
+            0 => [Binary::DATA_TYPE_BYTE, 0],       // DATA_FLAGS
+            1 => [Binary::DATA_TYPE_SHORT, 300],    // DATA_AIR
+            2 => [Binary::DATA_TYPE_STRING, ''],    // DATA_NAMETAG (overridden)
+            23 => [Binary::DATA_TYPE_LONG, -1],     // DATA_LEAD_HOLDER
+            24 => [Binary::DATA_TYPE_BYTE, 0],      // DATA_LEAD
+        ];
     }
 
     /** The right Move packet for an entity (players vs mobs/items). */

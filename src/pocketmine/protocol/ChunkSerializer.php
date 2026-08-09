@@ -106,7 +106,10 @@ final class ChunkSerializer {
                 $row = '';
                 for ($i = 0; $i < 256; $i++) {
                     $surface = max(0, min(127, (int)($heightmap[$i] ?? 0)));
-                    $row .= $worldY >= $surface ? $lit[$i] : $dark[$i];
+                    // Heightmap = top non-air Y + 1, so the top block itself
+                    // (surface - 1) is the highest opaque block: light it and
+                    // everything above, darken everything below.
+                    $row .= $worldY >= $surface - 1 ? $lit[$i] : $dark[$i];
                 }
                 $bytes .= $row;
             }

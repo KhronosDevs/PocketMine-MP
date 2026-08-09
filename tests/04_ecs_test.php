@@ -82,11 +82,11 @@ test('tick integrates movement + gravity exactly', function () use ($world, &$re
 
     $pos = $refs[0]->getPosition();
     near(10.1, $pos->x, 1e-6, 'x advanced by velocity * 2 ticks');
-    // Tick 1: vy=0 keeps y at 60; tick 2: vy=-0.004 pulls it down.
-    near(59.9998, $pos->y, 1e-6, 'gravity affects y from the second tick');
+    // Tick 1: vy=0 keeps y at 60; tick 2: vy=-0.08 (1.6*dt) pulls it down 0.004.
+    near(59.996, $pos->y, 1e-6, 'gravity affects y from the second tick');
 
     $vel = $refs[0]->getVelocity();
-    near(-0.008, $vel->y, 1e-9, 'gravity applied twice (0.08 * 0.05 * 2)');
+    near(-0.16, $vel->y, 1e-9, 'gravity applied twice (1.6 * 0.05 * 2)');
 });
 
 test('despawn removes from world and queries', function () use ($world, &$refs) {

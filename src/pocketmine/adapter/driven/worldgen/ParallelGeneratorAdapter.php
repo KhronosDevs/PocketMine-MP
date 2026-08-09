@@ -240,17 +240,26 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
     private static function generateTerrainChunk(int $chunkX, int $chunkZ, int $seed): ChunkData {
         // Simple deterministic pseudo-noise heightmap based on chunk coords + seed.
         $heightmap = [];
+        $rawHeights = [];
         for ($bz = 0; $bz < 16; $bz++) {
             for ($bx = 0; $bx < 16; $bx++) {
                 $worldX = $chunkX * 16 + $bx;
                 $worldZ = $chunkZ * 16 + $bz;
-                $heightmap[$bz * 16 + $bx] = self::sampleHeight($worldX, $worldZ, $seed);
+                $h = self::sampleHeight($worldX, $worldZ, $seed);
+                $rawHeights[$bz * 16 + $bx] = $h;
+                // Heightmap = top non-air Y + 1, the convention shared by
+                // ChunkStore::toChunkData and the flat generator: a land
+                // column tops out on grass at $h, an ocean column on the water
+                // surface at SEA_LEVEL. (The old grass-Y value disagreed with
+                // the persistence path, so chunks looked different after
+                // reload.)
+                $heightmap[$bz * 16 + $bx] = $h >= self::SEA_LEVEL ? $h + 1 : self::SEA_LEVEL + 1;
             }
         }
 
         // Keep enough sections for the tallest column AND for sea level, so
         // valley water is never truncated by a low-max chunk.
-        $maxHeight = max($heightmap);
+        $maxHeight = max($rawHeights);
         $topSectionY = intdiv(max($maxHeight, self::SEA_LEVEL), 16);
 
         // Build each column's full-height block profile once using str_repeat
@@ -265,7 +274,7 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
         $grass = chr(self::GRASS_BLOCK);
         $water = chr(self::WATER_BLOCK);
         $profiles = [];
-        foreach ($heightmap as $h) {
+        foreach ($rawHeights as $h) {
             $p = $bedrock;
             if ($h > 4) {
                 $p .= str_repeat($stone, $h - 4);

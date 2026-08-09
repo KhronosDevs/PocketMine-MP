@@ -11,6 +11,13 @@ final class SystemScheduler {
     private array $parallelSystems = [];
     private array $chunkParallelSystems = [];
 
+    /**
+     * Runs after the parallel systems write PENDING positions but before
+     * applyPendingComponents() commits them (block collision must see the
+     * moved positions and must not fight the committed state).
+     */
+    private ?System $collisionSystem = null;
+
     /** @var array<string, bool> system class => disabled while pipeline apply mode offloads it */
     private array $disabledSystems = [];
 
@@ -36,6 +43,13 @@ final class SystemScheduler {
         } else {
             $this->disabledSystems[$systemClass] = true;
         }
+    }
+
+    /**
+     * Register the post-movement collision pass (see $collisionSystem).
+     */
+    public function setCollisionSystem(System $system): void {
+        $this->collisionSystem = $system;
     }
 
     public function unregister(System $system): void {
@@ -97,6 +111,12 @@ final class SystemScheduler {
                 }
             }
             $this->threadingPort->awaitAll($futures);
+        }
+
+        // Post-movement collision: clamp the pending positions/velocities
+        // against solid blocks before they are committed.
+        if ($this->collisionSystem !== null && !isset($this->disabledSystems[get_class($this->collisionSystem)])) {
+            $this->collisionSystem->run($world, $deltaTime);
         }
 
         // Apply pending component changes (double-buffer swap)

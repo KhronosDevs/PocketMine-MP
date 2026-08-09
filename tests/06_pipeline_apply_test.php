@@ -13,7 +13,7 @@ use pocketmine\core\ecs\EntityBuilder;
  * The worker is authoritative for movement+gravity: main-thread MovementSystem
  * and PhysicsSystem are disabled, the worker integrates the mirrored snapshots,
  * and results are written back. Entity positions must match the exact expected
- * integration (P0 + V * dt per tick, gravity -0.08*dt per tick).
+ * integration (P0 + V * dt per tick, gravity -1.6*dt = -0.08/tick).
  */
 
 $kernel = \pocketmine\bootstrap();
@@ -46,9 +46,9 @@ test('apply mode: worker integrates movement + gravity exactly', function () use
         near(0.0, $pos->z, 1e-6, "entity $i z unchanged (no z velocity)");
     }
 
-    // Gravity accumulated on the worker side: -0.08 * 0.05 per tick.
+    // Gravity accumulated on the worker side: -1.6*0.05 = -0.08 per tick.
     $vel = $refs[0]->getVelocity();
-    near(-0.02, $vel->y, 1e-9, 'worker applied gravity 5 times');
+    near(-0.4, $vel->y, 1e-9, 'worker applied gravity 5 times');
 });
 
 exit(runTests());

@@ -38,7 +38,14 @@ final class RegionThread extends Thread {
      *  the diff-only mirror's prediction can never silently drift from the
      *  worker's integration. */
     public const TARGET_DELTA_TIME = 0.05;   // 20 TPS
-    public const GRAVITY_ACCELERATION = 0.08; // blocks/tick^2 (matches PhysicsSystem)
+    /**
+     * Gravity in blocks/s^2. At the lockstep 20 TPS this is 0.08 blocks/tick^2
+     * (MC parity) - and, crucially, it is bit-identical to PhysicsSystem's
+     * `1.6 * dt` at dt = 0.05. The diff-only mirror and the gate's 1e-6 drift
+     * check both depend on the two integrations never differing, so this must
+     * stay in lockstep with PhysicsSystem.
+     */
+    public const GRAVITY_ACCELERATION = 1.6; // blocks/s^2 (0.08 blocks/tick^2)
 
     private ThreadSafeArray $commandQueue;
     private ThreadSafeArray $syncQueue;
@@ -353,8 +360,12 @@ final class RegionThread extends Thread {
             $x = $d[1] + $d[4] * self::TARGET_DELTA_TIME;
             $y = $d[2] + $d[5] * self::TARGET_DELTA_TIME;
             $z = $d[3] + $d[6] * self::TARGET_DELTA_TIME;
-            // Gravity: same constant as PhysicsSystem.
+            // Gravity + terminal velocity: same constant and clamp as
+            // PhysicsSystem, bit-exact for the mirror's determinism gate.
             $vy = $d[5] - self::GRAVITY_ACCELERATION * self::TARGET_DELTA_TIME;
+            if ($vy < -78.4) {
+                $vy = -78.4;
+            }
             $this->entityData[(string)$entityId] = pack('N', $id)
                 . pack('e6', $x, $y, $z, $d[4], $vy, $d[6]);
             $ids .= pack('N', $id);

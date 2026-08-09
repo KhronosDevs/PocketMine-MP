@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\core\service;
 
 use pocketmine\core\component\AIStateComponent;
+use pocketmine\core\component\CollisionComponent;
 use pocketmine\core\component\HealthComponent;
 use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
@@ -95,6 +96,9 @@ final class EntitySpawnService {
                 ))
                 ->with(new HealthComponent(5, 5))
                 ->with(new MetadataComponent())
+                // A small box so drops fall with gravity and land on the
+                // ground (BlockCollisionSystem) instead of sinking through.
+                ->with(new CollisionComponent(width: 0.25, height: 0.25))
                 ->withTag('item')
 
         );
@@ -172,6 +176,13 @@ final class EntitySpawnService {
         if ($ai === null) {
             $ai = new AIStateComponent();
             $entity->set(AIStateComponent::class, $ai);
+        }
+
+        // A standard 0.6x1.8 mob box so BlockCollisionSystem keeps the mob
+        // out of walls and standing on the terrain (previously mobs drifted
+        // through blocks).
+        if (!$entity->has(CollisionComponent::class)) {
+            $entity->set(CollisionComponent::class, new CollisionComponent());
         }
         $ai->attackDamage = $stats['damage'];
         $ai->speedModifier = $stats['speed'];

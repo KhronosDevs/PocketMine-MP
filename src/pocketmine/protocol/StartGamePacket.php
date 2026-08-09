@@ -27,43 +27,42 @@ namespace pocketmine\protocol;
 
 
 
-class StartGamePacket extends DataPacket{
-	const NETWORK_ID = Info::START_GAME_PACKET;
+class StartGamePacket extends DataPacket
+{
+    const NETWORK_ID = Info::START_GAME_PACKET;
 
-	public int $seed = 0;
-	public int $dimension = 0;
-	public int $generator = 0;
-	public int $gamemode = 0;
-	public int $eid = 0;
-	public int $spawnX = 0;
-	public int $spawnY = 0;
-	public int $spawnZ = 0;
-	public float $x = 0.0;
-	public float $y = 0.0;
-	public float $z = 0.0;
-	public string $unknown = "";
+    public int $seed = 0;
+    public int $dimension = 0;
+    public int $generator = 0;
+    public int $gamemode = 0;
+    public int $eid = 0;
+    public int $spawnX = 0;
+    public int $spawnY = 0;
+    public int $spawnZ = 0;
+    public float $x = 0.0;
+    public float $y = 0.0;
+    public float $z = 0.0;
+    public string $unknown = "";
 
-	public function decode() : void{
+    public function decode(): void {}
 
-	}
-
-	public function encode() : void{
-		$this->reset();
-		$this->putInt($this->seed);
-		$this->putByte($this->dimension);
-		$this->putInt($this->generator);
-		$this->putInt($this->gamemode);
-		$this->putLong($this->eid);
-		$this->putInt($this->spawnX);
-		$this->putInt($this->spawnY);
-		$this->putInt($this->spawnZ);
-		$this->putFloat($this->x);
-		$this->putFloat($this->y);
-		$this->putFloat($this->z);
-		$this->putByte(1);
-		$this->putByte(1);
-		$this->putByte(0);
-		$this->putString($this->unknown);
-	}
-
+    public function encode(): void
+    {
+        $this->reset();
+        $this->putInt($this->seed);
+        $this->putByte($this->dimension);
+        $this->putInt($this->generator);
+        $this->putInt($this->gamemode);
+        $this->putLong($this->eid);
+        $this->putInt($this->spawnX);
+        $this->putInt($this->spawnY);
+        $this->putInt($this->spawnZ);
+        $this->putFloat($this->x);
+        $this->putFloat($this->y);
+        $this->putFloat($this->z);
+        $this->putByte(1);
+        $this->putByte(1);
+        $this->putByte(0);
+        $this->putString($this->unknown);
+    }
 }

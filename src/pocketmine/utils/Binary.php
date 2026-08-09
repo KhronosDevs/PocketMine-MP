@@ -197,7 +197,7 @@ class Binary{
 					}
 					break;
 				case self::DATA_TYPE_LONG:
-					$r = self::readLLong(substr($value, $offset, 4));
+					$r = self::readLLong(substr($value, $offset, 8));
 					$offset += 8;
 					break;
 				default:
