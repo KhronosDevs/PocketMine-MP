@@ -38,6 +38,13 @@ $config = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerCo
 if ($config instanceof \pocketmine\core\resource\ServerConfig) {
     $config->spawnMobs = true;
 }
+// 14.6: hostile mobs only spawn after dusk. The spawn tests need night
+// (midnight = 18000) - the day-gate test flips back to day to prove the
+// spawner stays quiet.
+$worldConfig = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
+if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+    $worldConfig->time = \pocketmine\core\system\TimeSystem::TIME_MIDNIGHT;
+}
 
 // Load a 3x3 ring of chunks around spawn so the spawner has plenty of
 // real terrain to place mobs on (dry land - the spawn column itself may be
@@ -139,10 +146,42 @@ test('mobs spawn near the player and respect the caps', function () use ($world,
     ok($aiEnabled === $hostile, 'every spawned mob carries the AI component');
 });
 
+test('mobs do not spawn during the day (night gate)', function () use ($kernel, $world, $playerPos): void {
+    $worldConfig = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
+    if (!$worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+        ok(true, 'no world config to test');
+        return;
+    }
+    $before = 0;
+    foreach ($world->getEntities() as $entity) {
+        $meta = $entity->get(MetadataComponent::class);
+        if ($meta !== null && $meta->get('hostile')) {
+            $before++;
+        }
+    }
+    $worldConfig->time = \pocketmine\core\system\TimeSystem::TIME_DAWN; // 06:00
+    for ($i = 0; $i < 120; $i++) { // 3 spawn intervals, all in daylight
+        $world->tick(0.05);
+    }
+    $after = 0;
+    foreach ($world->getEntities() as $entity) {
+        $meta = $entity->get(MetadataComponent::class);
+        if ($meta !== null && $meta->get('hostile')) {
+            $after++;
+        }
+    }
+    same($before, $after, 'no hostile mobs spawn while the sun is up');
+});
+
 test('mob spawning stops when ServerConfig::spawnMobs is false', function () use ($kernel, $world): void {
     $config = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
     if ($config instanceof \pocketmine\core\resource\ServerConfig) {
         $config->spawnMobs = false;
+    }
+    // Back to night so the gate is not the reason no mobs spawn.
+    $worldConfig = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
+    if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+        $worldConfig->time = \pocketmine\core\system\TimeSystem::TIME_MIDNIGHT;
     }
     $before = count($world->getEntities());
     for ($i = 0; $i < 120; $i++) { // 3 spawn intervals

@@ -1129,12 +1129,16 @@ final class Kernel {
         }
         $config = $this->resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
         if ($config instanceof \pocketmine\core\resource\ServerConfig) {
+            // 14.6: the current time of day is persisted with the world meta so
+            // a restart resumes at the same hour instead of snapping to dawn.
+            $worldConfig = $this->resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
             $this->storagePort->saveWorldMeta([
                 'seed' => (string)$config->getSeed(),
                 'spawnX' => (string)$config->spawnX,
                 'spawnY' => (string)$config->spawnY,
                 'spawnZ' => (string)$config->spawnZ,
                 'difficulty' => (string)$config->difficulty,
+                'time' => (string)($worldConfig instanceof \pocketmine\core\resource\WorldConfig ? $worldConfig->time : 0),
             ]);
         }
         // 14.4b: persist every online player (position/health/inventory/
@@ -1561,6 +1565,12 @@ function applyPersistedWorldMeta(StoragePort $storagePort, ResourceRegistry $res
     if (isset($meta['difficulty']) && $meta['difficulty'] !== '') {
         $config->difficulty = (int)$meta['difficulty'];
     }
+    // 14.6: resume the persisted time of day (wrapped to a valid day range).
+    $worldConfig = $resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
+    if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig
+        && isset($meta['time']) && $meta['time'] !== '') {
+        $worldConfig->time = ((int)$meta['time'] % 24000 + 24000) % 24000;
+    }
 }
 
 function registerBuiltinSystems(SystemScheduler $scheduler): void {
@@ -1571,6 +1581,10 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // index, and cross-entity reads. Runs before parallel movement/physics so
     // the velocities it writes are integrated the same tick.
     $scheduler->register(new \pocketmine\core\system\AISystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // 14.6: day/night cycle - advances WorldConfig::$time every tick so the
+    // network layer can broadcast it and the mob spawner can gate on it.
+    // Runs before MobSpawnerSystem so the spawner sees the advanced time.
+    $scheduler->register(new \pocketmine\core\system\TimeSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     // 14.3: periodic hostile-mob spawning near players. Registered after AI so
     // fresh spawns do not act (target, move) the same tick they appear.
     $scheduler->register(new \pocketmine\core\system\MobSpawnerSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
