@@ -1965,6 +1965,190 @@ test('a sword wears out on a landed attack', function () use ($kernel): void {
     $kernel->getEntityDespawnService()->despawn($mob);
 });
 
+// --- Food + hunger (14.11) -------------------------------------------------
+test('a player eats food to restore hunger and the HUD bar updates', function () use ($client, $kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $entity = $kernel->getWorld()->getEntity($alice['entityId']);
+    $inv = $entity?->get(\pocketmine\core\component\InventoryComponent::class);
+    $hc = $entity?->get(\pocketmine\core\component\HungerComponent::class);
+    if ($inv === null || $hc === null) {
+        ok(false, 'Alice inventory + hunger present');
+        return;
+    }
+    // Deterministic starting state: half-full food bar.
+    $hc->hunger = 10.0;
+    $hc->saturation = 5.0;
+    $hc->exhaustion = 0.0;
+    $hc->lastSyncedHunger = 10.0;
+    $hc->lastSyncedSaturation = 5.0;
+    // Apple (260) x3 in the held slot.
+    $inv->set(0, new \pocketmine\core\component\ItemStack(260, 0, 3));
+    $inv->setHeldSlot(0);
+
+    // Right-click with the apple: USE_ITEM routes to the eat path.
+    $use = new UseItemPacket();
+    $use->x = (int)floor($alice['x']);
+    $use->y = (int)floor($alice['y']);
+    $use->z = (int)floor($alice['z']);
+    $use->face = 0;
+    $use->fx = 0.0;
+    $use->fy = 0.0;
+    $use->fz = 0.0;
+    $use->posX = $alice['x'];
+    $use->posY = $alice['y'];
+    $use->posZ = $alice['z'];
+    $use->slot = 0;
+    $use->item = [260, 1, 0, null];
+    $client->sendGamePacket($use);
+
+    // The USE_ITEM packet travels socket -> RakNet thread -> kernel: poll
+    // until the eat lands. Apple restores 4 hunger + 2.4 saturation (legacy
+    // Food values) and consumes one item.
+    $deadline = microtime(true) + 4.0;
+    while (microtime(true) < $deadline && $hc->hunger < 14.0) {
+        $kernel->run(1);
+        usleep(10000);
+    }
+    ok($hc->hunger === 14.0, 'hunger restored to 14 (10 + 4)');
+    ok(abs($hc->saturation - 7.4) < 0.001, 'saturation raised to 7.4 (5 + 2.4)');
+    $held = $inv->get(0);
+    ok($held !== null && $held->count === 2, 'one apple consumed (2 left)');
+
+    // The HUD food bar must follow (player.hunger attribute, eid 0).
+    $deadline = microtime(true) + 3.0;
+    $sawBar = false;
+    while (microtime(true) < $deadline && !$sawBar) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::UPDATE_ATTRIBUTES_PACKET) {
+                $ua = uaFields($buffer);
+                if (isset($ua['entries']['player.hunger']) && abs($ua['entries']['player.hunger']['value'] - 14.0) < 0.001) {
+                    $sawBar = true;
+                }
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawBar, 'HUD hunger bar synced to 14 via UpdateAttributesPacket');
+});
+
+test('hunger drains as exhaustion builds up past the threshold', function () use ($kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $hc = $kernel->getWorld()->getEntity($alice['entityId'])?->get(\pocketmine\core\component\HungerComponent::class);
+    if ($hc === null) {
+        ok(false, 'Alice hunger present');
+        return;
+    }
+    // No saturation left, exhaustion 0.1 below the 4.0 drain threshold.
+    $hc->hunger = 20.0;
+    $hc->saturation = 0.0;
+    $hc->exhaustion = 3.8;
+
+    // ~0.01 passive exhaustion per tick: after 30 ticks exhaustion passes
+    // 4.0 exactly once, costing 1 hunger (saturation is already 0).
+    $world = $kernel->getWorld();
+    for ($i = 0; $i < 30; $i++) {
+        $world->tick(0.05);
+    }
+    ok($hc->hunger === 19.0, 'hunger drained by 1 when exhaustion hit 4.0 (' . var_export($hc->hunger, true) . ')');
+});
+
+test('a starving player takes damage at zero hunger', function () use ($kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $entity = $kernel->getWorld()->getEntity($alice['entityId']);
+    $hc = $entity?->get(\pocketmine\core\component\HungerComponent::class);
+    $health = $entity?->get(\pocketmine\core\component\HealthComponent::class);
+    if ($hc === null || $health === null) {
+        ok(false, 'Alice hunger + health present');
+        return;
+    }
+    $hc->hunger = 0.0;
+    $hc->exhaustion = 0.0;
+    $health->current = 20.0;
+
+    // RegenSystem is gated on hunger > 0, so at zero hunger only the
+    // starvation damage applies: 1 HP per 80 ticks (the window starts on the
+    // first tick, so 81 ticks are needed to see the first damage).
+    $world = $kernel->getWorld();
+    for ($i = 0; $i < 81; $i++) {
+        $world->tick(0.05);
+    }
+    ok($health->current < 20.0, 'starving player took damage (' . var_export($health->current, true) . ' HP)');
+    $hc->hunger = 20.0; // restore so later tests are unaffected
+});
+
+test('attacking and mining add exhaustion', function () use ($kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $entity = $kernel->getWorld()->getEntity($alice['entityId']);
+    $inv = $entity?->get(\pocketmine\core\component\InventoryComponent::class);
+    $hc = $entity?->get(\pocketmine\core\component\HungerComponent::class);
+    if ($inv === null || $hc === null) {
+        ok(false, 'Alice inventory + hunger present');
+        return;
+    }
+    $hc->exhaustion = 0.0;
+
+    // Mining a fresh dirt block (legacy CAUSE_MINING 0.025).
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+    if ($store === null) {
+        ok(false, 'chunk store present');
+        return;
+    }
+    $tx = (int)floor($alice['x']) + 2;
+    $ty = (int)floor($alice['y']);
+    $tz = (int)floor($alice['z']);
+    $store->setBlock($tx, $ty, $tz, 3, 0);
+    $aliceRef = \pocketmine\core\ecs\EntityRef::create($alice['entityId'], $kernel->getWorld());
+    ok($kernel->getBlockBreakService()->breakBlock($aliceRef, $tx, $ty, $tz, 1), 'dirt block broke');
+    ok(abs($hc->exhaustion - 0.025) < 0.001, 'mining added 0.025 exhaustion');
+
+    // A landed sword hit (legacy CAUSE_ATTACK 0.3).
+    $inv->set(0, new \pocketmine\core\component\ItemStack(268, 0, 1));
+    $inv->setHeldSlot(0);
+    $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', $alice['x'] + 2.5, $alice['y'] - 1.0, $alice['z']);
+    $mobRef = \pocketmine\core\ecs\EntityRef::create($mob->getId(), $kernel->getWorld());
+    $landed = $kernel->getEntityInteractionService()->attack($aliceRef, $mobRef);
+    ok($landed, 'attack landed');
+    ok(abs($hc->exhaustion - 0.325) < 0.001, 'attack added 0.3 exhaustion (total 0.325)');
+    $kernel->getEntityDespawnService()->despawn($mob);
+});
+
 // --- XP orbs + health regen (14.9) -----------------------------------------
 test('an XP orb dropped by a mob death is broadcast as AddEntityPacket type 69', function () use ($kernel, $client): void {
     $alice = null;

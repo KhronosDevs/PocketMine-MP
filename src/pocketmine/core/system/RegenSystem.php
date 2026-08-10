@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\core\system;
 
 use pocketmine\core\component\HealthComponent;
+use pocketmine\core\component\HungerComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\tags\PlayerTag;
 use pocketmine\core\ecs\System;
@@ -49,7 +50,15 @@ final class RegenSystem implements System {
             if ($health === null || $pos === null) {
                 continue;
             }
+            // Tracked BEFORE the hunger gate so a starving player does not
+            // lose their regen state (lastDamage/lastRegen ticks) and then
+            // heal instantly on their first bite after eating.
             $alive[$entity->id] = true;
+            // 14.11: natural regen requires food (vanilla pre-1.6 rule) - a
+            // starving player (hunger 0) only takes damage, never heals.
+            if (($entity->get(HungerComponent::class)?->hunger ?? 20.0) <= 0.0) {
+                continue;
+            }
 
             $prev = $this->lastHealth[$entity->id] ?? $health->current;
             if ($health->current < $prev) {

@@ -14,6 +14,7 @@ use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\BlockRegistry;
 use pocketmine\core\resource\ChunkStore;
+use pocketmine\core\resource\Hunger;
 use pocketmine\core\resource\ItemDurability;
 use pocketmine\port\driven\StoragePort;
 
@@ -178,6 +179,8 @@ final class BlockBreakService {
         // 14.10: tools wear out with use (survival only; the helper is a
         // no-op in creative and for bare hands / non-durable items).
         ItemDurability::consume($playerRef);
+        // 14.11: mining is slightly hungry work (legacy CAUSE_MINING 0.025).
+        Hunger::exhaust($playerRef, 0.025);
         
         return true;
     }

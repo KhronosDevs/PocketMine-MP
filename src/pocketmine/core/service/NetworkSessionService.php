@@ -6,6 +6,7 @@ namespace pocketmine\core\service;
 
 use pocketmine\adapter\driven\network\Protocol84NetworkAdapter;
 use pocketmine\core\component\HealthComponent;
+use pocketmine\core\component\HungerComponent;
 use pocketmine\core\component\InventoryComponent;
 use pocketmine\core\component\ItemStack;
 use pocketmine\core\component\MetadataComponent;
@@ -16,6 +17,8 @@ use pocketmine\core\ecs\Entity;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\ResourceRegistry;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\Hunger;
+use pocketmine\core\resource\ItemRegistry;
 use pocketmine\core\resource\ServerConfig;
 use pocketmine\core\resource\WorldConfig;
 use pocketmine\port\driven\NetworkPort;
@@ -633,6 +636,14 @@ final class NetworkSessionService {
         if ($held === null || $held->count <= 0) {
             return;
         }
+        // 14.11: food items are eaten on use (legacy Food::onConsume). The
+        // eat() path refuses when the player is already full.
+        $registry = $this->resourceRegistry->get(ItemRegistry::class);
+        $food = $registry instanceof ItemRegistry ? $registry->getFood($held->itemId) : null;
+        if ($food !== null) {
+            $this->eat($addrKey, $session, $held, $food);
+            return;
+        }
         $blockId = $held->itemId;
         // Item ids 1..255 are placeable blocks in the protocol-84 era; item
         // ids above that (tools, food...) are not placeable.
@@ -912,6 +923,64 @@ final class NetworkSessionService {
     }
 
     /**
+     * 14.11 eating: consume one food item from the held slot, apply its
+     * hunger/saturation restore (capped), animate USE_ITEM to the eater and
+     * all viewers (legacy Food::onConsume), then refresh the actor's slot and
+     * HUD food bar. Refuses when the player is already full.
+     *
+     * @param array{0: int, 1: float} $food [hunger restore, saturation restore]
+     */
+    private function eat(string $addrKey, array $session, ItemStack $held, array $food): void {
+        $entity = $session['entityRef']->getEntity();
+        $hunger = $entity?->get(HungerComponent::class);
+        if ($hunger === null || $hunger->hunger >= Hunger::MAX_FOOD) {
+            return; // full (or no hunger state): cannot eat
+        }
+        $inventory = $entity?->get(InventoryComponent::class);
+        if ($inventory === null) {
+            return;
+        }
+        $removed = $inventory->remove($inventory->heldSlot, 1);
+        if ($removed === null) {
+            return;
+        }
+        Hunger::applyFood($session['entityRef'], (int)$food[0], (float)$food[1]);
+
+        // Legacy Food::onConsume: USE_ITEM animation to the eater + viewers.
+        $event = new EntityEventPacket();
+        $event->eid = $session['playerRef']->entityId;
+        $event->event = EntityEventPacket::USE_ITEM;
+        foreach ($this->sessions as $s) {
+            $this->queuePacket($s['playerRef'], clone $event);
+        }
+        $this->sendInventorySlot($session['playerRef'], $inventory->heldSlot);
+        $this->syncFoodFor($session['playerRef']->entityId);
+    }
+
+    /**
+     * 14.11: push the player's food bars to the client via the legacy
+     * attribute packet (player.hunger + player.saturation). Called after
+     * eating, by the HungerSystem when the bars drain, and at login so the
+     * bar starts full.
+     */
+    public function syncFoodFor(int $entityId): void {
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId !== $entityId) {
+                continue;
+            }
+            $hunger = $session['entityRef']->getEntity()?->get(HungerComponent::class);
+            $pk = new UpdateAttributesPacket();
+            $pk->entityId = 0; // legacy: 0 targets the player's own HUD
+            $pk->entries = [
+                [0.0, 20.0, (float)($hunger?->hunger ?? 20.0), 'player.hunger'],
+                [0.0, 20.0, (float)($hunger?->saturation ?? 5.0), 'player.saturation'],
+            ];
+            $this->queuePacket($session['playerRef'], $pk);
+            return;
+        }
+    }
+
+    /**
      * 14.9: push the player's XP bar (level + progress) to the client via
      * the legacy attribute packet. Called after an XP orb is collected; also
      * part of the login burst so the bar starts at a known state.
@@ -1148,6 +1217,8 @@ final class NetworkSessionService {
 
         // 14.9: init the XP bar (level 0, empty progress).
         $this->syncXpFor($session['playerRef']->entityId);
+        // 14.11: init the food bars (full hunger, default saturation).
+        $this->syncFoodFor($session['playerRef']->entityId);
     }
 
     /**
