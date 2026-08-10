@@ -474,7 +474,13 @@ final class BlockRegistry {
      * (a wrong tool simply takes longer; the block still breaks).
      */
     public function requiresTool(int $id): bool {
-        return $this->getToolType($id) !== 'hand';
+        // Vanilla semantics: only blocks that drop NOTHING by hand truly
+        // require a tool (stone, ores, ...). Those carry a toolLevel. Soft
+        // blocks (grass, dirt, planks) break by hand at normal speed even
+        // though a tool is faster - the 5x hand penalty would otherwise
+        // make them take longer than the 0.15 client's own crack timer,
+        // and legit breaks would be rejected server-side.
+        return $this->getToolLevel($id) > 0;
     }
 
     /**

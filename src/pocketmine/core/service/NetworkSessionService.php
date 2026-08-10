@@ -43,6 +43,7 @@ use pocketmine\protocol\PlayStatusPacket;
 use pocketmine\protocol\PlayerActionPacket;
 use pocketmine\protocol\PlayerListPacket;
 use pocketmine\protocol\RemoveEntityPacket;
+use pocketmine\protocol\RemoveBlockPacket;
 use pocketmine\protocol\RequestChunkRadiusPacket;
 use pocketmine\protocol\RespawnPacket;
 use pocketmine\protocol\SetDifficultyPacket;
@@ -132,7 +133,8 @@ final class NetworkSessionService {
      *   spawned: bool,
      *   lastHealth: float,
      *   knownEntities: array<int, array{0: float, 1: float, 2: float, 3: float}>,
-     *   moveCredit: array<string, int>
+     *   moveCredit: array<string, int>,
+     *   breaking: array{x: int, y: int, z: int, startTick: int}|null
      * }>
      */
     private array $sessions = [];
@@ -387,6 +389,12 @@ final class NetworkSessionService {
                 $pk->decode();
                 $this->handleDropItem($addrKey, $pk);
                 break;
+            case Info::REMOVE_BLOCK_PACKET:
+                $pk = new RemoveBlockPacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handleRemoveBlock($addrKey, $pk);
+                break;
             case Info::INTERACT_PACKET:
                 $pk = new InteractPacket();
                 $pk->setBuffer($buffer, 1);
@@ -455,6 +463,8 @@ final class NetworkSessionService {
             'knownEntities' => [],
             // Backing for validated inventory moves (id:meta => released count).
             'moveCredit' => [],
+            // 14.8: in-progress block break (position + the tick it started).
+            'breaking' => null,
         ];
 
         // Broadcast the new player to everyone (including themselves) and
@@ -517,22 +527,88 @@ final class NetworkSessionService {
     }
 
     /**
-     * Block interaction (14.1): ACTION_START_BREAK breaks the clicked block
-     * through BlockBreakService and broadcasts the new (air) state to every
-     * session so clients render the change. Other actions (sprint, sneak,
-     * jump...) carry no world effect yet and are ignored.
+     * Block interaction (14.1/14.8): survival mining is a two-phase handshake.
+     *
+     * The 0.15 client animates the crack locally (it knows block hardness
+     * itself) and then confirms completion with REMOVE_BLOCK_PACKET (or
+     * ACTION_STOP_BREAK). The server stays authoritative on the TIMING: it
+     * records the tick ACTION_START_BREAK arrives and only honours the
+     * completion once BlockBreakService::requiredBreakTicks() has elapsed.
+     * A hacked client cannot insta-mine, because an immediate confirm is
+     * rejected. ACTION_ABORT_BREAK cancels the in-progress break. Creative
+     * mode and zero-hardness blocks still break instantly on START.
      */
     private function handlePlayerAction(string $addrKey, PlayerActionPacket $pk): void {
-        if ($pk->action !== PlayerActionPacket::ACTION_START_BREAK) {
-            return;
-        }
         $session = $this->sessions[$addrKey] ?? null;
         if ($session === null) {
             return;
         }
-        if ($this->blockBreakService->breakBlock($session['entityRef'], $pk->x, $pk->y, $pk->z, $pk->face)) {
-            $this->broadcastBlockState($pk->x, $pk->y, $pk->z);
+        if ($pk->action === PlayerActionPacket::ACTION_START_BREAK) {
+            $ticks = $this->blockBreakService->requiredBreakTicks($session['entityRef'], $pk->x, $pk->y, $pk->z);
+            if ($ticks < 0) {
+                return; // unreachable or unbreakable: nothing starts
+            }
+            if ($ticks === 0) {
+                // Creative or instant-break block (torches, saplings, ...).
+                if ($this->blockBreakService->breakBlock($session['entityRef'], $pk->x, $pk->y, $pk->z, $pk->face)) {
+                    $this->broadcastBlockState($pk->x, $pk->y, $pk->z);
+                }
+                $session['breaking'] = null;
+                $this->sessions[$addrKey] = $session;
+                return;
+            }
+            $session['breaking'] = [
+                'x' => $pk->x,
+                'y' => $pk->y,
+                'z' => $pk->z,
+                'startTick' => $this->currentTick(),
+            ];
+            $this->sessions[$addrKey] = $session;
+            return;
         }
+        if ($pk->action === PlayerActionPacket::ACTION_ABORT_BREAK) {
+            $session['breaking'] = null;
+            $this->sessions[$addrKey] = $session;
+            return;
+        }
+        if ($pk->action === PlayerActionPacket::ACTION_STOP_BREAK) {
+            $this->finishBreak($addrKey, $session, $pk->x, $pk->y, $pk->z);
+        }
+    }
+
+    /**
+     * The 0.15 client's "the crack finished" signal (REMOVE_BLOCK_PACKET):
+     * break the block only if the player actually held the button for
+     * requiredBreakTicks(). Mirrors the ACTION_STOP_BREAK path.
+     */
+    private function handleRemoveBlock(string $addrKey, RemoveBlockPacket $pk): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $this->finishBreak($addrKey, $session, $pk->x, $pk->y, $pk->z);
+    }
+
+    private function finishBreak(string $addrKey, array $session, int $x, int $y, int $z): void {
+        $breaking = $session['breaking'];
+        if ($breaking === null || $breaking['x'] !== $x || $breaking['y'] !== $y || $breaking['z'] !== $z) {
+            return; // no in-progress break on this block (or moved away)
+        }
+        $session['breaking'] = null;
+        $this->sessions[$addrKey] = $session;
+        $elapsed = $this->currentTick() - $breaking['startTick'];
+        $required = $this->blockBreakService->requiredBreakTicks($session['entityRef'], $x, $y, $z);
+        if ($required < 0 || $elapsed < $required) {
+            return; // released early / hostile instant confirm: block stays
+        }
+        if ($this->blockBreakService->breakBlock($session['entityRef'], $x, $y, $z, 1)) {
+            $this->broadcastBlockState($x, $y, $z);
+        }
+    }
+
+    private function currentTick(): int {
+        $counter = $this->resourceRegistry->get(\pocketmine\core\resource\TickCounter::class);
+        return $counter instanceof \pocketmine\core\resource\TickCounter ? $counter->value : 0;
     }
 
     /**
