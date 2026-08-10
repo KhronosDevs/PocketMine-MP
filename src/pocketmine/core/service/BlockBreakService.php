@@ -14,6 +14,7 @@ use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\BlockRegistry;
 use pocketmine\core\resource\ChunkStore;
+use pocketmine\core\resource\ItemDurability;
 use pocketmine\port\driven\StoragePort;
 
 final class BlockBreakService {
@@ -173,6 +174,10 @@ final class BlockBreakService {
         
         // Play break sound/particles
         $this->playBreakEffects($x, $y, $z);
+
+        // 14.10: tools wear out with use (survival only; the helper is a
+        // no-op in creative and for bare hands / non-durable items).
+        ItemDurability::consume($playerRef);
         
         return true;
     }

@@ -1816,6 +1816,155 @@ test('attacking a mob via InteractPacket damages it and broadcasts the hurt anim
     $kernel->getEntityDespawnService()->despawn($mob);
 });
 
+// --- Tool durability (14.10) -----------------------------------------------
+test('a held tool degrades with each block broken and syncs the slot', function () use ($client, $kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $inv = $kernel->getWorld()->getEntity($alice['entityId'])?->get(\pocketmine\core\component\InventoryComponent::class);
+    ok($inv !== null, 'Alice inventory present');
+    if ($inv === null) {
+        return;
+    }
+    // Deterministic target: a fresh dirt block two cells east of Alice at her
+    // feet height, written through the same ChunkStore the services use (no
+    // seed-random terrain scanning / teleport timing involved).
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+    if ($store === null) {
+        ok(false, 'chunk store present');
+        return;
+    }
+    $tx = (int)floor($alice['x']) + 2;
+    $ty = (int)floor($alice['y']);
+    $tz = (int)floor($alice['z']);
+    $store->setBlock($tx, $ty, $tz, 3, 0); // dirt
+
+    // Wooden pickaxe (270, max durability 59): the meta IS the damage.
+    $inv->set(0, new \pocketmine\core\component\ItemStack(270, 0, 1));
+    $inv->setHeldSlot(0);
+
+    $aliceRef = \pocketmine\core\ecs\EntityRef::create($alice['entityId'], $kernel->getWorld());
+    ok($kernel->getBlockBreakService()->breakBlock($aliceRef, $tx, $ty, $tz, 1), 'dirt block broke');
+    $kernel->run(1); // flush the outbound slot sync
+
+    $held = $inv->get(0);
+    ok($held !== null && $held->itemId === 270 && $held->meta === 1, 'held pickaxe took one point of wear (meta 1)');
+
+    // The degraded meta must reach the client so the durability bar updates.
+    $deadline = microtime(true) + 3.0;
+    $sawWorn = false;
+    while (microtime(true) < $deadline && !$sawWorn) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::CONTAINER_SET_SLOT_PACKET) {
+                $css = cssFields($buffer);
+                if ($css['slot'] === 0 && $css['item'][0] === 270 && $css['item'][2] === 1) {
+                    $sawWorn = true;
+                }
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawWorn, 'worn tool meta synced to the client via ContainerSetSlot');
+});
+
+test('a tool breaks into air when its damage reaches max durability', function () use ($client, $kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $inv = $kernel->getWorld()->getEntity($alice['entityId'])?->get(\pocketmine\core\component\InventoryComponent::class);
+    if ($inv === null) {
+        ok(false, 'Alice inventory present');
+        return;
+    }
+    // Fresh dirt block two cells east of Alice, at her feet height.
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+    if ($store === null) {
+        ok(false, 'chunk store present');
+        return;
+    }
+    $tx = (int)floor($alice['x']) + 2;
+    $ty = (int)floor($alice['y']);
+    $tz = (int)floor($alice['z']);
+    $store->setBlock($tx, $ty, $tz, 3, 0); // dirt
+
+    // Wooden pickaxe at 58/59: the next break destroys it (59 >= 59).
+    $inv->set(0, new \pocketmine\core\component\ItemStack(270, 58, 1));
+    $inv->setHeldSlot(0);
+
+    $aliceRef = \pocketmine\core\ecs\EntityRef::create($alice['entityId'], $kernel->getWorld());
+    ok($kernel->getBlockBreakService()->breakBlock($aliceRef, $tx, $ty, $tz, 1), 'dirt block broke');
+    $kernel->run(1);
+
+    ok($inv->get(0) === null, 'broken tool removed from the held slot');
+
+    // The client is told the slot now holds air.
+    $deadline = microtime(true) + 3.0;
+    $sawAir = false;
+    while (microtime(true) < $deadline && !$sawAir) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::CONTAINER_SET_SLOT_PACKET) {
+                $css = cssFields($buffer);
+                if ($css['slot'] === 0 && $css['item'][0] === 0) {
+                    $sawAir = true;
+                }
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawAir, 'broken tool synced to the client as an empty slot');
+});
+
+test('a sword wears out on a landed attack', function () use ($kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $inv = $kernel->getWorld()->getEntity($alice['entityId'])?->get(\pocketmine\core\component\InventoryComponent::class);
+    if ($inv === null) {
+        ok(false, 'Alice inventory present');
+        return;
+    }
+    // Wooden sword (268, max durability 59) in the held slot.
+    $inv->set(0, new \pocketmine\core\component\ItemStack(268, 0, 1));
+    $inv->setHeldSlot(0);
+
+    $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', $alice['x'] + 2.5, $alice['y'] - 1.0, $alice['z']);
+    $mobRef = \pocketmine\core\ecs\EntityRef::create($mob->getId(), $kernel->getWorld());
+    $aliceRef = \pocketmine\core\ecs\EntityRef::create($alice['entityId'], $kernel->getWorld());
+
+    $healthBefore = $kernel->getWorld()->getEntity($mob->getId())?->get(\pocketmine\core\component\HealthComponent::class)?->current;
+    $landed = $kernel->getEntityInteractionService()->attack($aliceRef, $mobRef);
+    $healthAfter = $kernel->getWorld()->getEntity($mob->getId())?->get(\pocketmine\core\component\HealthComponent::class)?->current;
+
+    ok($landed, 'attack landed');
+    ok($healthAfter !== null && $healthAfter < ($healthBefore ?? 20.0), 'mob took damage');
+    $held = $inv->get(0);
+    ok($held !== null && $held->itemId === 268 && $held->meta === 1, 'held sword took one point of wear (meta 1)');
+    $kernel->getEntityDespawnService()->despawn($mob);
+});
+
 // --- XP orbs + health regen (14.9) -----------------------------------------
 test('an XP orb dropped by a mob death is broadcast as AddEntityPacket type 69', function () use ($kernel, $client): void {
     $alice = null;
