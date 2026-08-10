@@ -897,6 +897,21 @@ final class NetworkSessionService {
     }
 
     /**
+     * 14.10: reflect a single inventory slot change to the owning client.
+     * Public because the tool-durability wear path (ItemDurability) runs in
+     * services that have no session access - it resolves the session service
+     * lazily and calls this after degrading or breaking the held tool.
+     */
+    public function syncInventorySlot(int $entityId, int $slot): void {
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId === $entityId) {
+                $this->sendInventorySlot($session['playerRef'], $slot);
+                return;
+            }
+        }
+    }
+
+    /**
      * 14.9: push the player's XP bar (level + progress) to the client via
      * the legacy attribute packet. Called after an XP orb is collected; also
      * part of the login burst so the bar starts at a known state.

@@ -9,6 +9,7 @@ use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\ItemDurability;
 
 final class EntityInteractionService {
     public function __construct(
@@ -172,12 +173,18 @@ final class EntityInteractionService {
         
         // Route through the unified combat pipeline: damage event, armor
         // reduction, knockback, death handling + loot drops.
-        return $this->combatService->applyDamage(
+        $landed = $this->combatService->applyDamage(
             $targetRef,
             $damage,
             $attackerRef,
             \pocketmine\api\event\EntityDamageEvent::CAUSE_ENTITY_ATTACK
         );
+        // 14.10: a landed hit wears the held weapon (survival only; the
+        // helper is a no-op in creative and for bare hands).
+        if ($landed) {
+            ItemDurability::consume($attackerRef);
+        }
+        return $landed;
     }
 
     private function canAttack(EntityRef $attackerRef, EntityRef $targetRef): bool {
