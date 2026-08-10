@@ -43,7 +43,11 @@ class RemoveBlockPacket extends DataPacket{
 	}
 
 	public function encode() : void{
-
+		$this->reset();
+		$this->putLong($this->eid);
+		$this->putInt($this->x);
+		$this->putInt($this->z);
+		$this->putByte($this->y);
 	}
 
 }

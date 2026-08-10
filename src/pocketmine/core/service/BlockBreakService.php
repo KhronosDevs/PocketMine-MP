@@ -126,6 +126,39 @@ final class BlockBreakService {
         return max(0.05, $speed);
     }
 
+    /**
+     * How many server ticks a survival player must hold the break button
+     * before the block can be broken (0 = instant: creative mode or
+     * zero-hardness blocks, -1 = cannot be broken at all).
+     *
+     * The 0.15 client animates the crack over its own local timer and then
+     * confirms with REMOVE_BLOCK_PACKET / STOP_BREAK; the server honours that
+     * confirmation only once this much time has passed, so a hacked client
+     * cannot insta-mine everything.
+     */
+    public function requiredBreakTicks(EntityRef $playerRef, int $x, int $y, int $z): int {
+        $player = $playerRef->getEntity();
+        if (!$player) {
+            return -1;
+        }
+        $metadata = $player->get(MetadataComponent::class);
+        if (($metadata?->get('gamemode') ?? 0) === 1) {
+            return 0; // creative: instant
+        }
+        if (!$this->canReach($playerRef, $x, $y, $z) || !$this->isBreakable($x, $y, $z)) {
+            return -1;
+        }
+        $speed = $this->calculateBreakSpeed($this->getHeldItem($playerRef), $x, $y, $z);
+        if ($speed <= 0.0) {
+            return -1; // unbreakable
+        }
+        $seconds = 1.0 / $speed;
+        if ($seconds <= 0.05) {
+            return 0; // effectively instant (torches, saplings, ...)
+        }
+        return max(1, (int)ceil($seconds * 20.0));
+    }
+
     private function doBreakBlock(EntityRef $playerRef, int $x, int $y, int $z, ?ItemStack $tool): bool {
         // Get block drops
         $drops = $this->getBlockDrops($x, $y, $z, $tool);

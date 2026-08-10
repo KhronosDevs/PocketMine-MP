@@ -17,6 +17,7 @@ use pocketmine\protocol\MobEquipmentPacket;
 use pocketmine\protocol\MovePlayerPacket;
 use pocketmine\protocol\PlayStatusPacket;
 use pocketmine\protocol\PlayerActionPacket;
+use pocketmine\protocol\RemoveBlockPacket;
 use pocketmine\protocol\RequestChunkRadiusPacket;
 use pocketmine\protocol\TextPacket;
 use pocketmine\protocol\UpdateBlockPacket;
@@ -1078,11 +1079,12 @@ test('held item change (MobEquipment) updates the ECS held slot', function () us
     ok(false, 'held slot updated to 1');
 });
 
-test('breaking a block updates the world and broadcasts UpdateBlockPacket', function () use ($client, $kernel): void {
+test('breaking a block requires holding and then confirms via RemoveBlockPacket', function () use ($client, $kernel): void {
     [$bx, $by, $bz] = findSurfaceBlockNearSpawn($kernel);
     teleportAliceOnto($kernel, $client, $bx, $by, $bz);
 
-    // Break the surface block under Alice's feet (ACTION_START_BREAK).
+    // Phase 1: press and hold (ACTION_START_BREAK) - the server records the
+    // break start and the client animates the crack locally.
     $action = new PlayerActionPacket();
     $action->eid = 0;
     $action->action = PlayerActionPacket::ACTION_START_BREAK;
@@ -1091,6 +1093,20 @@ test('breaking a block updates the world and broadcasts UpdateBlockPacket', func
     $action->z = $bz;
     $action->face = 1;
     $client->sendGamePacket($action);
+    $kernel->run(1); // the START is processed on this tick
+
+    // Phase 2: hold the button for the server-side requirement (grass/dirt
+    // needs ~12 ticks), then the client's local crack timer finishes and it
+    // confirms with REMOVE_BLOCK_PACKET.
+    for ($i = 0; $i < 20; $i++) {
+        $kernel->run(1);
+    }
+    $rm = new RemoveBlockPacket();
+    $rm->eid = 0;
+    $rm->x = $bx;
+    $rm->y = $by;
+    $rm->z = $bz;
+    $client->sendGamePacket($rm);
 
     $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
     $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
@@ -1111,6 +1127,39 @@ test('breaking a block updates the world and broadcasts UpdateBlockPacket', func
     }
     ok($store !== null && $store->getBlock($bx, $by, $bz) === 0, 'broken block is air in the world');
     ok($sawUpdate, 'UpdateBlockPacket broadcast for the broken block');
+});
+
+test('an instant RemoveBlock confirm is rejected (no insta-mining)', function () use ($client, $kernel): void {
+    [$bx, $by, $bz] = findSurfaceBlockNearSpawn($kernel);
+    teleportAliceOnto($kernel, $client, $bx, $by, $bz);
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+    if ($store === null) {
+        ok(false, 'chunk store present');
+        return;
+    }
+    $before = $store->getBlock($bx, $by, $bz);
+    ok($before !== 0, 'target block is solid before the attack');
+
+    // START and IMMEDIATE confirm in the same tick: a hacked client that
+    // never held the button. The server must reject it.
+    $action = new PlayerActionPacket();
+    $action->eid = 0;
+    $action->action = PlayerActionPacket::ACTION_START_BREAK;
+    $action->x = $bx;
+    $action->y = $by;
+    $action->z = $bz;
+    $action->face = 1;
+    $client->sendGamePacket($action);
+    $rm = new RemoveBlockPacket();
+    $rm->eid = 0;
+    $rm->x = $bx;
+    $rm->y = $by;
+    $rm->z = $bz;
+    $client->sendGamePacket($rm);
+    $kernel->run(3); // START + instant confirm + grace
+
+    ok($store->getBlock($bx, $by, $bz) === $before, 'block survives an instant confirm');
 });
 
 test('placing a block consumes inventory and broadcasts UpdateBlockPacket', function () use ($client, $kernel): void {
