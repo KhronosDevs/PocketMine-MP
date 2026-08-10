@@ -9,6 +9,7 @@ use pocketmine\adapter\driven\network\Protocol84NetworkAdapter;
 use pocketmine\protocol\BatchPacket;
 use pocketmine\protocol\ContainerSetContentPacket;
 use pocketmine\protocol\ContainerSetSlotPacket;
+use pocketmine\protocol\CraftingEventPacket;
 use pocketmine\protocol\DropItemPacket;
 use pocketmine\protocol\FullChunkDataPacket;
 use pocketmine\protocol\Info;
@@ -583,6 +584,44 @@ function cssFields(string $buf): array {
     ];
 }
 
+/**
+ * CraftingDataPacket (0x2f): entry count, then per entry [type, len, payload]
+ * where shaped payloads are width, height, width*height slots, result count,
+ * result slot, uuid. Only shaped (type 1) entries are decoded.
+ */
+function cdFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    $count = $s->getInt();
+    $recipes = [];
+    for ($i = 0; $i < $count && $i < 128; $i++) {
+        $type = $s->getInt();
+        $len = $s->getInt();
+        $payload = substr($s->getBuffer(), $s->getOffset(), $len);
+        $s->offset += $len;
+        if ($type !== 1) {
+            continue;
+        }
+        $r = new BinaryStream($payload);
+        $width = $r->getInt();
+        $height = $r->getInt();
+        $ingredients = [];
+        for ($j = 0; $j < $width * $height; $j++) {
+            $ingredients[] = $r->getSlot();
+        }
+        $resultCount = $r->getInt();
+        $result = $r->getSlot();
+        $r->getUUID(); // recipe uuid
+        $recipes[] = [
+            'width' => $width,
+            'height' => $height,
+            'ingredients' => $ingredients,
+            'resultCount' => $resultCount,
+            'result' => $result,
+        ];
+    }
+    return ['count' => $count, 'recipes' => $recipes];
+}
+
 function apFields(string $buf): array {
     $s = new BinaryStream($buf, 1);
     return [
@@ -749,11 +788,12 @@ test('login produces the full protocol-84 burst', function () use ($client, $ker
     $client->sendLogin('Alice', $uuidA);
     $kernel->run(2);
 
-    // Gather packets until the burst essentials are all seen (9 distinct
-    // ids: the inventory content packet joined the login burst in 14.1).
+    // Gather packets until the burst essentials are all seen (10 distinct
+    // ids: the inventory content packet joined in 14.1, the recipe list in
+    // 14.12).
     $deadline = microtime(true) + 8.0;
     $seen = [];
-    while (microtime(true) < $deadline && count($seen) < 9) {
+    while (microtime(true) < $deadline && count($seen) < 10) {
         foreach ($client->readGamePackets() as [$id, $buffer]) {
             $seen[$id] = true;
             $loginPackets[] = [$id, $buffer];
@@ -836,6 +876,23 @@ test('login produces the full protocol-84 burst', function () use ($client, $ker
     same(5, $csc['slots'][0][0], 'slot 0 holds planks');
     same(32, $csc['slots'][0][1], '32 planks in slot 0');
     same(4, $csc['slots'][1][0], 'slot 1 holds cobblestone');
+
+    // 14.12: the login burst carries the recipe list so the client can
+    // render the crafting UI.
+    ok(isset($byId[Info::CRAFTING_DATA_PACKET]), 'crafting data sent on login');
+    $cd = cdFields($byId[Info::CRAFTING_DATA_PACKET]);
+    same(9, $cd['count'], 'nine shaped recipes');
+    // A 1x1 'L' -> 4 planks recipe is the first registered one; its ingredient
+    // uses the wildcard damage marker (0x7fff) for any log wood type.
+    $first = $cd['recipes'][0] ?? null;
+    ok($first !== null, 'first recipe decodes');
+    if ($first !== null) {
+        same(1, $first['width'], 'planks recipe is 1 wide');
+        same(1, $first['height'], 'planks recipe is 1 tall');
+        same(5, $first['result'][0], 'planks recipe yields planks');
+        same(4, $first['result'][1], 'four planks per log');
+        same(32767, $first['ingredients'][0][2], 'log ingredient uses wildcard damage');
+    }
 });
 
 // --- Chunk streaming -------------------------------------------------------
@@ -1963,6 +2020,88 @@ test('a sword wears out on a landed attack', function () use ($kernel): void {
     $held = $inv->get(0);
     ok($held !== null && $held->itemId === 268 && $held->meta === 1, 'held sword took one point of wear (meta 1)');
     $kernel->getEntityDespawnService()->despawn($mob);
+});
+
+// --- Crafting (14.12) ------------------------------------------------------
+test('a 2x2 craft consumes ingredients and grants the result over the wire', function () use ($client, $kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $entity = $kernel->getWorld()->getEntity($alice['entityId']);
+    $inv = $entity?->get(\pocketmine\core\component\InventoryComponent::class);
+    if ($inv === null) {
+        ok(false, 'Alice inventory present');
+        return;
+    }
+
+    // Deterministic start: earlier break tests left drop entities lying near
+    // Alice that the pickup system would shovel into her inventory mid-test.
+    // Despawn every item entity, clear the inventory, then put exactly 4
+    // planks in slot 0 (the 2x2 crafting grid draws from the player
+    // inventory).
+    foreach ($kernel->getWorld()->getEntities() as $e) {
+        if ($e->has('item')) {
+            $kernel->getWorld()->despawn($e);
+        }
+    }
+    $inv->clear();
+    $inv->set(0, new \pocketmine\core\component\ItemStack(5, 0, 4));
+    $inv->setHeldSlot(0);
+
+    // Client crafts a crafting table: 2x2 grid of four planks -> id 58.
+    $craft = new CraftingEventPacket();
+    $craft->windowId = 0x79; // player 2x2 crafting grid
+    $craft->type = 0;        // small crafting
+    $craft->id = \pocketmine\utils\UUID::fromData('crafting_table');
+    $craft->input = [[5, 1, 0, null], [5, 1, 0, null], [5, 1, 0, null], [5, 1, 0, null]];
+    $craft->output = [[58, 1, 0, null]];
+    $client->sendGamePacket($craft);
+
+    $deadline = microtime(true) + 4.0;
+    $sawTable = false;
+    $sawResync = false;
+    while (microtime(true) < $deadline && !$sawTable) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::CONTAINER_SET_CONTENT_PACKET) {
+                $csc = cscFields($buffer);
+                if ($csc['windowid'] === 0) {
+                    foreach ($csc['slots'] as $slot) {
+                        if ($slot[0] === 58) {
+                            $sawResync = true;
+                        }
+                    }
+                }
+            }
+        }
+        $planks = 0;
+        $tables = 0;
+        foreach ($inv->getContents() as $item) {
+            if ($item === null) {
+                continue;
+            }
+            if ($item->itemId === 5) {
+                $planks += $item->count;
+            }
+            if ($item->itemId === 58) {
+                $tables += $item->count;
+            }
+        }
+        if ($tables >= 1 && $planks <= 0) {
+            $sawTable = true;
+        }
+        usleep(10000);
+    }
+    ok($tables >= 1, 'crafting table granted');
+    same(0, $planks, 'no planks left after the craft');
+    ok($sawResync, 'inventory contents resynced to the client after the craft');
 });
 
 // --- Food + hunger (14.11) -------------------------------------------------
