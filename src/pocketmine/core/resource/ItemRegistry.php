@@ -123,12 +123,47 @@ final class ItemRegistry {
         314 => 77, 315 => 112, 316 => 105, 317 => 91,
     ];
 
+    /**
+     * Food restore values (14.11): itemId => [hunger points, saturation].
+     * Modern/0.15-legacy values are identical (e.g. apple 4 / 2.4). Only
+     * foods present in the protocol-84 item id space are listed (rabbit/
+     * mutton postdate this fork; 397 is a Skull here, not pumpkin pie).
+     */
+    private const FOOD = [
+        260 => [4, 2.4],   // Apple
+        282 => [6, 7.2],   // Mushroom Stew
+        297 => [5, 6.0],   // Bread
+        319 => [3, 1.8],   // Raw Porkchop
+        320 => [8, 12.8],  // Cooked Porkchop
+        322 => [4, 9.6],   // Golden Apple
+        349 => [2, 0.4],   // Raw Fish
+        350 => [5, 6.0],   // Cooked Fish
+        357 => [2, 0.4],   // Cookie
+        360 => [2, 1.2],   // Melon Slice
+        363 => [3, 1.8],   // Raw Beef
+        364 => [8, 12.8],  // Steak
+        365 => [2, 1.2],   // Raw Chicken
+        366 => [6, 7.2],   // Cooked Chicken
+        367 => [4, 0.8],   // Rotten Flesh
+        391 => [3, 3.6],   // Carrot
+        392 => [1, 0.6],   // Potato
+        393 => [5, 6.0],   // Baked Potato
+        396 => [6, 14.4],  // Golden Carrot
+    ];
+
     public function getMaxStackSize(int $itemId): int {
         return self::MAX_STACK[$itemId] ?? 64;
     }
 
     public function getMaxDurability(int $itemId): int {
         return self::DURABILITY[$itemId] ?? 0;
+    }
+
+    /**
+     * @return array{0: int, 1: float}|null [hunger restore, saturation restore]
+     */
+    public function getFood(int $itemId): ?array {
+        return self::FOOD[$itemId] ?? null;
     }
 
     public function getName(int $itemId): string {

@@ -60,6 +60,7 @@ final class PlayerJoinService {
                     ->with(new HealthComponent())
                     ->with(new InventoryComponent(36))
                     ->with(new MetadataComponent())
+                    ->with(new \pocketmine\core\component\HungerComponent())
                     ->withTag('player')
             );
             
@@ -91,6 +92,7 @@ final class PlayerJoinService {
                 ->with(new HealthComponent(20, 20))
                 ->with(new InventoryComponent(36))
                 ->with(new MetadataComponent())
+                ->with(new \pocketmine\core\component\HungerComponent())
                 ->withTag('player')
                 
         );

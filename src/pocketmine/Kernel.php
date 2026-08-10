@@ -1602,6 +1602,10 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // 14.9: natural health regen - 1 HP / 4s after 5s without damage. Runs
     // after combat (health reads are current) and before chunk work.
     $scheduler->register(new \pocketmine\core\system\RegenSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // 14.11: hunger - passive exhaustion, drain to saturation/hunger,
+    // starvation damage, HUD sync. After regen so the hunger gate (regen
+    // needs food) sees current values.
+    $scheduler->register(new \pocketmine\core\system\HungerSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     $scheduler->register(new \pocketmine\core\system\ChunkUpdateSystem(), \pocketmine\core\ecs\SystemPhase::CHUNK_PARALLEL);
     // Post-movement block collision: clamps the pending positions written by
     // the parallel systems against solid blocks before they are committed

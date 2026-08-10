@@ -18,6 +18,7 @@ use pocketmine\core\component\tags\PlayerTag;
 use pocketmine\core\ecs\EntityBuilder;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\Hunger;
 use pocketmine\port\driving\EventPort;
 
 final class CombatService {
@@ -75,6 +76,10 @@ final class CombatService {
 
         // Apply damage
         $health->current = max(0, $health->current - $damage);
+
+        // 14.11: taking damage exhausts a player (legacy CAUSE_DAMAGE 0.3).
+        // No-op for mobs (no HungerComponent).
+        Hunger::exhaust($targetRef, 0.3);
 
         // Apply knockback if source exists
         if ($source && $damage > 0) {

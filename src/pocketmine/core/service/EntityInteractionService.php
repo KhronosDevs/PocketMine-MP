@@ -9,6 +9,7 @@ use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\Hunger;
 use pocketmine\core\resource\ItemDurability;
 
 final class EntityInteractionService {
@@ -183,6 +184,8 @@ final class EntityInteractionService {
         // helper is a no-op in creative and for bare hands).
         if ($landed) {
             ItemDurability::consume($attackerRef);
+            // 14.11: attacking is hungry work (legacy CAUSE_ATTACK 0.3).
+            Hunger::exhaust($attackerRef, 0.3);
         }
         return $landed;
     }
