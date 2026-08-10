@@ -11,6 +11,7 @@ use pocketmine\core\component\RotationComponent;
 use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\resource\ChunkStore;
+use pocketmine\core\resource\ProjectileRegistry;
 
 /**
  * Phase 14.17: bows / arrows.
@@ -108,7 +109,7 @@ test('an arrow sticks into a solid block (velocity zeroed, entity kept)', functi
     ok($again !== null && abs($again->x - $stuckX) < 0.001, "stuck arrow stays pinned at x={$stuckX}");
 });
 
-test('an arrow damages a living entity it hits and despawns', function () use ($kernel, $world, $pathY): void {
+test('an arrow sticks into the entity it hits and rides it', function () use ($kernel, $world, $chunks, $pathY): void {
     $shooter = $kernel->getEntitySpawnService()->spawnMob('Zombie', 30, $pathY, 30);
     $target = $kernel->getEntitySpawnService()->spawnMob('Pig', 11, $pathY, 8);
     $targetId = $target->getId();
@@ -129,7 +130,101 @@ test('an arrow damages a living entity it hits and despawns', function () use ($
     $healthAfter = $world->getEntity($targetId)?->get(\pocketmine\core\component\HealthComponent::class)?->current;
     ok($healthAfter !== null, 'target still exists after the hit');
     ok($healthAfter < $healthBefore, "arrow damaged the target ({$healthBefore} -> {$healthAfter})");
-    ok($world->getEntity($arrowId) === null, 'arrow despawned after the hit');
+
+    // The arrow sticks: it stays in the world, marked stuck on the victim.
+    $arrowMeta = $world->getEntity($arrowId)?->get(MetadataComponent::class);
+    ok($arrowMeta !== null, 'arrow kept in the world after the hit (stuck, not despawned)');
+    ok($arrowMeta?->get('stuck') === true, 'arrow marked stuck after the hit');
+    same($targetId, $arrowMeta?->get('stuckTargetId'), 'stuck arrow remembers its victim');
+
+    // Riding: nudge the victim and the arrow follows it. The hit knocks the
+    // pig around (sometimes out of the corridor into solid terrain), so carve
+    // a clear box around it, park it at a known spot, then nudge it - the
+    // follow check must not depend on the knockback geometry.
+    $pigPos = $world->getEntity($targetId)?->get(PositionComponent::class);
+    $cx = (int)floor($pigPos?->x ?? 11);
+    $cz = (int)floor($pigPos?->z ?? 8);
+    for ($x = $cx - 4; $x <= $cx + 4; $x++) {
+        for ($z = $cz - 4; $z <= $cz + 4; $z++) {
+            for ($y = $pathY - 4; $y <= $pathY + 3; $y++) {
+                $chunks->setBlock($x, $y, $z, 0);
+            }
+        }
+    }
+    $targetPos = $world->getEntity($targetId)?->get(PositionComponent::class);
+    if ($targetPos) {
+        $targetPos->x = 11;
+        $targetPos->y = $pathY;
+        $targetPos->z = 8;
+    }
+    $world->tick(0.05); // re-sync the arrow to the parked pig
+    $targetPos = $world->getEntity($targetId)?->get(PositionComponent::class);
+    if ($targetPos) {
+        $targetPos->x += 3.0;
+    }
+    for ($i = 0; $i < 4; $i++) {
+        $world->tick(0.05);
+    }
+    $arrowPos = $world->getEntity($arrowId)?->get(PositionComponent::class);
+    $pigPos = $world->getEntity($targetId)?->get(PositionComponent::class);
+    $dx = ($arrowPos?->x ?? 0) - ($pigPos?->x ?? 0);
+    $dy = ($arrowPos?->y ?? 0) - ($pigPos?->y ?? 0);
+    $dz = ($arrowPos?->z ?? 0) - ($pigPos?->z ?? 0);
+    ok($arrowPos !== null && $pigPos !== null && ($dx * $dx + $dy * $dy + $dz * $dz) < 0.6, 'stuck arrow follows its victim');
+});
+
+test('an arrow falls to the ground when its victim dies', function () use ($kernel, $world, $chunks, $pathY): void {
+    $shooter = $kernel->getEntitySpawnService()->spawnMob('Zombie', 30, $pathY, 30);
+    $target = $kernel->getEntitySpawnService()->spawnMob('Pig', 11, $pathY, 8);
+    $arrow = $kernel->getEntitySpawnService()->spawnProjectile(
+        'Arrow', 10, $pathY, 8,
+        40, 0, 0,
+        $shooter,
+    );
+    $arrowId = $arrow->getId();
+
+    for ($i = 0; $i < 5; $i++) {
+        $world->tick(0.05);
+    }
+    $meta = $world->getEntity($arrowId)?->get(MetadataComponent::class);
+    ok($meta?->get('stuck') === true, 'arrow stuck in the target before it dies');
+
+    // The hit knocks the pig around (sometimes out of the cleared corridor
+    // into solid terrain). Carve a generous clear shaft around the pig's
+    // current spot and park it back at a known position, so the fall below is
+    // deterministic no matter how the knockback bounced it.
+    $pigPos = $world->getEntity($target->getId())?->get(PositionComponent::class);
+    $cx = (int)floor($pigPos?->x ?? 11);
+    $cz = (int)floor($pigPos?->z ?? 8);
+    for ($x = $cx - 3; $x <= $cx + 3; $x++) {
+        for ($z = $cz - 3; $z <= $cz + 3; $z++) {
+            for ($y = $pathY - 4; $y <= $pathY + 3; $y++) {
+                $chunks->setBlock($x, $y, $z, 0);
+            }
+        }
+    }
+    $targetPos = $world->getEntity($target->getId())?->get(PositionComponent::class);
+    if ($targetPos) {
+        $targetPos->x = 11;
+        $targetPos->y = $pathY;
+        $targetPos->z = 8;
+    }
+    $world->tick(0.05); // let the arrow re-sync to the parked victim
+
+    // Remove the victim (as if it died). The arrow unsticks, falls with
+    // gravity, and re-sticks in the ground.
+    $kernel->getEntityDespawnService()->despawn(EntityRef::create($target->getId(), $world), false);
+    $resting = false;
+    for ($i = 0; $i < 200; $i++) {
+        $world->tick(0.05);
+        $m = $world->getEntity($arrowId)?->get(MetadataComponent::class);
+        $p = $world->getEntity($arrowId)?->get(PositionComponent::class);
+        if ($m?->get('stuck') === true && $p !== null && $p->y < $pathY - 0.5) {
+            $resting = true;
+            break;
+        }
+    }
+    ok($resting, 'arrow fell and re-stuck in the ground after the victim died');
 });
 
 test('a critical arrow deals at least the base arrow damage', function () use ($kernel, $world, $pathY): void {
@@ -166,6 +261,54 @@ test('arrow metadata carries the shooter id (used for attribution and rendering)
     // Rotation is set so the client renders the arrow pointing along its path.
     $rot = $arrow->getEntity()?->get(RotationComponent::class);
     ok($rot !== null, 'arrow has a rotation component');
+});
+
+test('an in-flight arrow points along its velocity (in-flight rendering)', function () use ($kernel, $world, $pathY): void {
+    $shooter = $kernel->getEntitySpawnService()->spawnMob('Zombie', 30, $pathY, 30);
+    $arrow = $kernel->getEntitySpawnService()->spawnProjectile(
+        'Arrow', 8, $pathY, 8,
+        10, 5, 0, // mostly +X, climbing
+        $shooter,
+    );
+    $arrowId = $arrow->getId();
+
+    // At spawn the rotation is derived from the motion vector (legacy):
+    // yaw = atan2(10, 0) = 90, pitch = atan2(5, 10) ~ 26.57.
+    $rot = $arrow->getEntity()?->get(RotationComponent::class);
+    ok($rot !== null, 'arrow has a rotation component');
+    ok($rot !== null && abs($rot->yaw - 90.0) < 1.0, "arrow yaw points along velocity (got {$rot?->yaw})");
+    ok($rot !== null && abs($rot->pitch - atan2(5.0, 10.0) * 180 / M_PI) < 1.0, 'arrow pitch points along velocity');
+
+    // While flying, the ArrowSystem keeps the rotation aligned (drag + the
+    // generic gravity bend the path slightly, so use loose bounds).
+    for ($i = 0; $i < 4; $i++) {
+        $world->tick(0.05);
+    }
+    $rot2 = $world->getEntity($arrowId)?->get(RotationComponent::class);
+    ok($rot2 !== null, 'arrow still alive and rotated in flight');
+    ok($rot2 !== null && abs($rot2->yaw - 90.0) < 5.0, "in-flight yaw stays along +X (got {$rot2->yaw})");
+    ok($rot2 !== null && $rot2->pitch > 0.0, "in-flight pitch stays upward (got {$rot2->pitch})");
+});
+
+test('the projectile registry is the single source of truth for projectiles', function () use ($kernel, $world, $pathY): void {
+    $registry = $kernel->getResourceRegistry()->get(ProjectileRegistry::class);
+    ok($registry instanceof ProjectileRegistry, 'projectile registry resource present');
+    if ($registry instanceof ProjectileRegistry) {
+        same(80, $registry->getNetworkId('Arrow'), 'Arrow maps to the legacy network id 80');
+        ok($registry->isProjectile('Arrow'), 'Arrow is a known projectile');
+        ok(!$registry->isProjectile('NotAThing'), 'unknown names are not projectiles');
+        same(null, $registry->getNetworkId('NotAThing'), 'unknown names resolve to no network id');
+    }
+
+    // Unknown projectile types are rejected at spawn (fail fast).
+    $shooter = $kernel->getEntitySpawnService()->spawnMob('Zombie', 30, $pathY, 30);
+    $threw = false;
+    try {
+        $kernel->getEntitySpawnService()->spawnProjectile('Snowball', 8, $pathY, 8, 10, 0, 0, $shooter);
+    } catch (\InvalidArgumentException) {
+        $threw = true;
+    }
+    ok($threw, 'spawning an unregistered projectile throws');
 });
 
 exit(runTests());

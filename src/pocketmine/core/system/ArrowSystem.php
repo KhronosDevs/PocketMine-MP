@@ -7,37 +7,47 @@ namespace pocketmine\core\system;
 use pocketmine\core\component\HealthComponent;
 use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
+use pocketmine\core\component\RotationComponent;
 use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\System;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\BlockRegistry;
 use pocketmine\core\resource\ChunkStore;
+use pocketmine\core\resource\ProjectileRegistry;
 use pocketmine\core\service\CombatService;
 use pocketmine\core\service\EntityDespawnService;
 use pocketmine\Kernel;
 use function abs;
+use function atan2;
 use function ceil;
 use function floor;
+use function is_string;
 use function max;
 use function mt_rand;
 use function sqrt;
 
 /**
- * 14.17: arrow projectiles. Bows fire arrows (spawnProjectile with the
- * 'Arrow' type, metadata projectileType='Arrow'); this sequential system ticks
- * them exactly like the legacy 0.15 Arrow::onUpdate:
+ * 14.17/14.18: the projectile driver. Every entity tagged with a REGISTERED
+ * projectileType (metadata set by EntitySpawnService::spawnProjectile) is
+ * ticked here, with per-type stats read from the ProjectileRegistry:
  *
- *  - drag: velocity *= 0.99 each tick (legacy drag 0.01)
- *  - block collision: a solid block at the arrow's next position sticks it
+ *  - drag: velocity *= (1 - drag) each tick (registry drag, legacy 0.01)
+ *  - rotation: the projectile points along its motion vector every tick
+ *    (legacy Projectile::onUpdate), so in-flight rendering shows it aimed
+ *    correctly - the client follows it with MoveEntityPacket while it flies
+ *  - block collision: a solid block on the flight path sticks the projectile
  *    (velocity zeroed; it idles until age 1200 then despawns, legacy parity)
  *  - entity collision: the nearest living entity on the flight path takes
- *    ceil(speed_blocksPerTick * 2) damage (critical arrows add a random bonus
- *    up to half that), attributed to the shooter through CombatService so the
- *    full damage pipeline (events, armor, knockback, death drops) applies
- *  - age: arrows despawn after 1200 ticks, matching legacy
+ *    ceil(speed_blocksPerTick * damage) damage (critical arrows add a random
+ *    bonus up to half that), attributed to the shooter through CombatService
+ *    so the full damage pipeline (events, armor, knockback, death drops)
+ *    applies. Sticky projectiles (arrows) then embed in the victim, ride it
+ *    while it lives, and fall to the ground when it dies; non-sticky ones
+ *    (future snowballs/eggs) despawn on hit like legacy.
+ *  - age: projectiles despawn after 1200 ticks, matching legacy
  *
- * Gravity is NOT applied here: arrows ride the generic PhysicsSystem +
+ * Gravity is NOT applied here: projectiles ride the generic PhysicsSystem +
  * MovementSystem pipeline (1.6 blocks/s^2) exactly like item drops and mobs,
  * and they deliberately have no CollisionComponent so they fly through blocks
  * until this system stops them (legacy arrows had a 0.5 box but no sliding).
@@ -63,10 +73,19 @@ final class ArrowSystem implements System {
             ->with(PositionComponent::class, VelocityComponent::class, MetadataComponent::class)
             ->build();
 
+        // Per-projectile stats come from the registry (single source of truth).
+        $registry = $world->getResourceRegistry()->get(ProjectileRegistry::class);
+        $registry = $registry instanceof ProjectileRegistry ? $registry : null;
+
         foreach ($query as $entity) {
             $meta = $entity->get(MetadataComponent::class);
-            if ($meta?->get('projectileType') !== 'Arrow') {
+            $projectileType = $meta?->get('projectileType');
+            if (!is_string($projectileType)) {
                 continue;
+            }
+            $projectile = $registry?->get($projectileType);
+            if ($projectile === null) {
+                continue; // not a registered projectile - not ours to tick
             }
             $pos = $entity->get(PositionComponent::class);
             $vel = $entity->get(VelocityComponent::class);
@@ -87,19 +106,55 @@ final class ArrowSystem implements System {
             // arrow through the floor. Re-zero each tick (before the parallel
             // integration reads it) so a stuck arrow stays pinned in place
             // until its age despawn (legacy: onGround arrow, motion zeroed).
+            // An arrow stuck in a living victim instead RIDES it: its position
+            // is re-synced to the victim every tick, so the client sees it
+            // embedded and following. When the victim dies/despawns, the arrow
+            // unsticks and falls to the ground like a normal arrow.
             if ($meta->get('stuck') === true) {
                 $vel->x = 0;
                 $vel->y = 0;
                 $vel->z = 0;
+                $stuckTargetId = (int)$meta->get('stuckTargetId', -1);
+                if ($stuckTargetId !== -1) {
+                    $victim = $world->getEntity($stuckTargetId);
+                    $victimHealth = $victim?->get(HealthComponent::class);
+                    if ($victim !== null && $victimHealth !== null && $victimHealth->current > 0) {
+                        $victimPos = $victim->get(PositionComponent::class);
+                        if ($victimPos !== null) {
+                            // Re-sync to the victim each tick so the client
+                            // renders the arrow embedded and following. If the
+                            // victim died inside solid terrain, the arrow
+                            // re-sticks there (invisible) - an accepted edge.
+                            $pos->x = $victimPos->x;
+                            $pos->y = $victimPos->y;
+                            $pos->z = $victimPos->z;
+                        }
+                        continue;
+                    }
+                    // Victim is gone: the projectile drops out and falls.
+                    $meta->set('stuck', false);
+                    $meta->set('stuckTargetId', -1);
+                }
                 continue;
             }
 
-            // Drag (legacy 0.01/tick).
-            $vel->x *= 0.99;
-            $vel->y *= 0.99;
-            $vel->z *= 0.99;
+            // Drag from the registry (legacy 0.01/tick -> x0.99).
+            $drag = 1.0 - $projectile['drag'];
+            $vel->x *= $drag;
+            $vel->y *= $drag;
+            $vel->z *= $drag;
             if (abs($vel->x) < 0.0001 && abs($vel->y) < 0.0001 && abs($vel->z) < 0.0001) {
                 continue;
+            }
+
+            // In-flight rendering: the arrow always points along its motion
+            // (legacy Projectile::onUpdate), so the client's MoveEntity packets
+            // carry a rotation that matches where the arrow is heading.
+            $rot = $entity->get(RotationComponent::class);
+            if ($rot !== null) {
+                $f = sqrt($vel->x * $vel->x + $vel->z * $vel->z);
+                $rot->yaw = atan2($vel->x, $vel->z) * 180 / M_PI;
+                $rot->pitch = atan2($vel->y, $f) * 180 / M_PI;
             }
 
             // Flight path: the movement systems integrate pos += vel*dt after
@@ -141,9 +196,9 @@ final class ArrowSystem implements System {
                 // Entity collision: nearest living target near this sample.
                 $target = $this->findHitTarget($world, $sx, $sy, $sz, $age, (int)($meta->get('shooterId', -1)));
                 if ($target !== null) {
-                    // Legacy: damage = ceil(motion_blocksPerTick * 2); our
+                    // Legacy: damage = ceil(motion_blocksPerTick * damage); our
                     // velocity is blocks/second, so divide by 20 for per tick.
-                    $damage = (int)ceil(($speed / 20.0) * 2);
+                    $damage = (int)ceil(($speed / 20.0) * $projectile['damage']);
                     $critical = (bool)$meta->get('critical', false);
                     if ($critical) {
                         $damage += mt_rand(0, (int)($damage / 2) + 1);
@@ -155,7 +210,20 @@ final class ArrowSystem implements System {
                         $shooter,
                         \pocketmine\api\event\EntityDamageEvent::CAUSE_PROJECTILE,
                     );
-                    $despawn->despawn(EntityRef::create($entity->id, $world), false);
+                    if ($projectile['sticky'] === true) {
+                        // Sticky projectiles (arrows) embed into the victim:
+                        // they stay in the world with zero velocity and ride
+                        // it until the victim dies, then fall to the ground.
+                        $vel->x = 0;
+                        $vel->y = 0;
+                        $vel->z = 0;
+                        $meta->set('stuck', true);
+                        $meta->set('stuckTargetId', $target);
+                    } else {
+                        // Non-sticky projectiles (future snowballs/eggs)
+                        // despawn on impact, like legacy Projectile::kill().
+                        $despawn->despawn(EntityRef::create($entity->id, $world), false);
+                    }
                     $hit = true;
                     break;
                 }

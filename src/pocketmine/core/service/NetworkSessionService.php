@@ -21,6 +21,7 @@ use pocketmine\core\ecs\World;
 use pocketmine\core\resource\ChestStore;
 use pocketmine\core\resource\Hunger;
 use pocketmine\core\resource\ItemRegistry;
+use pocketmine\core\resource\ProjectileRegistry;
 use pocketmine\core\resource\ServerConfig;
 use pocketmine\core\resource\WorldConfig;
 use pocketmine\port\driven\NetworkPort;
@@ -74,6 +75,7 @@ use pocketmine\utils\UUID;
 use function count;
 use function floor;
 use function in_array;
+use function is_string;
 use function ord;
 use function pack;
 use function strlen;
@@ -2231,12 +2233,21 @@ final class NetworkSessionService {
             $pk->metadata[15] = [Binary::DATA_TYPE_BYTE, 1]; // DATA_NO_AI
             return $pk;
         }
-        // 14.17: arrows render as the legacy Arrow entity (network id 80).
-        // spawnProjectile tags them with projectileType='Arrow'.
-        if ($meta?->get('projectileType') === 'Arrow') {
+        // Projectiles render through the projectile registry (14.18): the
+        // network id comes from the registry, never hard-coded, so future
+        // projectile types (snowballs, eggs, ...) render without touching
+        // this method. Unregistered types return null so we never leak
+        // garbage entity ids to clients.
+        $projectileType = $meta?->get('projectileType');
+        if (is_string($projectileType)) {
+            $projectiles = $this->resourceRegistry->get(ProjectileRegistry::class);
+            $networkId = $projectiles instanceof ProjectileRegistry ? $projectiles->getNetworkId($projectileType) : null;
+            if ($networkId === null) {
+                return null;
+            }
             $pk = new AddEntityPacket();
             $pk->eid = $entityId;
-            $pk->type = 80; // legacy Arrow::NETWORK_ID
+            $pk->type = $networkId;
             $pos = $entity->get(PositionComponent::class);
             $vel = $entity->get(VelocityComponent::class);
             $rot = $entity->get(RotationComponent::class);
