@@ -8,12 +8,20 @@ use pocketmine\core\ecs\Component;
 
 #[Component]
 final class InventoryComponent {
+    /**
+     * Window-0 inventory size (0-35): hotbar + main. Slots ARMOR_OFFSET..
+     * ARMOR_OFFSET+3 (36-39) are the armor slots (helmet, chestplate,
+     * leggings, boots), which the protocol exposes as the 0x78 armor window
+     * (legacy PlayerInventory 36 + ArmorInventory 4 mapping).
+     */
+    public const ARMOR_OFFSET = 36;
+
     /** @var array<int, ItemStack> */
     public array $slots = [];
     public int $size;
     public int $heldSlot = 0;
 
-    public function __construct(int $size = 36) {
+    public function __construct(int $size = 40) {
         $this->size = $size;
     }
 
@@ -51,8 +59,13 @@ final class InventoryComponent {
             return true;
         }
         $remaining = $item->count;
-        // Space in existing stacks of the same item first.
-        foreach ($this->slots as $existing) {
+        // Space in existing stacks of the same item first. Armor slots are
+        // never auto-filled by add()/canAddItem(): they are only writable via
+        // the armor window (0x78) or direct slot access.
+        foreach ($this->slots as $slot => $existing) {
+            if ($slot >= self::ARMOR_OFFSET) {
+                continue;
+            }
             if ($existing->canStackWith($item)) {
                 $remaining -= $existing->getMaxStackSize() - $existing->count;
                 if ($remaining <= 0) {
@@ -60,9 +73,9 @@ final class InventoryComponent {
                 }
             }
         }
-        // Remainder needs empty slots, a full stack per slot.
+        // Remainder needs empty slots, a full stack per slot (window-0 only).
         $free = 0;
-        for ($i = 0; $i < $this->size; $i++) {
+        for ($i = 0; $i < min($this->size, self::ARMOR_OFFSET); $i++) {
             if (!isset($this->slots[$i])) {
                 $free++;
             }
@@ -73,6 +86,9 @@ final class InventoryComponent {
     public function add(ItemStack $item): bool {
         // Try to stack first
         foreach ($this->slots as $slot => $existing) {
+            if ($slot >= self::ARMOR_OFFSET) {
+                continue;
+            }
             if ($existing->canStackWith($item)) {
                 $added = min($existing->getMaxStackSize() - $existing->count, $item->count);
                 $existing->count += $added;
@@ -86,8 +102,8 @@ final class InventoryComponent {
         // Empty slots: split over-stack remainders across multiple slots so
         // add() can always fit exactly what canAddItem() promises (a result
         // larger than one stack fills several slots instead of creating an
-        // over-stack slot).
-        for ($i = 0; $i < $this->size; $i++) {
+        // over-stack slot). Window-0 slots only - armor slots stay untouched.
+        for ($i = 0; $i < min($this->size, self::ARMOR_OFFSET); $i++) {
             if (isset($this->slots[$i])) {
                 continue;
             }

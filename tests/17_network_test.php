@@ -2022,6 +2022,219 @@ test('a sword wears out on a landed attack', function () use ($kernel): void {
     $kernel->getEntityDespawnService()->despawn($mob);
 });
 
+// --- Armor + equipment (14.13) ---------------------------------------------
+test('the armor window equips gear and broadcasts it to everyone', function () use ($client, $kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $entity = $kernel->getWorld()->getEntity($alice['entityId']);
+    $inv = $entity?->get(\pocketmine\core\component\InventoryComponent::class);
+    if ($inv === null) {
+        ok(false, 'Alice inventory present');
+        return;
+    }
+
+    // Deterministic start: despawn stray drop entities and clear the inventory.
+    foreach ($kernel->getWorld()->getEntities() as $e) {
+        if ($e->has('item')) {
+            $kernel->getWorld()->despawn($e);
+        }
+    }
+    $inv->clear();
+    // The client equips a helmet the way a real 0.15 client does: empty the
+    // inventory source slot first (releasing move credit), then fill armor
+    // slot 0 through the 0x78 armor window.
+    $inv->set(9, new \pocketmine\core\component\ItemStack(306, 0, 1)); // iron helmet
+
+    $empty = new ContainerSetSlotPacket();
+    $empty->windowid = ContainerSetContentPacket::SPECIAL_INVENTORY;
+    $empty->slot = 9;
+    $empty->hotbarSlot = 0;
+    $empty->item = [0, 0, 0, null];
+    $client->sendGamePacket($empty);
+
+    $equip = new ContainerSetSlotPacket();
+    $equip->windowid = ContainerSetContentPacket::SPECIAL_ARMOR;
+    $equip->slot = 0;
+    $equip->hotbarSlot = 0;
+    $equip->item = [306, 1, 0, null];
+    $client->sendGamePacket($equip);
+
+    $deadline = microtime(true) + 4.0;
+    $sawMirror = false;
+    $sawBroadcast = false;
+    while (microtime(true) < $deadline && !($sawMirror && $sawBroadcast)) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::CONTAINER_SET_SLOT_PACKET) {
+                $css = cssFields($buffer);
+                if ($css['windowid'] === ContainerSetContentPacket::SPECIAL_ARMOR
+                    && $css['slot'] === 0 && $css['item'][0] === 306) {
+                    $sawMirror = true;
+                }
+            }
+            if ($id === Info::MOB_ARMOR_EQUIPMENT_PACKET) {
+                // Skip the leading packet-id byte (see cscFields).
+                $bs = new BinaryStream($buffer, 1);
+                $eid = $bs->getLong();
+                $helmet = $bs->getSlot();
+                if ($eid === $alice['entityId'] && $helmet[0] === 306) {
+                    $sawBroadcast = true;
+                }
+            }
+        }
+        usleep(10000);
+    }
+    $equipped = $inv->get(36);
+    ok($equipped !== null && $equipped->itemId === 306, 'helmet stored in armor slot 36');
+    ok($inv->get(9) === null, 'inventory slot 9 emptied by the move');
+    ok($sawMirror, 'armor slot mirrored back through window 0x78');
+    ok($sawBroadcast, 'MobArmorEquipmentPacket broadcast to viewers');
+});
+
+test('armor reduces attack damage', function () use ($kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $entity = $kernel->getWorld()->getEntity($alice['entityId']);
+    $inv = $entity?->get(\pocketmine\core\component\InventoryComponent::class);
+    if ($inv === null) {
+        ok(false, 'Alice inventory present');
+        return;
+    }
+    $aliceRef = \pocketmine\core\ecs\EntityRef::create($alice['entityId'], $kernel->getWorld());
+
+    // One zombie hit against Alice, returning the HP drop. Alice is re-fetched
+    // per hit so knockback drift cannot put the mob out of reach.
+    $drop = function () use ($kernel): float {
+        $alice = null;
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            if ($p['username'] === 'Alice') {
+                $alice = $p;
+                break;
+            }
+        }
+        if ($alice === null) {
+            return 0.0;
+        }
+        $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', $alice['x'] + 2.5, $alice['y'] - 1.0, $alice['z']);
+        $mobRef = \pocketmine\core\ecs\EntityRef::create($mob->getId(), $kernel->getWorld());
+        $aliceRef = \pocketmine\core\ecs\EntityRef::create($alice['entityId'], $kernel->getWorld());
+        $healthBefore = $kernel->getWorld()->getEntity($alice['entityId'])?->get(\pocketmine\core\component\HealthComponent::class)?->current ?? 20.0;
+        $kernel->getEntityInteractionService()->attack($mobRef, $aliceRef);
+        $healthAfter = $kernel->getWorld()->getEntity($alice['entityId'])?->get(\pocketmine\core\component\HealthComponent::class)?->current ?? 0.0;
+        $kernel->getEntityDespawnService()->despawn($mob);
+        return max(0.0, $healthBefore - $healthAfter);
+    };
+
+    // Unarmored baseline.
+    $inv->clear();
+    $kernel->getCombatService()->heal($aliceRef, 20);
+    $baseline = $drop();
+
+    // Full diamond set (helmet/chest/legs/boots = 310-313, 56% reduction).
+    $inv->clear();
+    $inv->set(36, new \pocketmine\core\component\ItemStack(310, 0, 1));
+    $inv->set(37, new \pocketmine\core\component\ItemStack(311, 0, 1));
+    $inv->set(38, new \pocketmine\core\component\ItemStack(312, 0, 1));
+    $inv->set(39, new \pocketmine\core\component\ItemStack(313, 0, 1));
+    $kernel->getCombatService()->heal($aliceRef, 20);
+    $armored = $drop();
+
+    ok($baseline > 0, 'an unarmored zombie hit deals damage');
+    ok($armored < $baseline, 'armor reduces the damage taken');
+    ok($armored <= $baseline * 0.8 + 0.01, 'full diamond cuts the damage by roughly half or more');
+
+    $kernel->getCombatService()->heal($aliceRef, 20);
+    $inv->clear();
+});
+
+test('armor wears out on hits and breaks at max durability', function () use ($kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+            break;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $entity = $kernel->getWorld()->getEntity($alice['entityId']);
+    $inv = $entity?->get(\pocketmine\core\component\InventoryComponent::class);
+    if ($inv === null) {
+        ok(false, 'Alice inventory present');
+        return;
+    }
+    $aliceRef = \pocketmine\core\ecs\EntityRef::create($alice['entityId'], $kernel->getWorld());
+    $inv->clear();
+
+    // One zombie hit against Alice, then heal her back to full. The zombie is
+    // spawned at Alice's current position so knockback cannot break reach.
+    $hit = function () use ($kernel): void {
+        $alice = null;
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            if ($p['username'] === 'Alice') {
+                $alice = $p;
+                break;
+            }
+        }
+        if ($alice === null) {
+            return;
+        }
+        $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', $alice['x'] + 2.5, $alice['y'] - 1.0, $alice['z']);
+        $mobRef = \pocketmine\core\ecs\EntityRef::create($mob->getId(), $kernel->getWorld());
+        $aliceRef = \pocketmine\core\ecs\EntityRef::create($alice['entityId'], $kernel->getWorld());
+        $kernel->getCombatService()->heal($aliceRef, 20);
+        $kernel->getEntityInteractionService()->attack($mobRef, $aliceRef);
+        $kernel->getEntityDespawnService()->despawn($mob);
+    };
+
+    // Wear: a fresh leather helmet (298, 55 max durability) gains damage on
+    // hits. Wear is random (2 hits in 3), so poll until observed (P(no wear
+    // in 30 hits) is negligible).
+    $inv->set(36, new \pocketmine\core\component\ItemStack(298, 0, 1));
+    $wore = false;
+    for ($i = 0; $i < 30 && !$wore; $i++) {
+        $hit();
+        $helmet = $inv->get(36);
+        if ($helmet !== null && $helmet->meta >= 3) {
+            $wore = true;
+        }
+    }
+    ok($wore, 'armor took durability damage from hits');
+
+    // Break: a piece one hit from max durability (meta 53, +3 per wear) is
+    // removed when it hits the cap.
+    $inv->set(36, new \pocketmine\core\component\ItemStack(298, 53, 1));
+    $broke = false;
+    for ($i = 0; $i < 30 && !$broke; $i++) {
+        $hit();
+        if ($inv->get(36) === null) {
+            $broke = true;
+        }
+    }
+    ok($broke, 'armor broke and was removed at max durability');
+
+    $kernel->getCombatService()->heal($aliceRef, 20);
+    $inv->clear();
+});
+
 // --- Crafting (14.12) ------------------------------------------------------
 test('a 2x2 craft consumes ingredients and grants the result over the wire', function () use ($client, $kernel): void {
     $alice = null;

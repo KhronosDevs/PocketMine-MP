@@ -58,7 +58,7 @@ final class PlayerJoinService {
                     ->with(new RotationComponent($savedData->yaw, $savedData->pitch))
                     ->with(new VelocityComponent())
                     ->with(new HealthComponent())
-                    ->with(new InventoryComponent(36))
+                    ->with(new InventoryComponent())
                     ->with(new MetadataComponent())
                     ->with(new \pocketmine\core\component\HungerComponent())
                     ->withTag('player')

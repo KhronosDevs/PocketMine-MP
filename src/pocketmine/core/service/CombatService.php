@@ -19,6 +19,8 @@ use pocketmine\core\ecs\EntityBuilder;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\Hunger;
+use pocketmine\core\resource\ItemRegistry;
+use pocketmine\Kernel;
 use pocketmine\port\driving\EventPort;
 
 final class CombatService {
@@ -76,6 +78,12 @@ final class CombatService {
 
         // Apply damage
         $health->current = max(0, $health->current - $damage);
+
+        // 14.13: a landed attack wears the target's armor (fall/void/custom
+        // damage does not - legacy only damaged gear on entity attacks).
+        if ($cause === EntityDamageEvent::CAUSE_ENTITY_ATTACK && $damage > 0) {
+            $this->wearArmorOnHit($targetRef);
+        }
 
         // 14.11: taking damage exhausts a player (legacy CAUSE_DAMAGE 0.3).
         // No-op for mobs (no HungerComponent).
@@ -153,14 +161,14 @@ final class CombatService {
         $inventory = $target->get(InventoryComponent::class);
         if (!$inventory) return $damage;
 
-        $armorSlots = [5, 6, 7, 8]; // Helmet, Chestplate, Leggings, Boots
+        // Armor window slots map to inventory slots 36-39: helmet, chestplate,
+        // leggings, boots (see InventoryComponent::ARMOR_OFFSET).
         $totalReduction = 0;
 
-        foreach ($armorSlots as $slot) {
-            $item = $inventory->get($slot);
+        for ($i = 0; $i < 4; $i++) {
+            $item = $inventory->get(InventoryComponent::ARMOR_OFFSET + $i);
             if ($item && $item->count > 0) {
-                $reduction = $this->getArmorReduction($item->itemId);
-                $totalReduction += $reduction;
+                $totalReduction += $this->getArmorReduction($item->itemId);
             }
         }
 
@@ -172,28 +180,83 @@ final class CombatService {
 
     private function getArmorReduction(int $itemId): float {
         return match ($itemId) {
-            302 => 0.04, // Leather helmet
-            303 => 0.06, // Leather chestplate
-            304 => 0.05, // Leather leggings
-            305 => 0.02, // Leather boots
-            306 => 0.06, // Chain helmet
-            307 => 0.10, // Chain chestplate
-            308 => 0.08, // Chain leggings
-            309 => 0.04, // Chain boots
-            310 => 0.08, // Iron helmet
-            311 => 0.15, // Iron chestplate
-            312 => 0.12, // Iron leggings
-            313 => 0.06, // Iron boots
+            298 => 0.04, // Leather helmet
+            299 => 0.06, // Leather chestplate
+            300 => 0.05, // Leather leggings
+            301 => 0.02, // Leather boots
+            302 => 0.04, // Chain helmet
+            303 => 0.06, // Chain chestplate
+            304 => 0.05, // Chain leggings
+            305 => 0.02, // Chain boots
+            306 => 0.08, // Iron helmet
+            307 => 0.15, // Iron chestplate
+            308 => 0.12, // Iron leggings
+            309 => 0.06, // Iron boots
+            310 => 0.12, // Diamond helmet
+            311 => 0.20, // Diamond chestplate
+            312 => 0.16, // Diamond leggings
+            313 => 0.08, // Diamond boots
             314 => 0.08, // Gold helmet
             315 => 0.10, // Gold chestplate
             316 => 0.08, // Gold leggings
             317 => 0.04, // Gold boots
-            318 => 0.12, // Diamond helmet
-            319 => 0.20, // Diamond chestplate
-            320 => 0.16, // Diamond leggings
-            321 => 0.08, // Diamond boots
             default => 0,
         };
+    }
+
+    /**
+     * 14.13: an entity-attack hit wears one random worn piece by 3 durability
+     * points, breaking it (and removing it) at its max durability. Mirrors
+     * legacy ArmorInventory::damage (mt_rand(1, 3) !== 1 gate + 3 per hit).
+     */
+    private function wearArmorOnHit(EntityRef $targetRef): void {
+        $target = $targetRef->getEntity();
+        if (!$target) return;
+
+        $inventory = $target->get(InventoryComponent::class);
+        if (!$inventory) return;
+
+        // Two hits in three actually wear (legacy random gate).
+        if (mt_rand(1, 3) === 1) {
+            return;
+        }
+
+        $worn = [];
+        for ($i = 0; $i < 4; $i++) {
+            $item = $inventory->get(InventoryComponent::ARMOR_OFFSET + $i);
+            if ($item !== null && $item->count > 0) {
+                $worn[] = $i;
+            }
+        }
+        if ($worn === []) {
+            return;
+        }
+
+        $piece = $worn[array_rand($worn)];
+        $slot = InventoryComponent::ARMOR_OFFSET + $piece;
+        $item = $inventory->get($slot);
+        if ($item === null) {
+            return;
+        }
+
+        $maxDurability = $this->world->getResourceRegistry()->get(ItemRegistry::class)
+            ?->getMaxDurability($item->itemId) ?? 0;
+        if ($maxDurability <= 0) {
+            return; // non-durable items in armor slots never wear
+        }
+        $newDamage = $item->meta + 3;
+
+        if ($newDamage >= $maxDurability) {
+            $inventory->set($slot, null); // the piece breaks and is removed
+        } else {
+            $inventory->set($slot, new ItemStack($item->itemId, $newDamage, $item->count, $item->nbt));
+        }
+
+        // Reflect the change on the wire: armor window + HurtArmor + the
+        // MobArmorEquipment broadcast everyone (including the actor) sees.
+        $sessionService = Kernel::getInstance()?->getNetworkSessionService();
+        $sessionService?->syncArmorFor($target->id);
+        $sessionService?->sendHurtArmorFor($target->id, min(20, $newDamage));
     }
 
     private function handleDeath(EntityRef $targetRef, ?EntityRef $killerRef): void {
