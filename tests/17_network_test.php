@@ -757,6 +757,17 @@ $kernel->setNetworkingEnabled(true);
 $kernel->setBindPort($port);
 $kernel->setAutoShutdownOnRun(false);
 
+// Pin the world seed: with a fresh world the seed is first consumed at the
+// first chunk generation, so setting it right after bootstrap makes the
+// terrain fully deterministic. A random seed occasionally spawned the
+// configured spawn inside an ocean, which moved findSafeSpawn's result far
+// enough to break the 'spawn stays near the configured world spawn' bound.
+// seed=1 gives dry land exactly at the configured (0,0) spawn (verified).
+$serverCfg = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
+if ($serverCfg instanceof \pocketmine\core\resource\ServerConfig) {
+    $serverCfg->seed = 1;
+}
+
 // 14.3: the builtin MobSpawnerSystem would otherwise populate hostile mobs
 // around Alice every 40 ticks, making her health/position non-deterministic
 // for the assertions below (the mob spawner has its own dedicated test).
@@ -2645,6 +2656,278 @@ test('player health regenerates after a no-damage window', function () use ($ker
         usleep(10000);
     }
     ok($sawHealth, 'SetHealthPacket reflects the regenerated health on the HUD');
+});
+
+// --- Commands (14.14) ------------------------------------------------------
+test('a /gamemode command flips the client and the metadata', function () use ($client, $kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+            break;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $entity = $kernel->getWorld()->getEntity($alice['entityId']);
+    $meta = $entity?->get(\pocketmine\core\component\MetadataComponent::class);
+    if ($meta === null) {
+        ok(false, 'Alice metadata present');
+        return;
+    }
+
+    $cmd = new TextPacket();
+    $cmd->type = TextPacket::TYPE_CHAT;
+    $cmd->source = 'Alice';
+    $cmd->message = '/gamemode 1';
+    $client->sendGamePacket($cmd);
+
+    $deadline = microtime(true) + 3.0;
+    $sawCreative = false;
+    $sawReply = false;
+    while (microtime(true) < $deadline && !($sawCreative && $sawReply)) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::ADVENTURE_SETTINGS_PACKET) {
+                if ((advFields($buffer)['flags'] & 0x10) !== 0) {
+                    $sawCreative = true; // no-clip bit => creative settings
+                }
+            }
+            if ($id === Info::TEXT_PACKET) {
+                $tp = textPacket($buffer);
+                if (str_contains($tp['message'] ?? '', 'creative')) {
+                    $sawReply = true;
+                }
+            }
+        }
+        usleep(10000);
+    }
+    same(1, $meta->get('gamemode'), 'gamemode metadata set to creative');
+    ok($sawCreative, 'creative adventure-settings flags sent');
+    ok($sawReply, 'command reply sent back to the sender');
+
+    // Back to survival so the rest of the suite runs in survival.
+    $cmd->message = '/gamemode 0';
+    $client->sendGamePacket($cmd);
+    $deadline = microtime(true) + 3.0;
+    $back = false;
+    while (microtime(true) < $deadline && !$back) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::TEXT_PACKET
+                && str_contains(textPacket($buffer)['message'] ?? '', 'survival')) {
+                $back = true;
+            }
+        }
+        usleep(10000);
+    }
+    same(0, $meta->get('gamemode'), 'gamemode metadata back to survival');
+});
+
+test('a /give command grants items and syncs the window', function () use ($client, $kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+            break;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $inv = $kernel->getWorld()->getEntity($alice['entityId'])?->get(\pocketmine\core\component\InventoryComponent::class);
+    if ($inv === null) {
+        ok(false, 'Alice inventory present');
+        return;
+    }
+    $inv->clear();
+
+    $cmd = new TextPacket();
+    $cmd->type = TextPacket::TYPE_CHAT;
+    $cmd->source = 'Alice';
+    $cmd->message = '/give Alice 264 5';
+    $client->sendGamePacket($cmd);
+
+    $deadline = microtime(true) + 3.0;
+    $sawReply = false;
+    while (microtime(true) < $deadline && !$sawReply) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::TEXT_PACKET) {
+                $tp = textPacket($buffer);
+                if (str_contains($tp['message'] ?? '', '5 x Diamond')) {
+                    $sawReply = true;
+                }
+            }
+        }
+        usleep(10000);
+    }
+    $stack = $inv->get(0);
+    ok($stack !== null && $stack->itemId === 264 && $stack->count === 5, 'five diamonds landed in slot 0');
+    ok($sawReply, '/give reply received');
+    $inv->clear();
+});
+
+test('a /tp command teleports the player', function () use ($client, $kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+            break;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $entity = $kernel->getWorld()->getEntity($alice['entityId']);
+    $pos = $entity?->get(\pocketmine\core\component\PositionComponent::class);
+    if ($pos === null) {
+        ok(false, 'Alice position present');
+        return;
+    }
+
+    $cmd = new TextPacket();
+    $cmd->type = TextPacket::TYPE_CHAT;
+    $cmd->source = 'Alice';
+    $cmd->message = '/tp 10 80 -10';
+    $client->sendGamePacket($cmd);
+
+    $deadline = microtime(true) + 3.0;
+    $sawTeleport = false;
+    $packetY = null;
+    while (microtime(true) < $deadline && !$sawTeleport) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::MOVE_PLAYER_PACKET) {
+                $mp = mpFields($buffer);
+                if ($mp['mode'] === MovePlayerPacket::MODE_RESET && abs($mp['x'] - 10.0) < 0.01) {
+                    $packetY = $mp['y'];
+                    $sawTeleport = true;
+                }
+            }
+        }
+        usleep(10000);
+    }
+    ok($sawTeleport, 'teleport MovePlayerPacket (MODE_RESET) sent');
+    ok(abs($pos->x - 10.0) < 0.01, 'position x updated to 10');
+    ok(abs($pos->z - (-10.0)) < 0.01, 'position z updated to -10');
+    ok($packetY !== null && $packetY >= 79.0 && $packetY <= 81.0, 'teleport packet y is ~80');
+});
+
+test('a /time command sets the world clock', function () use ($client, $kernel): void {
+    $cmd = new TextPacket();
+    $cmd->type = TextPacket::TYPE_CHAT;
+    $cmd->source = 'Alice';
+    $cmd->message = '/time set day';
+    $client->sendGamePacket($cmd);
+
+    $deadline = microtime(true) + 3.0;
+    $sawTime = false;
+    $sawReply = false;
+    while (microtime(true) < $deadline && !($sawTime && $sawReply)) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::SET_TIME_PACKET) {
+                $t = stTime($buffer);
+                if ($t >= 1000 && $t < 1015) {
+                    $sawTime = true;
+                }
+            }
+            if ($id === Info::TEXT_PACKET) {
+                if (str_contains(textPacket($buffer)['message'] ?? '', 'Time set to 1000')) {
+                    $sawReply = true;
+                }
+            }
+        }
+        usleep(10000);
+    }
+    ok($sawReply, '/time reply received');
+    ok($sawTime, 'clients synced to the new dawn time');
+});
+
+test('a /help command lists the commands', function () use ($client, $kernel): void {
+    $cmd = new TextPacket();
+    $cmd->type = TextPacket::TYPE_CHAT;
+    $cmd->source = 'Alice';
+    $cmd->message = '/help';
+    $client->sendGamePacket($cmd);
+
+    $deadline = microtime(true) + 3.0;
+    $sawHelp = false;
+    while (microtime(true) < $deadline && !$sawHelp) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::TEXT_PACKET) {
+                $tp = textPacket($buffer);
+                if (str_contains($tp['message'] ?? '', 'gamemode')) {
+                    $sawHelp = true;
+                }
+            }
+        }
+        usleep(10000);
+    }
+    ok($sawHelp, '/help lists the gamemode command');
+});
+
+test('a /kill command kills the player and respawn revives', function () use ($client, $kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+            break;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $entity = $kernel->getWorld()->getEntity($alice['entityId']);
+    $inv = $entity?->get(\pocketmine\core\component\InventoryComponent::class);
+    $inv?->clear(); // nothing to drop into the world
+
+    $cmd = new TextPacket();
+    $cmd->type = TextPacket::TYPE_CHAT;
+    $cmd->source = 'Alice';
+    $cmd->message = '/kill';
+    $client->sendGamePacket($cmd);
+
+    $deadline = microtime(true) + 3.0;
+    $sawDead = false;
+    while (microtime(true) < $deadline && !$sawDead) {
+        $kernel->run(1);
+        $health = $entity?->get(\pocketmine\core\component\HealthComponent::class);
+        if ($entity !== null && $entity->has(\pocketmine\core\component\tags\DeadTag::class)
+            && $health !== null && $health->current === 0.0) {
+            $sawDead = true;
+        }
+        usleep(10000);
+    }
+    ok($sawDead, 'Alice is dead after /kill');
+
+    $client->readGamePackets(); // drain the death burst
+    $respawn = new \pocketmine\protocol\RespawnPacket();
+    $respawn->x = 0.0;
+    $respawn->y = 0.0;
+    $respawn->z = 0.0;
+    $client->sendGamePacket($respawn);
+
+    $deadline = microtime(true) + 5.0;
+    $sawHealth = false;
+    while (microtime(true) < $deadline && !$sawHealth) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::SET_HEALTH_PACKET && shFields($buffer) === 20) {
+                $sawHealth = true;
+            }
+        }
+        usleep(10000);
+    }
+    $health = $entity?->get(\pocketmine\core\component\HealthComponent::class);
+    ok($sawHealth && $health !== null && $health->current === 20.0, 'Alice revived with full health');
 });
 
 test('a dead player respawns via RespawnPacket (health restored, spawn burst sent)', function () use ($kernel, $client): void {
