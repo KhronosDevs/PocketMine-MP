@@ -645,6 +645,21 @@ function mpFields(string $buf): array {
     ];
 }
 
+function uaFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    $eid = $s->getLong();
+    $count = $s->getShort();
+    $entries = [];
+    for ($i = 0; $i < $count; $i++) {
+        $min = $s->getFloat();
+        $max = $s->getFloat();
+        $value = $s->getFloat();
+        $name = $s->getString();
+        $entries[$name] = ['min' => $min, 'max' => $max, 'value' => $value];
+    }
+    return ['eid' => $eid, 'entries' => $entries];
+}
+
 function reFields(string $buf): int {
     $s = new BinaryStream($buf, 1);
     return $s->getLong();
@@ -1799,6 +1814,152 @@ test('attacking a mob via InteractPacket damages it and broadcasts the hurt anim
     ok($sawHurt, 'hurt animation broadcast via EntityEventPacket');
     ok(!$sawAirCorruption, 'no DATA_AIR corruption via SetEntityDataPacket health sync');
     $kernel->getEntityDespawnService()->despawn($mob);
+});
+
+// --- XP orbs + health regen (14.9) -----------------------------------------
+test('an XP orb dropped by a mob death is broadcast as AddEntityPacket type 69', function () use ($kernel, $client): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+
+    // Kill a zombie right next to Alice: the death pipeline drops an XP orb
+    // (CombatService::dropExperience) at the death position.
+    $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', $alice['x'] + 2.0, $alice['y'] - 1.0, $alice['z']);
+    $mobRef = \pocketmine\core\ecs\EntityRef::create($mob->getId(), $kernel->getWorld());
+    $kernel->getCombatService()->applyDamage($mobRef, 1000.0);
+
+    $deadline = microtime(true) + 5.0;
+    $sawOrb = false;
+    while (microtime(true) < $deadline && !$sawOrb) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::ADD_ENTITY_PACKET) {
+                $ae = aeFields($buffer);
+                if ($ae['type'] === 69) {
+                    $sawOrb = true;
+                }
+            }
+        }
+        usleep(10000);
+    }
+    ok($sawOrb, 'XP orb broadcast as AddEntityPacket with legacy type 69');
+
+    // Clean up any leftover orbs so later tests are deterministic.
+    foreach ($kernel->getWorld()->getEntities() as $entity) {
+        if ($entity->has('xp_orb')) {
+            $kernel->getWorld()->despawn($entity);
+        }
+    }
+    $kernel->getWorld()->tick(0.05);
+});
+
+test('a player collects an XP orb and the HUD level attribute updates', function () use ($kernel, $client): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+
+    // Drop an XP orb right at Alice's feet (5 XP) and let the per-tick
+    // walk-over system collect it into her XP metadata.
+    $orb = $kernel->getWorld()->spawn(
+        (new \pocketmine\core\ecs\EntityBuilder())
+            ->with(new \pocketmine\core\component\PositionComponent($alice['x'], $alice['y'], $alice['z']))
+            ->with(new \pocketmine\core\component\VelocityComponent())
+            ->with(new \pocketmine\core\component\HealthComponent(1, 1))
+            ->with(new \pocketmine\core\component\MetadataComponent(['xp' => 5]))
+            ->withTag('xp_orb')
+    );
+    $orbEid = $orb->getId();
+
+    $deadline = microtime(true) + 5.0;
+    $sawXp = false;
+    $sawLevel = false;
+    while (microtime(true) < $deadline && (!$sawXp || !$sawLevel)) {
+        $kernel->run(1);
+        // The orb entity should be gone: collected by the pickup system.
+        if ($kernel->getWorld()->getEntity($orbEid) === null) {
+            $sawXp = true;
+        }
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::UPDATE_ATTRIBUTES_PACKET) {
+                $ua = uaFields($buffer);
+                if (isset($ua['entries']['player.level'])) {
+                    $sawLevel = true;
+                }
+            }
+        }
+        usleep(10000);
+    }
+    ok($sawXp, 'XP orb collected by walk-over (despawned)');
+    ok($sawLevel, 'UpdateAttributesPacket with player.level sent to the HUD');
+
+    // The player's XP metadata must reflect the collected orb.
+    $playerEntity = null;
+    foreach ($kernel->getWorld()->getEntities() as $entity) {
+        if ($entity->has(\pocketmine\core\component\tags\PlayerTag::class)) {
+            $playerEntity = $entity;
+            break;
+        }
+    }
+    $xp = $playerEntity?->get(\pocketmine\core\component\MetadataComponent::class)?->get('xp', 0);
+    ok($xp !== null && (int)$xp >= 5, 'player XP metadata credited (' . var_export($xp, true) . ')');
+});
+
+test('player health regenerates after a no-damage window', function () use ($kernel, $client): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+
+    // Damage Alice to half health through the combat pipeline.
+    $aliceRef = \pocketmine\core\ecs\EntityRef::create($alice['entityId'], $kernel->getWorld());
+    $kernel->getCombatService()->applyDamage($aliceRef, 10.0);
+    $healthAfter = $kernel->getWorld()->getEntity($alice['entityId'])?->get(\pocketmine\core\component\HealthComponent::class)?->current;
+    ok($healthAfter !== null && $healthAfter < 20.0, 'Alice damaged below max health');
+
+    // RegenSystem: 1 HP per 80 ticks after a 100-tick no-damage window.
+    // Run world ticks directly (no kernel sleep) so the test is fast; the
+    // system keeps its own tick counter.
+    $world = $kernel->getWorld();
+    for ($i = 0; $i < 100 + 80 + 5; $i++) {
+        $world->tick(0.05);
+    }
+    $healthRegen = $world->getEntity($alice['entityId'])?->get(\pocketmine\core\component\HealthComponent::class)?->current;
+    ok($healthRegen !== null && $healthRegen > $healthAfter, 'health regenerated after the no-damage window (' . var_export($healthRegen, true) . ')');
+
+    // The HUD must follow: one kernel tick flushes a SetHealthPacket.
+    $kernel->run(1);
+    $deadline = microtime(true) + 3.0;
+    $sawHealth = false;
+    while (microtime(true) < $deadline && !$sawHealth) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::SET_HEALTH_PACKET) {
+                $sawHealth = true;
+            }
+        }
+        $kernel->run(1);
+        usleep(10000);
+    }
+    ok($sawHealth, 'SetHealthPacket reflects the regenerated health on the HUD');
 });
 
 test('a dead player respawns via RespawnPacket (health restored, spawn burst sent)', function () use ($kernel, $client): void {

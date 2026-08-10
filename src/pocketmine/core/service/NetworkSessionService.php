@@ -54,6 +54,7 @@ use pocketmine\protocol\SetTimePacket;
 use pocketmine\protocol\StartGamePacket;
 use pocketmine\protocol\TextPacket;
 use pocketmine\protocol\UpdateBlockPacket;
+use pocketmine\protocol\UpdateAttributesPacket;
 use pocketmine\protocol\UseItemPacket;
 use pocketmine\utils\Binary;
 use pocketmine\utils\UUID;
@@ -896,6 +897,46 @@ final class NetworkSessionService {
     }
 
     /**
+     * 14.9: push the player's XP bar (level + progress) to the client via
+     * the legacy attribute packet. Called after an XP orb is collected; also
+     * part of the login burst so the bar starts at a known state.
+     */
+    public function syncXpFor(int $entityId): void {
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId !== $entityId) {
+                continue;
+            }
+            $meta = $session['entityRef']->getEntity()?->get(MetadataComponent::class);
+            $xpLevel = (int)($meta?->get('xpLevel') ?? 0);
+            $xp = (int)($meta?->get('xp') ?? 0);
+            $need = self::xpNeedForLevel($xpLevel);
+            $progress = $need > 0 ? min(1.0, $xp / $need) : 0.0;
+
+            $pk = new UpdateAttributesPacket();
+            $pk->entityId = 0; // legacy: 0 targets the player's own HUD
+            $pk->entries = [
+                [0.0, 2147483647.0, (float)$xpLevel, 'player.level'],
+                [0.0, 1.0, $progress, 'player.experience'],
+            ];
+            $this->queuePacket($session['playerRef'], $pk);
+            return;
+        }
+    }
+
+    /**
+     * Standard Minecraft XP curve (legacy Human::getXpNeedToNextLevel).
+     */
+    public static function xpNeedForLevel(int $level): int {
+        if ($level <= 15) {
+            return 2 * $level + 7;
+        }
+        if ($level <= 30) {
+            return 5 * $level - 38;
+        }
+        return 9 * $level - 158;
+    }
+
+    /**
      * 14.3 respawn: the client sends RespawnPacket from the death screen.
      * Revive the player through PlayerRespawnService (clear DeadTag, restore
      * health, teleport to the safe spawn) and send the respawn burst so the
@@ -1089,6 +1130,9 @@ final class NetworkSessionService {
         // Full inventory contents (window 0) so the client renders the
         // hotbar with the player's actual items (starter kit for new players).
         $this->sendInventoryContents($playerRef);
+
+        // 14.9: init the XP bar (level 0, empty progress).
+        $this->syncXpFor($session['playerRef']->entityId);
     }
 
     /**
@@ -1274,6 +1318,24 @@ final class NetworkSessionService {
             $pk->speedX = $vel?->x ?? 0.0;
             $pk->speedY = $vel?->y ?? 0.0;
             $pk->speedZ = $vel?->z ?? 0.0;
+            return $pk;
+        }
+        // 14.9: XP orbs render as legacy XPOrb (network id 69) with the
+        // DATA_NO_AI flag so the client does not give them mob AI behaviour.
+        if ($meta?->get('xp') !== null && $entity->has('xp_orb')) {
+            $pk = new AddEntityPacket();
+            $pk->eid = $entityId;
+            $pk->type = 69; // legacy XPOrb::NETWORK_ID
+            $pos = $entity->get(PositionComponent::class);
+            $vel = $entity->get(VelocityComponent::class);
+            $pk->x = $pos?->x ?? 0.0;
+            $pk->y = $pos?->y ?? 0.0;
+            $pk->z = $pos?->z ?? 0.0;
+            $pk->speedX = $vel?->x ?? 0.0;
+            $pk->speedY = $vel?->y ?? 0.0;
+            $pk->speedZ = $vel?->z ?? 0.0;
+            $pk->metadata = $this->legacyMetadataDefaults();
+            $pk->metadata[15] = [Binary::DATA_TYPE_BYTE, 1]; // DATA_NO_AI
             return $pk;
         }
         $type = $meta?->get('mobType') ?? $meta?->get('entityType');
