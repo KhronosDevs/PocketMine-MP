@@ -7,6 +7,7 @@ require __DIR__ . '/helpers.php';
 
 use pocketmine\adapter\driven\network\Protocol84NetworkAdapter;
 use pocketmine\protocol\BatchPacket;
+use pocketmine\protocol\ContainerClosePacket;
 use pocketmine\protocol\ContainerSetContentPacket;
 use pocketmine\protocol\ContainerSetSlotPacket;
 use pocketmine\protocol\CraftingEventPacket;
@@ -1127,13 +1128,43 @@ function teleportAliceOnto(\pocketmine\Kernel $kernel, FakeClient $client, int $
     $deadline = microtime(true) + 3.0;
     while (microtime(true) < $deadline) {
         $kernel->run(1);
-        $online = $kernel->getNetworkSessionService()->getOnlinePlayers();
-        if (isset($online[0]) && abs($online[0]['x'] - ($x + 0.5)) < 1e-6) {
-            return;
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            // Target Alice by name: after the second-player test Bob is also
+            // online, and the first list entry is not guaranteed to be Alice.
+            if ($p['username'] === 'Alice' && abs($p['x'] - ($x + 0.5)) < 1e-6) {
+                return;
+            }
         }
         usleep(10000);
     }
     throw new RuntimeException('teleport to (' . $x . ', ' . $y . ', ' . $z . ') did not land');
+}
+
+/** Teleport a specific entity (by id) onto a block and wait for it to land. */
+function teleportEntityOnto(\pocketmine\Kernel $kernel, FakeClient $client, int $entityId, int $x, int $y, int $z): void {
+    $move = new MovePlayerPacket();
+    $move->eid = $entityId;
+    $move->x = $x + 0.5;
+    $move->y = $y + 1;
+    $move->z = $z + 0.5;
+    $move->yaw = 0.0;
+    $move->bodyYaw = 0.0;
+    $move->pitch = 0.0;
+    $move->mode = MovePlayerPacket::MODE_NORMAL;
+    $move->onGround = true;
+    $client->sendGamePacket($move);
+
+    $deadline = microtime(true) + 3.0;
+    while (microtime(true) < $deadline) {
+        $kernel->run(1);
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            if ($p['entityId'] === $entityId && abs($p['x'] - ($x + 0.5)) < 1e-6) {
+                return;
+            }
+        }
+        usleep(10000);
+    }
+    throw new RuntimeException('teleport entity ' . $entityId . ' to (' . $x . ', ' . $y . ', ' . $z . ') did not land');
 }
 
 test('held item change (MobEquipment) updates the ECS held slot', function () use ($client, $kernel): void {
@@ -3180,6 +3211,388 @@ test('the world clock advances and is broadcast each tick', function () use ($ke
     $c->close();
     ok($latest !== null, 'a SetTime broadcast arrives after login');
     ok($latest !== null && $latest > $t0, "time advances on the wire (t0=$t0, latest=" . ($latest ?? 'none') . ')');
+});
+
+// --- Chests (14.15) ---------------------------------------------------------
+
+function copFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    return [
+        'windowid' => $s->getByte(),
+        'type' => $s->getByte(),
+        'slots' => $s->getShort(),
+        'x' => $s->getInt(),
+        'y' => $s->getInt(),
+        'z' => $s->getInt(),
+        'entityId' => $s->getLong(),
+    ];
+}
+
+function ccpFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    return ['windowid' => $s->getByte()];
+}
+
+/**
+ * Drop a chest block into the world at the given position and teleport Alice
+ * next to it so she can right-click it (the break/place tests teleport her
+ * onto a surface block; the chest sits one cell above that surface).
+ * @return array{0: int, 1: int, 2: int}
+ */
+function placeTestChest(\pocketmine\Kernel $kernel, FakeClient $client, int $entityId): array {
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+    if ($store === null) {
+        throw new RuntimeException('no chunk store');
+    }
+    // Find a surface column whose cell ABOVE the surface is still air (a
+    // previous test may have placed a chest there - never stack on it).
+    $sea = \pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter::SEA_LEVEL;
+    $water = \pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter::WATER_BLOCK;
+    $config = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
+    $cx = $config instanceof \pocketmine\core\resource\ServerConfig ? $config->spawnX : 0;
+    $cz = $config instanceof \pocketmine\core\resource\ServerConfig ? $config->spawnZ : 0;
+    $chestAt = null;
+    for ($r = 0; $r <= 32 && $chestAt === null; $r += 4) {
+        for ($dz = -$r; $dz <= $r && $chestAt === null; $dz += 2) {
+            for ($dx = -$r; $dx <= $r && $chestAt === null; $dx += 2) {
+                $x = $cx + $dx;
+                $z = $cz + $dz;
+                $top = $store->getHighestBlockAt($x, $z);
+                $surface = $store->getBlock($x, $top, $z);
+                if ($top < $sea || $surface === $water) {
+                    continue; // underwater column
+                }
+                // The surface block must be real terrain (grass/dirt) - never
+                // a chest from a previous test (whose block id is 54).
+                if ($surface !== 2 && $surface !== 3) {
+                    continue;
+                }
+                if ($store->getBlock($x, $top + 1, $z) !== 0) {
+                    continue; // cell above the surface is occupied
+                }
+                $chestAt = [$x, $top + 1, $z];
+            }
+        }
+    }
+    if ($chestAt === null) {
+        throw new RuntimeException('no free surface cell for a test chest');
+    }
+    [$cx, $cy, $cz] = $chestAt;
+    $store->setBlock($cx, $cy, $cz, 54); // chest
+    teleportEntityOnto($kernel, $client, $entityId, $cx, $cy, $cz);
+    return [$cx, $cy, $cz];
+}
+
+/**
+ * Right-click a chest and wait for the server's ContainerOpenPacket to
+ * land. The server only accepts window-2 (chest) writes for sessions that
+ * have the chest open, so tests must let the open round-trip first.
+ *
+ * @return array<string, mixed>
+ */
+function openTestChest(\pocketmine\Kernel $kernel, FakeClient $client, int $cx, int $cy, int $cz): array {
+    $use = new UseItemPacket();
+    $use->x = $cx;
+    $use->y = $cy;
+    $use->z = $cz;
+    $use->face = 1;
+    $use->fx = 0.0;
+    $use->fy = 0.0;
+    $use->fz = 0.0;
+    $use->posX = $cx + 0.5;
+    $use->posY = $cy + 0.5;
+    $use->posZ = $cz + 0.5;
+    $use->slot = 0;
+    $use->item = [5, 32, 0, null];
+    $client->sendGamePacket($use);
+
+    $deadline = microtime(true) + 3.0;
+    while (microtime(true) < $deadline) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::CONTAINER_OPEN_PACKET) {
+                $fields = copFields($buffer);
+                if (($fields['windowid'] ?? -1) === 2) {
+                    return $fields;
+                }
+            }
+        }
+        usleep(10000);
+    }
+    throw new RuntimeException('chest at (' . $cx . ', ' . $cy . ', ' . $cz . ') did not open');
+}
+
+// Earlier suite clients idle past the RakNet 10s transport timeout (the
+// world-clock test notes this), so every chest test boots its own client.
+function joinFreshClient(\pocketmine\Kernel $kernel, int $port, string $name, string $uuid): array {
+    $c = new FakeClient($port);
+    $c->handshake(fn() => $kernel->run(1));
+    $c->connect(fn() => $kernel->run(1));
+    $c->sendLogin($name, $uuid);
+    $kernel->run(2);
+
+    // Wait for the login burst to land (so the player is spawned and chunks
+    // around the safe spawn are streamed before we place a chest there).
+    $deadline = microtime(true) + 8.0;
+    $spawned = false;
+    while (microtime(true) < $deadline && !$spawned) {
+        foreach ($c->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::PLAY_STATUS_PACKET && psStatus($buffer) === PlayStatusPacket::PLAYER_SPAWN) {
+                $spawned = true;
+            }
+        }
+        $kernel->run(1);
+        usleep(10000);
+    }
+    if (!$spawned) {
+        $c->close();
+        throw new RuntimeException("$name did not spawn on login");
+    }
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === $name) {
+            return [$c, $p['entityId']];
+        }
+    }
+    $c->close();
+    throw new RuntimeException("$name not found after login");
+}
+
+test('right-clicking a chest opens a real container window (0x2a + contents)', function () use ($kernel, $port): void {
+    [$chestClient, $eid] = joinFreshClient($kernel, $port, 'Chesty', 'e0000000-0000-0000-0000-0000000000c1');
+    try {
+        [$cx, $cy, $cz] = placeTestChest($kernel, $chestClient, $eid);
+
+        // Right-click the chest: the client sends UseItem targeting the chest
+        // block itself (not a face offset).
+        $use = new UseItemPacket();
+        $use->x = $cx;
+        $use->y = $cy;
+        $use->z = $cz;
+        $use->face = 1;
+        $use->fx = 0.0;
+        $use->fy = 0.0;
+        $use->fz = 0.0;
+        $use->posX = $cx + 0.5;
+        $use->posY = $cy + 0.5;
+        $use->posZ = $cz + 0.5;
+        $use->slot = 0;
+        $use->item = [5, 32, 0, null];
+        $chestClient->sendGamePacket($use);
+
+        $deadline = microtime(true) + 3.0;
+        $sawOpen = null;
+        $sawContent = null;
+        while (microtime(true) < $deadline && ($sawOpen === null || $sawContent === null)) {
+            $kernel->run(1);
+            foreach ($chestClient->readGamePackets() as [$id, $buffer]) {
+                if ($id === Info::CONTAINER_OPEN_PACKET && $sawOpen === null) {
+                    $sawOpen = copFields($buffer);
+                }
+                if ($id === Info::CONTAINER_SET_CONTENT_PACKET && $sawContent === null) {
+                    $sawContent = cscFields($buffer);
+                }
+            }
+            usleep(10000);
+        }
+        ok($sawOpen !== null, 'ContainerOpenPacket sent');
+        if ($sawOpen !== null) {
+            same(2, $sawOpen['windowid'], 'chest window id 2');
+            same(0, $sawOpen['type'], 'chest window type 0');
+            same(27, $sawOpen['slots'], '27 chest slots');
+            same($cx, $sawOpen['x'], 'open x matches the chest block');
+            same($cy, $sawOpen['y'], 'open y matches the chest block');
+            same($cz, $sawOpen['z'], 'open z matches the chest block');
+        }
+        ok($sawContent !== null, 'chest contents sent after open');
+        if ($sawContent !== null) {
+            same(2, $sawContent['windowid'], 'contents ride window 2');
+            same(27, count($sawContent['slots']), '27 content slots');
+        }
+    } finally {
+        $chestClient->close();
+    }
+});
+
+test('a chest-window move is validated and synced to every viewer', function () use ($kernel, $port): void {
+    [$chestClient, $eid] = joinFreshClient($kernel, $port, 'Chesty2', 'e0000000-0000-0000-0000-0000000000c2');
+    try {
+        [$cx, $cy, $cz] = placeTestChest($kernel, $chestClient, $eid);
+
+        // Open the chest first: window-2 writes are only accepted for
+        // sessions that have the chest open.
+        openTestChest($kernel, $chestClient, $cx, $cy, $cz);
+
+        // The fresh player has the starter kit: planks in slot 0. First empty
+        // slot 0 (releases 32 planks into move credit), then fill chest slot
+        // 0 with 5 planks - a two-packet drag, exactly like window-0 moves.
+        $empty = new ContainerSetSlotPacket();
+        $empty->windowid = 0;
+        $empty->slot = 0;
+        $empty->hotbarSlot = 0;
+        $empty->item = [0, 0, 0, null];
+        $chestClient->sendGamePacket($empty);
+
+        $fill = new ContainerSetSlotPacket();
+        $fill->windowid = 2;
+        $fill->slot = 0;
+        $fill->hotbarSlot = 0;
+        $fill->item = [5, 5, 0, null];
+        $chestClient->sendGamePacket($fill);
+        $kernel->run(2);
+
+        $chestStore = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChestStore::class);
+        if (!$chestStore instanceof \pocketmine\core\resource\ChestStore) {
+            ok(false, 'chest store present');
+            return;
+        }
+        $chestInv = $chestStore->get($cx, $cy, $cz);
+        $item = $chestInv->get(0);
+        ok($item !== null && $item->itemId === 5 && $item->count === 5, '5 planks landed in chest slot 0');
+
+        // The changed chest slot is broadcast back to every viewer of that
+        // chest (including the mover themselves).
+        $deadline = microtime(true) + 3.0;
+        $sawSlot = false;
+        while (microtime(true) < $deadline && !$sawSlot) {
+            foreach ($chestClient->readGamePackets() as [$id, $buffer]) {
+                if ($id === Info::CONTAINER_SET_SLOT_PACKET) {
+                    $css = cssFields($buffer);
+                    if ($css['windowid'] === 2 && $css['slot'] === 0 && $css['item'][0] === 5) {
+                        $sawSlot = true;
+                    }
+                }
+            }
+            $kernel->run(1);
+            usleep(10000);
+        }
+        ok($sawSlot, 'chest slot change broadcast on window 2');
+    } finally {
+        $chestClient->close();
+    }
+});
+
+test('a hostile chest-window claim without move credit is rejected', function () use ($kernel, $port): void {
+    [$chestClient, $eid] = joinFreshClient($kernel, $port, 'Chesty3', 'e0000000-0000-0000-0000-0000000000c3');
+    try {
+        [$cx, $cy, $cz] = placeTestChest($kernel, $chestClient, $eid);
+        $chestStore = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChestStore::class);
+        $chestInv = $chestStore instanceof \pocketmine\core\resource\ChestStore ? $chestStore->get($cx, $cy, $cz) : null;
+        if ($chestInv === null) {
+            ok(false, 'chest store present');
+            return;
+        }
+
+        // Claim 64 diamonds in chest slot 1 out of nowhere (no move credit
+        // for diamonds was ever released).
+        $claim = new ContainerSetSlotPacket();
+        $claim->windowid = 2;
+        $claim->slot = 1;
+        $claim->hotbarSlot = 1;
+        $claim->item = [264, 64, 0, null];
+        $chestClient->sendGamePacket($claim);
+        $kernel->run(2);
+
+        ok($chestInv->get(1) === null, 'unbacked claim rejected - chest slot stays empty');
+    } finally {
+        $chestClient->close();
+    }
+});
+
+test('closing the chest window clears it and mirrors the close', function () use ($kernel, $port): void {
+    [$chestClient, $eid] = joinFreshClient($kernel, $port, 'Chesty4', 'e0000000-0000-0000-0000-0000000000c4');
+    try {
+        [$cx, $cy, $cz] = placeTestChest($kernel, $chestClient, $eid);
+
+        // Open the chest first and wait for the open to round-trip: the
+        // server only mirrors a close for an open container.
+        openTestChest($kernel, $chestClient, $cx, $cy, $cz);
+
+        $close = new ContainerClosePacket();
+        $close->windowid = 2;
+        $chestClient->sendGamePacket($close);
+        $kernel->run(1);
+
+        $deadline = microtime(true) + 3.0;
+        $sawClose = false;
+        while (microtime(true) < $deadline && !$sawClose) {
+            foreach ($chestClient->readGamePackets() as [$id, $buffer]) {
+                if ($id === Info::CONTAINER_CLOSE_PACKET) {
+                    $ccp = ccpFields($buffer);
+                    if ($ccp['windowid'] === 2) {
+                        $sawClose = true;
+                    }
+                }
+            }
+            $kernel->run(1);
+            usleep(10000);
+        }
+        ok($sawClose, 'server mirrors the chest close');
+    } finally {
+        $chestClient->close();
+    }
+});
+
+test('breaking a chest spills its contents as item entities', function () use ($kernel, $port): void {
+    [$chestClient, $eid] = joinFreshClient($kernel, $port, 'Chesty5', 'e0000000-0000-0000-0000-0000000000c5');
+    try {
+        [$cx, $cy, $cz] = placeTestChest($kernel, $chestClient, $eid);
+        $chestStore = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChestStore::class);
+        $chestInv = $chestStore instanceof \pocketmine\core\resource\ChestStore ? $chestStore->get($cx, $cy, $cz) : null;
+        if ($chestInv === null) {
+            ok(false, 'chest store present');
+            return;
+        }
+        // Seed the chest with an item, then break the chest like the break
+        // test (START_BREAK, hold, REMOVE_BLOCK).
+        $chestInv->set(0, new \pocketmine\core\component\ItemStack(264, 0, 3));
+
+        // Set the player to creative (gamemode 1) so the break is instant
+        // on START_BREAK, bypassing the REMOVE_BLOCK confirm (which the fake
+        // RakNet transport drops unpredictably).
+        $entity = $kernel->getWorld()->getEntity($eid);
+        $meta = $entity?->get(\pocketmine\core\component\MetadataComponent::class);
+        if ($meta !== null) {
+            $meta->set('gamemode', 1);
+        }
+
+        $action = new PlayerActionPacket();
+        $action->eid = $eid;
+        $action->action = PlayerActionPacket::ACTION_START_BREAK;
+        $action->x = $cx;
+        $action->y = $cy;
+        $action->z = $cz;
+        $action->face = 1;
+        $chestClient->sendGamePacket($action);
+
+        $deadline = microtime(true) + 3.0;
+        $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+        $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+        while (microtime(true) < $deadline && ($store === null || $store->getBlock($cx, $cy, $cz) !== 0)) {
+            $kernel->run(1);
+            usleep(10000);
+        }
+        ok($store !== null && $store->getBlock($cx, $cy, $cz) === 0, 'chest block is gone');
+        ok(!($chestStore instanceof \pocketmine\core\resource\ChestStore && $chestStore->has($cx, $cy, $cz)), 'chest contents removed from the store');
+
+        // The spilled diamond should exist as an item entity in the world.
+        $found = false;
+        $query = $kernel->getWorld()->query()
+            ->with(\pocketmine\core\component\MetadataComponent::class)
+            ->with(\pocketmine\core\component\PositionComponent::class)
+            ->build();
+        foreach ($query as $entity) {
+            $meta = $entity->get(\pocketmine\core\component\MetadataComponent::class);
+            $pos = $entity->get(\pocketmine\core\component\PositionComponent::class);
+            if ($meta !== null && $pos !== null && $meta->get('entityType') === 'item'
+                && abs($pos->x - $cx - 0.5) < 2 && abs($pos->z - $cz - 0.5) < 2) {
+                $found = true;
+            }
+        }
+        ok($found, 'a diamond item entity spawned at the broken chest');
+    } finally {
+        $chestClient->close();
+    }
 });
 
 test('server shuts down cleanly with active sessions', function () use ($kernel, $client): void {

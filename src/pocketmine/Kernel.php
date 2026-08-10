@@ -1135,6 +1135,20 @@ final class Kernel {
             foreach ($store->getLoadedChunkCoordinates() as [$chunkX, $chunkZ]) {
                 $chunkData = $store->toChunkData($chunkX, $chunkZ);
                 if ($chunkData !== null) {
+                    // 14.15: chest contents ride the chunk's tile-entity list,
+                    // so they survive restarts with the terrain.
+                    $chestStore = $this->resourceRegistry->get(\pocketmine\core\resource\ChestStore::class);
+                    if ($chestStore instanceof \pocketmine\core\resource\ChestStore) {
+                        $chunkData = new \pocketmine\port\driven\ChunkData(
+                            $chunkData->chunkX,
+                            $chunkData->chunkZ,
+                            $chunkData->sections,
+                            $chunkData->biomes,
+                            $chunkData->heightmap,
+                            $chunkData->entities,
+                            array_merge($chunkData->tileEntities, $chestStore->snapshotsForChunk($chunkX, $chunkZ)),
+                        );
+                    }
                     $this->storagePort->saveChunk($chunkX, $chunkZ, $chunkData);
                 }
             }
@@ -1487,6 +1501,7 @@ function registerBuiltinResources(ResourceRegistry $registry): void {
     $registry->set(new \pocketmine\core\resource\BlockRegistry());
     $registry->set(new \pocketmine\core\resource\ItemRegistry());
     $registry->set(new \pocketmine\core\resource\ChunkStore());
+    $registry->set(new \pocketmine\core\resource\ChestStore());
     $registry->set(new \pocketmine\core\resource\RecipeRegistry());
 }
 

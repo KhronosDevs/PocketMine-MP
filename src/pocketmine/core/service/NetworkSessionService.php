@@ -18,6 +18,7 @@ use pocketmine\core\ecs\Entity;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\ResourceRegistry;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\ChestStore;
 use pocketmine\core\resource\Hunger;
 use pocketmine\core\resource\ItemRegistry;
 use pocketmine\core\resource\ServerConfig;
@@ -32,6 +33,8 @@ use pocketmine\protocol\AdventureSettingsPacket;
 use pocketmine\protocol\BatchPacket;
 use pocketmine\protocol\ChunkRadiusUpdatedPacket;
 use pocketmine\protocol\ChunkSerializer;
+use pocketmine\protocol\ContainerClosePacket;
+use pocketmine\protocol\ContainerOpenPacket;
 use pocketmine\protocol\ContainerSetContentPacket;
 use pocketmine\protocol\ContainerSetSlotPacket;
 use pocketmine\protocol\CraftingDataPacket;
@@ -146,7 +149,8 @@ final class NetworkSessionService {
      *   lastHealth: float,
      *   knownEntities: array<int, array{0: float, 1: float, 2: float, 3: float}>,
      *   moveCredit: array<string, int>,
-     *   breaking: array{x: int, y: int, z: int, startTick: int}|null
+     *   breaking: array{x: int, y: int, z: int, startTick: int}|null,
+     *   openContainer: array{x: int, y: int, z: int}|null
      * }>
      */
     private array $sessions = [];
@@ -399,6 +403,12 @@ final class NetworkSessionService {
                 $pk->decode();
                 $this->handleContainerSetSlot($addrKey, $pk);
                 break;
+            case Info::CONTAINER_CLOSE_PACKET:
+                $pk = new ContainerClosePacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handleContainerClose($addrKey, $pk);
+                break;
             case Info::DROP_ITEM_PACKET:
                 $pk = new DropItemPacket();
                 $pk->setBuffer($buffer, 1);
@@ -487,6 +497,8 @@ final class NetworkSessionService {
             'moveCredit' => [],
             // 14.8: in-progress block break (position + the tick it started).
             'breaking' => null,
+            // 14.15: the chest this player currently has open (block coords).
+            'openContainer' => null,
         ];
 
         // Broadcast the new player to everyone (including themselves) and
@@ -666,8 +678,12 @@ final class NetworkSessionService {
             }
             if ($ticks === 0) {
                 // Creative or instant-break block (torches, saplings, ...).
+                $wasChest = $this->isChestBlock($pk->x, $pk->y, $pk->z);
                 if ($this->blockBreakService->breakBlock($session['entityRef'], $pk->x, $pk->y, $pk->z, $pk->face)) {
                     $this->broadcastBlockState($pk->x, $pk->y, $pk->z);
+                    if ($wasChest) {
+                        $this->onChestBroken($pk->x, $pk->y, $pk->z, $session);
+                    }
                 }
                 $session['breaking'] = null;
                 $this->sessions[$addrKey] = $session;
@@ -717,8 +733,12 @@ final class NetworkSessionService {
         if ($required < 0 || $elapsed < $required) {
             return; // released early / hostile instant confirm: block stays
         }
+        $wasChest = $this->isChestBlock($x, $y, $z);
         if ($this->blockBreakService->breakBlock($session['entityRef'], $x, $y, $z, 1)) {
             $this->broadcastBlockState($x, $y, $z);
+            if ($wasChest) {
+                $this->onChestBroken($x, $y, $z, $session);
+            }
         }
     }
 
@@ -742,6 +762,15 @@ final class NetworkSessionService {
         $entity = $session['entityRef']->getEntity();
         $inventory = $entity?->get(InventoryComponent::class);
         if ($inventory === null) {
+            return;
+        }
+        // 14.15: right-clicking a chest opens it (legacy Chest::onActivate
+        // runs before placement in Level::useItemOn, and works with an empty
+        // hand). The chest GUI is a real window: ContainerOpenPacket +
+        // contents, then per-slot moves.
+        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+        if ($store instanceof \pocketmine\core\resource\ChunkStore && $store->getBlock($pk->x, $pk->y, $pk->z) === 54) {
+            $this->openChest($addrKey, $pk->x, $pk->y, $pk->z);
             return;
         }
         $held = $inventory->get($inventory->heldSlot);
@@ -841,6 +870,12 @@ final class NetworkSessionService {
             if ($pk->slot >= 0 && $pk->slot < 4) {
                 $invSlot = InventoryComponent::ARMOR_OFFSET + $pk->slot;
             }
+        } elseif ($pk->windowid === self::CHEST_WINDOW_ID) {
+            $open = $session['openContainer'];
+            if ($open !== null && $pk->slot >= 0 && $pk->slot < ChestStore::CHEST_SIZE) {
+                $this->handleChestSetSlot($addrKey, $session, $pk);
+                return;
+            }
         }
         if ($invSlot < 0) {
             return;
@@ -901,6 +936,145 @@ final class NetworkSessionService {
         if ($pk->windowid === ContainerSetContentPacket::SPECIAL_ARMOR) {
             $this->sendMobArmorToAll($session['playerRef']->entityId);
         }
+    }
+
+    /**
+     * 14.15 chests: right-clicking a chest block opened the window; the
+     * client now reports slot moves on that window. A chest move uses the
+     * same move credit as window 0 (the credit map is session-wide, so
+     * emptying a player slot then filling a chest slot - or vice versa - is
+     * accepted as one drag). The chest window id is 2 (legacy: the first
+     * container window a player opens).
+     */
+    private const CHEST_WINDOW_ID = 2;
+
+    private function openChest(string $addrKey, int $x, int $y, int $z): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z];
+        $this->sessions[$addrKey] = $session;
+
+        // Legacy ContainerInventory::onOpen: ContainerOpenPacket (type 0 =
+        // chest, 27 slots, block coords) then the full contents.
+        $chestStore = $this->chestStore();
+        $inv = $chestStore->get($x, $y, $z);
+        $open = new ContainerOpenPacket();
+        $open->windowid = self::CHEST_WINDOW_ID;
+        $open->type = 0; // InventoryType::CHEST
+        $open->slots = ChestStore::CHEST_SIZE;
+        $open->x = $x;
+        $open->y = $y;
+        $open->z = $z;
+        $open->entityId = -1;
+        $this->queuePacket($session['playerRef'], $open);
+        $this->sendChestContents($session['playerRef'], $inv);
+    }
+
+    private function chestStore(): ChestStore {
+        $store = $this->resourceRegistry->get(ChestStore::class);
+        return $store instanceof ChestStore ? $store : new ChestStore();
+    }
+
+    /** Send the full 27 chest slots as window 2 (legacy sendContents). */
+    private function sendChestContents(PlayerRef $player, \pocketmine\core\component\InventoryComponent $inv): void {
+        $pk = new ContainerSetContentPacket();
+        $pk->windowid = self::CHEST_WINDOW_ID;
+        $pk->slots = [];
+        for ($i = 0; $i < ChestStore::CHEST_SIZE; $i++) {
+            $item = $inv->get($i);
+            $pk->slots[] = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
+        }
+        $this->queuePacket($player, $pk);
+    }
+
+    /** Send one chest slot to every player with that chest open. */
+    private function broadcastChestSlot(int $x, int $y, int $z, int $slot, \pocketmine\core\component\InventoryComponent $inv): void {
+        $item = $inv->get($slot);
+        $pk = new ContainerSetSlotPacket();
+        $pk->windowid = self::CHEST_WINDOW_ID;
+        $pk->slot = $slot;
+        $pk->hotbarSlot = $slot;
+        $pk->item = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
+        foreach ($this->sessions as $s) {
+            $open = $s['openContainer'];
+            if ($open !== null && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
+                $this->queuePacket($s['playerRef'], clone $pk);
+            }
+        }
+    }
+
+    /**
+     * A chest-window slot change. The client reports the NEW contents of one
+     * chest slot per packet; the server applies the authoritative state with
+     * the same session-wide move credit as window 0 (an empty-player-slot
+     * then fill-chest-slot drag is one move). Every viewer with the same
+     * chest open gets the changed slot so the GUI stays in lockstep.
+     */
+    private function handleChestSetSlot(string $addrKey, array $session, ContainerSetSlotPacket $pk): void {
+        $open = $session['openContainer'];
+        if ($open === null) {
+            return;
+        }
+        $chest = $this->chestStore()->get($open['x'], $open['y'], $open['z']);
+        $slot = $pk->slot;
+        $id = (int)($pk->item[0] ?? 0);
+        $count = (int)($pk->item[1] ?? 0);
+        $meta = (int)($pk->item[2] ?? 0);
+
+        /** @var array<string, int> $credit */
+        $credit = $session['moveCredit'];
+        $creditKey = $id . ':' . $meta;
+        $credit[$creditKey] = $credit[$creditKey] ?? 0;
+
+        $current = $chest->get($slot);
+        $inSlot = ($current !== null && $current->itemId === $id && $current->meta === $meta)
+            ? $current->count
+            : 0;
+
+        if ($id <= 0 || $count <= 0) {
+            // Slot emptied: release what it held into move credit (the client
+            // will report the destination slot next packet of a drag).
+            if ($current !== null) {
+                $heldKey = $current->itemId . ':' . $current->meta;
+                $credit[$heldKey] = ($credit[$heldKey] ?? 0) + $current->count;
+            }
+            $chest->set($slot, null);
+        } else {
+            // Claim a stack backed by the same item already in the slot plus
+            // released credit (never conjured from nothing).
+            $need = max(0, $count - $inSlot);
+            if ($need > $credit[$creditKey]) {
+                return; // hostile claim - keep the authoritative state
+            }
+            $credit[$creditKey] -= $need;
+            if ($inSlot > $count) {
+                $credit[$creditKey] += $inSlot - $count;
+            }
+            $chest->set($slot, new ItemStack($id, $meta, $count));
+        }
+        $session['moveCredit'] = $credit;
+        $this->sessions[$addrKey] = $session;
+        $this->broadcastChestSlot($open['x'], $open['y'], $open['z'], $slot, $chest);
+    }
+
+    /**
+     * The client closed the chest window (or the server told it to): forget
+     * the open container and mirror the close back (legacy
+     * ContainerInventory::onClose).
+     */
+    private function handleContainerClose(string $addrKey, ContainerClosePacket $pk): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null || $session['openContainer'] === null) {
+            return;
+        }
+        $session['openContainer'] = null;
+        $this->sessions[$addrKey] = $session;
+        // Legacy mirrors the close to the client that sent it.
+        $close = new ContainerClosePacket();
+        $close->windowid = $pk->windowid;
+        $this->queuePacket($session['playerRef'], $close);
     }
 
     /**
@@ -1241,6 +1415,34 @@ final class NetworkSessionService {
         $pk->flags = UpdateBlockPacket::FLAG_ALL_PRIORITY;
         foreach ($this->sessions as $s) {
             $this->queuePacket($s['playerRef'], clone $pk);
+        }
+    }
+
+    private function isChestBlock(int $x, int $y, int $z): bool {
+        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+        return $store instanceof \pocketmine\core\resource\ChunkStore && $store->getBlock($x, $y, $z) === 54;
+    }
+
+    /**
+     * A chest block was broken: spill its contents as item entities (so the
+     * items are not lost), forget the store entry, and close the window of
+     * every session that had it open (the chest is gone).
+     */
+    private function onChestBroken(int $x, int $y, int $z, array $breaker): void {
+        $store = $this->chestStore();
+        $inv = $store->remove($x, $y, $z);
+        foreach ($inv->getContents() as $item) {
+            $this->entitySpawnService->spawnItem($x + 0.5, $y + 0.5, $z + 0.5, $item);
+        }
+        foreach ($this->sessions as $key => $s) {
+            $open = $s['openContainer'];
+            if ($open !== null && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
+                $s['openContainer'] = null;
+                $this->sessions[$key] = $s;
+                $close = new ContainerClosePacket();
+                $close->windowid = self::CHEST_WINDOW_ID;
+                $this->queuePacket($s['playerRef'], $close);
+            }
         }
     }
 

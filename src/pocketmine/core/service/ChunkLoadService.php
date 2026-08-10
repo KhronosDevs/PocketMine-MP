@@ -69,12 +69,29 @@ final class ChunkLoadService {
             []
         );
 
-        // Split into stored (already on disk) vs missing (need generation).
+        // Split into already-loaded (in-memory is authoritative), stored
+        // (already on disk) vs missing (need generation).
         /** @var list<array{0: int, 1: int}> $toGenerate */
         $toGenerate = [];
         /** @var array<int, ?ChunkData> $byIndex */
         $byIndex = [];
+        /** @var array<int, bool> $alreadyLoaded */
+        $alreadyLoaded = [];
+        $store = $this->getChunkStore();
         foreach ($chunkCoords as $index => [$chunkX, $chunkZ]) {
+            // Loaded chunks are authoritative in memory: a re-request (e.g. a
+            // late login burst or a chunk-radius refresh after a move) must
+            // never clobber the resident chunk with stale disk/generator
+            // data - that would wipe in-memory breaks, places, and chest
+            // contents that haven't been saved to disk yet.
+            if ($store !== null && $store->isLoaded($chunkX, $chunkZ)) {
+                $dto = $store->toChunkData($chunkX, $chunkZ);
+                if ($dto !== null) {
+                    $alreadyLoaded[$index] = true;
+                    $byIndex[$index] = $dto;
+                    continue;
+                }
+            }
             $chunkData = $this->storagePort->loadChunk($chunkX, $chunkZ);
             if ($this->isEmptyChunk($chunkData)) {
                 $toGenerate[] = [$chunkX, $chunkZ];
@@ -95,12 +112,17 @@ final class ChunkLoadService {
             }
         }
 
-        // Populate, light, and materialize each chunk into the in-memory store.
+        // Populate, light, and materialize each chunk into the in-memory store
+        // (already-loaded chunks are returned as-is - they are already live).
         $result = [];
         ksort($byIndex);
         foreach ($byIndex as $index => $chunkData) {
             if (!$chunkData instanceof ChunkData) {
                 continue; // defensive: every index was resolved above
+            }
+            if (isset($alreadyLoaded[$index])) {
+                $result[$index] = $chunkData;
+                continue;
             }
             $result[$index] = $this->materializeChunk($chunkData);
         }
@@ -134,6 +156,13 @@ final class ChunkLoadService {
         $store = $this->getChunkStore();
         if ($store !== null) {
             $store->load($chunkData);
+            // 14.15: rehydrate chest inventories from the chunk's tile
+            // snapshots (saved by Kernel::saveWorld) so chest contents
+            // survive restarts with the terrain.
+            $chestStore = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\ChestStore::class);
+            if ($chestStore instanceof \pocketmine\core\resource\ChestStore) {
+                $chestStore->restoreFromSnapshots($chunkData->tileEntities);
+            }
             if (!$this->isEmptyChunk($chunkData)) {
                 $store->markGenerated($chunkX, $chunkZ);
                 // Generated chunks are populated once the population pass ran
