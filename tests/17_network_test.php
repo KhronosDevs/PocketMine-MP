@@ -3975,6 +3975,81 @@ test('a held bow charges on use and fires an arrow on ACTION_RELEASE_ITEM', func
     }
 });
 
+// --- 14.20 multi-world: switching worlds re-streams the new world's chunks --
+test('switchWorld moves the session to a new world and streams its chunks', function () use ($kernel, $port): void {
+    // A second world with a fixed seed, generated through the Server API.
+    $server = \pocketmine\api\server\Server::getInstance();
+    $world2 = $server->generateWorld('switch_world', 777);
+    ok($world2 !== null, 'second world generated');
+
+    $sw = new FakeClient($port);
+    $sw->handshake(fn() => $kernel->run(1));
+    $sw->connect(fn() => $kernel->run(1));
+    $sw->sendLogin('Switcher', 'aaaa1111-2222-3333-4444-555555555555');
+
+    // Wait for the initial (default world) chunk stream to start.
+    $deadline = microtime(true) + 8.0;
+    $sawAnyChunk = false;
+    while (microtime(true) < $deadline && !$sawAnyChunk) {
+        foreach ($sw->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::FULL_CHUNK_DATA_PACKET) {
+                $sawAnyChunk = true;
+                break;
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawAnyChunk, 'player received default-world chunks before the switch');
+
+    // Find the player's entity id through the session service.
+    $entityId = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Switcher') {
+            $entityId = $p['entityId'];
+            break;
+        }
+    }
+    ok($entityId !== null, 'switcher session found');
+
+    // Switch to the second world: the session must re-stream that world's
+    // terrain (different seed => different chunk bytes) and receive its time.
+    $ok = false;
+    if ($entityId !== null) {
+        $ok = $kernel->getNetworkSessionService()->switchWorld($entityId, $world2->getWorldId());
+    }
+    ok($ok, 'switchWorld accepted');
+
+    $deadline = microtime(true) + 8.0;
+    $sawNewChunk = false;
+    $sawTime = false;
+    while (microtime(true) < $deadline && (!$sawNewChunk || !$sawTime)) {
+        foreach ($sw->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::FULL_CHUNK_DATA_PACKET) {
+                $fc = fcFields($buffer);
+                // The switch teleports the player to the new world's spawn,
+                // so the streamed chunks should center on the new world's
+                // chunk (0,0) - the same coordinate, but the payload comes
+                // from the second world's store (777 seed).
+                if ($fc['x'] === 0 && $fc['z'] === 0) {
+                    $sawNewChunk = true;
+                }
+            }
+            if ($id === Info::SET_TIME_PACKET) {
+                $sawTime = true;
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawNewChunk, 'new-world chunk (0,0) streamed after the switch');
+    ok($sawTime, 'SetTimePacket sent after the switch');
+
+    // The player entity now belongs to world 2.
+    $swEntity = $kernel->getWorld()->getEntity($entityId ?? -1);
+    $wc = $swEntity?->get(\pocketmine\core\component\WorldComponent::class);
+    ok($wc instanceof \pocketmine\core\component\WorldComponent && $wc->id === $world2->getWorldId(), 'player WorldComponent now points at world 2');
+    $sw->close();
+});
+
 test('server shuts down cleanly with active sessions', function () use ($kernel, $client): void {
     $adapter = $kernel->getNetworkPort();
     if ($adapter instanceof Protocol84NetworkAdapter) {

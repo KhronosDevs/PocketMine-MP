@@ -8,6 +8,7 @@ use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\ChunkStore;
+use pocketmine\core\resource\WorldRegistry;
 use pocketmine\port\driven\StoragePort;
 
 final class ChunkUnloadService {
@@ -16,16 +17,16 @@ final class ChunkUnloadService {
         private readonly StoragePort $storagePort,
     ) {}
 
-    public function unloadChunk(int $chunkX, int $chunkZ): void {
+    public function unloadChunk(int $chunkX, int $chunkZ, int $worldId = 0): void {
         // Get entities in the chunk
-        $entities = $this->getEntitiesInChunk($chunkX, $chunkZ);
+        $entities = $this->getEntitiesInChunk($chunkX, $chunkZ, $worldId);
         
         // Save entities that are in this chunk
         foreach ($entities as $entityRef) {
             $this->saveEntity($entityRef);
         }
         
-        $this->persistAndUnload($chunkX, $chunkZ);
+        $this->persistAndUnload($chunkX, $chunkZ, $worldId);
     }
 
     /**
@@ -39,9 +40,9 @@ final class ChunkUnloadService {
      * a distance-from-players policy would need player position tracking in
      * this service and can slot in behind the same call sites.
      */
-    public function unloadUnusedChunks(int $maxLoadedChunks = 10000): int {
-        $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
-        if (!$store instanceof ChunkStore) {
+    public function unloadUnusedChunks(int $maxLoadedChunks = 10000, int $worldId = 0): int {
+        $store = $this->getChunkStore($worldId);
+        if ($store === null) {
             return 0;
         }
         $evicted = 0;
@@ -51,16 +52,16 @@ final class ChunkUnloadService {
                 break; // store empty or inconsistent
             }
             [$chunkX, $chunkZ] = $oldest;
-            $this->persistAndUnload($chunkX, $chunkZ);
+            $this->persistAndUnload($chunkX, $chunkZ, $worldId);
             $evicted++;
         }
         return $evicted;
     }
 
-    private function persistAndUnload(int $chunkX, int $chunkZ): void {
+    private function persistAndUnload(int $chunkX, int $chunkZ, int $worldId = 0): void {
         // Persist and drop the chunk from the in-memory store.
-        $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
-        if ($store instanceof ChunkStore && $store->isLoaded($chunkX, $chunkZ)) {
+        $store = $this->getChunkStore($worldId);
+        if ($store !== null && $store->isLoaded($chunkX, $chunkZ)) {
             $chunkData = $store->toChunkData($chunkX, $chunkZ);
             if ($chunkData !== null) {
                 // 14.16: never evict a chunk without its block-store tile
@@ -73,13 +74,36 @@ final class ChunkUnloadService {
                     $chunkX,
                     $chunkZ,
                 );
-                $this->storagePort->saveChunk($chunkX, $chunkZ, $chunkData);
+                $this->getStorage($worldId)->saveChunk($chunkX, $chunkZ, $chunkData);
             }
             $store->unload($chunkX, $chunkZ);
         }
     }
 
-    private function getEntitiesInChunk(int $chunkX, int $chunkZ): array {
+    private function getChunkStore(int $worldId = 0): ?ChunkStore {
+        // Non-default worlds resolve strictly through the registry; only the
+        // default world (id 0) falls back to the classic resource-registry
+        // store so single-world behavior is unchanged.
+        if ($worldId !== 0) {
+            $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getStore($worldId) : null;
+        }
+        $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
+        return $store instanceof ChunkStore ? $store : null;
+    }
+
+    private function getStorage(int $worldId = 0): StoragePort {
+        // Only the default world may fall back to the kernel's own storage; an
+        // unknown non-zero world must never read default-world data.
+        if ($worldId !== 0) {
+            $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+            $storage = $registry instanceof WorldRegistry ? $registry->getStorage($worldId) : null;
+            return $storage ?? $this->storagePort;
+        }
+        return $this->storagePort;
+    }
+
+    private function getEntitiesInChunk(int $chunkX, int $chunkZ, int $worldId = 0): array {
         $entities = [];
         
         $query = $this->world->query()

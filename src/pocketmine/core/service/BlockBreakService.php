@@ -10,10 +10,12 @@ use pocketmine\core\component\ItemStack;
 use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\RotationComponent;
+use pocketmine\core\component\WorldComponent;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\BlockRegistry;
 use pocketmine\core\resource\ChunkStore;
+use pocketmine\core\resource\WorldRegistry;
 use pocketmine\core\resource\Hunger;
 use pocketmine\core\resource\ItemDurability;
 use pocketmine\port\driven\StoragePort;
@@ -27,6 +29,7 @@ final class BlockBreakService {
     public function breakBlock(EntityRef $playerRef, int $x, int $y, int $z, int $face): bool {
         $player = $playerRef->getEntity();
         if (!$player) return false;
+        $worldId = $this->worldIdOf($playerRef);
         
         // Check if player can reach the block
         if (!$this->canReach($playerRef, $x, $y, $z)) {
@@ -34,7 +37,7 @@ final class BlockBreakService {
         }
         
         // Check if block is breakable
-        if (!$this->isBreakable($x, $y, $z)) {
+        if (!$this->isBreakable($x, $y, $z, $worldId)) {
             return false;
         }
         
@@ -42,19 +45,19 @@ final class BlockBreakService {
         $tool = $this->getHeldItem($playerRef);
         
         // Calculate break speed
-        $breakSpeed = $this->calculateBreakSpeed($tool, $x, $y, $z);
+        $breakSpeed = $this->calculateBreakSpeed($tool, $x, $y, $z, $worldId);
         
         // For instant break (creative mode), break immediately
         $metadata = $player->get(MetadataComponent::class);
         $gamemode = $metadata?->get('gamemode') ?? 0;
         
         if ($gamemode === 1) { // Creative
-            return $this->doBreakBlock($playerRef, $x, $y, $z, $tool);
+            return $this->doBreakBlock($playerRef, $x, $y, $z, $tool, $worldId);
         }
         
         // Survival mode - would need progressive breaking
         // For now, instant break for testing
-        return $this->doBreakBlock($playerRef, $x, $y, $z, $tool);
+        return $this->doBreakBlock($playerRef, $x, $y, $z, $tool, $worldId);
     }
 
     private function canReach(EntityRef $playerRef, int $x, int $y, int $z): bool {
@@ -78,8 +81,8 @@ final class BlockBreakService {
         return $distanceSq <= ($reach * $reach);
     }
 
-    private function isBreakable(int $x, int $y, int $z): bool {
-        $store = $this->getChunkStore();
+    private function isBreakable(int $x, int $y, int $z, int $worldId = 0): bool {
+        $store = $this->getChunkStore($worldId);
         if ($store === null) {
             return false;
         }
@@ -97,8 +100,8 @@ final class BlockBreakService {
         return $inventory->get($inventory->heldSlot);
     }
 
-    private function calculateBreakSpeed(?ItemStack $tool, int $x, int $y, int $z): float {
-        $store = $this->getChunkStore();
+    private function calculateBreakSpeed(?ItemStack $tool, int $x, int $y, int $z, int $worldId = 0): float {
+        $store = $this->getChunkStore($worldId);
         if ($store === null) {
             return 0.0;
         }
@@ -147,10 +150,11 @@ final class BlockBreakService {
         if (($metadata?->get('gamemode') ?? 0) === 1) {
             return 0; // creative: instant
         }
-        if (!$this->canReach($playerRef, $x, $y, $z) || !$this->isBreakable($x, $y, $z)) {
+        $worldId = $this->worldIdOf($playerRef);
+        if (!$this->canReach($playerRef, $x, $y, $z) || !$this->isBreakable($x, $y, $z, $worldId)) {
             return -1;
         }
-        $speed = $this->calculateBreakSpeed($this->getHeldItem($playerRef), $x, $y, $z);
+        $speed = $this->calculateBreakSpeed($this->getHeldItem($playerRef), $x, $y, $z, $worldId);
         if ($speed <= 0.0) {
             return -1; // unbreakable
         }
@@ -161,16 +165,16 @@ final class BlockBreakService {
         return max(1, (int)ceil($seconds * 20.0));
     }
 
-    private function doBreakBlock(EntityRef $playerRef, int $x, int $y, int $z, ?ItemStack $tool): bool {
+    private function doBreakBlock(EntityRef $playerRef, int $x, int $y, int $z, ?ItemStack $tool, int $worldId = 0): bool {
         // Get block drops
-        $drops = $this->getBlockDrops($x, $y, $z, $tool);
+        $drops = $this->getBlockDrops($x, $y, $z, $tool, $worldId);
         
         // Set block to air
-        $this->setBlock($x, $y, $z, 0); // Air
+        $this->setBlock($x, $y, $z, 0, $worldId); // Air
         
         // Spawn drop entities
         foreach ($drops as $drop) {
-            $this->spawnDropEntity($x + 0.5, $y + 0.5, $z + 0.5, $drop);
+            $this->spawnDropEntity($x + 0.5, $y + 0.5, $z + 0.5, $drop, $worldId);
         }
         
         // Play break sound/particles
@@ -188,8 +192,8 @@ final class BlockBreakService {
     /**
      * @return ItemStack[]
      */
-    private function getBlockDrops(int $x, int $y, int $z, ?ItemStack $tool): array {
-        $store = $this->getChunkStore();
+    private function getBlockDrops(int $x, int $y, int $z, ?ItemStack $tool, int $worldId = 0): array {
+        $store = $this->getChunkStore($worldId);
         if ($store === null) {
             return [];
         }
@@ -220,7 +224,7 @@ final class BlockBreakService {
         };
     }
 
-    private function spawnDropEntity(float $x, float $y, float $z, \pocketmine\core\component\ItemStack $item): void {
+    private function spawnDropEntity(float $x, float $y, float $z, \pocketmine\core\component\ItemStack $item, int $worldId = 0): void {
         $this->world->spawn(
             (new \pocketmine\core\ecs\EntityBuilder())
                 ->with(new \pocketmine\core\component\PositionComponent($x, $y, $z))
@@ -232,6 +236,7 @@ final class BlockBreakService {
                 ->with(new \pocketmine\core\component\HealthComponent(5, 5))
                 ->with(new \pocketmine\core\component\InventoryComponent(1))
                 ->with(new \pocketmine\core\component\MetadataComponent())
+                ->with(new \pocketmine\core\component\WorldComponent($worldId))
                 ->withTag('item')
                 
         );
@@ -244,16 +249,29 @@ final class BlockBreakService {
         // NetworkSyncSystem would send LevelEventPacket for break particles/sound
     }
 
-    private function setBlock(int $x, int $y, int $z, int $blockId): void {
-        $store = $this->getChunkStore();
+    private function setBlock(int $x, int $y, int $z, int $blockId, int $worldId = 0): void {
+        $store = $this->getChunkStore($worldId);
         if ($store !== null) {
             $store->setBlock($x, $y, $z, $blockId, 0);
         }
     }
 
-    private function getChunkStore(): ?ChunkStore {
+    private function getChunkStore(int $worldId = 0): ?ChunkStore {
+        // Non-default worlds resolve strictly through the registry; only the
+        // default world (id 0) falls back to the classic resource-registry
+        // store so single-world behavior is unchanged.
+        if ($worldId !== 0) {
+            $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getStore($worldId) : null;
+        }
         $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
         return $store instanceof ChunkStore ? $store : null;
+    }
+
+    private function worldIdOf(EntityRef $playerRef): int {
+        $entity = $playerRef->getEntity();
+        $worldComponent = $entity?->get(WorldComponent::class);
+        return $worldComponent instanceof WorldComponent ? $worldComponent->id : 0;
     }
 
     private function getBlockRegistry(): BlockRegistry {

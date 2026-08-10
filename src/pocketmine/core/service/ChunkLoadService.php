@@ -6,6 +6,7 @@ namespace pocketmine\core\service;
 
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\ChunkStore;
+use pocketmine\core\resource\WorldRegistry;
 use pocketmine\port\driven\ChunkData;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\WorldGenPort;
@@ -41,8 +42,8 @@ final class ChunkLoadService {
         $this->maxLoadedChunks = max(1, $maxLoadedChunks);
     }
 
-    public function loadChunk(int $chunkX, int $chunkZ): ChunkData {
-        return $this->loadChunks([[$chunkX, $chunkZ]])[0];
+    public function loadChunk(int $chunkX, int $chunkZ, int $worldId = 0): ChunkData {
+        return $this->loadChunks([[$chunkX, $chunkZ]], $worldId)[0];
     }
 
     /**
@@ -57,15 +58,16 @@ final class ChunkLoadService {
      * the ChunkStore may need to re-load an evicted chunk from disk.
      *
      * @param array<int, array{0: int, 1: int}> $chunkCoords chunk coordinate pairs
+     * @param int $worldId which world bundle to load into (default world = 0)
      * @return list<ChunkData> one per requested coord, in input order
      */
-    public function loadChunks(array $chunkCoords): array {
+    public function loadChunks(array $chunkCoords, int $worldId = 0): array {
         if (empty($chunkCoords)) {
             return [];
         }
         $config = new \pocketmine\port\driven\GeneratorConfig(
             'normal', // default generator
-            $this->getWorldSeed(),
+            $this->getWorldSeed($worldId),
             []
         );
 
@@ -79,7 +81,7 @@ final class ChunkLoadService {
         $alreadyLoaded = [];
         /** @var array<int, bool> $generatedIndices */
         $generatedIndices = [];
-        $store = $this->getChunkStore();
+        $store = $this->getChunkStore($worldId);
         foreach ($chunkCoords as $index => [$chunkX, $chunkZ]) {
             // Loaded chunks are authoritative in memory: a re-request (e.g. a
             // late login burst or a chunk-radius refresh after a move) must
@@ -94,7 +96,7 @@ final class ChunkLoadService {
                     continue;
                 }
             }
-            $chunkData = $this->storagePort->loadChunk($chunkX, $chunkZ);
+            $chunkData = $this->getStorage($worldId)->loadChunk($chunkX, $chunkZ);
             if ($this->isEmptyChunk($chunkData)) {
                 $toGenerate[] = [$chunkX, $chunkZ];
                 $generatedIndices[$index] = true;
@@ -132,19 +134,19 @@ final class ChunkLoadService {
             // function of (chunk, seed), so re-running it on an already-
             // populated chunk would place a second, different set of features
             // and corrupt persistence round-trips).
-            $result[$index] = $this->materializeChunk($chunkData, $config->seed, isset($generatedIndices[$index]));
+            $result[$index] = $this->materializeChunk($chunkData, $config->seed, isset($generatedIndices[$index]), $worldId);
         }
 
         // Loaded-chunk budget (11.3): the store grew, so bring it back under
         // the cap by evicting the oldest residents (persisted first, so
         // nothing is lost). This is the single choke point for the world
         // growing its resident set - every load path funnels through here.
-        $this->chunkUnloadService->unloadUnusedChunks($this->maxLoadedChunks);
+        $this->chunkUnloadService->unloadUnusedChunks($this->maxLoadedChunks, $worldId);
 
         return array_values($result);
     }
 
-    private function materializeChunk(ChunkData $chunkData, int $seed, bool $populate): ChunkData {
+    private function materializeChunk(ChunkData $chunkData, int $seed, bool $populate, int $worldId = 0): ChunkData {
         $chunkX = $chunkData->chunkX;
         $chunkZ = $chunkData->chunkZ;
 
@@ -165,7 +167,7 @@ final class ChunkLoadService {
         
         // Materialize the chunk into the in-memory store so block reads/writes
         // and the API World facade operate on real data.
-        $store = $this->getChunkStore();
+        $store = $this->getChunkStore($worldId);
         if ($store !== null) {
             $store->load($chunkData);
             // 14.15: rehydrate chest inventories from the chunk's tile
@@ -192,7 +194,17 @@ final class ChunkLoadService {
         return $chunkData;
     }
 
-    private function getWorldSeed(): int {
+    private function getWorldSeed(int $worldId = 0): int {
+        // A registered 0 seed means "not resolved yet": fall back to the
+        // ServerConfig seed, which callers may pin AFTER bootstrap (the
+        // network test pins seed=1 post-boot) and getSeed() resolves once.
+        $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+        if ($registry instanceof WorldRegistry && $registry->getWorld($worldId) !== null) {
+            $seed = $registry->getSeed($worldId);
+            if ($seed !== 0) {
+                return $seed;
+            }
+        }
         $kernel = \pocketmine\Kernel::getInstance();
         if ($kernel !== null) {
             $resource = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
@@ -216,9 +228,9 @@ final class ChunkLoadService {
         return false;
     }
 
-    public function unloadChunk(int $chunkX, int $chunkZ): void {
+    public function unloadChunk(int $chunkX, int $chunkZ, int $worldId = 0): void {
         // Save the in-memory chunk to storage, then drop it from the store.
-        $store = $this->getChunkStore();
+        $store = $this->getChunkStore($worldId);
         if ($store !== null && $store->isLoaded($chunkX, $chunkZ)) {
             $chunkData = $store->toChunkData($chunkX, $chunkZ);
             if ($chunkData !== null) {
@@ -228,14 +240,14 @@ final class ChunkLoadService {
                     $chunkX,
                     $chunkZ,
                 );
-                $this->storagePort->saveChunk($chunkX, $chunkZ, $chunkData);
+                $this->getStorage($worldId)->saveChunk($chunkX, $chunkZ, $chunkData);
             }
             $store->unload($chunkX, $chunkZ);
         }
     }
 
-    public function saveChunk(ChunkData $data): void {
-        $store = $this->getChunkStore();
+    public function saveChunk(ChunkData $data, int $worldId = 0): void {
+        $store = $this->getChunkStore($worldId);
         // Never overwrite newer in-memory state with an older DTO: only import
         // the DTO when the chunk is not currently loaded.
         if ($store !== null && !$store->isLoaded($data->chunkX, $data->chunkZ)) {
@@ -249,10 +261,30 @@ final class ChunkLoadService {
             $data->chunkX,
             $data->chunkZ,
         );
-        $this->storagePort->saveChunk($data->chunkX, $data->chunkZ, $data);
+        $this->getStorage($worldId)->saveChunk($data->chunkX, $data->chunkZ, $data);
     }
 
-    private function getChunkStore(): ?ChunkStore {
+    private function getStorage(int $worldId = 0): StoragePort {
+        // Only the default world (id 0) may fall back to the kernel's own
+        // storage; an unknown non-zero world id must NOT read the default
+        // world's data (a player left in an unloaded world would silently
+        // mix worlds otherwise).
+        if ($worldId !== 0) {
+            $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+            $storage = $registry instanceof WorldRegistry ? $registry->getStorage($worldId) : null;
+            return $storage ?? $this->storagePort;
+        }
+        return $this->storagePort;
+    }
+
+    private function getChunkStore(int $worldId = 0): ?ChunkStore {
+        // Non-default worlds resolve strictly through the registry; only the
+        // default world (id 0) falls back to the classic resource-registry
+        // store so single-world behavior is unchanged.
+        if ($worldId !== 0) {
+            $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getStore($worldId) : null;
+        }
         $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
         return $store instanceof ChunkStore ? $store : null;
     }

@@ -45,7 +45,7 @@ final class EntitySpawnService {
         private readonly StoragePort $storagePort,
     ) {}
 
-    public function spawnEntity(string $entityType, float $x, float $y, float $z, float $yaw = 0, float $pitch = 0, array $metadata = []): EntityRef {
+    public function spawnEntity(string $entityType, float $x, float $y, float $z, float $yaw = 0, float $pitch = 0, array $metadata = [], int $worldId = 0): EntityRef {
         $entityRef = $this->world->spawn(
             (new EntityBuilder())
                 ->with(new PositionComponent($x, $y, $z))
@@ -53,6 +53,7 @@ final class EntitySpawnService {
                 ->with(new VelocityComponent())
                 ->with(new HealthComponent())
                 ->with(new MetadataComponent())
+                ->with(new \pocketmine\core\component\WorldComponent($worldId))
         );
 
         $entity = $entityRef->getEntity();
@@ -73,8 +74,8 @@ final class EntitySpawnService {
         return $entityRef;
     }
 
-    public function spawnMob(string $mobType, float $x, float $y, float $z): EntityRef {
-        $entityRef = $this->spawnEntity($mobType, $x, $y, $z);
+    public function spawnMob(string $mobType, float $x, float $y, float $z, int $worldId = 0): EntityRef {
+        $entityRef = $this->spawnEntity($mobType, $x, $y, $z, 0, 0, [], $worldId);
 
         $entity = $entityRef->getEntity();
         if ($entity) {
@@ -87,7 +88,7 @@ final class EntitySpawnService {
         return $entityRef;
     }
 
-    public function spawnItem(float $x, float $y, float $z, \pocketmine\core\component\ItemStack $item): EntityRef {
+    public function spawnItem(float $x, float $y, float $z, \pocketmine\core\component\ItemStack $item, int $worldId = 0): EntityRef {
         $entityRef = $this->world->spawn(
             (new EntityBuilder())
                 ->with(new PositionComponent($x, $y, $z))
@@ -102,6 +103,7 @@ final class EntitySpawnService {
                 // A small box so drops fall with gravity and land on the
                 // ground (BlockCollisionSystem) instead of sinking through.
                 ->with(new CollisionComponent(width: 0.25, height: 0.25))
+                ->with(new \pocketmine\core\component\WorldComponent($worldId))
                 ->withTag('item')
 
         );
@@ -131,7 +133,13 @@ final class EntitySpawnService {
             throw new \InvalidArgumentException("Unknown projectile type: {$projectileType}");
         }
 
-        $entityRef = $this->spawnEntity($projectileType, $x, $y, $z);
+        // 14.20: the projectile belongs to the shooter's world so the entity
+        // broadcast filters it correctly when worlds differ.
+        $shooterEntity = $shooter->getEntity();
+        $shooterWorld = $shooterEntity?->get(\pocketmine\core\component\WorldComponent::class);
+        $worldId = $shooterWorld instanceof \pocketmine\core\component\WorldComponent ? $shooterWorld->id : 0;
+
+        $entityRef = $this->spawnEntity($projectileType, $x, $y, $z, 0, 0, [], $worldId);
 
         $entity = $entityRef->getEntity();
         if ($entity) {

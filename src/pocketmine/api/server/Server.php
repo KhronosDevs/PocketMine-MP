@@ -12,7 +12,7 @@ class Server {
     private static ?self $instance = null;
     
     private array $worlds = [];
-    private World $defaultWorld;
+    private ?World $defaultWorld = null;
     private string $name = 'Khronos';
     private string $version = '2.0.0';
     private int $maxPlayers = 20;
@@ -163,19 +163,54 @@ class Server {
     }
 
     public function getWorlds(): array {
-        return array_values($this->worlds);
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel === null) {
+            return array_values($this->worlds);
+        }
+        $out = [];
+        foreach ($kernel->getWorldRegistry()->getWorlds() as $worldId => $info) {
+            $out[] = $this->facadeFor($worldId, $info);
+        }
+        return $out;
     }
 
     public function getWorldByName(string $name): ?World {
-        foreach ($this->worlds as $world) {
-            if ($world->getName() === $name) {
-                return $world;
-            }
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel === null) {
+            return $this->worlds[$name] ?? null;
         }
-        return null;
+        $registry = $kernel->getWorldRegistry();
+        $id = $registry->getWorldIdByName($name);
+        if ($id === null) {
+            return null;
+        }
+        $info = $registry->getWorld($id);
+        return $info !== null ? $this->facadeFor($id, $info) : null;
+    }
+
+    public function getWorldById(int $worldId): ?World {
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel === null) {
+            return null;
+        }
+        $info = $kernel->getWorldRegistry()->getWorld($worldId);
+        return $info !== null ? $this->facadeFor($worldId, $info) : null;
     }
 
     public function getDefaultWorld(): World {
+        // The default world is always id 0 and registered at kernel boot.
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel === null) {
+            throw new \RuntimeException('Kernel not initialized');
+        }
+        $info = $kernel->getWorldRegistry()->getWorld(0);
+        if ($info === null) {
+            throw new \RuntimeException('Default world not registered');
+        }
+        $facade = $this->facadeFor(0, $info);
+        if ($this->defaultWorld === null) {
+            $this->defaultWorld = $facade;
+        }
         return $this->defaultWorld;
     }
 
@@ -184,30 +219,129 @@ class Server {
         $this->worlds[$world->getName()] = $world;
     }
 
+    /**
+     * Load a world that already exists on disk (worlds/<folderName>/). The
+     * persisted seed/spawn meta is restored from its level.dat so its terrain
+     * regenerates identically; if no meta exists a fresh random seed is used.
+     */
     public function loadWorld(string $name): World {
-        if (isset($this->worlds[$name])) {
-            return $this->worlds[$name];
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel === null) {
+            throw new \RuntimeException('Kernel not initialized');
         }
-        // Only the single world is loaded in the current architecture; the
-        // storage port is fixed to one level name.
-        throw new \RuntimeException("World '$name' is not loaded");
+        $registry = $kernel->getWorldRegistry();
+        $existingId = $registry->getWorldIdByName($name);
+        if ($existingId !== null) {
+            $info = $registry->getWorld($existingId);
+            return $this->facadeFor($existingId, $info);
+        }
+        // A loaded world must already have a folder (generated once before).
+        $folder = 'worlds/' . $name . '/';
+        if (!is_dir($folder)) {
+            throw new \RuntimeException("World '$name' has no saved data");
+        }
+        $storage = new \pocketmine\adapter\driven\storage\AnvilStorageAdapter('worlds/', $name);
+        $meta = $storage->loadWorldMeta();
+        $seed = isset($meta['seed']) && $meta['seed'] !== '' ? (int)$meta['seed'] : random_int(1, PHP_INT_MAX);
+        $store = new \pocketmine\core\resource\ChunkStore();
+        $config = new \pocketmine\core\resource\WorldConfig();
+        $config->name = $name;
+        $config->folderName = $name;
+        $config->seed = $seed;
+        if ($meta !== null) {
+            $config->spawnX = (int)($meta['spawnX'] ?? 0);
+            $config->spawnY = (int)($meta['spawnY'] ?? 64);
+            $config->spawnZ = (int)($meta['spawnZ'] ?? 0);
+            $config->time = (int)($meta['time'] ?? 0);
+        }
+        $worldId = $registry->registerWorld($name, $name, $seed, $store, $config, $storage);
+        $info = $registry->getWorld($worldId);
+        return $this->facadeFor($worldId, $info);
     }
 
+    /**
+     * Create a brand-new world: its own chunk store, config, seed and storage
+     * folder (worlds/<name>/). The world becomes immediately playable - a
+     * player switched to it (via /world) streams freshly generated terrain.
+     */
     public function generateWorld(string $name, int $seed = 0, string $generator = 'normal', array $options = []): World {
-        if (isset($this->worlds[$name])) {
-            return $this->worlds[$name];
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel === null) {
+            throw new \RuntimeException('Kernel not initialized');
         }
-        // Multi-world generation is not supported yet: the ECS holds a single
-        // world and the worldgen/storage adapters are single-level.
-        throw new \RuntimeException("World generation is not supported yet (only the default world exists)");
+        $registry = $kernel->getWorldRegistry();
+        $existingId = $registry->getWorldIdByName($name);
+        if ($existingId !== null) {
+            $info = $registry->getWorld($existingId);
+            return $this->facadeFor($existingId, $info);
+        }
+        if ($seed === 0) {
+            $seed = random_int(1, PHP_INT_MAX);
+        }
+        $storage = new \pocketmine\adapter\driven\storage\AnvilStorageAdapter('worlds/', $name);
+        $store = new \pocketmine\core\resource\ChunkStore();
+        $config = new \pocketmine\core\resource\WorldConfig();
+        $config->name = $name;
+        $config->folderName = $name;
+        $config->seed = $seed;
+        $config->generator = $generator;
+        $worldId = $registry->registerWorld($name, $name, $seed, $store, $config, $storage);
+        $info = $registry->getWorld($worldId);
+        return $this->facadeFor($worldId, $info);
     }
 
+    /**
+     * Unload a world: optionally persist its resident chunks + meta, then
+     * drop its bundle from the registry. The default world (id 0) cannot be
+     * unloaded.
+     */
     public function unloadWorld(string $name, bool $save = true): bool {
-        if (isset($this->worlds[$name])) {
-            unset($this->worlds[$name]);
-            return true;
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel === null) {
+            return isset($this->worlds[$name]) ? (bool)array_splice($this->worlds, array_search($name, array_keys($this->worlds), true), 1) : false;
         }
-        return false;
+        $registry = $kernel->getWorldRegistry();
+        $worldId = $registry->getWorldIdByName($name);
+        if ($worldId === null || $worldId === 0) {
+            return false;
+        }
+        // Never leave players in a world that is about to disappear: they
+        // would silently read the default world's store through the fallback
+        // while still carrying the old world id. Evacuate them first.
+        $network = $kernel->getNetworkSessionService();
+        foreach ($network->getOnlinePlayers() as $p) {
+            $entity = $kernel->getWorld()->getEntity($p['entityId']);
+            $wc = $entity?->get(\pocketmine\core\component\WorldComponent::class);
+            if ($wc instanceof \pocketmine\core\component\WorldComponent && $wc->id === $worldId) {
+                $network->switchWorld($p['entityId'], 0);
+            }
+        }
+        if ($save) {
+            $kernel->saveAllWorlds();
+        }
+        $removed = $registry->removeWorld($worldId);
+        if ($removed && isset($this->worlds[$name])) {
+            unset($this->worlds[$name]);
+        }
+        return $removed;
+    }
+
+    /**
+     * Build (and cache) the API World facade for a registry bundle.
+     */
+    private function facadeFor(int $worldId, array $info): World {
+        $name = (string)$info['name'];
+        if (isset($this->worlds[$name]) && $this->worlds[$name]->getWorldId() === $worldId) {
+            return $this->worlds[$name];
+        }
+        $facade = new World(
+            \pocketmine\Kernel::getInstance()->getWorld(),
+            $name,
+            (string)$info['folderName'],
+            $worldId,
+        );
+        $this->worlds[$name] = $facade;
+        return $facade;
     }
 
     public function getOnlinePlayers(): array {
