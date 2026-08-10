@@ -63,6 +63,16 @@ final class ChunkUnloadService {
         if ($store instanceof ChunkStore && $store->isLoaded($chunkX, $chunkZ)) {
             $chunkData = $store->toChunkData($chunkX, $chunkZ);
             if ($chunkData !== null) {
+                // 14.16: never evict a chunk without its block-store tile
+                // snapshots (chest contents, furnace state) - the kernel's
+                // autosave attaches them, so eviction must too or a crash
+                // after eviction loses block contents permanently.
+                $chunkData = ChunkPersistence::attachTileSnapshots(
+                    $this->world->getResourceRegistry(),
+                    $chunkData,
+                    $chunkX,
+                    $chunkZ,
+                );
                 $this->storagePort->saveChunk($chunkX, $chunkZ, $chunkData);
             }
             $store->unload($chunkX, $chunkZ);
