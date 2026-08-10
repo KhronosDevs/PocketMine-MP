@@ -17,7 +17,12 @@ interface WorldGenPort {
      */
     public function generateChunks(array $chunks, GeneratorConfig $config): array;
 
-    public function populateChunk(int $chunkX, int $chunkZ, ChunkData $data): void;
+    /**
+     * Populate a generated chunk with structures and decoration (trees,
+     * vegetation, ...). Must be deterministic in (chunkX, chunkZ, seed) and
+     * return the populated chunk (ChunkData is immutable).
+     */
+    public function populateChunk(int $chunkX, int $chunkZ, ChunkData $data, int $seed): ChunkData;
 
     public function calculateLight(int $chunkX, int $chunkZ, ChunkData $data): LightData;
 }

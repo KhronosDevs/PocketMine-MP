@@ -85,7 +85,9 @@ test('terrain: heights are smooth (no flat plateaus or cliffs)', function () {
 
 test('terrain: water only fills valleys below sea level', function () {
     $kernel = \pocketmine\bootstrap();
-    $chunks = generateArea($kernel, 3, 42); // 7x7 chunks = 112x112 blocks
+    // Scan beyond the 96-block spawn plateau (radius 9 = 304x304 blocks) so
+    // natural oceans and lakes outside the guaranteed-land area are seen.
+    $chunks = generateArea($kernel, 9, 42);
 
     $waterColumns = 0;
     $dryHilltops = 0;
