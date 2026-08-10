@@ -212,6 +212,16 @@ final class Kernel {
         $this->entitySpawnService = new EntitySpawnService($world, $storagePort);
         $this->combatService = new CombatService($world, $eventPort, $this->entitySpawnService);
         $this->entityInteractionService = new EntityInteractionService($world, $this->combatService);
+        $this->blockUpdateService = new BlockUpdateService($world, $storagePort);
+        $this->entityDespawnService = new EntityDespawnService($world, $storagePort);
+        $this->damageService = new DamageService($world, $this->combatService);
+        $this->knockbackService = new KnockbackService($world);
+        $this->inventoryService = new InventoryService($world);
+        $this->craftingService = new CraftingService($world);
+        $this->containerService = new ContainerService($world);
+
+        // CraftingService must exist before NetworkSessionService: the wire
+        // craft handler (CraftingEventPacket) validates grids through it.
         $this->networkSessionService = new NetworkSessionService(
             $networkPort,
             $world,
@@ -224,15 +234,9 @@ final class Kernel {
             $this->playerRespawnService,
             $this->entityInteractionService,
             $this->entitySpawnService,
+            $this->craftingService,
             $this->resourceRegistry,
         );
-        $this->blockUpdateService = new BlockUpdateService($world, $storagePort);
-        $this->entityDespawnService = new EntityDespawnService($world, $storagePort);
-        $this->damageService = new DamageService($world, $this->combatService);
-        $this->knockbackService = new KnockbackService($world);
-        $this->inventoryService = new InventoryService($world);
-        $this->craftingService = new CraftingService($world);
-        $this->containerService = new ContainerService($world);
 
         // Single scheduler instance: it registers a tick system that runs tasks,
         // so it must not be recreated per access.

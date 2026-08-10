@@ -32,6 +32,8 @@ use pocketmine\protocol\ChunkRadiusUpdatedPacket;
 use pocketmine\protocol\ChunkSerializer;
 use pocketmine\protocol\ContainerSetContentPacket;
 use pocketmine\protocol\ContainerSetSlotPacket;
+use pocketmine\protocol\CraftingDataPacket;
+use pocketmine\protocol\CraftingEventPacket;
 use pocketmine\protocol\DropItemPacket;
 use pocketmine\protocol\DataPacket;
 use pocketmine\protocol\EntityEventPacket;
@@ -106,6 +108,7 @@ final class NetworkSessionService {
     private readonly PlayerRespawnService $playerRespawnService;
     private readonly EntityInteractionService $entityInteractionService;
     private readonly EntitySpawnService $entitySpawnService;
+    private readonly CraftingService $craftingService;
     private readonly ResourceRegistry $resourceRegistry;
 
     /**
@@ -174,6 +177,7 @@ final class NetworkSessionService {
         PlayerRespawnService $playerRespawnService,
         EntityInteractionService $entityInteractionService,
         EntitySpawnService $entitySpawnService,
+        CraftingService $craftingService,
         ResourceRegistry $resourceRegistry,
     ) {
         $this->adapter = $networkPort instanceof Protocol84NetworkAdapter ? $networkPort : null;
@@ -187,6 +191,7 @@ final class NetworkSessionService {
         $this->playerRespawnService = $playerRespawnService;
         $this->entityInteractionService = $entityInteractionService;
         $this->entitySpawnService = $entitySpawnService;
+        $this->craftingService = $craftingService;
         $this->resourceRegistry = $resourceRegistry;
         $this->wireTrace = getenv('KHRONOS_WIRE_TRACE') === '1';
     }
@@ -410,6 +415,12 @@ final class NetworkSessionService {
                 $pk->setBuffer($buffer, 1);
                 $pk->decode();
                 $this->handleRespawn($addrKey, $pk);
+                break;
+            case Info::CRAFTING_EVENT_PACKET:
+                $pk = new CraftingEventPacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handleCraftingEvent($addrKey, $pk);
                 break;
         }
     }
@@ -1131,6 +1142,49 @@ final class NetworkSessionService {
         $this->queuePacket($player, $pk);
     }
 
+    /**
+     * A craft request from the client. The packet carries the crafting grid
+     * contents (input) and the claimed result (output). The grid is validated
+     * against the RecipeRegistry by shape (RecipeRegistry::matchShaped), the
+     * ingredients are consumed from the player inventory and the result is
+     * added - all through CraftingService. The window is then resynced so the
+     * client's counts stay authoritative even when a craft is rejected.
+     */
+    private function handleCraftingEvent(string $addrKey, CraftingEventPacket $pk): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $entity = $session['entityRef']->getEntity();
+        if ($entity === null) {
+            return;
+        }
+        // windowId 0x79 = player 2x2 crafting grid; 0x7e = crafting table
+        // (3x3). The type field mirrors this (0 = small, 1 = big) but the
+        // window id is the reliable discriminator on the 0.15.10 wire.
+        $gridWidth = ($pk->windowId === 0x7e || $pk->type === 1) ? 3 : 2;
+        $cells = $gridWidth * $gridWidth;
+
+        $grid = [];
+        foreach (array_slice($pk->input, 0, $cells) as $slot) {
+            $id = (int)$slot[0];
+            if ($id <= 0) {
+                $grid[] = null;
+                continue;
+            }
+            $grid[] = new ItemStack($id, (int)$slot[2], 1, null);
+        }
+        while (count($grid) < $cells) {
+            $grid[] = null; // pad a short grid with empty cells
+        }
+
+        $this->craftingService->craft($session['entityRef'], $grid, $gridWidth);
+        // Resync regardless of outcome: on success the ingredients are gone
+        // and the result is in the inventory; on failure this undoes any
+        // client-side grid desync.
+        $this->sendInventoryContents($session['playerRef']);
+    }
+
     /** Send the full inventory contents (window 0) to the player. */
     private function sendInventoryContents(PlayerRef $player): void {
         $addrKey = $this->addrKeyForPlayer($player);
@@ -1219,6 +1273,24 @@ final class NetworkSessionService {
         $this->syncXpFor($session['playerRef']->entityId);
         // 14.11: init the food bars (full hunger, default saturation).
         $this->syncFoodFor($session['playerRef']->entityId);
+        // 14.12: the client needs the recipe list to render the crafting UI
+        // (legacy sent it in Server::onPlayerLogin, right after the burst).
+        $this->sendCraftingData($playerRef);
+    }
+
+    /**
+     * Send the full recipe list (CraftingDataPacket) so the client can render
+     * crafting results. Recipes come from the RecipeRegistry (registered in
+     * Kernel::registerBuiltinRecipes); every shaped recipe is one wire entry.
+     */
+    private function sendCraftingData(PlayerRef $player): void {
+        $registry = $this->resourceRegistry->get(\pocketmine\core\resource\RecipeRegistry::class);
+        if (!$registry instanceof \pocketmine\core\resource\RecipeRegistry) {
+            return;
+        }
+        $pk = new CraftingDataPacket();
+        $pk->recipes = $registry->getShapedRecipes();
+        $this->queuePacket($player, $pk);
     }
 
     /**

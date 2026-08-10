@@ -37,6 +37,15 @@ final class RecipeRegistry {
     }
 
     /**
+     * All registered shaped recipes, keyed by recipe id.
+     *
+     * @return array<string, array{pattern: list<string>, key: array<string, ItemStack>, result: ItemStack}>
+     */
+    public function getShapedRecipes(): array {
+        return $this->shaped;
+    }
+
+    /**
      * Find a shaped recipe matching the given crafting grid.
      *
      * The grid is a flat list (row-major) of ItemStack|null entries. Like
