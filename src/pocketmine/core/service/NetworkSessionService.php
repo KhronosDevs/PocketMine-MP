@@ -38,9 +38,11 @@ use pocketmine\protocol\DropItemPacket;
 use pocketmine\protocol\DataPacket;
 use pocketmine\protocol\EntityEventPacket;
 use pocketmine\protocol\FullChunkDataPacket;
+use pocketmine\protocol\HurtArmorPacket;
 use pocketmine\protocol\Info;
 use pocketmine\protocol\InteractPacket;
 use pocketmine\protocol\LoginPacket;
+use pocketmine\protocol\MobArmorEquipmentPacket;
 use pocketmine\protocol\MobEquipmentPacket;
 use pocketmine\protocol\MoveEntityPacket;
 use pocketmine\protocol\MovePlayerPacket;
@@ -706,25 +708,42 @@ final class NetworkSessionService {
 
     /**
      * Inventory action (14.7): the client moved an item between slots of its
-     * own inventory window (window 0). Protocol 84's player inventory has no
-     * separate source/destination fields - the client sends the NEW contents
-     * of one slot per packet, so a drag produces several of these.
+     * own inventory window (window 0) or armor window (0x78). Protocol 84's
+     * player inventory has no separate source/destination fields - the client
+     * sends the NEW contents of one slot per packet, so a drag produces
+     * several of these.
      *
      * We apply the authoritative state directly (the client is the source of
      * truth for its own window layout) and mirror the change back to the
-     * actor so the window stays in lockstep. Only window 0 is wired so far;
-     * armor (0x78) and future container windows are ignored.
+     * actor so the window stays in lockstep. Other container windows (chests,
+     * furnaces, ...) are not wired yet.
      */
     private function handleContainerSetSlot(string $addrKey, ContainerSetSlotPacket $pk): void {
-        if ($pk->windowid !== ContainerSetContentPacket::SPECIAL_INVENTORY) {
-            return; // armor/container windows are not wired yet
-        }
         $session = $this->sessions[$addrKey] ?? null;
         if ($session === null) {
             return;
         }
         $inventory = $session['entityRef']->getEntity()?->get(InventoryComponent::class);
-        if ($inventory === null || $pk->slot < 0 || $pk->slot >= $inventory->size) {
+        if ($inventory === null) {
+            return;
+        }
+
+        // 14.13: translate the wire slot to an inventory slot. Window 0 is the
+        // player's own inventory (0-35); the armor window (0x78) maps its 4
+        // slots onto inventory slots 36-39 (helmet, chestplate, leggings,
+        // boots). Move credit is session-wide, so a two-packet equip (empty
+        // inventory slot A, fill armor slot B) is accepted across windows.
+        $invSlot = -1;
+        if ($pk->windowid === ContainerSetContentPacket::SPECIAL_INVENTORY) {
+            if ($pk->slot >= 0 && $pk->slot < InventoryComponent::ARMOR_OFFSET) {
+                $invSlot = $pk->slot;
+            }
+        } elseif ($pk->windowid === ContainerSetContentPacket::SPECIAL_ARMOR) {
+            if ($pk->slot >= 0 && $pk->slot < 4) {
+                $invSlot = InventoryComponent::ARMOR_OFFSET + $pk->slot;
+            }
+        }
+        if ($invSlot < 0) {
             return;
         }
         $id = (int)($pk->item[0] ?? 0);
@@ -743,7 +762,7 @@ final class NetworkSessionService {
         $creditKey = $id . ':' . $meta;
         $credit[$creditKey] = $credit[$creditKey] ?? 0;
 
-        $current = $inventory->get($pk->slot);
+        $current = $inventory->get($invSlot);
         $inSlot = ($current !== null && $current->itemId === $id && $current->meta === $meta)
             ? $current->count
             : 0;
@@ -755,7 +774,7 @@ final class NetworkSessionService {
                 $heldKey = $current->itemId . ':' . $current->meta;
                 $credit[$heldKey] = ($credit[$heldKey] ?? 0) + $current->count;
             }
-            $inventory->set($pk->slot, null);
+            $inventory->set($invSlot, null);
         } else {
             // Claim a stack. It must be backed by the same item already in the
             // slot plus credit released by earlier slot-empties this session.
@@ -770,12 +789,19 @@ final class NetworkSessionService {
             }
             // Slot NBT arrives as raw bytes; parsed-NBT wiring is not done for
             // slots yet, so item NBT is dropped here.
-            $inventory->set($pk->slot, new ItemStack($id, $meta, $count));
+            $inventory->set($invSlot, new ItemStack($id, $meta, $count));
         }
         $session['moveCredit'] = $credit;
         $this->sessions[$addrKey] = $session;
-        // Mirror the authoritative slot back (legacy PlayerInventory::sendSlot).
-        $this->sendInventorySlot($session['playerRef'], $pk->slot);
+        // Mirror the authoritative slot back (legacy PlayerInventory::sendSlot
+        // / ArmorInventory::sendSlot - sendInventorySlot picks the window).
+        $this->sendInventorySlot($session['playerRef'], $invSlot);
+
+        // 14.13: an armor-window change is visible to every player, so
+        // broadcast the equipped gear (MobArmorEquipmentPacket).
+        if ($pk->windowid === ContainerSetContentPacket::SPECIAL_ARMOR) {
+            $this->sendMobArmorToAll($session['playerRef']->entityId);
+        }
     }
 
     /**
@@ -1119,7 +1145,10 @@ final class NetworkSessionService {
         }
     }
 
-    /** Send one inventory slot (window 0 = the player's own inventory). */
+    /**
+     * Send one inventory slot, translating the inventory slot back to the
+     * right wire window: 0-35 -> window 0, 36-39 -> armor window (0x78).
+     */
     private function sendInventorySlot(PlayerRef $player, int $slot): void {
         $addrKey = $this->addrKeyForPlayer($player);
         $session = $addrKey !== null ? ($this->sessions[$addrKey] ?? null) : null;
@@ -1132,12 +1161,18 @@ final class NetworkSessionService {
         }
         $item = $inventory->get($slot);
         $pk = new ContainerSetSlotPacket();
-        $pk->windowid = ContainerSetContentPacket::SPECIAL_INVENTORY;
-        $pk->slot = $slot;
-        // For the player's own window the hotbar mapping is the identity for
-        // hotbar slots 0-8 (all current callers use held hotbar slots); main
-        // inventory slots (9+) would need the real hotbar mapping.
-        $pk->hotbarSlot = $slot;
+        if ($slot >= InventoryComponent::ARMOR_OFFSET) {
+            $pk->windowid = ContainerSetContentPacket::SPECIAL_ARMOR;
+            $pk->slot = $slot - InventoryComponent::ARMOR_OFFSET;
+            $pk->hotbarSlot = $pk->slot; // legacy ArmorInventory::sendSlot parity
+        } else {
+            $pk->windowid = ContainerSetContentPacket::SPECIAL_INVENTORY;
+            $pk->slot = $slot;
+            // For the player's own window the hotbar mapping is the identity
+            // for hotbar slots 0-8 (all current callers use held hotbar
+            // slots); main inventory slots (9+) would need the real mapping.
+            $pk->hotbarSlot = $slot;
+        }
         $pk->item = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
         $this->queuePacket($player, $pk);
     }
@@ -1199,11 +1234,92 @@ final class NetworkSessionService {
         $pk = new ContainerSetContentPacket();
         $pk->windowid = ContainerSetContentPacket::SPECIAL_INVENTORY;
         $pk->slots = [];
-        for ($i = 0; $i < $inventory->size; $i++) {
+        // Window 0 is 36 slots; armor slots (36-39) ride in the 0x78 window.
+        for ($i = 0; $i < min($inventory->size, InventoryComponent::ARMOR_OFFSET); $i++) {
             $item = $inventory->get($i);
             $pk->slots[] = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
         }
         $this->queuePacket($player, $pk);
+    }
+
+    // --- Armor (14.13) -------------------------------------------------------
+
+    /** Send the 4 armor slots as the armor window (0x78) to the player. */
+    private function sendArmorContents(PlayerRef $player): void {
+        $addrKey = $this->addrKeyForPlayer($player);
+        $session = $addrKey !== null ? ($this->sessions[$addrKey] ?? null) : null;
+        if ($session === null) {
+            return;
+        }
+        $inventory = $session['entityRef']->getEntity()?->get(InventoryComponent::class);
+        if ($inventory === null) {
+            return;
+        }
+        $pk = new ContainerSetContentPacket();
+        $pk->windowid = ContainerSetContentPacket::SPECIAL_ARMOR;
+        $pk->slots = [];
+        for ($i = 0; $i < 4; $i++) {
+            $item = $inventory->get(InventoryComponent::ARMOR_OFFSET + $i);
+            $pk->slots[] = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
+        }
+        $this->queuePacket($player, $pk);
+    }
+
+    /** Broadcast a player's equipped gear to every session (actor included). */
+    private function sendMobArmorToAll(int $entityId): void {
+        $inventory = null;
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId === $entityId) {
+                $inventory = $session['entityRef']->getEntity()?->get(InventoryComponent::class);
+                break;
+            }
+        }
+        if ($inventory === null) {
+            return;
+        }
+        $pk = new MobArmorEquipmentPacket();
+        $pk->eid = $entityId;
+        for ($i = 0; $i < 4; $i++) {
+            $item = $inventory->get(InventoryComponent::ARMOR_OFFSET + $i);
+            $pk->slots[$i] = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
+        }
+        foreach ($this->sessions as $session) {
+            $this->queuePacket($session['playerRef'], $pk);
+        }
+    }
+
+    /**
+     * 14.13: reflect an armor change to everyone. The actor gets its armor
+     * window (0x78) refreshed; every session gets a MobArmorEquipmentPacket so
+     * other players see the equipped gear. Public because the wear-on-hit
+     * path (CombatService) has no session access - it resolves the session
+     * service lazily and calls this after degrading or breaking a piece.
+     */
+    public function syncArmorFor(int $entityId): void {
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId === $entityId) {
+                $this->sendArmorContents($session['playerRef']);
+                break;
+            }
+        }
+        $this->sendMobArmorToAll($entityId);
+    }
+
+    /**
+     * 14.13: notify the client that armor absorbed a hit (HurtArmorPacket -
+     * the client flashes the armor damage indicator). Public for the
+     * wear-on-hit path in CombatService.
+     */
+    public function sendHurtArmorFor(int $entityId, int $health): void {
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId !== $entityId) {
+                continue;
+            }
+            $pk = new HurtArmorPacket();
+            $pk->health = max(0, $health);
+            $this->queuePacket($session['playerRef'], $pk);
+            return;
+        }
     }
 
     // --- Outbound ----------------------------------------------------------
@@ -1268,6 +1384,10 @@ final class NetworkSessionService {
         // Full inventory contents (window 0) so the client renders the
         // hotbar with the player's actual items (starter kit for new players).
         $this->sendInventoryContents($playerRef);
+        // 14.13: armor window contents (0x78) + the equipped gear broadcast
+        // (MobArmorEquipmentPacket) so other players see it right away.
+        $this->sendArmorContents($playerRef);
+        $this->sendMobArmorToAll($session['playerRef']->entityId);
 
         // 14.9: init the XP bar (level 0, empty progress).
         $this->syncXpFor($session['playerRef']->entityId);
