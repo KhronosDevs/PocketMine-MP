@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\core\service;
 
 use pocketmine\adapter\driven\network\Protocol84NetworkAdapter;
+use pocketmine\api\command\PlayerCommandSender;
 use pocketmine\core\component\HealthComponent;
 use pocketmine\core\component\HungerComponent;
 use pocketmine\core\component\InventoryComponent;
@@ -23,6 +24,7 @@ use pocketmine\core\resource\ServerConfig;
 use pocketmine\core\resource\WorldConfig;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\PlayerRef;
+use pocketmine\port\driving\CommandPort;
 use pocketmine\protocol\AddEntityPacket;
 use pocketmine\protocol\AddItemEntityPacket;
 use pocketmine\protocol\AddPlayerPacket;
@@ -112,6 +114,7 @@ final class NetworkSessionService {
     private readonly EntitySpawnService $entitySpawnService;
     private readonly CraftingService $craftingService;
     private readonly ResourceRegistry $resourceRegistry;
+    private readonly CommandPort $commandPort;
 
     /**
      * MCPE block-face -> placement offset: the block a player places when
@@ -181,6 +184,7 @@ final class NetworkSessionService {
         EntitySpawnService $entitySpawnService,
         CraftingService $craftingService,
         ResourceRegistry $resourceRegistry,
+        CommandPort $commandPort,
     ) {
         $this->adapter = $networkPort instanceof Protocol84NetworkAdapter ? $networkPort : null;
         $this->world = $world;
@@ -195,6 +199,7 @@ final class NetworkSessionService {
         $this->entitySpawnService = $entitySpawnService;
         $this->craftingService = $craftingService;
         $this->resourceRegistry = $resourceRegistry;
+        $this->commandPort = $commandPort;
         $this->wireTrace = getenv('KHRONOS_WIRE_TRACE') === '1';
     }
 
@@ -535,11 +540,105 @@ final class NetworkSessionService {
         if ($session === null) {
             return;
         }
+        // Commands: a leading '/' routes to the server-wide command map
+        // instead of being broadcast as chat (legacy command handling; the
+        // same map the console and plugins use, so builtins + plugin commands
+        // share one registry). Command output goes back to the sender only.
+        if (str_starts_with($pk->message, '/')) {
+            $this->dispatchCommand($addrKey, substr($pk->message, 1));
+            return;
+        }
         $echo = new TextPacket();
         $echo->type = TextPacket::TYPE_RAW;
         $echo->message = $session['username'] . ': ' . $pk->message;
         foreach ($this->sessions as $s) {
             $this->queuePacket($s['playerRef'], clone $echo);
+        }
+    }
+
+    private function dispatchCommand(string $addrKey, string $commandLine): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $sender = new PlayerCommandSender(
+            $session['playerRef']->entityId,
+            $session['username'],
+        );
+        $this->commandPort->execute($sender, $commandLine);
+    }
+
+    /**
+     * Send a raw chat/command-response line to one player (builtin + plugin
+     * command output). Public because command senders resolve the session
+     * service lazily via Kernel::getInstance().
+     */
+    public function sendMessageTo(int $entityId, string $message): void {
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId !== $entityId) {
+                continue;
+            }
+            $pk = new TextPacket();
+            $pk->type = TextPacket::TYPE_RAW;
+            $pk->source = '';
+            $pk->message = $message;
+            $this->queuePacket($session['playerRef'], $pk);
+            return;
+        }
+    }
+
+    /**
+     * Flip a player's client between survival and creative (AdventureSettings
+     * flags; legacy parity for the 0.15 client). The authoritative gamemode
+     * lives in MetadataComponent('gamemode') - this only mirrors it.
+     */
+    public function sendGamemodeTo(int $entityId, int $mode): void {
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId !== $entityId) {
+                continue;
+            }
+            $pk = new AdventureSettingsPacket();
+            // Creative: world-immutable + auto-jump + allow-flight + no-clip
+            // + world-builder + flying. Survival keeps the login flags.
+            $pk->flags = $mode === 1 ? 0x7D : 0x4E;
+            $pk->userPermission = 2;
+            $pk->globalPermission = 2;
+            $this->queuePacket($session['playerRef'], $pk);
+            return;
+        }
+    }
+
+    /**
+     * Teleport a player: set the ECS position (so the per-tick entity
+     * broadcast moves them for every viewer) and send an immediate
+     * MovePlayerPacket (MODE_RESET) to the actor.
+     */
+    public function sendTeleportTo(int $entityId, float $x, float $y, float $z): void {
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId !== $entityId) {
+                continue;
+            }
+            $entity = $session['entityRef']->getEntity();
+            $pos = $entity?->get(PositionComponent::class);
+            if ($pos === null) {
+                return;
+            }
+            $pos->x = $x;
+            $pos->y = $y;
+            $pos->z = $z;
+            $rotation = $entity->get(RotationComponent::class);
+            $pk = new MovePlayerPacket();
+            $pk->eid = $entityId;
+            $pk->x = $x;
+            $pk->y = $y;
+            $pk->z = $z;
+            $pk->yaw = $rotation?->yaw ?? 0.0;
+            $pk->bodyYaw = $rotation?->yaw ?? 0.0;
+            $pk->pitch = $rotation?->pitch ?? 0.0;
+            $pk->mode = MovePlayerPacket::MODE_RESET;
+            $pk->onGround = true;
+            $this->queuePacket($session['playerRef'], $pk);
+            return;
         }
     }
 

@@ -236,6 +236,7 @@ final class Kernel {
             $this->entitySpawnService,
             $this->craftingService,
             $this->resourceRegistry,
+            $this->commandPort,
         );
 
         // Single scheduler instance: it registers a tick system that runs tasks,
@@ -1384,6 +1385,9 @@ function createKernel(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): 
     $worldGenPort = createWorldGenPort($threadingPort);
     $eventPort = createEventPort();
     $commandPort = createCommandPort($eventPort);
+    // Builtin commands (gamemode/tp/give/kill/time/help) share the same
+    // server-wide map the console and plugins use.
+    \pocketmine\api\command\builtin\BuiltinCommands::registerAll($commandPort);
     $pluginPort = createPluginPort($commandPort, $eventPort);
 
     $componentRegistry = new ComponentRegistry();
