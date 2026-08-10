@@ -60,6 +60,7 @@ use pocketmine\protocol\RequestChunkRadiusPacket;
 use pocketmine\protocol\RespawnPacket;
 use pocketmine\protocol\SetDifficultyPacket;
 use pocketmine\protocol\SetEntityDataPacket;
+use pocketmine\protocol\SetPlayerGameTypePacket;
 use pocketmine\protocol\SetHealthPacket;
 use pocketmine\protocol\SetSpawnPositionPacket;
 use pocketmine\protocol\SetTimePacket;
@@ -609,13 +610,17 @@ final class NetworkSessionService {
             if ($session['playerRef']->entityId !== $entityId) {
                 continue;
             }
-            $pk = new AdventureSettingsPacket();
-            // Creative: world-immutable + auto-jump + allow-flight + no-clip
-            // + world-builder + flying. Survival keeps the login flags.
-            $pk->flags = $mode === 1 ? 0x7D : 0x4E;
-            $pk->userPermission = 2;
-            $pk->globalPermission = 2;
-            $this->queuePacket($session['playerRef'], $pk);
+            // 0.15 protocol: AdventureSettingsPacket + SetPlayerGameTypePacket
+            // both required to fully flip the client UI (hotbar, flight toggle,
+            // block-breaking animation).
+            $settings = new AdventureSettingsPacket();
+            $settings->flags = $mode === 1 ? 0x7D : 0x4E;
+            $settings->userPermission = 2;
+            $settings->globalPermission = 2;
+            $this->queuePacket($session['playerRef'], $settings);
+            $typePk = new SetPlayerGameTypePacket();
+            $typePk->gamemode = $mode;
+            $this->queuePacket($session['playerRef'], $typePk);
             return;
         }
     }
@@ -1646,7 +1651,10 @@ final class NetworkSessionService {
         $startGame->seed = $config instanceof ServerConfig ? $config->getSeed() : 0;
         $startGame->dimension = 0;
         $startGame->generator = 1;
-        $startGame->gamemode = 0;
+        // Gamemode from the player's metadata (saved on disconnect, or 0 for
+        // fresh players). The client needs the initial mode to render the
+        // correct UI (survival: hotbar, creative: flight toggle).
+        $startGame->gamemode = $entity?->get(\pocketmine\core\component\MetadataComponent::class)?->get('gamemode') ?? 0;
         $startGame->eid = 0; // protocol 84 always uses entity id 0 for the player
         $startGame->spawnX = $spawnX;
         $startGame->spawnY = $spawnY;

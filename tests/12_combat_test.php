@@ -47,6 +47,32 @@ function flushWorld(World $world): void {
     $world->tick(0.05);
 }
 
+test('creative players are immune to entity attacks; survival players are not', function () use ($world, $combat) {
+    $creative = spawnCombatant($world, 200, 200, 'Player', ['gamemode' => 1]);
+    $blocked = $combat->applyDamage(
+        EntityRef::create($creative->getId(), $world),
+        10.0,
+        null,
+        EntityDamageEvent::CAUSE_ENTITY_ATTACK,
+    );
+    same(false, $blocked, 'creative target rejects entity-attack damage');
+    same(20.0, $creative->getEntity()?->get(HealthComponent::class)?->current, 'creative health unchanged');
+
+    $survival = spawnCombatant($world, 201, 201, 'Player');
+    $applied = $combat->applyDamage(
+        EntityRef::create($survival->getId(), $world),
+        4.0,
+        null,
+        EntityDamageEvent::CAUSE_ENTITY_ATTACK,
+    );
+    same(true, $applied, 'survival target takes entity-attack damage');
+    near(16.0, $survival->getEntity()?->get(HealthComponent::class)?->current, 1e-9, 'survival health reduced');
+
+    $world->despawn($creative->getEntity());
+    $world->despawn($survival->getEntity());
+    $world->tick(0.05);
+});
+
 test('damage event fires, is cancellable, and honors modified damage', function () use ($world, $combat, $eventPort) {
     $target = spawnCombatant($world, 100, 100, 'Zombie');
 
