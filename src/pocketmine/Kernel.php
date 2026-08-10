@@ -1599,6 +1599,9 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // plus the right-click route inside EntityInteractionService). Runs after
     // movement/AI so entity positions are current.
     $scheduler->register(new \pocketmine\core\system\ItemPickupSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // 14.9: natural health regen - 1 HP / 4s after 5s without damage. Runs
+    // after combat (health reads are current) and before chunk work.
+    $scheduler->register(new \pocketmine\core\system\RegenSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     $scheduler->register(new \pocketmine\core\system\ChunkUpdateSystem(), \pocketmine\core\ecs\SystemPhase::CHUNK_PARALLEL);
     // Post-movement block collision: clamps the pending positions written by
     // the parallel systems against solid blocks before they are committed

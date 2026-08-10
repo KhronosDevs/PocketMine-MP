@@ -54,22 +54,47 @@ final class ItemPickupSystem implements System {
 
         $radiusSq = self::PICKUP_RADIUS * self::PICKUP_RADIUS;
         foreach ($world->getEntities() as $entity) {
-            // Item entities are tagged 'item' at spawn (withTag('item')).
-            if (!$entity->has('item')) {
-                continue;
-            }
             $pos = $entity->get(PositionComponent::class);
             if ($pos === null) {
                 continue;
             }
-            // Count down the drop's pickup delay before it can be collected.
             $meta = $entity->get(MetadataComponent::class);
-            if ($meta !== null) {
-                $delay = (int)$meta->get('pickupDelay', 0);
-                if ($delay > 0) {
-                    $meta->set('pickupDelay', $delay - 1);
+            if ($meta === null) {
+                continue;
+            }
+
+            // 14.9: XP orbs (tagged 'xp_orb') credit the player's XP bar
+            // instead of the inventory. No pickup delay (legacy orbs were
+            // collectible immediately; the XP is server-side anyway).
+            if ($entity->has('xp_orb')) {
+                $amount = (int)$meta->get('xp', 0);
+                if ($amount <= 0) {
+                    $world->despawn($entity); // nothing to credit: don't linger
                     continue;
                 }
+                foreach ($players as $playerId => $playerPos) {
+                    $dx = $pos->x - $playerPos->x;
+                    $dy = $pos->y - $playerPos->y;
+                    $dz = $pos->z - $playerPos->z;
+                    if ($dx * $dx + $dy * $dy + $dz * $dz <= $radiusSq) {
+                        $this->grantXp($world, $playerId, $amount);
+                        $world->despawn($entity);
+                        $this->syncXpFor($playerId);
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            // Item entities are tagged 'item' at spawn (withTag('item')).
+            if (!$entity->has('item')) {
+                continue;
+            }
+            // Count down the drop's pickup delay before it can be collected.
+            $delay = (int)$meta->get('pickupDelay', 0);
+            if ($delay > 0) {
+                $meta->set('pickupDelay', $delay - 1);
+                continue;
             }
             foreach ($players as $playerId => $playerPos) {
                 $dx = $pos->x - $playerPos->x;
@@ -86,6 +111,31 @@ final class ItemPickupSystem implements System {
                 }
             }
         }
+    }
+
+    /**
+     * Credit XP to a player's persistent metadata (xp progress + level),
+     * leveling up through the standard curve as needed.
+     */
+    private function grantXp(World $world, int $playerId, int $amount): void {
+        $player = $world->getEntity($playerId);
+        if ($player === null) {
+            return;
+        }
+        $meta = $player->get(MetadataComponent::class);
+        if ($meta === null) {
+            return;
+        }
+        $xp = (int)$meta->get('xp', 0) + $amount;
+        $level = (int)$meta->get('xpLevel', 0);
+        $need = \pocketmine\core\service\NetworkSessionService::xpNeedForLevel($level);
+        while ($need > 0 && $xp >= $need) {
+            $xp -= $need;
+            $level++;
+            $need = \pocketmine\core\service\NetworkSessionService::xpNeedForLevel($level);
+        }
+        $meta->set('xp', $xp);
+        $meta->set('xpLevel', $level);
     }
 
     /**
@@ -111,6 +161,14 @@ final class ItemPickupSystem implements System {
         $sessionService = \pocketmine\Kernel::getInstance()?->getNetworkSessionService();
         if ($sessionService !== null) {
             $sessionService->syncInventoryContents($playerId);
+        }
+    }
+
+    /** Push the updated XP bar to the collector's client. */
+    private function syncXpFor(int $playerId): void {
+        $sessionService = \pocketmine\Kernel::getInstance()?->getNetworkSessionService();
+        if ($sessionService !== null) {
+            $sessionService->syncXpFor($playerId);
         }
     }
 }
