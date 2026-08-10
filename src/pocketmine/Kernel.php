@@ -1415,6 +1415,9 @@ function createKernel(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): 
     // Register built-in crafting recipes
     registerBuiltinRecipes($resourceRegistry);
 
+    // Register built-in projectiles
+    registerBuiltinProjectiles($resourceRegistry);
+
     // Register built-in systems
     registerBuiltinSystems($systemScheduler);
 
@@ -1502,6 +1505,18 @@ function registerBuiltinResources(ResourceRegistry $registry): void {
     $registry->set(new \pocketmine\core\resource\RecipeRegistry());
     $registry->set(new \pocketmine\core\resource\SmeltingRegistry());
     $registry->set(new \pocketmine\core\resource\FurnaceStore());
+    $registry->set(new \pocketmine\core\resource\ProjectileRegistry());
+}
+
+function registerBuiltinProjectiles(ResourceRegistry $registry): void {
+    $projectiles = $registry->get(\pocketmine\core\resource\ProjectileRegistry::class);
+    if (!$projectiles instanceof \pocketmine\core\resource\ProjectileRegistry) {
+        return;
+    }
+
+    // Arrow: legacy Arrow::NETWORK_ID 80, damage 2, gravity 0.05, drag 0.01,
+    // sticky (embeds in entities it hits).
+    $projectiles->register('Arrow', 80, 2.0, 0.05, 0.01, true);
 }
 
 function registerBuiltinRecipes(ResourceRegistry $registry): void {

@@ -15,7 +15,10 @@ use pocketmine\core\component\tags\MonsterTag;
 use pocketmine\core\ecs\EntityBuilder;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\ProjectileRegistry;
 use pocketmine\port\driven\StoragePort;
+use function atan2;
+use function sqrt;
 
 final class EntitySpawnService {
     /**
@@ -120,21 +123,40 @@ final class EntitySpawnService {
     }
 
     public function spawnProjectile(string $projectileType, float $x, float $y, float $z, float $velX, float $velY, float $velZ, EntityRef $shooter): EntityRef {
+        // The projectile registry is the single source of truth: an unregistered
+        // type is a programming error (the client would have no entity id to
+        // render, so the arrow could never be seen).
+        $registry = $this->world->getResourceRegistry()->get(ProjectileRegistry::class);
+        if (!$registry instanceof ProjectileRegistry || !$registry->isProjectile($projectileType)) {
+            throw new \InvalidArgumentException("Unknown projectile type: {$projectileType}");
+        }
+
         $entityRef = $this->spawnEntity($projectileType, $x, $y, $z);
 
         $entity = $entityRef->getEntity();
         if ($entity) {
-            $velocity = $entity->get(\pocketmine\core\component\VelocityComponent::class);
+            $velocity = $entity->get(VelocityComponent::class);
             if ($velocity) {
                 $velocity->x = $velX;
                 $velocity->y = $velY;
                 $velocity->z = $velZ;
             }
 
-            $meta = $entity->get(\pocketmine\core\component\MetadataComponent::class);
+            $meta = $entity->get(MetadataComponent::class);
             if ($meta) {
                 $meta->set('projectileType', $projectileType);
                 $meta->set('shooterId', $shooter->getId());
+            }
+
+            // Legacy Projectile::onUpdate: a projectile renders pointing along
+            // its motion vector (yaw = atan2(vx, vz), pitch = atan2(vy, |vxz|)),
+            // so the client's first AddEntityPacket already shows the arrow
+            // aimed correctly, and ArrowSystem keeps it aligned while flying.
+            $rot = $entity->get(RotationComponent::class);
+            if ($rot) {
+                $f = sqrt($velX * $velX + $velZ * $velZ);
+                $rot->yaw = atan2($velX, $velZ) * 180 / M_PI;
+                $rot->pitch = atan2($velY, $f) * 180 / M_PI;
             }
         }
 

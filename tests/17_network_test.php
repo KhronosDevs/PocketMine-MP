@@ -3941,8 +3941,27 @@ test('a held bow charges on use and fires an arrow on ACTION_RELEASE_ITEM', func
             $kernel->run(1);
         }
 
+        // In-flight rendering (14.18): while the arrow flies, the server
+        // follows it with MoveEntityPacket every tick (position changes), so
+        // the client sees it travel instead of freezing at the spawn point.
+        $moveDeadline = microtime(true) + 4.0;
+        $sawArrowMove = false;
+        while (microtime(true) < $moveDeadline && !$sawArrowMove) {
+            foreach ($bowClient->readGamePackets() as [$id, $buffer]) {
+                if ($id === Info::MOVE_ENTITY_PACKET && strlen($buffer) >= 24) {
+                    $ms = new BinaryStream($buffer, 1);
+                    if ($arrowEid !== null && $ms->getLong() === $arrowEid) {
+                        $sawArrowMove = true;
+                        break;
+                    }
+                }
+            }
+            $kernel->run(1);
+        }
+
         ok($arrowEid !== null, 'arrow entity spawned server-side');
         ok($sawArrowAdd, 'client received AddEntityPacket for the arrow (type 80)');
+        ok($sawArrowMove, 'client received MoveEntityPacket for the flying arrow (in-flight rendering)');
         ok($invAfter !== null && ($invAfter->get(1)?->count ?? 0) === 2, 'one arrow consumed from the inventory (3 -> 2)');
         // Bow wore one durability in survival.
         $bowAfter = $invAfter?->get(0);
