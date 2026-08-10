@@ -11,8 +11,10 @@ use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\RotationComponent;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
+use pocketmine\core\component\WorldComponent;
 use pocketmine\core\resource\BlockRegistry;
 use pocketmine\core\resource\ChunkStore;
+use pocketmine\core\resource\WorldRegistry;
 
 final class BlockPlaceService {
     public function __construct(
@@ -36,7 +38,7 @@ final class BlockPlaceService {
         }
         
         // Check if placement is valid (not inside another block, etc.)
-        if (!$this->isValidPlacement($x, $y, $z)) {
+        if (!$this->isValidPlacement($x, $y, $z, $this->worldIdOf($playerRef))) {
             return false;
         }
         
@@ -48,7 +50,7 @@ final class BlockPlaceService {
         $placedMeta = $registry->applyPlacementMeta($blockId, $face, $meta);
         
         // Place the block
-        $this->setBlock($x, $y, $z, $blockId, $placedMeta);
+        $this->setBlock($x, $y, $z, $blockId, $placedMeta, $this->worldIdOf($playerRef));
         
         // Play place effects
         $this->playPlaceEffects($x, $y, $z, $blockId);
@@ -109,8 +111,8 @@ final class BlockPlaceService {
         }
     }
 
-    private function isValidPlacement(int $x, int $y, int $z): bool {
-        $store = $this->getChunkStore();
+    private function isValidPlacement(int $x, int $y, int $z, int $worldId = 0): bool {
+        $store = $this->getChunkStore($worldId);
         if ($store === null) {
             return false;
         }
@@ -120,16 +122,29 @@ final class BlockPlaceService {
         return $existing === 0 || $this->getBlockRegistry()->isReplaceable($existing);
     }
 
-    private function setBlock(int $x, int $y, int $z, int $blockId, int $meta): void {
-        $store = $this->getChunkStore();
+    private function setBlock(int $x, int $y, int $z, int $blockId, int $meta, int $worldId = 0): void {
+        $store = $this->getChunkStore($worldId);
         if ($store !== null) {
             $store->setBlock($x, $y, $z, $blockId, $meta);
         }
     }
 
-    private function getChunkStore(): ?ChunkStore {
+    private function getChunkStore(int $worldId = 0): ?ChunkStore {
+        // Non-default worlds resolve strictly through the registry; only the
+        // default world (id 0) falls back to the classic resource-registry
+        // store so single-world behavior is unchanged.
+        if ($worldId !== 0) {
+            $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getStore($worldId) : null;
+        }
         $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
         return $store instanceof ChunkStore ? $store : null;
+    }
+
+    private function worldIdOf(EntityRef $playerRef): int {
+        $entity = $playerRef->getEntity();
+        $worldComponent = $entity?->get(WorldComponent::class);
+        return $worldComponent instanceof WorldComponent ? $worldComponent->id : 0;
     }
 
     private function getBlockRegistry(): BlockRegistry {

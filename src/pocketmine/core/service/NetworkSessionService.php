@@ -14,6 +14,7 @@ use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\RotationComponent;
 use pocketmine\core\component\VelocityComponent;
+use pocketmine\core\component\WorldComponent;
 use pocketmine\core\ecs\Entity;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\ResourceRegistry;
@@ -22,8 +23,10 @@ use pocketmine\core\resource\ChestStore;
 use pocketmine\core\resource\Hunger;
 use pocketmine\core\resource\ItemRegistry;
 use pocketmine\core\resource\ProjectileRegistry;
+use pocketmine\core\resource\ChunkStore;
 use pocketmine\core\resource\ServerConfig;
 use pocketmine\core\resource\WorldConfig;
+use pocketmine\core\resource\WorldRegistry;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\PlayerRef;
 use pocketmine\port\driving\CommandPort;
@@ -144,6 +147,7 @@ final class NetworkSessionService {
      *   username: string,
      *   uuid: UUID,
      *   skin: string,
+     *   worldId: int,
      *   radius: int,
      *   chunkQueue: list<array{0: int, 1: int}>,
      *   chunkQueueIndex: int,
@@ -312,6 +316,90 @@ final class NetworkSessionService {
     }
 
     // --- Inbound -----------------------------------------------------------
+
+    /**
+     * 14.20 multi-world: move a connected player to another world.
+     *
+     * The player entity's WorldComponent flips to the target world, the
+     * session is re-pointed at that world's chunk stream/broadcasts, and the
+     * player is teleported to the target world's spawn with a fresh chunk
+     * queue. Returns false when the player is offline or the world id does
+     * not exist.
+     */
+    public function switchWorld(int $entityId, int $worldId): bool {
+        $registry = $this->resourceRegistry->get(WorldRegistry::class);
+        if (!$registry instanceof WorldRegistry || $registry->getWorld($worldId) === null) {
+            return false;
+        }
+        foreach ($this->sessions as $addrKey => $session) {
+            if ($session['playerRef']->entityId !== $entityId) {
+                continue;
+            }
+            // Flip the entity's world membership.
+            $entity = $session['entityRef']->getEntity();
+            $worldComponent = $entity?->get(WorldComponent::class);
+            if ($worldComponent !== null) {
+                $worldComponent->id = $worldId;
+            }
+
+            // Teleport to the target world's spawn.
+            $config = $this->getWorldConfig($worldId);
+            $spawnX = $config?->spawnX ?? 0;
+            $spawnY = $config?->spawnY ?? 64;
+            $spawnZ = $config?->spawnZ ?? 0;
+            $pos = $entity?->get(PositionComponent::class);
+            if ($pos !== null) {
+                $pos->x = (float)$spawnX;
+                $pos->y = (float)$spawnY;
+                $pos->z = (float)$spawnZ;
+            }
+            $session['worldId'] = $worldId;
+            $session['chunksSent'] = [];
+            $session['chunkQueue'] = [];
+            $session['chunkQueueIndex'] = 0;
+            // Un-render every entity that was visible in the old world: a
+            // client keeps drawing known entities until it is told to drop
+            // them, so a world switch must explicitly remove them (a real
+            // client would otherwise keep the old world's mobs on screen).
+            foreach (array_keys($session['knownEntities']) as $oldEntityId) {
+                $rm = new RemoveEntityPacket();
+                $rm->eid = $oldEntityId;
+                $this->queuePacket($session['playerRef'], $rm);
+            }
+            $session['knownEntities'] = [];
+            // Stale per-action state from the old world must not survive the
+            // switch (a half-broken block or open chest belongs to the old
+            // world's coordinates).
+            $session['breaking'] = null;
+            $session['openContainer'] = null;
+            $session['bowDraw'] = null;
+            $this->sessions[$addrKey] = $session;
+            $this->queueChunks($addrKey);
+
+            // The client needs the new world's time + spawn + a hard move.
+            $time = new SetTimePacket();
+            $time->time = $config?->time ?? 0;
+            $time->started = true;
+            $this->queuePacket($session['playerRef'], $time);
+            $spawn = new SetSpawnPositionPacket();
+            $spawn->x = $spawnX;
+            $spawn->y = $spawnY;
+            $spawn->z = $spawnZ;
+            $this->queuePacket($session['playerRef'], $spawn);
+            $move = new MovePlayerPacket();
+            $move->eid = 0; // protocol 84: the player is always entity 0
+            $move->x = (float)$spawnX;
+            $move->y = (float)$spawnY;
+            $move->z = (float)$spawnZ;
+            $move->yaw = 0.0;
+            $move->bodyYaw = 0.0;
+            $move->pitch = 0.0;
+            $move->mode = MovePlayerPacket::MODE_RESET;
+            $this->queuePacket($session['playerRef'], $move);
+            return true;
+        }
+        return false;
+    }
 
     private function handleInbound(string $addrKey, int $packetId, string $buffer): void {
         // Protocol-84 wire (legacy RakLibInterface::getPacket): every game
@@ -490,6 +578,8 @@ final class NetworkSessionService {
             'username' => $username,
             'uuid' => $uuid,
             'skin' => $pk->skin ?? '',
+            // 14.20: players join the default world; /world switches it.
+            'worldId' => 0,
             'radius' => self::DEFAULT_RADIUS,
             'chunkQueue' => [],
             'chunkQueueIndex' => 0,
@@ -700,10 +790,11 @@ final class NetworkSessionService {
             }
             if ($ticks === 0) {
                 // Creative or instant-break block (torches, saplings, ...).
-                $wasChest = $this->isChestBlock($pk->x, $pk->y, $pk->z);
-                $wasFurnace = $this->isFurnaceBlock($pk->x, $pk->y, $pk->z);
+                $worldId = $session['worldId'];
+                $wasChest = $this->isChestBlock($pk->x, $pk->y, $pk->z, $worldId);
+                $wasFurnace = $this->isFurnaceBlock($pk->x, $pk->y, $pk->z, $worldId);
                 if ($this->blockBreakService->breakBlock($session['entityRef'], $pk->x, $pk->y, $pk->z, $pk->face)) {
-                    $this->broadcastBlockState($pk->x, $pk->y, $pk->z);
+                    $this->broadcastBlockState($pk->x, $pk->y, $pk->z, $worldId);
                     if ($wasChest) {
                         $this->onChestBroken($pk->x, $pk->y, $pk->z, $session);
                     }
@@ -759,10 +850,10 @@ final class NetworkSessionService {
         if ($required < 0 || $elapsed < $required) {
             return; // released early / hostile instant confirm: block stays
         }
-        $wasChest = $this->isChestBlock($x, $y, $z);
-        $wasFurnace = $this->isFurnaceBlock($x, $y, $z);
+        $wasChest = $this->isChestBlock($x, $y, $z, $session['worldId']);
+        $wasFurnace = $this->isFurnaceBlock($x, $y, $z, $session['worldId']);
         if ($this->blockBreakService->breakBlock($session['entityRef'], $x, $y, $z, 1)) {
-            $this->broadcastBlockState($x, $y, $z);
+            $this->broadcastBlockState($x, $y, $z, $session['worldId']);
             if ($wasChest) {
                 $this->onChestBroken($x, $y, $z, $session);
             }
@@ -885,8 +976,8 @@ final class NetworkSessionService {
         // runs before placement in Level::useItemOn, and works with an empty
         // hand). The chest GUI is a real window: ContainerOpenPacket +
         // contents, then per-slot moves.
-        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
-        if ($store instanceof \pocketmine\core\resource\ChunkStore) {
+        $store = $this->getChunkStore($session['worldId']);
+        if ($store !== null) {
             $block = $store->getBlock($pk->x, $pk->y, $pk->z);
             if ($block === 54) {
                 $this->openChest($addrKey, $pk->x, $pk->y, $pk->z);
@@ -931,7 +1022,7 @@ final class NetworkSessionService {
             // Broadcast the AUTHORITATIVE state: placeBlock may resolve a
             // different meta internally (e.g. slab top/bottom from the face),
             // so the client must see exactly what the world now holds.
-            $this->broadcastBlockState($targetX, $targetY, $targetZ);
+            $this->broadcastBlockState($targetX, $targetY, $targetZ, $session['worldId']);
             $this->sendInventorySlot($session['playerRef'], $inventory->heldSlot);
         }
     }
@@ -1340,9 +1431,9 @@ final class NetworkSessionService {
         }
     }
 
-    private function isFurnaceBlock(int $x, int $y, int $z): bool {
-        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
-        if (!$store instanceof \pocketmine\core\resource\ChunkStore) {
+    private function isFurnaceBlock(int $x, int $y, int $z, int $worldId = 0): bool {
+        $store = $this->getChunkStore($worldId);
+        if ($store === null) {
             return false;
         }
         $block = $store->getBlock($x, $y, $z);
@@ -1715,9 +1806,9 @@ final class NetworkSessionService {
      * Reads the state from the ChunkStore so whatever the services actually
      * set (including placement-meta resolution) is what the client receives.
      */
-    private function broadcastBlockState(int $x, int $y, int $z): void {
-        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
-        if (!$store instanceof \pocketmine\core\resource\ChunkStore) {
+    private function broadcastBlockState(int $x, int $y, int $z, int $worldId = 0): void {
+        $store = $this->getChunkStore($worldId);
+        if ($store === null) {
             return;
         }
         $pk = new UpdateBlockPacket();
@@ -1728,13 +1819,46 @@ final class NetworkSessionService {
         $pk->blockData = $store->getBlockMeta($x, $y, $z);
         $pk->flags = UpdateBlockPacket::FLAG_ALL_PRIORITY;
         foreach ($this->sessions as $s) {
-            $this->queuePacket($s['playerRef'], clone $pk);
+            // Only viewers in the same world see the change.
+            if ($s['worldId'] === $worldId) {
+                $this->queuePacket($s['playerRef'], clone $pk);
+            }
         }
     }
 
-    private function isChestBlock(int $x, int $y, int $z): bool {
-        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
-        return $store instanceof \pocketmine\core\resource\ChunkStore && $store->getBlock($x, $y, $z) === 54;
+    private function isChestBlock(int $x, int $y, int $z, int $worldId = 0): bool {
+        $store = $this->getChunkStore($worldId);
+        return $store !== null && $store->getBlock($x, $y, $z) === 54;
+    }
+
+    /**
+     * Resolve the ChunkStore for a world id (14.20): non-default worlds have
+     * their own store bundle; the default world falls back to the classic
+     * resource-registry store so single-world behavior is unchanged.
+     */
+    private function getChunkStore(int $worldId = 0): ?ChunkStore {
+        // Non-default worlds resolve strictly through the registry; only the
+        // default world (id 0) falls back to the classic resource-registry
+        // store so single-world behavior is unchanged.
+        if ($worldId !== 0) {
+            $registry = $this->resourceRegistry->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getStore($worldId) : null;
+        }
+        $store = $this->resourceRegistry->get(ChunkStore::class);
+        return $store instanceof ChunkStore ? $store : null;
+    }
+
+    /**
+     * Resolve the WorldConfig for a world id (14.20), falling back to the
+     * default world config resource.
+     */
+    private function getWorldConfig(int $worldId = 0): ?WorldConfig {
+        if ($worldId !== 0) {
+            $registry = $this->resourceRegistry->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getConfig($worldId) : null;
+        }
+        $config = $this->resourceRegistry->get(WorldConfig::class);
+        return $config instanceof WorldConfig ? $config : null;
     }
 
     /**
@@ -1951,13 +2075,16 @@ final class NetworkSessionService {
         $spawnZ = (int)floor($pos?->z ?? 0.0);
 
         $config = $this->resourceRegistry->get(ServerConfig::class);
+        $worldConfig = $this->getWorldConfig($session['worldId']);
 
         $playStatus = new PlayStatusPacket();
         $playStatus->status = PlayStatusPacket::LOGIN_SUCCESS;
         $this->queuePacket($playerRef, $playStatus);
 
         $startGame = new StartGamePacket();
-        $startGame->seed = $config instanceof ServerConfig ? $config->getSeed() : 0;
+        // 14.20: the world the player is in provides seed (terrain must match
+        // what the chunk stream delivers), not the server-wide config.
+        $startGame->seed = $worldConfig?->seed ?? ($config instanceof ServerConfig ? $config->getSeed() : 0);
         $startGame->dimension = 0;
         $startGame->generator = 1;
         // Gamemode from the player's metadata (saved on disconnect, or 0 for
@@ -1974,8 +2101,7 @@ final class NetworkSessionService {
         $this->queuePacket($playerRef, $startGame);
 
         $time = new SetTimePacket();
-        $worldConfig = $this->resourceRegistry->get(WorldConfig::class);
-        $time->time = $worldConfig instanceof WorldConfig ? $worldConfig->time : 0;
+        $time->time = $worldConfig?->time ?? 0;
         $time->started = true;
         $this->queuePacket($playerRef, $time);
 
@@ -2041,13 +2167,14 @@ final class NetworkSessionService {
         if (empty($this->sessions)) {
             return;
         }
-        $worldConfig = $this->resourceRegistry->get(WorldConfig::class);
-        $time = $worldConfig instanceof WorldConfig ? $worldConfig->time : 0;
-        $pk = new SetTimePacket();
-        $pk->time = $time;
-        $pk->started = true;
+        // 14.20: each session receives the time of the world it is in, so
+        // players in different worlds see different day/night cycles.
         foreach ($this->sessions as $session) {
-            $this->queuePacket($session['playerRef'], clone $pk);
+            $config = $this->getWorldConfig($session['worldId']);
+            $pk = new SetTimePacket();
+            $pk->time = $config?->time ?? 0;
+            $pk->started = true;
+            $this->queuePacket($session['playerRef'], $pk);
         }
     }
 
@@ -2114,8 +2241,18 @@ final class NetworkSessionService {
 
             // Visible set for this viewer: all entities within range except self.
             $visible = [];
+            $worldId = $session['worldId'];
             foreach ($worldEntities as $entityId => $entity) {
                 if ($entityId === $selfId) {
+                    continue;
+                }
+                // 14.20: only entities of the viewer's own world are visible
+                // (players in other worlds do not render across worlds).
+                // Entities without a WorldComponent default to world 0 so a
+                // stray spawn never leaks across worlds.
+                $entityWorld = $entity->get(WorldComponent::class);
+                $entityWorldId = $entityWorld instanceof WorldComponent ? $entityWorld->id : 0;
+                if ($entityWorldId !== $worldId) {
                     continue;
                 }
                 $pos = $entity->get(PositionComponent::class);
@@ -2409,7 +2546,7 @@ final class NetworkSessionService {
                 if (isset($session['chunksSent'][$key])) {
                     continue;
                 }
-                $chunkData = $this->chunkLoadService->loadChunk($chunkX, $chunkZ);
+                $chunkData = $this->chunkLoadService->loadChunk($chunkX, $chunkZ, $session['worldId']);
 
                 $chunk = new FullChunkDataPacket();
                 $chunk->chunkX = $chunkX;

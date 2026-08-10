@@ -62,6 +62,11 @@ abstract class Animal extends Living {
         $position = $this->getPosition();
         $partnerPos = $partner->getPosition();
 
+        // 14.20: the baby inherits the parent's world so it never leaks into
+        // the default world when breeding in a non-default world.
+        $parentWorld = $this->getEntity()?->get(\pocketmine\core\component\WorldComponent::class);
+        $worldId = $parentWorld instanceof \pocketmine\core\component\WorldComponent ? $parentWorld->id : 0;
+
         $ref = $this->world->spawn(
             (new \pocketmine\core\ecs\EntityBuilder())
                 ->with(new \pocketmine\core\component\PositionComponent(
@@ -75,6 +80,7 @@ abstract class Animal extends Living {
                     'age' => -1, // baby
                     'owner' => $metadata->get('owner'),
                 ]))
+                ->with(new \pocketmine\core\component\WorldComponent($worldId))
                 ->withTag('animal')
         );
 

@@ -336,12 +336,17 @@ final class CombatService {
         // Calculate XP drop based on entity type
         $xpAmount = $this->getXpDrop($entityRef);
 
+        // 14.20: XP orbs belong to the dead entity's world.
+        $deadWorld = $entity->get(\pocketmine\core\component\WorldComponent::class);
+        $worldId = $deadWorld instanceof \pocketmine\core\component\WorldComponent ? $deadWorld->id : 0;
+
         $this->world->spawn(
             (new EntityBuilder())
                 ->with(new PositionComponent($position->x, $position->y + 0.5, $position->z))
                 ->with(new VelocityComponent())
                 ->with(new HealthComponent(1, 1))
                 ->with(new MetadataComponent(['xp' => $xpAmount]))
+                ->with(new \pocketmine\core\component\WorldComponent($worldId))
                 ->withTag('xp_orb')
         );
     }
@@ -380,25 +385,33 @@ final class CombatService {
         // 2. Drop mob loot table rolls.
         $meta = $entity->get(MetadataComponent::class);
         $entityType = $meta?->get('entityType') ?? '';
+        $worldId = $this->worldIdOf($entityRef);
         foreach (self::MOB_LOOT[$entityType] ?? [] as [$itemId, $min, $max, $chance]) {
             if (mt_rand() / mt_getrandmax() > $chance) {
                 continue;
             }
             $count = $min >= $max ? $min : mt_rand($min, $max);
             if ($count > 0) {
-                $this->dropItemStack($position, new ItemStack($itemId, 0, $count));
+                $this->dropItemStack($position, new ItemStack($itemId, 0, $count), $worldId);
             }
         }
     }
 
-    private function dropItemStack(PositionComponent $position, ItemStack $item): void {
+    private function dropItemStack(PositionComponent $position, ItemStack $item, int $worldId = 0): void {
         if ($item->count <= 0) {
             return;
         }
         // Small random scatter so stacked drops do not occupy the same spot.
         $x = $position->x + (mt_rand(-20, 20) / 100);
         $z = $position->z + (mt_rand(-20, 20) / 100);
-        $this->spawnService->spawnItem($x, $position->y + 0.5, $z, $item);
+        // 14.20: loot stays in the dead entity's world.
+        $this->spawnService->spawnItem($x, $position->y + 0.5, $z, $item, $worldId);
+    }
+
+    private function worldIdOf(EntityRef $entityRef): int {
+        $entity = $entityRef->getEntity();
+        $worldComponent = $entity?->get(\pocketmine\core\component\WorldComponent::class);
+        return $worldComponent instanceof \pocketmine\core\component\WorldComponent ? $worldComponent->id : 0;
     }
 
     private function buildDeathMessage(EntityRef $targetRef, ?EntityRef $killerRef): string {

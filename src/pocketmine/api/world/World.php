@@ -13,6 +13,8 @@ use pocketmine\core\component\tags\PlayerTag;
 use pocketmine\core\resource\BlockRegistry;
 use pocketmine\core\resource\ChunkStore;
 use pocketmine\core\resource\WorldConfig;
+use pocketmine\core\resource\WorldRegistry;
+use pocketmine\core\component\WorldComponent;
 use pocketmine\core\service\ChunkLoadService;
 use pocketmine\core\service\ChunkUnloadService;
 use pocketmine\core\service\ChunkSendService;
@@ -24,15 +26,18 @@ class World {
     private ECSWorld $world;
     private string $name;
     private string $folderName;
+    // 14.20: which world bundle this facade wraps (0 = default world).
+    private int $worldId;
     
     private ChunkLoadService $chunkLoadService;
     private ChunkUnloadService $chunkUnloadService;
     private ChunkSendService $chunkSendService;
 
-    public function __construct(ECSWorld $world, string $name, string $folderName) {
+    public function __construct(ECSWorld $world, string $name, string $folderName, int $worldId = 0) {
         $this->world = $world;
         $this->name = $name;
         $this->folderName = $folderName;
+        $this->worldId = $worldId;
         
         $kernel = \pocketmine\Kernel::getInstance();
         $this->chunkLoadService = $kernel->getChunkLoadService();
@@ -53,6 +58,11 @@ class World {
 
     public function getFolderName(): string {
         return $this->folderName;
+    }
+
+    /** 14.20: the WorldRegistry id this facade wraps (0 = default world). */
+    public function getWorldId(): int {
+        return $this->worldId;
     }
 
     public function getEcsWorld(): ECSWorld {
@@ -145,11 +155,11 @@ class World {
     }
 
     public function loadChunk(int $chunkX, int $chunkZ): ChunkData {
-        return $this->chunkLoadService->loadChunk($chunkX, $chunkZ);
+        return $this->chunkLoadService->loadChunk($chunkX, $chunkZ, $this->worldId);
     }
 
     public function unloadChunk(int $chunkX, int $chunkZ): void {
-        $this->chunkUnloadService->unloadChunk($chunkX, $chunkZ);
+        $this->chunkUnloadService->unloadChunk($chunkX, $chunkZ, $this->worldId);
     }
 
     public function isChunkLoaded(int $chunkX, int $chunkZ): bool {
@@ -209,7 +219,18 @@ class World {
     }
 
     public function getSeed(): int {
-        return $this->getWorldConfig()?->seed ?? 0;
+        $config = $this->getWorldConfig();
+        if ($config !== null && $config->seed !== 0) {
+            return $config->seed;
+        }
+        // The default world's config keeps a raw 0 seed (callers may pin the
+        // seed after bootstrap); report the resolved value instead.
+        $kernel = \pocketmine\Kernel::getInstance();
+        $serverConfig = $kernel?->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
+        if ($serverConfig instanceof \pocketmine\core\resource\ServerConfig && $this->worldId === 0) {
+            return $serverConfig->getSeed();
+        }
+        return 0;
     }
 
     public function setSeed(int $seed): void {
@@ -260,6 +281,7 @@ class World {
                 ->with(new \pocketmine\core\component\VelocityComponent())
                 ->with(new \pocketmine\core\component\HealthComponent(1, 1))
                 ->with(new MetadataComponent(['xp' => $amount]))
+                ->with(new WorldComponent($this->worldId))
                 ->withTag('xp_orb')
         );
     }
@@ -269,7 +291,7 @@ class World {
         if ($store !== null && $store->isLoaded($chunkX, $chunkZ)) {
             return $store->toChunkData($chunkX, $chunkZ);
         }
-        return $this->chunkLoadService->loadChunk($chunkX, $chunkZ);
+        return $this->chunkLoadService->loadChunk($chunkX, $chunkZ, $this->worldId);
     }
 
     public function setChunkData(ChunkData $data): void {
@@ -363,11 +385,28 @@ class World {
     }
 
     private function getChunkStore(): ?ChunkStore {
+        // 14.20: non-default worlds have their own store bundle in the
+        // WorldRegistry; the default world falls back to the classic
+        // resource-registry store so single-world behavior is unchanged.
+        $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+        if ($registry instanceof WorldRegistry) {
+            $store = $registry->getStore($this->worldId);
+            if ($store !== null) {
+                return $store;
+            }
+        }
         $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
         return $store instanceof ChunkStore ? $store : null;
     }
 
     private function getWorldConfig(): ?WorldConfig {
+        $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+        if ($registry instanceof WorldRegistry) {
+            $config = $registry->getConfig($this->worldId);
+            if ($config !== null) {
+                return $config;
+            }
+        }
         $config = $this->world->getResourceRegistry()->get(WorldConfig::class);
         return $config instanceof WorldConfig ? $config : null;
     }

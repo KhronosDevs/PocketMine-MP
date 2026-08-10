@@ -249,6 +249,32 @@ final class Kernel {
         // plugin manager registers plugin.yml permissions into.
         $this->resourceRegistry->set($this->permissionManager);
 
+        // 14.20 multi-world: the default world (id 0) is the kernel's own
+        // single ChunkStore/WorldConfig/storage bundle. Extra worlds are
+        // registered later via WorldRegistry::registerWorld() (Server
+        // API /world command); their chunk/block/network routing reuses the
+        // exact same service instances, resolved per world id.
+        $worldRegistry = $this->resourceRegistry->get(\pocketmine\core\resource\WorldRegistry::class);
+        if ($worldRegistry instanceof \pocketmine\core\resource\WorldRegistry) {
+            $serverConfig = $this->resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
+            // Register the RAW seed value: getSeed() would randomize a 0 seed
+            // and cache it, but the caller may still pin the seed AFTER
+            // bootstrap (tests do). ChunkLoadService falls back to
+            // ServerConfig::getSeed() when the registered seed is 0, so the
+            // first actual generation resolves the pinned value.
+            $seed = $serverConfig instanceof \pocketmine\core\resource\ServerConfig ? $serverConfig->seed : 0;
+            $worldConfig = $this->resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
+            $chunkStore = $this->resourceRegistry->get(\pocketmine\core\resource\ChunkStore::class);
+            $worldRegistry->registerDefaultWorld(
+                'world',
+                'world',
+                $seed,
+                $chunkStore instanceof \pocketmine\core\resource\ChunkStore ? $chunkStore : new \pocketmine\core\resource\ChunkStore(),
+                $worldConfig instanceof \pocketmine\core\resource\WorldConfig ? $worldConfig : new \pocketmine\core\resource\WorldConfig(),
+                $storagePort,
+            );
+        }
+
         $this->dataPath = getcwd() . DIRECTORY_SEPARATOR;
         $this->startTime = time();
         self::$instance = $this;
@@ -1130,39 +1156,21 @@ final class Kernel {
      * terrain and spawn point. Called on the autosave interval and shutdown.
      */
     private function saveWorld(): void {
-        $store = $this->resourceRegistry->get(\pocketmine\core\resource\ChunkStore::class);
-        if ($store instanceof \pocketmine\core\resource\ChunkStore) {
-            foreach ($store->getLoadedChunkCoordinates() as [$chunkX, $chunkZ]) {
-                $chunkData = $store->toChunkData($chunkX, $chunkZ);
-                if ($chunkData !== null) {
-                    // 14.15/14.16: chest contents + furnace state ride the
-                    // chunk's tile-entity list so they survive restarts with
-                    // the terrain. Shared helper: the eviction path and the
-                    // explicit unload use it too, so a chunk that leaves the
-                    // resident set is never saved without its block state.
-                    $chunkData = \pocketmine\core\service\ChunkPersistence::attachTileSnapshots(
-                        $this->resourceRegistry,
-                        $chunkData,
-                        $chunkX,
-                        $chunkZ,
-                    );
-                    $this->storagePort->saveChunk($chunkX, $chunkZ, $chunkData);
-                }
+        // 14.20: every world bundle persists its own store to its own storage
+        // folder. The default world (id 0) keeps the historical behavior; new
+        // worlds save their region files under worlds/<folderName>/.
+        $worldRegistry = $this->resourceRegistry->get(\pocketmine\core\resource\WorldRegistry::class);
+        if ($worldRegistry instanceof \pocketmine\core\resource\WorldRegistry) {
+            foreach ($worldRegistry->getWorlds() as $worldId => $worldInfo) {
+                $this->saveWorldBundle($worldId, $worldRegistry->getStore($worldId), $worldRegistry->getStorage($worldId), $worldRegistry->getConfig($worldId));
             }
-        }
-        $config = $this->resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
-        if ($config instanceof \pocketmine\core\resource\ServerConfig) {
-            // 14.6: the current time of day is persisted with the world meta so
-            // a restart resumes at the same hour instead of snapping to dawn.
-            $worldConfig = $this->resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
-            $this->storagePort->saveWorldMeta([
-                'seed' => (string)$config->getSeed(),
-                'spawnX' => (string)$config->spawnX,
-                'spawnY' => (string)$config->spawnY,
-                'spawnZ' => (string)$config->spawnZ,
-                'difficulty' => (string)$config->difficulty,
-                'time' => (string)($worldConfig instanceof \pocketmine\core\resource\WorldConfig ? $worldConfig->time : 0),
-            ]);
+        } else {
+            // Fallback: pre-registry path (tests constructing the kernel
+            // without a registry) - save the single default store.
+            $store = $this->resourceRegistry->get(\pocketmine\core\resource\ChunkStore::class);
+            if ($store instanceof \pocketmine\core\resource\ChunkStore) {
+                $this->saveWorldBundle(0, $store, $this->storagePort, $this->resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class));
+            }
         }
         // 14.4b: persist every online player (position/health/inventory/
         // metadata) on the same interval so a crash loses at most the
@@ -1175,6 +1183,48 @@ final class Kernel {
                 );
             }
         }
+    }
+
+    /**
+     * Save one world bundle: every resident chunk through its own StoragePort
+     * (with chest/furnace tile snapshots attached) plus its world meta.
+     */
+    private function saveWorldBundle(int $worldId, ?\pocketmine\core\resource\ChunkStore $store, ?StoragePort $storage, ?\pocketmine\core\resource\WorldConfig $worldConfig): void {
+        if ($store === null || $storage === null) {
+            return;
+        }
+        foreach ($store->getLoadedChunkCoordinates() as [$chunkX, $chunkZ]) {
+            $chunkData = $store->toChunkData($chunkX, $chunkZ);
+            if ($chunkData !== null) {
+                $chunkData = \pocketmine\core\service\ChunkPersistence::attachTileSnapshots(
+                    $this->resourceRegistry,
+                    $chunkData,
+                    $chunkX,
+                    $chunkZ,
+                );
+                $storage->saveChunk($chunkX, $chunkZ, $chunkData);
+            }
+        }
+        $config = $this->resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
+        if ($config instanceof \pocketmine\core\resource\ServerConfig) {
+            $storage->saveWorldMeta([
+                'seed' => (string)($worldConfig?->seed ?? $config->getSeed()),
+                'spawnX' => (string)($worldConfig?->spawnX ?? $config->spawnX),
+                'spawnY' => (string)($worldConfig?->spawnY ?? $config->spawnY),
+                'spawnZ' => (string)($worldConfig?->spawnZ ?? $config->spawnZ),
+                'difficulty' => (string)$config->difficulty,
+                'time' => (string)($worldConfig?->time ?? 0),
+            ]);
+        }
+    }
+
+    /**
+     * Persist every world bundle (chunks + meta) now. Public so the API
+     * Server facade can save before unloading a world.
+     */
+    public function saveAllWorlds(): void {
+        $this->saveWorld();
+        $this->storagePort->saveAll();
     }
 
     public function getWorld(): World {
@@ -1225,6 +1275,19 @@ final class Kernel {
 
     public function getResourceRegistry(): ResourceRegistry {
         return $this->resourceRegistry;
+    }
+
+    /**
+     * Multi-world registry (14.20): per-world bundles (ChunkStore, WorldConfig,
+     * seed, storage folder). The default world is id 0; extra worlds are added
+     * via Server::generateWorld()/loadWorld() or directly on the registry.
+     */
+    public function getWorldRegistry(): \pocketmine\core\resource\WorldRegistry {
+        $registry = $this->resourceRegistry->get(\pocketmine\core\resource\WorldRegistry::class);
+        if (!$registry instanceof \pocketmine\core\resource\WorldRegistry) {
+            throw new \RuntimeException('WorldRegistry not registered');
+        }
+        return $registry;
     }
 
     public function getNetworkPort(): NetworkPort {
@@ -1474,6 +1537,7 @@ function createPluginPort(CommandPort $commandPort, EventPort $eventPort): Plugi
 
 function registerBuiltinComponents(ComponentRegistry $registry): void {
     $registry->register(\pocketmine\core\component\PositionComponent::class);
+    $registry->register(\pocketmine\core\component\WorldComponent::class);
     $registry->register(\pocketmine\core\component\RotationComponent::class);
     $registry->register(\pocketmine\core\component\VelocityComponent::class);
     $registry->register(\pocketmine\core\component\CollisionComponent::class);
@@ -1501,6 +1565,7 @@ function registerBuiltinResources(ResourceRegistry $registry): void {
     $registry->set(new \pocketmine\core\resource\BlockRegistry());
     $registry->set(new \pocketmine\core\resource\ItemRegistry());
     $registry->set(new \pocketmine\core\resource\ChunkStore());
+    $registry->set(new \pocketmine\core\resource\WorldRegistry());
     $registry->set(new \pocketmine\core\resource\ChestStore());
     $registry->set(new \pocketmine\core\resource\RecipeRegistry());
     $registry->set(new \pocketmine\core\resource\SmeltingRegistry());

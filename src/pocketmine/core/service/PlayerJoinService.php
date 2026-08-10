@@ -61,6 +61,8 @@ final class PlayerJoinService {
                     ->with(new InventoryComponent())
                     ->with(new MetadataComponent())
                     ->with(new \pocketmine\core\component\HungerComponent())
+                    // 14.20: players join the default world (id 0).
+                    ->with(new \pocketmine\core\component\WorldComponent(0))
                     ->withTag('player')
             );
             
@@ -93,6 +95,8 @@ final class PlayerJoinService {
                 ->with(new InventoryComponent(36))
                 ->with(new MetadataComponent())
                 ->with(new \pocketmine\core\component\HungerComponent())
+                // 14.20: players join the default world (id 0).
+                ->with(new \pocketmine\core\component\WorldComponent(0))
                 ->withTag('player')
                 
         );
