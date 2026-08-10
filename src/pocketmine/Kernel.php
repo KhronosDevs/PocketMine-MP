@@ -1691,6 +1691,9 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // are not part of the region pipeline). Runs after crafting so the
     // smelting registry is available; no ordering constraint on gameplay.
     $scheduler->register(new \pocketmine\core\system\FurnaceSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // 14.17: arrow projectiles - drag, block stick, entity hits, age despawn.
+    // After AI so targets' positions are current; before chunk work.
+    $scheduler->register(new \pocketmine\core\system\ArrowSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     $scheduler->register(new \pocketmine\core\system\ChunkUpdateSystem(), \pocketmine\core\ecs\SystemPhase::CHUNK_PARALLEL);
     // Post-movement block collision: clamps the pending positions written by
     // the parallel systems against solid blocks before they are committed

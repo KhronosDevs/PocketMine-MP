@@ -3815,6 +3815,143 @@ test('a lit furnace smelts ore and broadcasts the result slot', function () use 
     }
 });
 
+// --- Bows / arrows (14.17) ------------------------------------------------
+test('a held bow charges on use and fires an arrow on ACTION_RELEASE_ITEM', function () use ($kernel, $port): void {
+    // Earlier suite clients idle past the RakNet 10s transport timeout, so
+    // boot a fresh one (same pattern as the chest/furnace tests).
+    [$bowClient, $eid] = joinFreshClient($kernel, $port, 'Archer', 'a0000000-0000-0000-0000-0000000000a1');
+    try {
+        // A real client tunes its view distance; request a small one so the
+        // test client's UDP receive buffer is not flooded with megabytes of
+        // chunk data (which would drop the arrow's AddEntityPacket below the
+        // OS buffer watermark before the poll loop can read it).
+        $radiusReq = new RequestChunkRadiusPacket();
+        $radiusReq->radius = 2;
+        $bowClient->sendGamePacket($radiusReq);
+        $kernel->run(1);
+        $entity = $kernel->getWorld()->getEntity($eid);
+        $inv = $entity?->get(\pocketmine\core\component\InventoryComponent::class);
+        if ($inv === null) {
+            ok(false, 'archer inventory present');
+            return;
+        }
+        // Bow (261) in the held slot, arrows (262) in slot 1. Fresh bow: meta 0.
+        $inv->set(0, new \pocketmine\core\component\ItemStack(261, 0, 1));
+        $inv->set(1, new \pocketmine\core\component\ItemStack(262, 0, 3));
+        $inv->setHeldSlot(0);
+
+        // Aim flat +Z (yaw 0, pitch 0) so the arrow flies away from the
+        // player; point the use packet at an air cell above her so the
+        // chest/furnace intercept does not trigger.
+        $rot = $entity?->get(\pocketmine\core\component\RotationComponent::class);
+        if ($rot) {
+            $rot->yaw = 0.0;
+            $rot->pitch = 0.0;
+        }
+        $archer = null;
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            if ($p['username'] === 'Archer') {
+                $archer = $p;
+            }
+        }
+        if ($archer === null) {
+            ok(false, 'archer position known');
+            return;
+        }
+
+        // USE_ITEM with the bow starts the draw (legacy startAction).
+        $use = new UseItemPacket();
+        $use->x = (int)floor($archer['x']);
+        $use->y = (int)floor($archer['y']);
+        $use->z = (int)floor($archer['z']);
+        $use->face = 1; // up
+        $use->fx = 0.0;
+        $use->fy = 1.0;
+        $use->fz = 0.0;
+        $use->posX = $archer['x'];
+        $use->posY = $archer['y'];
+        $use->posZ = $archer['z'];
+        $use->slot = 0;
+        $use->item = [261, 0, 1, null];
+        $bowClient->sendGamePacket($use);
+        $kernel->run(2);
+
+        // Charge for 30 ticks (> full draw at 20). A real client keeps
+        // streaming movement while aiming, so send keepalive MovePlayer
+        // packets or the RakNet 10s idle timeout drops the session before
+        // the release arrives.
+        $keep = new MovePlayerPacket();
+        $keep->eid = $eid;
+        $keep->x = $archer['x'];
+        $keep->y = $archer['y'];
+        $keep->z = $archer['z'];
+        $keep->yaw = 0.0;
+        $keep->bodyYaw = 0.0;
+        $keep->pitch = 0.0;
+        $keep->mode = MovePlayerPacket::MODE_NORMAL;
+        $keep->onGround = true;
+        for ($i = 0; $i < 30; $i++) {
+            if ($i % 5 === 0) {
+                $bowClient->sendGamePacket($keep);
+            }
+            // Drain the client's socket so the chunk stream (even at the
+            // reduced radius) cannot overflow the OS receive buffer and drop
+            // the arrow's AddEntityPacket before the poll loop reads it.
+            $bowClient->readGamePackets();
+            $kernel->run(1);
+        }
+
+        // Release: ACTION_RELEASE_ITEM fires the arrow.
+        $release = new PlayerActionPacket();
+        $release->eid = 0;
+        $release->action = PlayerActionPacket::ACTION_RELEASE_ITEM;
+        $release->x = 0;
+        $release->y = 0;
+        $release->z = 0;
+        $release->face = 0;
+        $bowClient->sendGamePacket($release);
+
+        // Poll until the arrow entity appears (spawn is same-tick; broadcast
+        // on the next entity sync) and the inventory reflects the consumed
+        // arrow. Send keepalive movement so the session survives the cook-adj
+        // idle (the release packet itself counts as traffic).
+        $deadline = microtime(true) + 5.0;
+        $arrowEid = null;
+        $sawArrowAdd = false;
+        $invAfter = null;
+        while (microtime(true) < $deadline) {
+            foreach ($kernel->getWorld()->getEntities() as $id => $e) {
+                $m = $e->get(\pocketmine\core\component\MetadataComponent::class);
+                if ($m?->get('projectileType') === 'Arrow' && $arrowEid === null) {
+                    $arrowEid = $id;
+                }
+            }
+            foreach ($bowClient->readGamePackets() as [$id, $buffer]) {
+                if ($id === Info::ADD_ENTITY_PACKET) {
+                    $ae = aeFields($buffer);
+                    if ($ae['type'] === 80) { // legacy Arrow::NETWORK_ID
+                        $sawArrowAdd = true;
+                    }
+                }
+            }
+            $invAfter = $kernel->getWorld()->getEntity($eid)?->get(\pocketmine\core\component\InventoryComponent::class);
+            if ($arrowEid !== null && $sawArrowAdd && $invAfter !== null && ($invAfter->get(1)?->count ?? 0) <= 2) {
+                break;
+            }
+            $kernel->run(1);
+        }
+
+        ok($arrowEid !== null, 'arrow entity spawned server-side');
+        ok($sawArrowAdd, 'client received AddEntityPacket for the arrow (type 80)');
+        ok($invAfter !== null && ($invAfter->get(1)?->count ?? 0) === 2, 'one arrow consumed from the inventory (3 -> 2)');
+        // Bow wore one durability in survival.
+        $bowAfter = $invAfter?->get(0);
+        ok($bowAfter !== null && $bowAfter->itemId === 261 && $bowAfter->meta === 1, 'bow durability incremented to 1');
+    } finally {
+        $bowClient->close();
+    }
+});
+
 test('server shuts down cleanly with active sessions', function () use ($kernel, $client): void {
     $adapter = $kernel->getNetworkPort();
     if ($adapter instanceof Protocol84NetworkAdapter) {

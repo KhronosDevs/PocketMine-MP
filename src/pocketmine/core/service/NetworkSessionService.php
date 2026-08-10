@@ -151,7 +151,8 @@ final class NetworkSessionService {
      *   knownEntities: array<int, array{0: float, 1: float, 2: float, 3: float}>,
      *   moveCredit: array<string, int>,
      *   breaking: array{x: int, y: int, z: int, startTick: int}|null,
-     *   openContainer: array{x: int, y: int, z: int, type: string}|null
+     *   openContainer: array{x: int, y: int, z: int, type: string}|null,
+     *   bowDraw: int|null
      * }>
      */
     private array $sessions = [];
@@ -500,6 +501,8 @@ final class NetworkSessionService {
             'breaking' => null,
             // 14.15: the chest this player currently has open (block coords).
             'openContainer' => null,
+            // 14.17: the tick the player started charging a bow (null = not).
+            'bowDraw' => null,
         ];
 
         // Broadcast the new player to everyone (including themselves) and
@@ -676,6 +679,18 @@ final class NetworkSessionService {
         if ($session === null) {
             return;
         }
+        // 14.17: releasing the use button fires a charged bow (legacy
+        // ACTION_RELEASE_ITEM -> releaseUsingItem -> shootBow).
+        if ($pk->action === PlayerActionPacket::ACTION_RELEASE_ITEM) {
+            $this->releaseBow($addrKey, $session);
+            return;
+        }
+        // Any other action cancels an in-progress bow draw (legacy resets
+        // startAction after the action switch).
+        if (($session['bowDraw'] ?? null) !== null) {
+            $session['bowDraw'] = null;
+            $this->sessions[$addrKey] = $session;
+        }
         if ($pk->action === PlayerActionPacket::ACTION_START_BREAK) {
             $ticks = $this->blockBreakService->requiredBreakTicks($session['entityRef'], $pk->x, $pk->y, $pk->z);
             if ($ticks < 0) {
@@ -761,6 +776,93 @@ final class NetworkSessionService {
     }
 
     /**
+     * 14.17: ACTION_RELEASE_ITEM with a charged bow fires an arrow. Mirrors the
+     * legacy Player::releaseUsingItem -> shootBow flow: force grows with charge
+     * time (fully charged at 20 ticks = 1s), survival consumes one arrow and
+     * wears the bow, creative needs no arrow and takes no durability.
+     */
+    private function releaseBow(string $addrKey, array $session): void {
+        $bowDraw = $session['bowDraw'] ?? null;
+        $session['bowDraw'] = null;
+        $this->sessions[$addrKey] = $session;
+        if ($bowDraw === null) {
+            return; // no draw in progress
+        }
+        $entity = $session['entityRef']->getEntity();
+        $inventory = $entity?->get(InventoryComponent::class);
+        if ($inventory === null) {
+            return;
+        }
+        $held = $inventory->get($inventory->heldSlot);
+        if ($held === null || $held->itemId !== 261 || $held->count <= 0) {
+            return; // no longer holding a bow
+        }
+
+        // Legacy charge: p = seconds charged, f = min((p^2 + 2p) / 3, 1) * 2.
+        $diff = $this->currentTick() - $bowDraw;
+        $p = $diff / 20;
+        $f = min((($p ** 2) + $p * 2) / 3, 1) * 2;
+        if ($f < 0.1 || $diff < 5) {
+            return; // released too fast / barely drawn (legacy cancel)
+        }
+
+        $creative = ($entity->get(MetadataComponent::class)?->get('gamemode') ?? 0) === 1;
+        // Survival needs an arrow in the inventory (any meta, legacy ARROW).
+        $arrowSlot = -1;
+        if (!$creative) {
+            foreach ($inventory->getContents() as $slot => $item) {
+                if ($slot < InventoryComponent::ARMOR_OFFSET && $item->itemId === 262 && $item->count > 0) {
+                    $arrowSlot = $slot;
+                    break;
+                }
+            }
+            if ($arrowSlot === -1) {
+                return; // no arrows
+            }
+        }
+
+        $pos = $session['entityRef']->getPosition();
+        $rot = $session['entityRef']->getRotation();
+        if ($pos === null || $rot === null) {
+            return;
+        }
+        // Legacy direction from yaw/pitch: x=-sin(yaw)cos(pitch), y=-sin(pitch),
+        // z=cos(yaw)cos(pitch); motion = direction * force. Our velocity is in
+        // blocks/second, so scale the per-tick force by 20.
+        $yaw = deg2rad($rot->yaw);
+        $pitch = deg2rad($rot->pitch);
+        $dx = -sin($yaw) * cos($pitch);
+        $dy = -sin($pitch);
+        $dz = cos($yaw) * cos($pitch);
+        $speed = $f * 20; // blocks/second
+
+        $arrow = $this->entitySpawnService->spawnProjectile(
+            'Arrow',
+            $pos->x,
+            $pos->y + 1.62, // eye height (legacy getEyeHeight())
+            $pos->z,
+            $dx * $speed,
+            $dy * $speed,
+            $dz * $speed,
+            $session['entityRef'],
+        );
+        $arrowEntity = $arrow->getEntity();
+        if ($arrowEntity) {
+            $meta = $arrowEntity->get(MetadataComponent::class);
+            if ($meta) {
+                $meta->set('critical', $f >= 2.0);
+            }
+        }
+
+        if (!$creative) {
+            $inventory->remove($arrowSlot, 1);
+            $this->sendInventorySlot($session['playerRef'], $arrowSlot);
+            // Legacy: bow damage +1 per shot, breaks at max (384 uses).
+            \pocketmine\core\resource\ItemDurability::consume($session['entityRef']);
+        }
+    }
+
+    /**
      * Block interaction (14.1): USE_ITEM places the held block into the cell
      * adjacent to the clicked face (BlockPlaceService validates reach + the
      * player actually holds that block). On success the new block state is
@@ -796,6 +898,13 @@ final class NetworkSessionService {
         }
         $held = $inventory->get($inventory->heldSlot);
         if ($held === null || $held->count <= 0) {
+            return;
+        }
+        // 14.17: a bow starts charging on use (legacy Player sets startAction
+        // on USE_ITEM; the later ACTION_RELEASE_ITEM fires the arrow).
+        if ($held->itemId === 261) {
+            $session['bowDraw'] = $this->currentTick();
+            $this->sessions[$addrKey] = $session;
             return;
         }
         // 14.11: food items are eaten on use (legacy Food::onConsume). The
@@ -2107,8 +2216,7 @@ final class NetworkSessionService {
         }
         // 14.9: XP orbs render as legacy XPOrb (network id 69) with the
         // DATA_NO_AI flag so the client does not give them mob AI behaviour.
-        if ($meta?->get('xp') !== null && $entity->has('xp_orb')) {
-            $pk = new AddEntityPacket();
+        if ($meta?->get('xp') !== null && $entity->has('xp_orb')) {            $pk = new AddEntityPacket();
             $pk->eid = $entityId;
             $pk->type = 69; // legacy XPOrb::NETWORK_ID
             $pos = $entity->get(PositionComponent::class);
@@ -2121,6 +2229,29 @@ final class NetworkSessionService {
             $pk->speedZ = $vel?->z ?? 0.0;
             $pk->metadata = $this->legacyMetadataDefaults();
             $pk->metadata[15] = [Binary::DATA_TYPE_BYTE, 1]; // DATA_NO_AI
+            return $pk;
+        }
+        // 14.17: arrows render as the legacy Arrow entity (network id 80).
+        // spawnProjectile tags them with projectileType='Arrow'.
+        if ($meta?->get('projectileType') === 'Arrow') {
+            $pk = new AddEntityPacket();
+            $pk->eid = $entityId;
+            $pk->type = 80; // legacy Arrow::NETWORK_ID
+            $pos = $entity->get(PositionComponent::class);
+            $vel = $entity->get(VelocityComponent::class);
+            $rot = $entity->get(RotationComponent::class);
+            $pk->x = $pos?->x ?? 0.0;
+            $pk->y = $pos?->y ?? 0.0;
+            $pk->z = $pos?->z ?? 0.0;
+            $pk->speedX = $vel?->x ?? 0.0;
+            $pk->speedY = $vel?->y ?? 0.0;
+            $pk->speedZ = $vel?->z ?? 0.0;
+            $pk->yaw = $rot?->yaw ?? 0.0;
+            $pk->pitch = $rot?->pitch ?? 0.0;
+            $pk->metadata = $this->legacyMetadataDefaults();
+            // DATA_SHOOTER_ID (17): lets the client render the pulled-back bow
+            // for the shooter (legacy Projectile::DATA_SHOOTER_ID).
+            $pk->metadata[17] = [\pocketmine\utils\Binary::DATA_TYPE_LONG, (int)$meta->get('shooterId', 0)];
             return $pk;
         }
         $type = $meta?->get('mobType') ?? $meta?->get('entityType');
