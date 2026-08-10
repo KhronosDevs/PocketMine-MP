@@ -34,10 +34,14 @@ final class ChunkSerializer {
 
     /** @var array<int, int> biome id => RGBA color (cosmetic; plains default) */
     private const BIOME_COLORS = [
+        0 => 0x4B6EB4, // ocean (subtle water tint)
         1 => 0x7FB238, // plains
         2 => 0xBFB755, // desert
         3 => 0x879A63, // extreme hills
         4 => 0x8DB360, // forest
+        5 => 0x8F9F6B, // taiga
+        12 => 0xC6D7D6, // ice plains
+        16 => 0xDED9A4, // beach
     ];
 
     public static function serialize(ChunkData $data): string {

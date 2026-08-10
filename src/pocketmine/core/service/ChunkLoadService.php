@@ -77,6 +77,8 @@ final class ChunkLoadService {
         $byIndex = [];
         /** @var array<int, bool> $alreadyLoaded */
         $alreadyLoaded = [];
+        /** @var array<int, bool> $generatedIndices */
+        $generatedIndices = [];
         $store = $this->getChunkStore();
         foreach ($chunkCoords as $index => [$chunkX, $chunkZ]) {
             // Loaded chunks are authoritative in memory: a re-request (e.g. a
@@ -95,6 +97,7 @@ final class ChunkLoadService {
             $chunkData = $this->storagePort->loadChunk($chunkX, $chunkZ);
             if ($this->isEmptyChunk($chunkData)) {
                 $toGenerate[] = [$chunkX, $chunkZ];
+                $generatedIndices[$index] = true;
                 $byIndex[$index] = null;
             } else {
                 $byIndex[$index] = $chunkData;
@@ -124,7 +127,12 @@ final class ChunkLoadService {
                 $result[$index] = $chunkData;
                 continue;
             }
-            $result[$index] = $this->materializeChunk($chunkData);
+            // Only freshly GENERATED chunks are populated: disk-loaded chunks
+            // were populated at generation time (the population pass is a pure
+            // function of (chunk, seed), so re-running it on an already-
+            // populated chunk would place a second, different set of features
+            // and corrupt persistence round-trips).
+            $result[$index] = $this->materializeChunk($chunkData, $config->seed, isset($generatedIndices[$index]));
         }
 
         // Loaded-chunk budget (11.3): the store grew, so bring it back under
@@ -136,13 +144,17 @@ final class ChunkLoadService {
         return array_values($result);
     }
 
-    private function materializeChunk(ChunkData $chunkData): ChunkData {
+    private function materializeChunk(ChunkData $chunkData, int $seed, bool $populate): ChunkData {
         $chunkX = $chunkData->chunkX;
         $chunkZ = $chunkData->chunkZ;
 
-        // Populate if needed
-        if (!$this->isPopulated($chunkData)) {
-            $this->worldGenPort->populateChunk($chunkX, $chunkZ, $chunkData);
+        // Populate freshly generated chunks (trees, vegetation, ...). The
+        // generator is a pure function of (chunkX, chunkZ, seed), so the world
+        // seed makes the population deterministic across restarts. Chunks that
+        // came from disk are skipped - they were already populated when saved,
+        // and re-running the pass would place a second, different feature set.
+        if ($populate) {
+            $chunkData = $this->worldGenPort->populateChunk($chunkX, $chunkZ, $chunkData, $seed);
         }
         
         // Calculate light if needed
@@ -193,12 +205,6 @@ final class ChunkLoadService {
 
     private function isEmptyChunk(ChunkData $data): bool {
         return empty($data->sections) && empty($data->entities) && empty($data->tileEntities);
-    }
-
-    private function isPopulated(ChunkData $data): bool {
-        // Check if chunk has been populated (has structures, ores, etc.)
-        // For now, assume not populated if no tile entities or special blocks
-        return !empty($data->tileEntities);
     }
 
     private function hasLightData(ChunkData $data): bool {

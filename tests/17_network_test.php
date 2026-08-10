@@ -1674,11 +1674,15 @@ test('a dropped item is collected by walk-over and the inventory syncs back', fu
     // the one consumed by the placement test, so +3 must make 34). Also pump
     // Bob2's client so his RakNet session cannot hit the 10s server-side idle
     // timeout during this test's polling.
-    $deadline = microtime(true) + 8.0;
+    // Tick-budgeted (not wall-clock): a wall-clock deadline under CPU load
+    // (e.g. the full suite running) lets fewer kernel ticks elapse and the
+    // drop can miss the 8s pickup window. 600 ticks = 30s of game time, far
+    // beyond the fresh-drop delay + settle + broadcast chain.
     $sawAdd = false;
     $sawRemove = false;
     $sawSlot = false;
-    while (microtime(true) < $deadline && (!$sawAdd || !$sawRemove || !$sawSlot)) {
+    $tickBudget = 600;
+    while ($tickBudget-- > 0 && (!$sawAdd || !$sawRemove || !$sawSlot)) {
         foreach ($client->readGamePackets() as [$id, $buffer]) {
             if ($id === Info::ADD_ITEM_ENTITY_PACKET && aieFields($buffer)['eid'] === $itemEid) {
                 $sawAdd = true;
