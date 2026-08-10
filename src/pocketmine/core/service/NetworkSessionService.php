@@ -151,7 +151,7 @@ final class NetworkSessionService {
      *   knownEntities: array<int, array{0: float, 1: float, 2: float, 3: float}>,
      *   moveCredit: array<string, int>,
      *   breaking: array{x: int, y: int, z: int, startTick: int}|null,
-     *   openContainer: array{x: int, y: int, z: int}|null
+     *   openContainer: array{x: int, y: int, z: int, type: string}|null
      * }>
      */
     private array $sessions = [];
@@ -684,10 +684,14 @@ final class NetworkSessionService {
             if ($ticks === 0) {
                 // Creative or instant-break block (torches, saplings, ...).
                 $wasChest = $this->isChestBlock($pk->x, $pk->y, $pk->z);
+                $wasFurnace = $this->isFurnaceBlock($pk->x, $pk->y, $pk->z);
                 if ($this->blockBreakService->breakBlock($session['entityRef'], $pk->x, $pk->y, $pk->z, $pk->face)) {
                     $this->broadcastBlockState($pk->x, $pk->y, $pk->z);
                     if ($wasChest) {
                         $this->onChestBroken($pk->x, $pk->y, $pk->z, $session);
+                    }
+                    if ($wasFurnace) {
+                        $this->onFurnaceBroken($pk->x, $pk->y, $pk->z, $session);
                     }
                 }
                 $session['breaking'] = null;
@@ -739,10 +743,14 @@ final class NetworkSessionService {
             return; // released early / hostile instant confirm: block stays
         }
         $wasChest = $this->isChestBlock($x, $y, $z);
+        $wasFurnace = $this->isFurnaceBlock($x, $y, $z);
         if ($this->blockBreakService->breakBlock($session['entityRef'], $x, $y, $z, 1)) {
             $this->broadcastBlockState($x, $y, $z);
             if ($wasChest) {
                 $this->onChestBroken($x, $y, $z, $session);
+            }
+            if ($wasFurnace) {
+                $this->onFurnaceBroken($x, $y, $z, $session);
             }
         }
     }
@@ -774,9 +782,17 @@ final class NetworkSessionService {
         // hand). The chest GUI is a real window: ContainerOpenPacket +
         // contents, then per-slot moves.
         $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
-        if ($store instanceof \pocketmine\core\resource\ChunkStore && $store->getBlock($pk->x, $pk->y, $pk->z) === 54) {
-            $this->openChest($addrKey, $pk->x, $pk->y, $pk->z);
-            return;
+        if ($store instanceof \pocketmine\core\resource\ChunkStore) {
+            $block = $store->getBlock($pk->x, $pk->y, $pk->z);
+            if ($block === 54) {
+                $this->openChest($addrKey, $pk->x, $pk->y, $pk->z);
+                return;
+            }
+            // 14.16: right-clicking a furnace (lit or unlit) opens its window.
+            if ($block === 61 || $block === 62) {
+                $this->openFurnace($addrKey, $pk->x, $pk->y, $pk->z);
+                return;
+            }
         }
         $held = $inventory->get($inventory->heldSlot);
         if ($held === null || $held->count <= 0) {
@@ -877,8 +893,14 @@ final class NetworkSessionService {
             }
         } elseif ($pk->windowid === self::CHEST_WINDOW_ID) {
             $open = $session['openContainer'];
-            if ($open !== null && $pk->slot >= 0 && $pk->slot < ChestStore::CHEST_SIZE) {
+            if ($open !== null && $open['type'] === 'chest' && $pk->slot >= 0 && $pk->slot < ChestStore::CHEST_SIZE) {
                 $this->handleChestSetSlot($addrKey, $session, $pk);
+                return;
+            }
+        } elseif ($pk->windowid === self::FURNACE_WINDOW_ID) {
+            $open = $session['openContainer'];
+            if ($open !== null && $open['type'] === 'furnace' && $pk->slot >= 0 && $pk->slot < \pocketmine\core\resource\FurnaceStore::SIZE) {
+                $this->handleFurnaceSetSlot($addrKey, $session, $pk);
                 return;
             }
         }
@@ -958,7 +980,7 @@ final class NetworkSessionService {
         if ($session === null) {
             return;
         }
-        $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z];
+        $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z, 'type' => 'chest'];
         $this->sessions[$addrKey] = $session;
 
         // Legacy ContainerInventory::onOpen: ContainerOpenPacket (type 0 =
@@ -1062,6 +1084,182 @@ final class NetworkSessionService {
         $session['moveCredit'] = $credit;
         $this->sessions[$addrKey] = $session;
         $this->broadcastChestSlot($open['x'], $open['y'], $open['z'], $slot, $chest);
+    }
+
+    /**
+     * 14.16 furnaces: right-clicking a furnace opened the window. Furnace
+     * slots are 0 (smelting), 1 (fuel), 2 (result); the client drives moves
+     * through the same session-wide move credit as chests/window 0. Window
+     * id 3 (legacy: the second container window a player opens).
+     */
+    private const FURNACE_WINDOW_ID = 3;
+
+    private function openFurnace(string $addrKey, int $x, int $y, int $z): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z, 'type' => 'furnace'];
+        $this->sessions[$addrKey] = $session;
+
+        // Legacy FurnaceInventory::onOpen: ContainerOpenPacket (type 3 =
+        // InventoryType::FURNACE, 3 slots, block coords) then full contents.
+        $furnaceStore = $this->furnaceStore();
+        $state = $furnaceStore->get($x, $y, $z);
+        $open = new ContainerOpenPacket();
+        $open->windowid = self::FURNACE_WINDOW_ID;
+        $open->type = 3; // InventoryType::FURNACE
+        $open->slots = \pocketmine\core\resource\FurnaceStore::SIZE;
+        $open->x = $x;
+        $open->y = $y;
+        $open->z = $z;
+        $open->entityId = -1;
+        $this->queuePacket($session['playerRef'], $open);
+        $this->sendFurnaceContents($session['playerRef'], $state['inventory']);
+    }
+
+    private function furnaceStore(): \pocketmine\core\resource\FurnaceStore {
+        $store = $this->resourceRegistry->get(\pocketmine\core\resource\FurnaceStore::class);
+        return $store instanceof \pocketmine\core\resource\FurnaceStore ? $store : new \pocketmine\core\resource\FurnaceStore();
+    }
+
+    /** Send the full 3 furnace slots as window 3 (legacy sendContents). */
+    private function sendFurnaceContents(PlayerRef $player, \pocketmine\core\component\InventoryComponent $inv): void {
+        $pk = new ContainerSetContentPacket();
+        $pk->windowid = self::FURNACE_WINDOW_ID;
+        $pk->slots = [];
+        for ($i = 0; $i < \pocketmine\core\resource\FurnaceStore::SIZE; $i++) {
+            $item = $inv->get($i);
+            $pk->slots[] = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
+        }
+        $this->queuePacket($player, $pk);
+    }
+
+    /** Send one furnace slot to every player with that furnace open. */
+    private function broadcastFurnaceSlot(int $x, int $y, int $z, int $slot, \pocketmine\core\component\InventoryComponent $inv): void {
+        $item = $inv->get($slot);
+        $pk = new ContainerSetSlotPacket();
+        $pk->windowid = self::FURNACE_WINDOW_ID;
+        $pk->slot = $slot;
+        $pk->hotbarSlot = $slot;
+        $pk->item = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
+        foreach ($this->sessions as $s) {
+            $open = $s['openContainer'];
+            if ($open !== null && $open['type'] === 'furnace'
+                && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
+                $this->queuePacket($s['playerRef'], clone $pk);
+            }
+        }
+    }
+
+    /**
+     * A furnace-window slot change. Same authoritative apply + session-wide
+     * move credit as the chest path; every viewer with the same furnace open
+     * gets the changed slot.
+     */
+    private function handleFurnaceSetSlot(string $addrKey, array $session, ContainerSetSlotPacket $pk): void {
+        $open = $session['openContainer'];
+        if ($open === null) {
+            return;
+        }
+        $furnace = $this->furnaceStore()->get($open['x'], $open['y'], $open['z']);
+        $inv = $furnace['inventory'];
+        $slot = $pk->slot;
+        $id = (int)($pk->item[0] ?? 0);
+        $count = (int)($pk->item[1] ?? 0);
+        $meta = (int)($pk->item[2] ?? 0);
+
+        /** @var array<string, int> $credit */
+        $credit = $session['moveCredit'];
+        $creditKey = $id . ':' . $meta;
+        $credit[$creditKey] = $credit[$creditKey] ?? 0;
+
+        $current = $inv->get($slot);
+        $inSlot = ($current !== null && $current->itemId === $id && $current->meta === $meta)
+            ? $current->count
+            : 0;
+
+        if ($id <= 0 || $count <= 0) {
+            // Slot emptied: release what it held into move credit.
+            if ($current !== null) {
+                $heldKey = $current->itemId . ':' . $current->meta;
+                $credit[$heldKey] = ($credit[$heldKey] ?? 0) + $current->count;
+            }
+            $inv->set($slot, null);
+        } else {
+            $need = max(0, $count - $inSlot);
+            if ($need > $credit[$creditKey]) {
+                return; // hostile claim - keep the authoritative state
+            }
+            $credit[$creditKey] -= $need;
+            if ($inSlot > $count) {
+                $credit[$creditKey] += $inSlot - $count;
+            }
+            $inv->set($slot, new ItemStack($id, $meta, $count));
+        }
+        $session['moveCredit'] = $credit;
+        $this->sessions[$addrKey] = $session;
+        $this->furnaceStore()->put($open['x'], $open['y'], $open['z'], $furnace);
+        $this->broadcastFurnaceSlot($open['x'], $open['y'], $open['z'], $slot, $inv);
+    }
+
+    /**
+     * 14.16 public hook for FurnaceSystem: the furnace's burn/cook state
+     * changed on the world tick. Resync the changed slot (or all slots) to
+     * every viewer with that furnace open, and - only when the lit/unlit
+     * block id actually flipped - re-broadcast the block state (a produce
+     * tick must not spam UpdateBlockPacket to every session).
+     */
+    public function syncFurnace(int $x, int $y, int $z, ?int $slot = null, bool $blockChanged = false): void {
+        $furnace = $this->furnaceStore()->get($x, $y, $z);
+        $inv = $furnace['inventory'];
+        if ($blockChanged) {
+            $this->broadcastBlockState($x, $y, $z);
+        }
+        if ($slot !== null) {
+            $this->broadcastFurnaceSlot($x, $y, $z, $slot, $inv);
+        } else {
+            foreach ($this->sessions as $s) {
+                $open = $s['openContainer'];
+                if ($open !== null && $open['type'] === 'furnace'
+                    && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
+                    $this->sendFurnaceContents($s['playerRef'], $inv);
+                }
+            }
+        }
+    }
+
+    private function isFurnaceBlock(int $x, int $y, int $z): bool {
+        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+        if (!$store instanceof \pocketmine\core\resource\ChunkStore) {
+            return false;
+        }
+        $block = $store->getBlock($x, $y, $z);
+        return $block === 61 || $block === 62;
+    }
+
+    /**
+     * 14.16: a furnace block was broken - spill its contents (input, fuel,
+     * result) as dropped items, forget the store entry, and close the window
+     * of every session that had it open.
+     */
+    private function onFurnaceBroken(int $x, int $y, int $z, array $breaker): void {
+        $store = $this->furnaceStore();
+        $inv = $store->remove($x, $y, $z);
+        foreach ($inv->getContents() as $item) {
+            $this->entitySpawnService->spawnItem($x + 0.5, $y + 0.5, $z + 0.5, $item);
+        }
+        foreach ($this->sessions as $key => $s) {
+            $open = $s['openContainer'];
+            if ($open !== null && $open['type'] === 'furnace'
+                && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
+                $s['openContainer'] = null;
+                $this->sessions[$key] = $s;
+                $close = new ContainerClosePacket();
+                $close->windowid = self::FURNACE_WINDOW_ID;
+                $this->queuePacket($s['playerRef'], $close);
+            }
+        }
     }
 
     /**

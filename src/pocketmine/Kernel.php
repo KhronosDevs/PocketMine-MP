@@ -1135,20 +1135,17 @@ final class Kernel {
             foreach ($store->getLoadedChunkCoordinates() as [$chunkX, $chunkZ]) {
                 $chunkData = $store->toChunkData($chunkX, $chunkZ);
                 if ($chunkData !== null) {
-                    // 14.15: chest contents ride the chunk's tile-entity list,
-                    // so they survive restarts with the terrain.
-                    $chestStore = $this->resourceRegistry->get(\pocketmine\core\resource\ChestStore::class);
-                    if ($chestStore instanceof \pocketmine\core\resource\ChestStore) {
-                        $chunkData = new \pocketmine\port\driven\ChunkData(
-                            $chunkData->chunkX,
-                            $chunkData->chunkZ,
-                            $chunkData->sections,
-                            $chunkData->biomes,
-                            $chunkData->heightmap,
-                            $chunkData->entities,
-                            array_merge($chunkData->tileEntities, $chestStore->snapshotsForChunk($chunkX, $chunkZ)),
-                        );
-                    }
+                    // 14.15/14.16: chest contents + furnace state ride the
+                    // chunk's tile-entity list so they survive restarts with
+                    // the terrain. Shared helper: the eviction path and the
+                    // explicit unload use it too, so a chunk that leaves the
+                    // resident set is never saved without its block state.
+                    $chunkData = \pocketmine\core\service\ChunkPersistence::attachTileSnapshots(
+                        $this->resourceRegistry,
+                        $chunkData,
+                        $chunkX,
+                        $chunkZ,
+                    );
                     $this->storagePort->saveChunk($chunkX, $chunkZ, $chunkData);
                 }
             }
@@ -1503,6 +1500,8 @@ function registerBuiltinResources(ResourceRegistry $registry): void {
     $registry->set(new \pocketmine\core\resource\ChunkStore());
     $registry->set(new \pocketmine\core\resource\ChestStore());
     $registry->set(new \pocketmine\core\resource\RecipeRegistry());
+    $registry->set(new \pocketmine\core\resource\SmeltingRegistry());
+    $registry->set(new \pocketmine\core\resource\FurnaceStore());
 }
 
 function registerBuiltinRecipes(ResourceRegistry $registry): void {
@@ -1565,6 +1564,64 @@ function registerBuiltinRecipes(ResourceRegistry $registry): void {
         ['C' => new \pocketmine\core\component\ItemStack(263), 'S' => new \pocketmine\core\component\ItemStack(280)],
         new \pocketmine\core\component\ItemStack(50, 0, 4),    // 4 torches
     );
+
+    // 14.16 furnace smelting recipes + fuel (legacy recipes.json type 2/3
+    // and Fuel::$duration - authoritative for protocol 84).
+    registerBuiltinSmelting($registry);
+}
+
+function registerBuiltinSmelting(ResourceRegistry $registry): void {
+    $smelting = $registry->get(\pocketmine\core\resource\SmeltingRegistry::class);
+    if (!$smelting instanceof \pocketmine\core\resource\SmeltingRegistry) {
+        return;
+    }
+    $item = static fn(int $id, int $meta = 0, int $count = 1) => new \pocketmine\core\component\ItemStack($id, $meta, $count);
+
+    // Ores / blocks -> refined products.
+    $smelting->registerSmelting($item(4), $item(1));          // cobblestone -> stone
+    $smelting->registerSmelting($item(12), $item(20));        // sand -> glass
+    $smelting->registerSmelting($item(14), $item(266));       // gold ore -> gold ingot
+    $smelting->registerSmelting($item(15), $item(265));       // iron ore -> iron ingot
+    $smelting->registerSmelting($item(16), $item(263));       // coal ore -> coal
+    $smelting->registerSmelting($item(17, -1), $item(263, 1)); // logs -> charcoal
+    $smelting->registerSmelting($item(162, -1), $item(263, 1)); // acacia/dark oak logs -> charcoal
+    $smelting->registerSmelting($item(21), $item(351, 4));    // lapis ore -> lapis lazuli
+    $smelting->registerSmelting($item(56), $item(264));       // diamond ore -> diamond
+    $smelting->registerSmelting($item(73), $item(331));       // redstone ore -> redstone
+    $smelting->registerSmelting($item(81), $item(351, 2));    // cactus -> cactus green
+    $smelting->registerSmelting($item(82), $item(172));       // clay block -> hardened clay
+    $smelting->registerSmelting($item(87), $item(405));       // netherrack -> nether brick
+    $smelting->registerSmelting($item(129), $item(388));      // emerald ore -> emerald
+    $smelting->registerSmelting($item(153), $item(406));      // nether quartz ore -> quartz
+    $smelting->registerSmelting($item(98, 0), $item(98, 2));  // stone bricks -> cracked stone bricks
+
+    // Food.
+    $smelting->registerSmelting($item(319), $item(320));      // raw porkchop -> cooked porkchop
+    $smelting->registerSmelting($item(337), $item(336));      // raw chicken -> cooked chicken
+    $smelting->registerSmelting($item(349), $item(350));      // raw fish -> cooked fish
+    $smelting->registerSmelting($item(363), $item(364));      // raw beef -> steak
+    $smelting->registerSmelting($item(365), $item(366));      // raw mutton -> cooked mutton
+    $smelting->registerSmelting($item(392), $item(393));      // potato -> baked potato
+    $smelting->registerSmelting($item(411), $item(412));      // raw rabbit -> cooked rabbit
+    $smelting->registerSmelting($item(460), $item(463));      // raw salmon -> cooked salmon
+
+    // Fuel (legacy Fuel::$duration; -1 = any meta).
+    $smelting->registerFuel(263, -1, 1600);    // coal
+    $smelting->registerFuel(173, -1, 16000);   // coal block
+    $smelting->registerFuel(17, -1, 300);      // logs
+    $smelting->registerFuel(162, -1, 300);     // acacia/dark oak logs
+    $smelting->registerFuel(5, -1, 300);       // planks
+    $smelting->registerFuel(6, -1, 100);       // sapling
+    $smelting->registerFuel(280, -1, 100);     // stick
+    $smelting->registerFuel(268, -1, 200);     // wooden sword
+    $smelting->registerFuel(269, -1, 200);     // wooden shovel
+    $smelting->registerFuel(270, -1, 200);     // wooden pickaxe
+    $smelting->registerFuel(271, -1, 200);     // wooden axe
+    $smelting->registerFuel(290, -1, 200);     // wooden hoe
+    $smelting->registerFuel(58, -1, 300);      // crafting table
+    $smelting->registerFuel(54, -1, 300);      // chest
+    $smelting->registerFuel(369, -1, 2400);    // blaze rod
+    $smelting->registerFuel(325, 10, 20000);   // lava bucket
 }
 
 /**
@@ -1629,6 +1686,11 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // starvation damage, HUD sync. After regen so the hunger gate (regen
     // needs food) sees current values.
     $scheduler->register(new \pocketmine\core\system\HungerSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // 14.16: furnaces - burn fuel, cook input, produce results on the main
+    // thread every world tick (furnaces are blocks, not entities, so they
+    // are not part of the region pipeline). Runs after crafting so the
+    // smelting registry is available; no ordering constraint on gameplay.
+    $scheduler->register(new \pocketmine\core\system\FurnaceSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     $scheduler->register(new \pocketmine\core\system\ChunkUpdateSystem(), \pocketmine\core\ecs\SystemPhase::CHUNK_PARALLEL);
     // Post-movement block collision: clamps the pending positions written by
     // the parallel systems against solid blocks before they are committed

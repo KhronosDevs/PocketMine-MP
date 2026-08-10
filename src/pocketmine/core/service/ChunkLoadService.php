@@ -163,6 +163,11 @@ final class ChunkLoadService {
             if ($chestStore instanceof \pocketmine\core\resource\ChestStore) {
                 $chestStore->restoreFromSnapshots($chunkData->tileEntities);
             }
+            // 14.16: rehydrate furnace state (slots + burn/cook) the same way.
+            $furnaceStore = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\FurnaceStore::class);
+            if ($furnaceStore instanceof \pocketmine\core\resource\FurnaceStore) {
+                $furnaceStore->restoreFromSnapshots($chunkData->tileEntities);
+            }
             if (!$this->isEmptyChunk($chunkData)) {
                 $store->markGenerated($chunkX, $chunkZ);
                 // Generated chunks are populated once the population pass ran
@@ -211,6 +216,12 @@ final class ChunkLoadService {
         if ($store !== null && $store->isLoaded($chunkX, $chunkZ)) {
             $chunkData = $store->toChunkData($chunkX, $chunkZ);
             if ($chunkData !== null) {
+                $chunkData = ChunkPersistence::attachTileSnapshots(
+                    $this->world->getResourceRegistry(),
+                    $chunkData,
+                    $chunkX,
+                    $chunkZ,
+                );
                 $this->storagePort->saveChunk($chunkX, $chunkZ, $chunkData);
             }
             $store->unload($chunkX, $chunkZ);
@@ -224,6 +235,14 @@ final class ChunkLoadService {
         if ($store !== null && !$store->isLoaded($data->chunkX, $data->chunkZ)) {
             $store->load($data);
         }
+        // Attach block-store tile snapshots so a chunk saved while resident
+        // never drops its chest/furnace contents on disk.
+        $data = ChunkPersistence::attachTileSnapshots(
+            $this->world->getResourceRegistry(),
+            $data,
+            $data->chunkX,
+            $data->chunkZ,
+        );
         $this->storagePort->saveChunk($data->chunkX, $data->chunkZ, $data);
     }
 

@@ -3234,6 +3234,48 @@ function ccpFields(string $buf): array {
 }
 
 /**
+ * Find a free surface cell (air above real grass/dirt terrain) near the safe
+ * spawn - shared by the chest/furnace block-placement helpers. Never stack on
+ * a block left by a previous test.
+ * @return array{0: int, 1: int, 2: int}
+ */
+function findFreeSurfaceCell(\pocketmine\Kernel $kernel): array {
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+    if ($store === null) {
+        throw new RuntimeException('no chunk store');
+    }
+    $sea = \pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter::SEA_LEVEL;
+    $water = \pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter::WATER_BLOCK;
+    $config = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
+    $cx = $config instanceof \pocketmine\core\resource\ServerConfig ? $config->spawnX : 0;
+    $cz = $config instanceof \pocketmine\core\resource\ServerConfig ? $config->spawnZ : 0;
+    for ($r = 0; $r <= 32; $r += 4) {
+        for ($dz = -$r; $dz <= $r; $dz += 2) {
+            for ($dx = -$r; $dx <= $r; $dx += 2) {
+                $x = $cx + $dx;
+                $z = $cz + $dz;
+                $top = $store->getHighestBlockAt($x, $z);
+                $surface = $store->getBlock($x, $top, $z);
+                if ($top < $sea || $surface === $water) {
+                    continue; // underwater column
+                }
+                // Real terrain only (grass/dirt) - never a block a previous
+                // test left behind.
+                if ($surface !== 2 && $surface !== 3) {
+                    continue;
+                }
+                if ($store->getBlock($x, $top + 1, $z) !== 0) {
+                    continue; // cell above the surface is occupied
+                }
+                return [$x, $top + 1, $z];
+            }
+        }
+    }
+    throw new RuntimeException('no free surface cell for a test block');
+}
+
+/**
  * Drop a chest block into the world at the given position and teleport Alice
  * next to it so she can right-click it (the break/place tests teleport her
  * onto a surface block; the chest sits one cell above that surface).
@@ -3245,43 +3287,65 @@ function placeTestChest(\pocketmine\Kernel $kernel, FakeClient $client, int $ent
     if ($store === null) {
         throw new RuntimeException('no chunk store');
     }
-    // Find a surface column whose cell ABOVE the surface is still air (a
-    // previous test may have placed a chest there - never stack on it).
-    $sea = \pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter::SEA_LEVEL;
-    $water = \pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter::WATER_BLOCK;
-    $config = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
-    $cx = $config instanceof \pocketmine\core\resource\ServerConfig ? $config->spawnX : 0;
-    $cz = $config instanceof \pocketmine\core\resource\ServerConfig ? $config->spawnZ : 0;
-    $chestAt = null;
-    for ($r = 0; $r <= 32 && $chestAt === null; $r += 4) {
-        for ($dz = -$r; $dz <= $r && $chestAt === null; $dz += 2) {
-            for ($dx = -$r; $dx <= $r && $chestAt === null; $dx += 2) {
-                $x = $cx + $dx;
-                $z = $cz + $dz;
-                $top = $store->getHighestBlockAt($x, $z);
-                $surface = $store->getBlock($x, $top, $z);
-                if ($top < $sea || $surface === $water) {
-                    continue; // underwater column
-                }
-                // The surface block must be real terrain (grass/dirt) - never
-                // a chest from a previous test (whose block id is 54).
-                if ($surface !== 2 && $surface !== 3) {
-                    continue;
-                }
-                if ($store->getBlock($x, $top + 1, $z) !== 0) {
-                    continue; // cell above the surface is occupied
-                }
-                $chestAt = [$x, $top + 1, $z];
-            }
-        }
-    }
-    if ($chestAt === null) {
-        throw new RuntimeException('no free surface cell for a test chest');
-    }
-    [$cx, $cy, $cz] = $chestAt;
+    [$cx, $cy, $cz] = findFreeSurfaceCell($kernel);
     $store->setBlock($cx, $cy, $cz, 54); // chest
     teleportEntityOnto($kernel, $client, $entityId, $cx, $cy, $cz);
     return [$cx, $cy, $cz];
+}
+
+/**
+ * 14.16: drop a furnace block (unlit, id 61) into the world and teleport the
+ * player next to it, mirroring placeTestChest.
+ * @return array{0: int, 1: int, 2: int}
+ */
+function placeTestFurnace(\pocketmine\Kernel $kernel, FakeClient $client, int $entityId): array {
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+    if ($store === null) {
+        throw new RuntimeException('no chunk store');
+    }
+    [$fx, $fy, $fz] = findFreeSurfaceCell($kernel);
+    $store->setBlock($fx, $fy, $fz, 61); // furnace
+    teleportEntityOnto($kernel, $client, $entityId, $fx, $fy, $fz);
+    return [$fx, $fy, $fz];
+}
+
+/**
+ * 14.16: right-click a furnace and wait for the server's ContainerOpenPacket
+ * (window 3, type 3). The furnace window only accepts writes for sessions
+ * that have it open.
+ * @return array<string, mixed>
+ */
+function openTestFurnace(\pocketmine\Kernel $kernel, FakeClient $client, int $fx, int $fy, int $fz): array {
+    $use = new UseItemPacket();
+    $use->x = $fx;
+    $use->y = $fy;
+    $use->z = $fz;
+    $use->face = 1;
+    $use->fx = 0.0;
+    $use->fy = 0.0;
+    $use->fz = 0.0;
+    $use->posX = $fx + 0.5;
+    $use->posY = $fy + 0.5;
+    $use->posZ = $fz + 0.5;
+    $use->slot = 0;
+    $use->item = [0, 0, 0, null];
+    $client->sendGamePacket($use);
+
+    $deadline = microtime(true) + 3.0;
+    while (microtime(true) < $deadline) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::CONTAINER_OPEN_PACKET) {
+                $fields = copFields($buffer);
+                if (($fields['windowid'] ?? -1) === 3) {
+                    return $fields;
+                }
+            }
+        }
+        usleep(10000);
+    }
+    throw new RuntimeException('furnace at (' . $fx . ', ' . $fy . ', ' . $fz . ') did not open');
 }
 
 /**
@@ -3592,6 +3656,162 @@ test('breaking a chest spills its contents as item entities', function () use ($
         ok($found, 'a diamond item entity spawned at the broken chest');
     } finally {
         $chestClient->close();
+    }
+});
+
+// --- Furnaces / smelting (14.16) -----------------------------------------
+test('right-clicking a furnace opens a real container window (window 3, type 3)', function () use ($kernel, $port): void {
+    [$furnaceClient, $eid] = joinFreshClient($kernel, $port, 'Furny', 'f0000000-0000-0000-0000-0000000000f1');
+    try {
+        [$fx, $fy, $fz] = placeTestFurnace($kernel, $furnaceClient, $eid);
+        $open = openTestFurnace($kernel, $furnaceClient, $fx, $fy, $fz);
+        same(3, $open['windowid'], 'furnace window id 3');
+        same(3, $open['type'], 'furnace window type 3');
+        same(3, $open['slots'], '3 furnace slots');
+        same($fx, $open['x'], 'open x matches the furnace block');
+        same($fy, $open['y'], 'open y matches the furnace block');
+        same($fz, $open['z'], 'open z matches the furnace block');
+    } finally {
+        $furnaceClient->close();
+    }
+});
+
+test('furnace window moves are validated with move credit and sync to the store', function () use ($kernel, $port): void {
+    [$furnaceClient, $eid] = joinFreshClient($kernel, $port, 'Furny2', 'f0000000-0000-0000-0000-0000000000f2');
+    try {
+        [$fx, $fy, $fz] = placeTestFurnace($kernel, $furnaceClient, $eid);
+        openTestFurnace($kernel, $furnaceClient, $fx, $fy, $fz);
+
+        // The fresh player holds planks in slot 0: empty it (releases credit),
+        // then fill furnace slot 0 (smelting input) with 1 iron ore and slot 1
+        // (fuel) with 1 coal - a three-packet drag across the windows.
+        $empty = new ContainerSetSlotPacket();
+        $empty->windowid = 0;
+        $empty->slot = 0;
+        $empty->hotbarSlot = 0;
+        $empty->item = [0, 0, 0, null];
+        $furnaceClient->sendGamePacket($empty);
+
+        // Seed iron ore + coal directly into the player's inventory (the
+        // server-side authoritative slot), then release it with two more
+        // empties so the furnace claims are fully backed by move credit.
+        $entity = $kernel->getWorld()->getEntity($eid);
+        $inv = $entity?->get(\pocketmine\core\component\InventoryComponent::class);
+        if ($inv === null) {
+            ok(false, 'player inventory present');
+            return;
+        }
+        $inv->set(1, new \pocketmine\core\component\ItemStack(15, 0, 1)); // iron ore
+        $inv->set(2, new \pocketmine\core\component\ItemStack(263, 0, 1)); // coal
+        $empty1 = new ContainerSetSlotPacket();
+        $empty1->windowid = 0;
+        $empty1->slot = 1;
+        $empty1->hotbarSlot = 1;
+        $empty1->item = [0, 0, 0, null];
+        $furnaceClient->sendGamePacket($empty1);
+        $empty2 = new ContainerSetSlotPacket();
+        $empty2->windowid = 0;
+        $empty2->slot = 2;
+        $empty2->hotbarSlot = 2;
+        $empty2->item = [0, 0, 0, null];
+        $furnaceClient->sendGamePacket($empty2);
+
+        $fillOre = new ContainerSetSlotPacket();
+        $fillOre->windowid = 3;
+        $fillOre->slot = 0;
+        $fillOre->hotbarSlot = 0;
+        $fillOre->item = [15, 1, 0, null];
+        $furnaceClient->sendGamePacket($fillOre);
+        $fillFuel = new ContainerSetSlotPacket();
+        $fillFuel->windowid = 3;
+        $fillFuel->slot = 1;
+        $fillFuel->hotbarSlot = 1;
+        $fillFuel->item = [263, 1, 0, null];
+        $furnaceClient->sendGamePacket($fillFuel);
+        $kernel->run(3);
+
+        $furnaceStore = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\FurnaceStore::class);
+        if (!$furnaceStore instanceof \pocketmine\core\resource\FurnaceStore) {
+            ok(false, 'furnace store present');
+            return;
+        }
+        $state = $furnaceStore->get($fx, $fy, $fz);
+        $ore = $state['inventory']->get(0);
+        // The coal move landed and was immediately consumed when the furnace
+        // lit on the next world tick (1 coal = 1600 burn ticks): the burn
+        // state is the proof the fuel claim went through.
+        ok($ore !== null && $ore->itemId === 15 && $ore->count === 1, 'iron ore landed in furnace slot 0');
+        ok($state['burnTime'] > 0, 'coal was consumed to light the furnace (burning)');
+        same(null, $state['inventory']->get(1), 'fuel slot empty after the coal was spent lighting');
+    } finally {
+        $furnaceClient->close();
+    }
+});
+
+test('a lit furnace smelts ore and broadcasts the result slot', function () use ($kernel, $port): void {
+    [$furnaceClient, $eid] = joinFreshClient($kernel, $port, 'Furny3', 'f0000000-0000-0000-0000-0000000000f3');
+    try {
+        [$fx, $fy, $fz] = placeTestFurnace($kernel, $furnaceClient, $eid);
+        openTestFurnace($kernel, $furnaceClient, $fx, $fy, $fz);
+
+        // Seed the furnace directly (the open window already got its contents;
+        // the move-credit path is covered above): 1 iron ore + 1 coal. The
+        // furnace lights on the next world tick and cooks for 200 ticks.
+        $furnaceStore = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\FurnaceStore::class);
+        if (!$furnaceStore instanceof \pocketmine\core\resource\FurnaceStore) {
+            ok(false, 'furnace store present');
+            return;
+        }
+        $state = $furnaceStore->get($fx, $fy, $fz);
+        $state['inventory']->set(0, new \pocketmine\core\component\ItemStack(15, 0, 1)); // iron ore
+        $state['inventory']->set(1, new \pocketmine\core\component\ItemStack(263, 0, 1)); // coal
+        $furnaceStore->put($fx, $fy, $fz, $state);
+
+        // Run enough ticks for the smelt to complete: lighting consumes the
+        // coal and cookTime reaches 200 on the ~201st tick. The completed
+        // smelt is pushed as a full window-3 content refresh (legacy
+        // FurnaceInventory::onUpdate sends the whole window when the result
+        // changes). The kernel paces ticks at 50ms, so the cook takes ~10s of
+        // real time - the RakNet 10s idle timeout would drop a silent client,
+        // so the fake client reports its position every iteration like a real
+        // player to keep the session alive.
+        $deadline = microtime(true) + 30.0;
+        $sawIngot = false;
+        $sawLit = false;
+        while (microtime(true) < $deadline && (!$sawIngot || !$sawLit)) {
+            $kernel->run(10);
+            // Client keepalive: re-send the last known position.
+            $ka = new MovePlayerPacket();
+            $ka->eid = $eid;
+            $ka->x = $fx + 0.5;
+            $ka->y = $fy + 1;
+            $ka->z = $fz + 0.5;
+            $ka->yaw = 0.0;
+            $ka->bodyYaw = 0.0;
+            $ka->pitch = 0.0;
+            $ka->mode = MovePlayerPacket::MODE_NORMAL;
+            $ka->onGround = true;
+            $furnaceClient->sendGamePacket($ka);
+            foreach ($furnaceClient->readGamePackets() as [$id, $buffer]) {
+                if ($id === Info::CONTAINER_SET_CONTENT_PACKET) {
+                    $csc = cscFields($buffer);
+                    if ($csc['windowid'] === 3 && ($csc['slots'][2][0] ?? 0) === 265) {
+                        $sawIngot = true;
+                    }
+                }
+                if ($id === Info::UPDATE_BLOCK_PACKET) {
+                    $ub = ubFields($buffer);
+                    if ($ub['x'] === $fx && $ub['y'] === $fy && $ub['z'] === $fz && $ub['blockId'] === 62) {
+                        $sawLit = true;
+                    }
+                }
+            }
+            usleep(10000);
+        }
+        ok($sawLit, 'lit furnace block state (62) broadcast to the client');
+        ok($sawIngot, 'smelted iron ingot broadcast on furnace window 3 (content refresh)');
+    } finally {
+        $furnaceClient->close();
     }
 });
 
