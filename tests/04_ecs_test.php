@@ -5,6 +5,7 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/autoload.php';
 require __DIR__ . '/helpers.php';
 
+use pocketmine\core\component\CollisionComponent;
 use pocketmine\core\component\HealthComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\VelocityComponent;
@@ -87,6 +88,25 @@ test('tick integrates movement + gravity exactly', function () use ($world, &$re
 
     $vel = $refs[0]->getVelocity();
     near(-0.16, $vel->y, 1e-9, 'gravity applied twice (1.6 * 0.05 * 2)');
+});
+
+test('collidable entities integrate movement exactly once (no 2x speed)', function () use ($world) {
+    // Regression: BlockCollisionSystem used the PENDING (already integrated)
+    // position as its sweep base and integrated velocity AGAIN, so every
+    // entity with a CollisionComponent (mobs, drops) moved at 2x speed.
+    $e = $world->spawn(
+        (new EntityBuilder())
+            ->at(0.0, 200.0, 0.0)
+            ->with(new VelocityComponent(1.0, 0.0, 0.0))
+            ->with(new CollisionComponent(width: 0.6, height: 1.8))
+    );
+    for ($i = 0; $i < 20; $i++) {
+        $world->tick(0.05);
+    }
+    $pos = $e->getPosition();
+    near(1.0, $pos->x, 1e-6, '20 ticks at 1 blk/s moves exactly 1 block (not 2)');
+    $world->despawn($e->getEntity());
+    $world->tick(0.05);
 });
 
 test('despawn removes from world and queries', function () use ($world, &$refs) {

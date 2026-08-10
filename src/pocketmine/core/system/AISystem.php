@@ -9,6 +9,7 @@ use pocketmine\core\component\AIStateComponent;
 use pocketmine\core\component\HealthComponent;
 use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
+use pocketmine\core\component\RotationComponent;
 use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\component\tags\PlayerTag;
 use pocketmine\core\ecs\EntityRef;
@@ -46,6 +47,7 @@ final class AISystem implements System {
             ->with(
                 AIStateComponent::class,
                 PositionComponent::class,
+                RotationComponent::class,
                 VelocityComponent::class,
                 HealthComponent::class,
                 MetadataComponent::class,
@@ -55,10 +57,11 @@ final class AISystem implements System {
         foreach ($query as $entity) {
             $ai = $entity->get(AIStateComponent::class);
             $pos = $entity->get(PositionComponent::class);
+            $rot = $entity->get(RotationComponent::class);
             $vel = $entity->get(VelocityComponent::class);
             $health = $entity->get(HealthComponent::class);
             $meta = $entity->get(MetadataComponent::class);
-            if (!$ai || !$pos || !$vel || !$health || !$meta) {
+            if (!$ai || !$pos || !$rot || !$vel || !$health || !$meta) {
                 continue;
             }
 
@@ -91,22 +94,22 @@ final class AISystem implements System {
                 && $health->max > 0
                 && $health->current <= $health->max * $ai->retreatHealthPercent;
             if ($flee) {
-                $this->handleFleeing($world, $spatial, $ai, $pos, $vel, $entity->id);
+                $this->handleFleeing($world, $spatial, $ai, $pos, $rot, $vel, $entity->id);
                 continue;
             }
 
             if ($ai->targetEntity !== null) {
-                $this->handleChaseAndAttack($world, $combat, $ai, $pos, $vel, $entity->id);
+                $this->handleChaseAndAttack($world, $combat, $ai, $pos, $rot, $vel, $entity->id);
                 continue;
             }
 
             // No target: idle / wander / follow a manually set path.
             switch ($ai->state) {
                 case 1:
-                    $this->handleWandering($ai, $pos, $vel);
+                    $this->handleWandering($ai, $pos, $rot, $vel);
                     break;
                 case 2:
-                    $this->handlePathfinding($ai, $pos, $vel);
+                    $this->handlePathfinding($ai, $pos, $rot, $vel);
                     break;
                 default:
                     // Idle: stop moving. Without this a mob that lost its target
@@ -135,7 +138,7 @@ final class AISystem implements System {
         }
     }
 
-    private function handleWandering(AIStateComponent $ai, PositionComponent $position, VelocityComponent $velocity): void {
+    private function handleWandering(AIStateComponent $ai, PositionComponent $position, RotationComponent $rotation, VelocityComponent $velocity): void {
         $dx = $ai->targetX - $position->x;
         $dz = $ai->targetZ - $position->z;
         $distSq = $dx * $dx + $dz * $dz;
@@ -152,9 +155,10 @@ final class AISystem implements System {
         $speed = 1.5 * $ai->speedModifier;
         $velocity->x = ($dx / $dist) * $speed;
         $velocity->z = ($dz / $dist) * $speed;
+        $rotation->yaw = rad2deg(atan2(-$dx, $dz));
     }
 
-    private function handlePathfinding(AIStateComponent $ai, PositionComponent $position, VelocityComponent $velocity): void {
+    private function handlePathfinding(AIStateComponent $ai, PositionComponent $position, RotationComponent $rotation, VelocityComponent $velocity): void {
         if ($ai->hasPath()) {
             $next = $ai->getNextPathPoint();
             if ($next) {
@@ -170,6 +174,7 @@ final class AISystem implements System {
                 $speed = 0.3 * $ai->speedModifier;
                 $velocity->x = ($dx / $dist) * $speed;
                 $velocity->z = ($dz / $dist) * $speed;
+                $rotation->yaw = rad2deg(atan2(-$dx, $dz));
             }
         } else {
             $ai->state = 0; // Path complete or no path
@@ -185,6 +190,7 @@ final class AISystem implements System {
         ?CombatService $combat,
         AIStateComponent $ai,
         PositionComponent $pos,
+        RotationComponent $rot,
         VelocityComponent $vel,
         int $mobId,
     ): void {
@@ -229,6 +235,7 @@ final class AISystem implements System {
         $speed = 4.0 * $ai->speedModifier;
         $vel->x = ($dx / $dist) * $speed;
         $vel->z = ($dz / $dist) * $speed;
+        $rot->yaw = rad2deg(atan2(-$dx, $dz));
     }
 
     /** Move away from the nearest player (panic / retreat). */
@@ -237,6 +244,7 @@ final class AISystem implements System {
         ?SpatialIndex $spatial,
         AIStateComponent $ai,
         PositionComponent $pos,
+        RotationComponent $rot,
         VelocityComponent $vel,
         int $mobId,
     ): void {
@@ -260,6 +268,7 @@ final class AISystem implements System {
             $speed = 5.0 * $ai->speedModifier;
             $vel->x = ($dx / $dist) * $speed;
             $vel->z = ($dz / $dist) * $speed;
+            $rot->yaw = rad2deg(atan2(-$dx, $dz));
         }
     }
 
@@ -294,6 +303,12 @@ final class AISystem implements System {
             }
             $candidateHealth = $candidate->get(HealthComponent::class);
             if ($candidateHealth === null || $candidateHealth->current <= 0) {
+                continue;
+            }
+            // Creative players are not valid targets (legacy: mobs ignore
+            // creative players entirely).
+            $candidateMeta = $candidate->get(MetadataComponent::class);
+            if ($candidateMeta !== null && ($candidateMeta->get('gamemode') ?? 0) === 1) {
                 continue;
             }
             $candidatePos = $candidate->get(PositionComponent::class);

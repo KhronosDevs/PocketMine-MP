@@ -61,6 +61,16 @@ final class CombatService {
         $health = $target->get(HealthComponent::class);
         if (!$health) return false;
 
+        // Creative players are immune to attacks (legacy: no damage taken,
+        // mobs never target them either). /kill goes through kill() directly,
+        // so command kills keep working in creative.
+        if ($cause === EntityDamageEvent::CAUSE_ENTITY_ATTACK) {
+            $meta = $target->get(\pocketmine\core\component\MetadataComponent::class);
+            if ($meta !== null && ($meta->get('gamemode') ?? 0) === 1) {
+                return false;
+            }
+        }
+
         // Cancellable damage event: plugins can modify or cancel entirely.
         $event = new EntityDamageEvent(
             $this->wrapApiEntity($targetRef),

@@ -54,11 +54,15 @@ final class BlockCollisionSystem implements System {
                 continue;
             }
 
-            // The pending values written by the parallel systems (fall back to
-            // the committed state for entities no system touched this tick).
-            $x = $pos->pending?->x ?? $pos->x;
-            $y = $pos->pending?->y ?? $pos->y;
-            $z = $pos->pending?->z ?? $pos->z;
+            // Base the sweep on the COMMITTED position (the parallel
+            // movement/physics systems already integrated the pending
+            // position once; starting from the pending value here would
+            // integrate velocity a second time and move entities at 2x
+            // speed). Velocity uses the pending (gravity-adjusted) value so
+            // falling entities sweep with gravity applied.
+            $x = $pos->x;
+            $y = $pos->y;
+            $z = $pos->z;
             $vx = $vel->pending?->x ?? $vel->x;
             $vy = $vel->pending?->y ?? $vel->y;
             $vz = $vel->pending?->z ?? $vel->z;
