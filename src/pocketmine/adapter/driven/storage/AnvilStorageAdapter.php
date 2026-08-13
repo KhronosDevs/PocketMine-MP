@@ -4,489 +4,268 @@ declare(strict_types=1);
 
 namespace pocketmine\adapter\driven\storage;
 
+use pocketmine\nbt\NBT;
+use pocketmine\nbt\tag\ByteArrayTag;
+use pocketmine\nbt\tag\ByteTag;
+use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ListTag;
+use pocketmine\nbt\tag\LongTag;
 use pocketmine\port\driven\ChunkData;
 use pocketmine\port\driven\EntitySnapshot;
-use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\TileEntitySnapshot;
 use pocketmine\utils\BinaryStream;
-use function ceil;
-use function chr;
-use function dirname;
-use function file_exists;
-use function file_get_contents;
-use function file_put_contents;
-use function fopen;
-use function fread;
-use function fseek;
-use function ftell;
-use function fwrite;
-use function fclose;
-use function gzcompress;
-use function gzuncompress;
-use function is_dir;
-use function mkdir;
+use function array_fill;
+use function count;
 use function ord;
-use function pack;
 use function str_repeat;
-use function time;
-use function unpack;
+use function strlen;
 
 /**
- * Region-based (Anvil/MCA) chunk storage adapter.
+ * Real vanilla Anvil (MCPE/PocketMine .mca) chunk storage.
  *
- * Serializes ChunkData/EntitySnapshot DTOs directly — no dependency on
- * legacy level/entity/NBT classes. The on-disk format is a simplified
- * region format with a 8192-byte header (sector offsets + timestamps)
- * followed by zlib-compressed chunk payloads.
+ * Each region record is a zlib-compressed, big-endian NBT chunk: a root
+ * CompoundTag whose "Level" child holds xPos/zPos, Biomes, HeightMap (int
+ * array), a list of per-16-block Sections (Blocks/Data/SkyLight/BlockLight
+ * nibble arrays), plus the entity and tile-entity lists. This is the exact
+ * on-disk layout of real Anvil worlds, so a world saved by MCPE or by
+ * PocketMine-MP's Anvil provider loads here, and worlds saved here open in
+ * standard tools.
+ *
+ * Chunks written by EARLIER Khronos builds used a custom binary payload in
+ * the same .mca container (version byte 1). Those are detected (the first
+ * byte is not the NBT compound tag 0x0A) and parsed by the legacy reader,
+ * so existing worlds keep loading and are transparently converted to real
+ * Anvil on the next save.
  */
-final class AnvilStorageAdapter implements StoragePort {
-    private const SECTOR_SIZE = 4096;
-    private const HEADER_SIZE = 8192;
-
-    private string $basePath;
-    private string $levelName = "world";
-
-    public function __construct(string $dataPath = "", string $levelName = "world") {
-        $this->basePath = $dataPath !== "" ? $dataPath : "worlds/";
-        $this->levelName = $levelName;
-        
-        if (!is_dir($this->basePath)) {
-            mkdir($this->basePath, 0755, true);
-        }
+final class AnvilStorageAdapter extends RegionStorageAdapter {
+    protected function regionExtension(): string {
+        return '.mca';
     }
 
-    public function loadChunk(int $chunkX, int $chunkZ): ChunkData {
-        $regionFile = $this->getRegionFile($chunkX, $chunkZ);
-        
-        if (!$regionFile || !file_exists($regionFile)) {
-            return $this->generateEmptyChunk($chunkX, $chunkZ);
-        }
+    protected function encodeChunkPayload(ChunkData $data): string {
+        $level = new CompoundTag('Level', []);
+        $level->setInt('xPos', $data->chunkX);
+        $level->setInt('zPos', $data->chunkZ);
+        $level->setLong('LastUpdate', 0);
+        $level->setByte('LightPopulated', 1);
+        $level->setByte('TerrainPopulated', 1);
+        $level->setByte('V', 1);
+        $level->setLong('InhabitedTime', 0);
 
-        $raw = $this->readChunkFromRegion($regionFile, $chunkX, $chunkZ);
-        
-        if ($raw === null || $raw === "") {
-            return $this->generateEmptyChunk($chunkX, $chunkZ);
+        $biomes = str_repeat("\x00", 256);
+        foreach ($data->biomes as $i => $biome) {
+            if ($i < 256) {
+                $biomes[$i] = chr($biome & 0xFF);
+            }
         }
+        $level->setByteArray('Biomes', $biomes);
 
-        $parsed = $this->parseChunkData($raw, $chunkX, $chunkZ);
-        return $parsed ?? $this->generateEmptyChunk($chunkX, $chunkZ);
+        // Vanilla Anvil stores the heightmap as an int array (256 entries).
+        $heightmap = $data->heightmap;
+        if (count($heightmap) !== 256) {
+            $heightmap = array_fill(0, 256, 0);
+        }
+        $level->setIntArray('HeightMap', $heightmap);
+
+        $sections = new ListTag('Sections', []);
+        $sections->setTagType(NBT::TAG_Compound);
+        foreach ($data->sections as $section) {
+            $sy = (int)$section['y'];
+            if ($sy < 0 || $sy > 15) {
+                continue;
+            }
+            $compound = new CompoundTag('', []);
+            $compound->setByte('Y', $sy);
+            $blocks = (string)($section['blocks'] ?? '');
+            if (strlen($blocks) !== 4096) {
+                $blocks = str_repeat("\x00", 4096);
+            }
+            $compound->setByteArray('Blocks', $blocks);
+            $compound->setByteArray('Data', self::packNibbles((string)($section['data'] ?? str_repeat("\x00", 4096))));
+            $compound->setByteArray('SkyLight', (string)($section['skyLight'] ?? str_repeat("\xff", 2048)));
+            $compound->setByteArray('BlockLight', (string)($section['blockLight'] ?? str_repeat("\x00", 2048)));
+            $sections[] = $compound;
+        }
+        $level->setTag('Sections', $sections);
+        $level->setTag('Entities', $this->encodeEntities($data->entities));
+        $level->setTag('TileEntities', $this->encodeTileEntities($data->tileEntities));
+
+        $root = new CompoundTag('', []);
+        $root->setTag('Level', $level);
+        $nbt = new NBT(NBT::BIG_ENDIAN);
+        $nbt->setData($root);
+        return $nbt->write();
     }
 
-    public function saveChunk(int $chunkX, int $chunkZ, ChunkData $data): void {
-        $regionFile = $this->getRegionFile($chunkX, $chunkZ);
-        
-        if (!$regionFile) {
-            return;
+    protected function decodeChunkPayload(string $payload, int $chunkX, int $chunkZ): ?ChunkData {
+        // Real Anvil chunks start with the NBT compound tag (0x0A). Chunks
+        // from pre-NBT Khronos builds start with their version byte (0x01).
+        if (ord($payload[0]) === NBT::TAG_Compound) {
+            return $this->parseNbtChunk($payload, $chunkX, $chunkZ);
         }
-
-        $chunkBytes = $this->serializeChunkData($data);
-        $this->writeChunkToRegion($regionFile, $chunkX, $chunkZ, $chunkBytes);
+        return $this->parseLegacyChunk($payload, $chunkX, $chunkZ);
     }
 
-    /** Magic prefix of the per-entity (player) data files. */
-    private const PLAYER_MAGIC = 'KRONPLR1';
-
-    public function loadEntity(string $entityId): EntitySnapshot {
-        $raw = @file_get_contents($this->entityFile($entityId));
-        if ($raw === false || $raw === '') {
-            return $this->emptyEntitySnapshot($entityId);
-        }
-        $data = json_decode($raw, true);
-        if (!is_array($data) || ($data['magic'] ?? null) !== self::PLAYER_MAGIC) {
-            return $this->emptyEntitySnapshot($entityId);
-        }
-        return new EntitySnapshot(
-            $entityId,
-            (string)($data['type'] ?? ''),
-            (float)($data['x'] ?? 0.0),
-            (float)($data['y'] ?? 0.0),
-            (float)($data['z'] ?? 0.0),
-            (float)($data['yaw'] ?? 0.0),
-            (float)($data['pitch'] ?? 0.0),
-            is_array($data['components'] ?? null) ? $data['components'] : [],
-        );
-    }
-
-    public function saveEntity(EntitySnapshot $snapshot): void {
-        $dir = $this->worldFolder() . 'players/';
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
+    private function parseNbtChunk(string $payload, int $chunkX, int $chunkZ): ?ChunkData {
         try {
-            $payload = json_encode([
-                'magic' => self::PLAYER_MAGIC,
-                'id' => $snapshot->id,
-                'type' => $snapshot->type,
-                'x' => $snapshot->x,
-                'y' => $snapshot->y,
-                'z' => $snapshot->z,
-                'yaw' => $snapshot->yaw,
-                'pitch' => $snapshot->pitch,
-                'components' => $snapshot->components,
-            ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
-        } catch (\JsonException) {
-            return; // un-serializable component data: keep the last good save
+            $nbt = new NBT(NBT::BIG_ENDIAN);
+            $nbt->read($payload);
+            $root = $nbt->getData();
+            if (!$root instanceof CompoundTag) {
+                return null;
+            }
+            $level = $root->getCompoundTag('Level');
+            if ($level === null) {
+                return null;
+            }
+
+            $sections = [];
+            $sectionsTag = $level->getListTag('Sections');
+            if ($sectionsTag !== null) {
+                foreach ($sectionsTag as $tag) {
+                    if (!$tag instanceof CompoundTag) {
+                        continue;
+                    }
+                    $sy = $tag->getByte('Y', 0);
+                    if ($sy < 0 || $sy > 15) {
+                        continue;
+                    }
+                    $blocks = $tag->getByteArray('Blocks', '');
+                    if (strlen($blocks) !== 4096) {
+                        $blocks = str_repeat("\x00", 4096);
+                    }
+                    // Apply the extended-id nibble array (Add) so chunks with
+                    // block ids above 255 still render (clamped to the 8-bit
+                    // internal store, which 0.15 content never exceeds).
+                    $add = $tag->getByteArray('Add', '');
+                    if (strlen($add) === 2048) {
+                        $blocks = $this->applyAddArray($blocks, $add);
+                    }
+                    $sections[] = [
+                        'y' => $sy,
+                        'blocks' => $blocks,
+                        'data' => self::unpackNibbles($tag->getByteArray('Data', str_repeat("\x00", 2048))),
+                        'skyLight' => $tag->getByteArray('SkyLight', str_repeat("\xff", 2048)),
+                        'blockLight' => $tag->getByteArray('BlockLight', str_repeat("\x00", 2048)),
+                    ];
+                }
+            }
+            usort($sections, static fn(array $a, array $b): int => $a['y'] <=> $b['y']);
+
+            $biomes = [];
+            $biomesRaw = $level->getByteArray('Biomes', '');
+            for ($i = 0; $i < 256; $i++) {
+                $biomes[] = strlen($biomesRaw) > $i ? ord($biomesRaw[$i]) : 0;
+            }
+
+            $heightmap = $level->getIntArray('HeightMap', array_fill(0, 256, 0));
+            if (count($heightmap) !== 256) {
+                $heightmap = array_fill(0, 256, 0);
+            }
+
+            return new ChunkData(
+                $chunkX,
+                $chunkZ,
+                $sections,
+                $biomes,
+                $heightmap,
+                $this->decodeEntities($level->getListTag('Entities')),
+                $this->decodeTileEntities($level->getListTag('TileEntities')),
+            );
+        } catch (\Throwable) {
+            return null; // corrupt / foreign payload: treat as an empty chunk
         }
-        // Atomic write: temp file + rename so a crash mid-write cannot
-        // corrupt the last good save (same pattern as the region timestamps).
-        $file = $this->entityFile($snapshot->id);
-        file_put_contents($file . '.tmp', $payload);
-        @rename($file . '.tmp', $file);
     }
 
-    /** A per-entity data file, id-sanitized to prevent path traversal. */
-    private function entityFile(string $entityId): string {
-        $safe = preg_replace('/[^A-Za-z0-9_.-]/', '_', $entityId);
-        return $this->worldFolder() . 'players/' . ($safe !== null && $safe !== '' ? $safe : 'unknown') . '.dat';
+    /** Fold the 4-bit Add array into the block ids (clamped to 0-255). */
+    private function applyAddArray(string $blocks, string $add): string {
+        $out = $blocks;
+        for ($i = 0; $i < 4096; $i++) {
+            $id = ord($blocks[$i]) + (self::nibbleAt($add, $i) << 8);
+            $out[$i] = chr(min(255, $id));
+        }
+        return $out;
     }
 
-    private function emptyEntitySnapshot(string $entityId): EntitySnapshot {
-        return new EntitySnapshot($entityId, '', 0.0, 0.0, 0.0, 0.0, 0.0, []);
-    }
-
-    /** Magic + version header of the level.dat-style world meta file. */
-    private const WORLD_META_MAGIC = 0x4B524F4E; // 'KRON'
-    private const WORLD_META_VERSION = 1;
-
-    /** The per-world folder (basePath + levelName + '/'). */
-    private function worldFolder(): string {
-        return $this->basePath . $this->levelName . '/';
-    }
-
-    public function loadWorldMeta(): ?array {
-        $file = $this->worldFolder() . 'level.dat';
-        if (!file_exists($file)) {
+    /**
+     * Legacy pre-NBT Khronos chunk payload (the format this adapter wrote
+     * before the real-Anvil rewrite): version byte, section count, then per
+     * section [y][blocks 4096][data 4096][skyLight 2048][blockLight 2048],
+     * biomes, heightmap (ints), entities, tile entities.
+     */
+    private function parseLegacyChunk(string $payload, int $chunkX, int $chunkZ): ?ChunkData {
+        try {
+            $stream = new BinaryStream($payload);
+            if ($stream->getByte() !== 1) {
+                return null;
+            }
+            $sections = [];
+            $sectionCount = $stream->getByte();
+            for ($i = 0; $i < $sectionCount; $i++) {
+                $y = $stream->getByte();
+                $blocks = $stream->get(4096);
+                $blockData = $stream->get(4096);
+                $skyLight = $stream->get(2048);
+                $blockLight = $stream->get(2048);
+                $sections[] = [
+                    'y' => $y,
+                    'blocks' => $blocks,
+                    'data' => $blockData,
+                    'skyLight' => $skyLight,
+                    'blockLight' => $blockLight,
+                ];
+            }
+            $biomes = [];
+            for ($i = 0; $i < 256; $i++) {
+                $biomes[] = $stream->getByte();
+            }
+            $heightmap = [];
+            for ($i = 0; $i < 256; $i++) {
+                $heightmap[] = $stream->getInt();
+            }
+            $entities = [];
+            $entityCount = $stream->getInt();
+            for ($i = 0; $i < $entityCount; $i++) {
+                $entities[] = $this->readLegacyEntity($stream);
+            }
+            $tileEntities = [];
+            $tileCount = $stream->getInt();
+            for ($i = 0; $i < $tileCount; $i++) {
+                $tileEntities[] = $this->readLegacyTileEntity($stream);
+            }
+            return new ChunkData($chunkX, $chunkZ, $sections, $biomes, $heightmap, $entities, $tileEntities);
+        } catch (\Throwable) {
             return null;
         }
-        $raw = @file_get_contents($file);
-        if ($raw === false || $raw === '') {
-            return null;
-        }
-        $stream = new BinaryStream($raw);
-        if ($stream->getInt() !== self::WORLD_META_MAGIC) {
-            return null; // not a file this adapter wrote
-        }
-        if ($stream->getByte() !== self::WORLD_META_VERSION) {
-            return null;
-        }
-        $count = $stream->getByte();
-        $meta = [];
-        for ($i = 0; $i < $count; $i++) {
-            $key = (string)$stream->getString();
-            $value = (string)$stream->getString();
-            $meta[$key] = $value;
-        }
-        return $meta;
     }
 
-    public function saveWorldMeta(array $meta): void {
-        $dir = $this->worldFolder();
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-        $stream = new BinaryStream();
-        $stream->putInt(self::WORLD_META_MAGIC);
-        $stream->putByte(self::WORLD_META_VERSION);
-        $stream->putByte(count($meta));
-        foreach ($meta as $key => $value) {
-            $stream->putString((string)$key);
-            $stream->putString((string)$value);
-        }
-        file_put_contents($dir . 'level.dat', $stream->getBuffer());
-    }
-
-    public function saveAll(): void {
-        // Region files are written through on chunk save; nothing to flush.
-    }
-
-    private function getRegionFile(int $chunkX, int $chunkZ): string {
-        $worldFolder = $this->basePath . $this->levelName . "/";
-        $regionDir = $worldFolder . "region/";
-        
-        if (!is_dir($regionDir)) {
-            mkdir($regionDir, 0755, true);
-        }
-
-        $regionX = $chunkX >> 5;
-        $regionZ = $chunkZ >> 5;
-        
-        $regionFile = $regionDir . "r.{$regionX}.{$regionZ}.mca";
-        
-        if (!file_exists($regionFile)) {
-            $this->createRegionFile($regionFile);
-        }
-        
-        return $regionFile;
-    }
-
-    private function createRegionFile(string $path): void {
-        $dir = dirname($path);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-        
-        $header = str_repeat("\x00", self::HEADER_SIZE);
-        file_put_contents($path, $header);
-    }
-
-    private function readChunkFromRegion(string $regionFile, int $chunkX, int $chunkZ): ?string {
-        $localX = $chunkX & 31;
-        $localZ = $chunkZ & 31;
-        $index = ($localZ * 32 + $localX) * 4;
-        
-        $handle = fopen($regionFile, "rb");
-        if (!$handle) {
-            return null;
-        }
-        
-        fseek($handle, $index);
-        $header = fread($handle, 4);
-        fclose($handle);
-        
-        if ($header === false || strlen($header) < 4) {
-            return null;
-        }
-        
-        $offsetAndSize = unpack("N", $header)[1];
-        $sectorOffset = ($offsetAndSize >> 8) & 0xFFFFFF;
-        $sectorCount = $offsetAndSize & 0xFF;
-        
-        if ($sectorOffset === 0 || $sectorCount === 0) {
-            return null;
-        }
-        
-        $handle = fopen($regionFile, "rb");
-        if (!$handle) {
-            return null;
-        }
-        fseek($handle, $sectorOffset * self::SECTOR_SIZE);
-        $lengthData = fread($handle, 4);
-        if ($lengthData === false || strlen($lengthData) < 4) {
-            fclose($handle);
-            return null;
-        }
-        $length = unpack("N", $lengthData)[1];
-        // Guard against corrupt headers: a single chunk may span at most a few
-        // sectors (each 4096 bytes); cap the allocation to avoid OOM on garbage.
-        if ($length < 1 || $length > 256 * self::SECTOR_SIZE) {
-            fclose($handle);
-            return null;
-        }
-        $compression = ord(fread($handle, 1));
-        $data = fread($handle, max(0, $length - 1));
-        fclose($handle);
-        
-        // Only zlib (type 2) is written by this adapter; anything else is a
-        // corrupt or foreign file, so treat it as missing rather than parse
-        // still-compressed bytes as a chunk payload.
-        if ($compression !== 2 || $data === false) {
-            return null;
-        }
-        $decompressed = gzuncompress($data);
-        return $decompressed !== false ? $decompressed : null;
-    }
-
-    private function writeChunkToRegion(string $regionFile, int $chunkX, int $chunkZ, string $data): void {
-        $localX = $chunkX & 31;
-        $localZ = $chunkZ & 31;
-        $index = ($localZ * 32 + $localX) * 4;
-        
-        $compressed = gzcompress($data);
-        if ($compressed === false) {
-            return;
-        }
-        $length = strlen($compressed) + 1;
-        // The sector must hold the 4-byte length prefix too; sizing from
-        // $length alone would under-count exactly when $length crosses a
-        // 4096 boundary, making the padding below negative and crashing
-        // str_repeat() on a legitimately-sized chunk.
-        $sectorCount = (int)ceil(($length + 4) / self::SECTOR_SIZE);
-        
-        $handle = fopen($regionFile, "r+b");
-        if (!$handle) {
-            return;
-        }
-        
-        fseek($handle, 0, SEEK_END);
-        $fileSize = ftell($handle);
-        $sectorOffset = (int)ceil($fileSize / self::SECTOR_SIZE);
-        
-        fseek($handle, $sectorOffset * self::SECTOR_SIZE);
-        fwrite($handle, pack("N", $length));
-        fwrite($handle, chr(2));
-        fwrite($handle, $compressed);
-        
-        $padding = $sectorCount * self::SECTOR_SIZE - $length - 4;
-        if ($padding > 0) {
-            fwrite($handle, str_repeat("\x00", $padding));
-        }
-        
-        fseek($handle, $index);
-        $offsetAndSize = ($sectorOffset << 8) | $sectorCount;
-        fwrite($handle, pack("N", $offsetAndSize));
-        
-        // Timestamp table lives in the SECOND half of the header (bytes
-        // 4096..8191). Using HEADER_SIZE (8192) as the base would write the
-        // first timestamp over the first chunk's data sector, corrupting the
-        // length field on every save.
-        fseek($handle, self::HEADER_SIZE / 2 + ($localZ * 32 + $localX) * 4);
-        fwrite($handle, pack("N", time()));
-        
-        fclose($handle);
-    }
-
-    private function parseChunkData(string $data, int $chunkX, int $chunkZ): ?ChunkData {
-        $stream = new BinaryStream($data);
-        
-        $version = $stream->getByte();
-        if ($version !== 1) {
-            return null;
-        }
-        
-        $sections = [];
-        $sectionCount = $stream->getByte();
-        
-        for ($i = 0; $i < $sectionCount; $i++) {
-            $y = $stream->getByte();
-            $blocks = $stream->get(4096);
-            $blockData = $stream->get(4096);
-            $skyLight = $stream->get(2048);
-            $blockLight = $stream->get(2048);
-            
-            $sections[] = [
-                'y' => $y,
-                'blocks' => $blocks,
-                'data' => $blockData,
-                'skyLight' => $skyLight,
-                'blockLight' => $blockLight,
-            ];
-        }
-        
-        $biomes = [];
-        for ($i = 0; $i < 256; $i++) {
-            $biomes[] = $stream->getByte();
-        }
-        
-        $heightmap = [];
-        for ($i = 0; $i < 256; $i++) {
-            $heightmap[] = $stream->getInt();
-        }
-        
-        $entities = [];
-        $entityCount = $stream->getInt();
-        for ($i = 0; $i < $entityCount; $i++) {
-            $entities[] = $this->readEntity($stream);
-        }
-        
-        $tileEntities = [];
-        $tileCount = $stream->getInt();
-        for ($i = 0; $i < $tileCount; $i++) {
-            $tileEntities[] = $this->readTileEntity($stream);
-        }
-        
-        return new ChunkData($chunkX, $chunkZ, $sections, $biomes, $heightmap, $entities, $tileEntities);
-    }
-
-    private function readEntity(BinaryStream $stream): EntitySnapshot {
-        $entityId = $stream->getString();
-        $className = $stream->getString();
+    private function readLegacyEntity(BinaryStream $stream): EntitySnapshot {
+        $entityId = (string)$stream->getString();
+        $className = (string)$stream->getString();
         $x = $stream->getDouble();
         $y = $stream->getDouble();
         $z = $stream->getDouble();
         $yaw = $stream->getFloat();
         $pitch = $stream->getFloat();
-        
-        $componentCount = $stream->getInt();
         $components = [];
+        $componentCount = $stream->getInt();
         for ($i = 0; $i < $componentCount; $i++) {
-            $type = $stream->getString();
-            $componentData = $stream->getString();
+            $type = (string)$stream->getString();
+            $componentData = (string)$stream->getString();
             $components[$type] = $componentData;
         }
-        
-        return new EntitySnapshot(
-            (string)$entityId,
-            $className,
-            $x, $y, $z,
-            $yaw, $pitch,
-            $components
-        );
+        return new EntitySnapshot($entityId, $className, $x, $y, $z, $yaw, $pitch, $components);
     }
 
-    private function readTileEntity(BinaryStream $stream): TileEntitySnapshot {
-        $id = $stream->getString();
-        $className = $stream->getString();
+    private function readLegacyTileEntity(BinaryStream $stream): TileEntitySnapshot {
+        $id = (string)$stream->getString();
+        $className = (string)$stream->getString();
         $x = $stream->getInt();
         $y = $stream->getInt();
         $z = $stream->getInt();
-        
         $dataLength = $stream->getInt();
         $data = $stream->get($dataLength);
-        
-        return new TileEntitySnapshot(
-            (string)$id,
-            $className,
-            $x, $y, $z,
-            ['nbt' => base64_encode($data)]
-        );
-    }
-
-    private function serializeChunkData(ChunkData $data): string {
-        $stream = new BinaryStream();
-        
-        $stream->putByte(1);
-        
-        $stream->putByte(count($data->sections));
-        foreach ($data->sections as $section) {
-            $stream->putByte($section['y']);
-            $stream->put($section['blocks']);
-            $stream->put($section['data'] ?? str_repeat("\x00", 4096));
-            $stream->put($section['skyLight'] ?? str_repeat("\x00", 2048));
-            $stream->put($section['blockLight'] ?? str_repeat("\x00", 2048));
-        }
-        
-        foreach ($data->biomes as $biome) {
-            $stream->putByte($biome);
-        }
-        
-        foreach ($data->heightmap as $height) {
-            $stream->putInt($height);
-        }
-        
-        $stream->putInt(count($data->entities));
-        foreach ($data->entities as $entity) {
-            $stream->putString($entity->id);
-            $stream->putString($entity->type);
-            $stream->putDouble($entity->x);
-            $stream->putDouble($entity->y);
-            $stream->putDouble($entity->z);
-            $stream->putFloat($entity->yaw);
-            $stream->putFloat($entity->pitch);
-            
-            $stream->putInt(count($entity->components));
-            foreach ($entity->components as $type => $componentData) {
-                $stream->putString($type);
-                $stream->putString($componentData);
-            }
-        }
-        
-        $stream->putInt(count($data->tileEntities));
-        foreach ($data->tileEntities as $tile) {
-            $stream->putString($tile->id);
-            $stream->putString($tile->type);
-            $stream->putInt($tile->x);
-            $stream->putInt($tile->y);
-            $stream->putInt($tile->z);
-            
-            $nbtData = base64_decode($tile->data['nbt'] ?? '');
-            $stream->putInt(strlen($nbtData));
-            $stream->put($nbtData);
-        }
-        
-        return $stream->getBuffer();
-    }
-
-    private function generateEmptyChunk(int $chunkX, int $chunkZ): ChunkData {
-        return new ChunkData($chunkX, $chunkZ, [], array_fill(0, 256, 0), array_fill(0, 256, 0), [], []);
+        return new TileEntitySnapshot($id, $className, $x, $y, $z, ['nbt' => base64_encode($data)]);
     }
 }

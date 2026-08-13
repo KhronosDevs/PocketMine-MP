@@ -3779,7 +3779,12 @@ test('a lit furnace smelts ore and broadcasts the result slot', function () use 
         // real time - the RakNet 10s idle timeout would drop a silent client,
         // so the fake client reports its position every iteration like a real
         // player to keep the session alive.
-        $deadline = microtime(true) + 30.0;
+        // The cook needs ~201 ticks; at 50ms/tick that is ~10s, but the
+        // suite machine runs slower under the chunk load the infinite-world
+        // streaming adds (boundary re-queues keep more chunks resident). Keep
+        // the deadline generous so a correctly-cooking furnace is never
+        // flagged for mere tick-rate jitter.
+        $deadline = microtime(true) + 45.0;
         $sawIngot = false;
         $sawLit = false;
         while (microtime(true) < $deadline && (!$sawIngot || !$sawLit)) {
@@ -4048,6 +4053,87 @@ test('switchWorld moves the session to a new world and streams its chunks', func
     $wc = $swEntity?->get(\pocketmine\core\component\WorldComponent::class);
     ok($wc instanceof \pocketmine\core\component\WorldComponent && $wc->id === $world2->getWorldId(), 'player WorldComponent now points at world 2');
     $sw->close();
+});
+
+// --- Infinite world: the chunk stream follows the player -------------------
+// The world is unbounded; the bug was that chunks were only queued once (on
+// login / radius change / world switch), so walking past the initial window
+// hit an invisible wall. handleMove re-queues when the player crosses a chunk
+// boundary, so the stream must keep growing as the player moves.
+//
+// Placed at the end (kernel idle) and using a FRESH client so no session
+// state or lingering chunk queue leaks into the tests that follow.
+test('chunk stream follows the player across chunk boundaries', function () use ($kernel, $port): void {
+    $streamer = new FakeClient($port);
+    $streamer->handshake(fn() => $kernel->run(1));
+    $streamer->connect(fn() => $kernel->run(1));
+    $streamer->sendLogin('Streamer', 'b0000000-0000-0000-0000-0000000000b1');
+
+    // Wait for the login chunk stream to start (the switchWorld test uses
+    // this same inline pattern at this position in the file).
+    $deadline = microtime(true) + 10.0;
+    $sawChunk = false;
+    $eid = null;
+    while (microtime(true) < $deadline && (!$sawChunk || $eid === null)) {
+        foreach ($streamer->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::FULL_CHUNK_DATA_PACKET) {
+                $sawChunk = true;
+            }
+        }
+        $kernel->run(1);
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            if ($p['username'] === 'Streamer') {
+                $eid = $p['entityId'];
+            }
+        }
+    }
+    ok($sawChunk, 'player received login chunks');
+    ok($eid !== null, 'streamer session found');
+
+    // Small radius (3 => 49 chunks) so the moved window is cheap and the
+    // growth signal is unambiguous.
+    $radiusBody = chr(Info::REQUEST_CHUNK_RADIUS_PACKET) . pack('N', 3);
+    $streamer->sendRawBuffer($radiusBody);
+    $kernel->run(1);
+
+    $net = $kernel->getNetworkSessionService();
+    $baseline = 0;
+    foreach ($net->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Streamer') {
+            $baseline = (int)$p['chunksSent'];
+        }
+    }
+    ok($baseline > 0, "chunks already streamed before the move ($baseline)");
+
+    // Jump ~10 chunk columns away - beyond the initially streamed window.
+    $move = new MovePlayerPacket();
+    $move->eid = $eid;
+    $move->x = 168.5; // chunk (10)
+    $move->y = 80.0;
+    $move->z = 168.5; // chunk (10)
+    $move->yaw = 0.0;
+    $move->bodyYaw = 0.0;
+    $move->pitch = 0.0;
+    $move->mode = MovePlayerPacket::MODE_NORMAL;
+    $move->onGround = true;
+    $streamer->sendGamePacket($move);
+
+    $after = $baseline;
+    $deadline = microtime(true) + 8.0;
+    while (microtime(true) < $deadline) {
+        $kernel->run(1);
+        $after = $baseline; // reset: only a live session can raise it
+        foreach ($net->getOnlinePlayers() as $p) {
+            if ($p['username'] === 'Streamer') {
+                $after = (int)$p['chunksSent'];
+            }
+        }
+        if ($after > $baseline) {
+            break;
+        }
+    }
+    ok($after > $baseline, "chunk stream followed the player: $baseline -> $after chunks");
+    $streamer->close();
 });
 
 test('server shuts down cleanly with active sessions', function () use ($kernel, $client): void {
