@@ -6,6 +6,7 @@ namespace pocketmine;
 
 use pocketmine\adapter\driven\network\Protocol84NetworkAdapter;
 use pocketmine\adapter\driven\storage\AnvilStorageAdapter;
+use pocketmine\adapter\driven\storage\LevelProviderManager;
 use pocketmine\adapter\driven\threading\PmmpThreadPool;
 use pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter;
 
@@ -1516,7 +1517,9 @@ function createNetworkPort(): NetworkPort {
 }
 
 function createStoragePort(): StoragePort {
-    return new AnvilStorageAdapter();
+    // Auto-detect the default world's format on disk (Anvil / McRegion /
+    // LevelDB-with-error), falling back to a fresh Anvil world.
+    return LevelProviderManager::create(LevelProviderManager::DEFAULT_DATA_PATH, 'world');
 }
 
 function createWorldGenPort(ThreadingPort $threadingPort): WorldGenPort {

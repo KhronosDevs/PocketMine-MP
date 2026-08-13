@@ -149,6 +149,8 @@ final class NetworkSessionService {
      *   skin: string,
      *   worldId: int,
      *   radius: int,
+     *   lastChunkX: int,
+     *   lastChunkZ: int,
      *   chunkQueue: list<array{0: int, 1: int}>,
      *   chunkQueueIndex: int,
      *   chunksSent: array<string, bool>,
@@ -581,6 +583,8 @@ final class NetworkSessionService {
             // 14.20: players join the default world; /world switches it.
             'worldId' => 0,
             'radius' => self::DEFAULT_RADIUS,
+            'lastChunkX' => 0,
+            'lastChunkZ' => 0,
             'chunkQueue' => [],
             'chunkQueueIndex' => 0,
             'chunksSent' => [],
@@ -640,6 +644,20 @@ final class NetworkSessionService {
         if ($rot !== null) {
             $rot->yaw = $pk->yaw;
             $rot->pitch = $pk->pitch;
+        }
+
+        // The world is infinite: queueChunks() only fires on login / radius
+        // change / world switch, so a player who walks beyond the initially
+        // streamed area would never see new chunks. Re-queue whenever the
+        // player crosses into a new chunk column so the chunk stream follows
+        // them (chunksSent already tracks what was delivered, so re-queueing
+        // is idempotent - already-sent chunks are skipped by streamChunks).
+        if ($pos !== null) {
+            $chunkX = (int)floor($pos->x / 16);
+            $chunkZ = (int)floor($pos->z / 16);
+            if ($chunkX !== $session['lastChunkX'] || $chunkZ !== $session['lastChunkZ']) {
+                $this->queueChunks($addrKey);
+            }
         }
     }
 
@@ -2520,6 +2538,8 @@ final class NetworkSessionService {
         }
         $centerX = (int)floor($pos->x / 16);
         $centerZ = (int)floor($pos->z / 16);
+        $session['lastChunkX'] = $centerX;
+        $session['lastChunkZ'] = $centerZ;
         $radius = $session['radius'];
 
         $list = [];

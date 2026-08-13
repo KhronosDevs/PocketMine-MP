@@ -240,7 +240,7 @@ class Server {
         if (!is_dir($folder)) {
             throw new \RuntimeException("World '$name' has no saved data");
         }
-        $storage = new \pocketmine\adapter\driven\storage\AnvilStorageAdapter('worlds/', $name);
+        $storage = \pocketmine\adapter\driven\storage\LevelProviderManager::create('worlds/', $name);
         $meta = $storage->loadWorldMeta();
         $seed = isset($meta['seed']) && $meta['seed'] !== '' ? (int)$meta['seed'] : random_int(1, PHP_INT_MAX);
         $store = new \pocketmine\core\resource\ChunkStore();
@@ -278,7 +278,7 @@ class Server {
         if ($seed === 0) {
             $seed = random_int(1, PHP_INT_MAX);
         }
-        $storage = new \pocketmine\adapter\driven\storage\AnvilStorageAdapter('worlds/', $name);
+        $storage = \pocketmine\adapter\driven\storage\LevelProviderManager::create('worlds/', $name);
         $store = new \pocketmine\core\resource\ChunkStore();
         $config = new \pocketmine\core\resource\WorldConfig();
         $config->name = $name;
