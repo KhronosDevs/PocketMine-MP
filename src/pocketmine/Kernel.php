@@ -1324,6 +1324,9 @@ final class Kernel {
                 // 14.22: resume the weather spell and its remaining duration.
                 'weather' => (string)($worldConfig?->weather ?? 0),
                 'weatherDuration' => (string)($worldConfig?->weatherDuration ?? 0),
+                // 14.20b: persist the world's generator (normal/flat/void) so
+                // it survives restarts and is restored on load.
+                'generator' => (string)($worldConfig?->generator ?? 'normal'),
             ]);
         }
     }
@@ -2025,6 +2028,14 @@ function registerBuiltinSmelting(ResourceRegistry $registry): void {
 function applyPersistedWorldMeta(StoragePort $storagePort, ResourceRegistry $resourceRegistry): void {
     $meta = $storagePort->loadWorldMeta();
     if ($meta === null) {
+        // No level.dat at all: a genuinely fresh server (no world folder yet)
+        // keeps the normal generator, but a dropped-in world folder (foreign
+        // data without a Khronos level.dat) defaults to VOID so the server
+        // never regenerates terrain around whatever the user placed there.
+        $worldConfig = $resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
+        if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig && $storagePort->worldFolderExists()) {
+            $worldConfig->generator = 'void';
+        }
         return;
     }
     $config = $resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
@@ -2043,6 +2054,13 @@ function applyPersistedWorldMeta(StoragePort $storagePort, ResourceRegistry $res
     }
     if (isset($meta['spawnX']) && $meta['spawnX'] !== '') {
         $config->spawnX = (int)$meta['spawnX'];
+    }
+    // The default world's generator follows the persisted level.dat when it
+    // has one; a foreign/legacy level.dat (no generator info) defaults to
+    // VOID so the world is never regenerated around the player's build.
+    $worldConfigGen = $resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
+    if ($worldConfigGen instanceof \pocketmine\core\resource\WorldConfig) {
+        $worldConfigGen->generator = (string)($meta['generator'] ?? 'void');
     }
     if (isset($meta['spawnY']) && $meta['spawnY'] !== '') {
         $config->spawnY = (int)$meta['spawnY'];

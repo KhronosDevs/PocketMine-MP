@@ -299,6 +299,15 @@ class Server {
             $config->spawnY = (int)($meta['spawnY'] ?? 64);
             $config->spawnZ = (int)($meta['spawnZ'] ?? 0);
             $config->time = (int)($meta['time'] ?? 0);
+            // A world whose level.dat carries a generatorName is restored with
+            // it (normal/flat/void). Foreign or legacy level.dat files (no
+            // generator info) default to VOID: the world is not regenerated
+            // around the player - a dropped-in lobby stays as-is.
+            $config->generator = (string)($meta['generator'] ?? 'void');
+        } else {
+            // No level.dat at all (a hand-dropped folder): treat as void so
+            // nothing generates around whatever the user placed.
+            $config->generator = 'void';
         }
         $worldId = $registry->registerWorld($name, $name, $seed, $store, $config, $storage);
         $info = $registry->getWorld($worldId);

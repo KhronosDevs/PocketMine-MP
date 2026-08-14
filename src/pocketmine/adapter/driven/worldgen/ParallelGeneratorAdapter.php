@@ -211,6 +211,9 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
         if ($generatorType === "flat") {
             return self::generateFlatChunk($chunkX, $chunkZ);
         }
+        if ($generatorType === "void") {
+            return self::generateVoidChunk($chunkX, $chunkZ);
+        }
 
         return self::generateTerrainChunk($chunkX, $chunkZ, $seed);
     }
@@ -271,6 +274,60 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
         $biomes = array_fill(0, 256, self::BIOME_PLAINS); // plains
         $heightmap = array_fill(0, 256, $surfaceY + 1);
 
+        return new ChunkData($chunkX, $chunkZ, $sections, $biomes, $heightmap, [], []);
+    }
+
+    private static function generateVoidChunk(int $chunkX, int $chunkZ): ChunkData {
+        // Pure-void world (Bukkit-style VoidGen): air everywhere except a
+        // small 5x5 platform centered on world (0,0) - stone with a grass
+        // top at y 62..64 - so a fresh lobby world has somewhere to stand
+        // instead of falling into the void. Everything else is air.
+        $air = str_repeat("\x00", 4096);
+        $sky = str_repeat("\xff", 2048);
+        $dark = str_repeat("\x00", 2048);
+
+        // Platform columns: world x/z within [-2..2] land in this chunk.
+        $cols = [];
+        for ($bz = 0; $bz < 16; $bz++) {
+            $wz = $chunkZ * 16 + $bz;
+            for ($bx = 0; $bx < 16; $bx++) {
+                $wx = $chunkX * 16 + $bx;
+                if ($wx >= -2 && $wx <= 2 && $wz >= -2 && $wz <= 2) {
+                    $cols[$bz * 16 + $bx] = true;
+                }
+            }
+        }
+
+        // Emit only the sections that can hold platform blocks (y 48..79);
+        // missing sections serialize as air, keeping void chunks tiny. Sky
+        // light is derived from the height map by the serializer.
+        $row = str_repeat("\x00", 256);
+        if ($cols !== []) {
+            foreach ($cols as $col => $_) {
+                $row[$col] = chr(self::STONE_BLOCK);
+            }
+        }
+        $rowGrass = str_repeat("\x00", 256);
+        if ($cols !== []) {
+            foreach ($cols as $col => $_) {
+                $rowGrass[$col] = chr(self::GRASS_BLOCK);
+            }
+        }
+        // Section 3 (world y 48..63): rows 14/15 (y 62/63) are stone.
+        $blocks3 = str_repeat("\x00", 14 * 256) . $row . $row;
+        // Section 4 (world y 64..79): row 0 (y 64) is the grass top.
+        $blocks4 = $rowGrass . str_repeat("\x00", 15 * 256);
+        $sections = [
+            ['y' => 3, 'blocks' => $blocks3, 'data' => $air, 'skyLight' => $sky, 'blockLight' => $dark],
+            ['y' => 4, 'blocks' => $blocks4, 'data' => $air, 'skyLight' => $sky, 'blockLight' => $dark],
+        ];
+
+        // Height map: top non-air Y + 1 (65 on the platform, 0 in the void).
+        $heightmap = array_fill(0, 256, 0);
+        foreach ($cols as $col => $_) {
+            $heightmap[$col] = 65;
+        }
+        $biomes = array_fill(0, 256, self::BIOME_PLAINS);
         return new ChunkData($chunkX, $chunkZ, $sections, $biomes, $heightmap, [], []);
     }
 

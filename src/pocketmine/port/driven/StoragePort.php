@@ -22,6 +22,13 @@ interface StoragePort {
     public function loadWorldMeta(): ?array;
 
     /**
+     * 14.20b: does the world folder exist on disk? A fresh server has no
+     * folder yet; a dropped-in world folder (foreign data, no Khronos
+     * level.dat) does. Used to default unknown worlds to the void generator.
+     */
+    public function worldFolderExists(): bool;
+
+    /**
      * 14.4: persist the world meta (seed, spawn, difficulty, time) so a
      * restart reproduces the same terrain and spawn point.
      *

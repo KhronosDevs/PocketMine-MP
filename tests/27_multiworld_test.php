@@ -133,6 +133,107 @@ test('spawned entities carry a WorldComponent; block placement routes via it', f
     same(0, $server->getDefaultWorld()->getBlock(216, 70, 216), 'default world unaffected');
 });
 
+test('a void world generates air with a platform at spawn only', function () use ($kernel): void {
+    $server = \pocketmine\api\server\Server::getInstance();
+    $void = $server->generateWorld('void_test', 1234, 'void');
+    same('void', $void->getGenerator(), 'world carries the void generator');
+
+    // A far chunk is pure air.
+    $far = $void->getChunkData(20, 20);
+    ok($far instanceof ChunkData, 'void world generates far chunk');
+    if ($far instanceof ChunkData) {
+        $blocks = '';
+        foreach ($far->sections as $s) { $blocks .= (string)$s['blocks']; }
+        same(str_repeat("\x00", strlen($blocks)), $blocks, 'far void chunk is all air');
+    }
+
+    // The chunk holding the origin has a platform (grass on top of stone)
+    // at the world origin column - everything around it stays air.
+    $origin = $void->getChunkData(0, 0);
+    ok($origin instanceof ChunkData, 'void world generates origin chunk');
+    if ($origin instanceof ChunkData) {
+        // World (0,0): grass top at y=64 on the platform.
+        same(2, $void->getBlock(0, 64, 0), 'grass on the platform at origin');
+        same(1, $void->getBlock(0, 63, 0), 'stone under the grass');
+        // Off the 5x5 platform the column is air.
+        same(0, $void->getBlock(10, 64, 10), 'air off the platform');
+    }
+});
+
+test('a flat world generates its flat terrain (generator flows through ChunkLoadService)', function () use ($kernel): void {
+    $server = \pocketmine\api\server\Server::getInstance();
+    $flat = $server->generateWorld('flat_test', 99, 'flat');
+    same('flat', $flat->getGenerator(), 'world carries the flat generator');
+    $flat->loadChunk(0, 0);
+    // Flat surface: grass at y=4, stone below, air above.
+    same(2, $flat->getBlock(0, 4, 0), 'flat grass at y=4');
+    same(1, $flat->getBlock(0, 3, 0), 'flat stone below grass');
+    same(0, $flat->getBlock(0, 20, 0), 'air above the flat surface');
+});
+
+test('a void world persists its generator and restores it on load', function () use ($kernel, $registry): void {
+    $server = \pocketmine\api\server\Server::getInstance();
+    $void = $server->getWorldByName('void_test');
+    ok($void !== null, 'void_test world exists');
+    $void->loadChunk(0, 0);
+    $kernel->saveAllWorlds();
+
+    ok($server->unloadWorld('void_test', false), 'unload void_test');
+    $reloaded = $server->loadWorld('void_test');
+    ok($reloaded !== null, 'reload void_test from disk');
+    same('void', $reloaded->getGenerator(), 'generator restored from persisted level.dat');
+    same(1234, $reloaded->getSeed(), 'void seed restored');
+    $reloaded->loadChunk(0, 0);
+    same(2, $reloaded->getBlock(0, 64, 0), 'void platform survives the round-trip');
+});
+
+test('a foreign level.dat with no generator info loads as void (no regeneration)', function () use ($kernel): void {
+    $server = \pocketmine\api\server\Server::getInstance();
+
+    // Drop a world folder whose level.dat has no generatorName tag.
+    $dir = 'worlds/foreign_test/';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+    $nbt = new \pocketmine\nbt\NBT(\pocketmine\nbt\NBT::BIG_ENDIAN);
+    $data = new \pocketmine\nbt\tag\CompoundTag('Data', []);
+    $data->setLong('RandomSeed', 42);
+    $data->setInt('SpawnX', 0);
+    $data->setInt('SpawnY', 64);
+    $data->setInt('SpawnZ', 0);
+    $data->setByte('Difficulty', 1);
+    $root = new \pocketmine\nbt\tag\CompoundTag('', []);
+    $root->setTag('Data', $data);
+    $nbt->setData($root);
+    file_put_contents($dir . 'level.dat', $nbt->writeCompressed());
+
+    $loaded = $server->loadWorld('foreign_test');
+    ok($loaded !== null, 'foreign world loads');
+    same('void', $loaded->getGenerator(), 'no generator info -> void default');
+    // Terrain must not generate around the foreign world: a chunk loads as
+    // air except the spawn platform.
+    $loaded->loadChunk(3, 3);
+    same(0, $loaded->getBlock(48, 64, 48), 'no terrain generated in foreign world');
+});
+
+test('a dropped world folder without any level.dat loads as void at boot', function () use ($kernel): void {
+    // Simulate a hand-dropped lobby folder: no level.dat at all.
+    $dir = 'worlds/no_meta_test/';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+    $storage = \pocketmine\adapter\driven\storage\LevelProviderManager::create('worlds/', 'no_meta_test');
+    ok($storage->worldFolderExists(), 'world folder exists on disk');
+    same(null, $storage->loadWorldMeta(), 'no level.dat -> no meta');
+
+    // applyPersistedWorldMeta is what the boot path runs: a folder that
+    // exists but has no Khronos level.dat must default the generator to void.
+    $registry = $kernel->getResourceRegistry();
+    \pocketmine\applyPersistedWorldMeta($storage, $registry);
+    $cfg = $registry->get(\pocketmine\core\resource\WorldConfig::class);
+    same('void', $cfg?->generator, 'dropped folder without level.dat -> void');
+});
+
 test('world metadata persists per folder and reloads through the Server API', function () use ($kernel, $registry): void {
     $server = \pocketmine\api\server\Server::getInstance();
     $second = $server->getWorldByName('nether_test');
