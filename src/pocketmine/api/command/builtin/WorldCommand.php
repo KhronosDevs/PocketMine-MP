@@ -20,7 +20,7 @@ final class WorldCommand extends BuiltinCommand {
         parent::__construct(
             'world',
             'List, switch, or create worlds',
-            '/world [list|create <name> [seed]] [name]',
+            '/world [list|create <name> [seed] [generator]] [name]',
             ['worlds'],
             'khronos.command.world',
         );
@@ -33,16 +33,21 @@ final class WorldCommand extends BuiltinCommand {
         }
         $server = \pocketmine\api\server\Server::getInstance();
 
-        // /world create <name> [seed]
+        // /world create <name> [seed] [generator]
         if (($args[0] ?? '') === 'create') {
             $name = $args[1] ?? '';
             if ($name === '') {
-                $sender->sendMessage('Usage: /world create <name> [seed]');
+                $sender->sendMessage('Usage: /world create <name> [seed] [generator]');
                 return false;
             }
             $seed = isset($args[2]) && is_numeric($args[2]) ? (int)$args[2] : 0;
-            $world = $server->generateWorld($name, $seed);
-            $sender->sendMessage("World '{$world->getName()}' created (seed {$world->getSeed()}).");
+            $generator = $args[3] ?? 'normal';
+            if (!in_array($generator, ['normal', 'flat', 'void'], true)) {
+                $sender->sendMessage("Unknown generator '{$generator}'. Use normal, flat or void.");
+                return false;
+            }
+            $world = $server->generateWorld($name, $seed, $generator);
+            $sender->sendMessage("World '{$world->getName()}' created (seed {$world->getSeed()}, generator {$generator}).");
             return true;
         }
 

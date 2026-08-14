@@ -66,7 +66,7 @@ final class ChunkLoadService {
             return [];
         }
         $config = new \pocketmine\port\driven\GeneratorConfig(
-            'normal', // default generator
+            $this->getWorldGenerator($worldId),
             $this->getWorldSeed($worldId),
             []
         );
@@ -155,7 +155,9 @@ final class ChunkLoadService {
         // seed makes the population deterministic across restarts. Chunks that
         // came from disk are skipped - they were already populated when saved,
         // and re-running the pass would place a second, different feature set.
-        if ($populate) {
+        // Void worlds skip population entirely: a lobby platform must stay
+        // exactly as generated (no trees/grass sprouting on it).
+        if ($populate && $this->getWorldGenerator($worldId) !== 'void') {
             $chunkData = $this->worldGenPort->populateChunk($chunkX, $chunkZ, $chunkData, $seed);
         }
         
@@ -192,6 +194,28 @@ final class ChunkLoadService {
         }
         
         return $chunkData;
+    }
+
+    private function getWorldGenerator(int $worldId = 0): string {
+        // Read the world's own generator type (WorldConfig->generator,
+        // e.g. 'normal'/'flat'/'void'); non-default worlds resolve strictly
+        // through the registry, the default world (id 0) falls back to the
+        // resource WorldConfig. Unknown/absent config defaults to 'normal'.
+        $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+        if ($registry instanceof WorldRegistry && $registry->getWorld($worldId) !== null) {
+            $config = $registry->getConfig($worldId);
+            if ($config instanceof \pocketmine\core\resource\WorldConfig && $config->generator !== '') {
+                return $config->generator;
+            }
+        }
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel !== null) {
+            $resource = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
+            if ($resource instanceof \pocketmine\core\resource\WorldConfig && $resource->generator !== '') {
+                return $resource->generator;
+            }
+        }
+        return 'normal';
     }
 
     private function getWorldSeed(int $worldId = 0): int {

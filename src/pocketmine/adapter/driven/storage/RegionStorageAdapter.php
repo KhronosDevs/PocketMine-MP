@@ -481,6 +481,10 @@ abstract class RegionStorageAdapter implements StoragePort {
         return $this->basePath . $this->levelName . '/';
     }
 
+    public function worldFolderExists(): bool {
+        return is_dir($this->worldFolder());
+    }
+
     // --- NBT helpers shared by the chunk payload codecs --------------------
 
     /**
