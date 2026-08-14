@@ -4612,6 +4612,76 @@ test('bans and the whitelist reject logins with a DisconnectPacket', function ()
     }
 });
 
+test('/kick disconnects an online player immediately with a DisconnectPacket', function () use ($kernel, $port): void {
+    [$kickClient] = joinFreshClient($kernel, $port, 'Kicky', 'e0000000-0000-0000-0000-0000000000d1');
+    $lists = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\PlayerListManager::class);
+    try {
+        $ok = $kernel->getCommandPort()->execute(new \pocketmine\api\command\ConsoleCommandSender(), 'kick Kicky');
+        ok($ok, '/kick executes');
+
+        $gotDisconnect = false;
+        $deadline = microtime(true) + 5.0;
+        while (microtime(true) < $deadline) {
+            foreach ($kickClient->readGamePackets() as [$id, $buffer]) {
+                if ($id === Info::DISCONNECT_PACKET) {
+                    $gotDisconnect = true;
+                }
+            }
+            $kernel->run(1);
+            $online = array_column($kernel->getNetworkSessionService()->getOnlinePlayers(), 'username');
+            if ($gotDisconnect && !in_array('Kicky', $online, true)) {
+                break;
+            }
+            usleep(10000);
+        }
+        ok($gotDisconnect, 'kicked client received a DisconnectPacket immediately');
+        $online = array_column($kernel->getNetworkSessionService()->getOnlinePlayers(), 'username');
+        ok(!in_array('Kicky', $online, true), 'kicked player is offline right away');
+        // Kick is not a ban: the player is never added to the banned list.
+        if ($lists instanceof \pocketmine\core\resource\PlayerListManager) {
+            ok(!$lists->isBanned('Kicky'), '/kick does not write a ban');
+        }
+    } finally {
+        $kickClient->close();
+    }
+});
+
+test('/ban kicks an online player immediately (DisconnectPacket + offline + banned)', function () use ($kernel, $port): void {
+    [$banClient] = joinFreshClient($kernel, $port, 'Banee', 'e0000000-0000-0000-0000-0000000000d2');
+    $lists = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\PlayerListManager::class);
+    try {
+        $ok = $kernel->getCommandPort()->execute(new \pocketmine\api\command\ConsoleCommandSender(), 'ban Banee');
+        ok($ok, '/ban executes');
+
+        $gotDisconnect = false;
+        $deadline = microtime(true) + 5.0;
+        while (microtime(true) < $deadline) {
+            foreach ($banClient->readGamePackets() as [$id, $buffer]) {
+                if ($id === Info::DISCONNECT_PACKET) {
+                    $gotDisconnect = true;
+                }
+            }
+            $kernel->run(1);
+            $online = array_column($kernel->getNetworkSessionService()->getOnlinePlayers(), 'username');
+            if ($gotDisconnect && !in_array('Banee', $online, true)) {
+                break;
+            }
+            usleep(10000);
+        }
+        ok($gotDisconnect, 'banned client received a DisconnectPacket immediately');
+        $online = array_column($kernel->getNetworkSessionService()->getOnlinePlayers(), 'username');
+        ok(!in_array('Banee', $online, true), 'banned player is offline right away');
+        if ($lists instanceof \pocketmine\core\resource\PlayerListManager) {
+            ok($lists->isBanned('Banee'), '/ban recorded the ban');
+        }
+    } finally {
+        if ($lists instanceof \pocketmine\core\resource\PlayerListManager) {
+            $lists->pardon('Banee');
+        }
+        $banClient->close();
+    }
+});
+
 test('server shuts down cleanly with active sessions', function () use ($kernel, $client): void {
     $adapter = $kernel->getNetworkPort();
     if ($adapter instanceof Protocol84NetworkAdapter) {

@@ -1762,6 +1762,7 @@ function registerBuiltinPermissions(\pocketmine\api\permission\PermissionManager
         'khronos.command.op' => 'Grant operator',
         'khronos.command.deop' => 'Revoke operator',
         'khronos.command.ban' => 'Ban a player',
+        'khronos.command.kick' => 'Kick a player',
         'khronos.command.pardon' => 'Unban a player',
         'khronos.command.ban-ip' => 'Ban an IP address',
         'khronos.command.pardon-ip' => 'Unban an IP address',
