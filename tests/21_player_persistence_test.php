@@ -74,8 +74,11 @@ test('a returning player restores position/health/inventory/held slot and skips 
         $s0 = $inv?->get(0);
         ok($s0 !== null && $s0->itemId === 5 && $s0->count === 32, 'starter kit: 32 planks in slot 0');
 
-        // Customize: position, health, inventory, held slot, metadata.
-        ok($alice->teleport(12.5, 80.0, -4.25, 30.0, 45.0), 'teleport accepted');
+        // Customize: position, health, inventory, held slot, metadata. The
+        // saved spot must be a safe place to stand (the join guard only
+        // restores positions whose feet + head blocks are non-solid): y=200 is
+        // far above any terrain or tree, so the round-trip is deterministic.
+        ok($alice->teleport(12.5, 200.0, -4.25, 30.0, 45.0), 'teleport accepted');
         $health = $alice->getEntity()?->get(HealthComponent::class);
         if ($health !== null) {
             $health->current = 12.5;
@@ -95,7 +98,7 @@ test('a returning player restores position/health/inventory/held slot and skips 
         $alice2 = player_join($kernel, $uuidA, 'Alice');
         $pos = $alice2->getEntity()?->get(PositionComponent::class);
         near(12.5, $pos?->x ?? 0.0, 1e-6, 'restored x');
-        near(80.0, $pos?->y ?? 0.0, 1e-6, 'restored y');
+        near(200.0, $pos?->y ?? 0.0, 1e-6, 'restored y');
         near(-4.25, $pos?->z ?? 0.0, 1e-6, 'restored z');
         $health2 = $alice2->getEntity()?->get(HealthComponent::class);
         near(12.5, $health2?->current ?? 0.0, 1e-6, 'restored health');
@@ -123,7 +126,9 @@ test('cross-kernel: a player saved by kernel A is restored by a fresh kernel B b
     try {
         $kernelA = \pocketmine\bootstrap();
         $alice = player_join($kernelA, $uuidA, 'Alice');
-        $alice->teleport(20.0, 90.0, 3.5);
+        // y=200: high above any terrain so the safe-position join guard keeps
+        // the saved spot (the round-trip must prove disk, not fresh spawn).
+        $alice->teleport(20.0, 200.0, 3.5);
         player_inventory($alice)?->set(5, new ItemStack(266, 0, 7)); // iron ingots
         player_inventory($alice)?->setHeldSlot(4);
         player_save($kernelA, $alice);
@@ -135,7 +140,7 @@ test('cross-kernel: a player saved by kernel A is restored by a fresh kernel B b
         $alice2 = player_join($kernelB, $uuidA, 'Alice');
         $pos = $alice2->getEntity()?->get(PositionComponent::class);
         near(20.0, $pos?->x ?? 0.0, 1e-6, 'kernel B restores x');
-        near(90.0, $pos?->y ?? 0.0, 1e-6, 'kernel B restores y (far above any terrain - proves disk, not fresh spawn)');
+        near(200.0, $pos?->y ?? 0.0, 1e-6, 'kernel B restores y (far above any terrain - proves disk, not fresh spawn)');
         near(3.5, $pos?->z ?? 0.0, 1e-6, 'kernel B restores z');
         same(266, player_inventory($alice2)?->get(5)?->itemId, 'kernel B restores the iron ingots');
         same(7, player_inventory($alice2)?->get(5)?->count, 'kernel B restores the ingot count');

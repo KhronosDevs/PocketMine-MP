@@ -1221,6 +1221,9 @@ final class Kernel {
                 'spawnZ' => (string)($worldConfig?->spawnZ ?? $config->spawnZ),
                 'difficulty' => (string)$config->difficulty,
                 'time' => (string)($worldConfig?->time ?? 0),
+                // 14.22: resume the weather spell and its remaining duration.
+                'weather' => (string)($worldConfig?->weather ?? 0),
+                'weatherDuration' => (string)($worldConfig?->weatherDuration ?? 0),
             ]);
         }
     }
@@ -1754,6 +1757,16 @@ function applyPersistedWorldMeta(StoragePort $storagePort, ResourceRegistry $res
         && isset($meta['time']) && $meta['time'] !== '') {
         $worldConfig->time = ((int)$meta['time'] % 24000 + 24000) % 24000;
     }
+    // 14.22: resume the weather spell and its remaining duration (missing or
+    // zero means the next tick rolls a fresh spell - same as a new world).
+    if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig
+        && isset($meta['weather']) && $meta['weather'] !== '') {
+        $worldConfig->weather = (int)$meta['weather'];
+    }
+    if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig
+        && isset($meta['weatherDuration']) && $meta['weatherDuration'] !== '') {
+        $worldConfig->weatherDuration = (int)$meta['weatherDuration'];
+    }
 }
 
 function registerBuiltinSystems(SystemScheduler $scheduler): void {
@@ -1768,6 +1781,11 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // network layer can broadcast it and the mob spawner can gate on it.
     // Runs before MobSpawnerSystem so the spawner sees the advanced time.
     $scheduler->register(new \pocketmine\core\system\TimeSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // 14.22: weather cycle - transitions between clear/rain/storm spells with
+    // random durations and a lightning timer during storms. After time so the
+    // world clock and weather stay independent; before the network poll the
+    // broadcast picks up transitions the same tick they occur.
+    $scheduler->register(new \pocketmine\core\system\WeatherSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     // 14.3: periodic hostile-mob spawning near players. Registered after AI so
     // fresh spawns do not act (target, move) the same tick they appear.
     $scheduler->register(new \pocketmine\core\system\MobSpawnerSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);

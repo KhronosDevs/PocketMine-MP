@@ -315,6 +315,14 @@ abstract class RegionStorageAdapter implements StoragePort {
                 if ($data->getTag('generatorName') !== null) {
                     $meta['generator'] = $data->getString('generatorName', 'normal');
                 }
+                // 14.22: weather spell + remaining duration (custom keys -
+                // vanilla 0.15 level.dat has no weather persistence).
+                if ($data->getTag('KhronosWeather') !== null) {
+                    $meta['weather'] = (string)$data->getByte('KhronosWeather', 0);
+                }
+                if ($data->getTag('KhronosWeatherDuration') !== null) {
+                    $meta['weatherDuration'] = (string)$data->getInt('KhronosWeatherDuration', 0);
+                }
                 return $meta;
             } catch (\Throwable) {
                 return null; // corrupt level.dat: treat as a fresh world
@@ -358,6 +366,8 @@ abstract class RegionStorageAdapter implements StoragePort {
         $data->setLong('Time', (int)($meta['time'] ?? 0));
         $data->setByte('Difficulty', (int)($meta['difficulty'] ?? 1));
         $data->setString('generatorName', (string)($meta['generator'] ?? 'normal'));
+        $data->setByte('KhronosWeather', (int)($meta['weather'] ?? 0));
+        $data->setInt('KhronosWeatherDuration', (int)($meta['weatherDuration'] ?? 0));
         $data->setString('LevelName', $this->levelName);
         $data->setInt('version', 19133); // MCPE data version for 0.15-era worlds
         $data->setByte('hardcore', 0);

@@ -50,6 +50,7 @@ use pocketmine\protocol\FullChunkDataPacket;
 use pocketmine\protocol\HurtArmorPacket;
 use pocketmine\protocol\Info;
 use pocketmine\protocol\InteractPacket;
+use pocketmine\protocol\LevelEventPacket;
 use pocketmine\protocol\LoginPacket;
 use pocketmine\protocol\MobArmorEquipmentPacket;
 use pocketmine\protocol\MobEquipmentPacket;
@@ -160,7 +161,8 @@ final class NetworkSessionService {
      *   moveCredit: array<string, int>,
      *   breaking: array{x: int, y: int, z: int, startTick: int}|null,
      *   openContainer: array{x: int, y: int, z: int, type: string}|null,
-     *   bowDraw: int|null
+     *   bowDraw: int|null,
+     *   lastWeather: int
      * }>
      */
     private array $sessions = [];
@@ -238,6 +240,9 @@ final class NetworkSessionService {
         // 14.6: every tick the client receives the current time of day so
         // the sun/moon keep moving (the login burst sends the starting value).
         $this->broadcastTime();
+        // 14.22: weather transitions + periodic lightning during storms (the
+        // login burst sends the starting weather state).
+        $this->broadcastWeather();
         // 14.2: mirror live entities to every session (add/move/remove) so
         // other players, mobs and dropped items are visible on the wire.
         $this->broadcastEntityStates();
@@ -375,6 +380,9 @@ final class NetworkSessionService {
             $session['breaking'] = null;
             $session['openContainer'] = null;
             $session['bowDraw'] = null;
+            // The new world's weather must be pushed on the next poll (the
+            // old world's state was already delivered to this client).
+            $session['lastWeather'] = -1;
             $this->sessions[$addrKey] = $session;
             $this->queueChunks($addrKey);
 
@@ -599,6 +607,10 @@ final class NetworkSessionService {
             'openContainer' => null,
             // 14.17: the tick the player started charging a bow (null = not).
             'bowDraw' => null,
+            // 14.22: the weather state last pushed to this client. The login
+            // burst sends the current state explicitly, so tracking it here
+            // means only actual transitions go out afterwards.
+            'lastWeather' => $this->getWorldConfig(0)?->weather ?? 0,
         ];
 
         // Broadcast the new player to everyone (including themselves) and
@@ -2123,6 +2135,10 @@ final class NetworkSessionService {
         $time->started = true;
         $this->queuePacket($playerRef, $time);
 
+        // 14.22: hand the newcomer the current weather so rain/storms render
+        // immediately (legacy Weather::sendWeather on join).
+        $this->sendWeatherState($playerRef, $worldConfig?->weather ?? 0);
+
         $spawn = new SetSpawnPositionPacket();
         $spawn->x = $spawnX;
         $spawn->y = $spawnY;
@@ -2193,6 +2209,109 @@ final class NetworkSessionService {
             $pk->time = $config?->time ?? 0;
             $pk->started = true;
             $this->queuePacket($session['playerRef'], $pk);
+        }
+    }
+
+    /**
+     * 14.22: push weather state changes to every connected player. The client
+     * only needs packets on transitions (legacy Weather::sendWeatherToAll on
+     * setWeather): rain/storm state is encoded as two LevelEventPackets - one
+     * for rain (START/STOP 3001/3003) and one for thunder (START/STOP
+     * 3002/3004) - each carrying the legacy particle-strength ints. During
+     * storms the WeatherSystem advances WorldConfig::lightningTick; when it
+     * crosses LIGHTNING_INTERVAL a bolt strikes near a random player in that
+     * world (AddEntityPacket type 93), exactly like legacy calcWeather.
+     */
+    private function broadcastWeather(): void {
+        if (empty($this->sessions)) {
+            return;
+        }
+        $struck = []; // worldId => already struck this tick
+        foreach ($this->sessions as $addrKey => $session) {
+            $config = $this->getWorldConfig($session['worldId']);
+            if ($config === null) {
+                continue;
+            }
+            $weather = $config->weather;
+            if ($session['lastWeather'] !== $weather) {
+                $this->sendWeatherState($session['playerRef'], $weather);
+                $session['lastWeather'] = $weather;
+                $this->sessions[$addrKey] = $session;
+            }
+            // Lightning: once per interval during a storm, near a random
+            // player of that world (one strike per world per tick).
+            if (\pocketmine\core\system\WeatherSystem::isThundering($weather)
+                && $config->lightningTick > 0
+                && $config->lightningTick % \pocketmine\core\system\WeatherSystem::LIGHTNING_INTERVAL === 0
+                && !isset($struck[$session['worldId']])
+            ) {
+                $this->strikeLightning($session['worldId']);
+                $struck[$session['worldId']] = true;
+            }
+        }
+    }
+
+    /**
+     * The two legacy LevelEventPackets that describe the current weather to
+     * one client (identical layout to old Weather::sendWeather).
+     */
+    private function sendWeatherState(PlayerRef $player, int $weather): void {
+        $strength1 = mt_rand(90000, 110000);
+        $strength2 = mt_rand(30000, 40000);
+
+        $rain = new LevelEventPacket();
+        $rain->evid = \pocketmine\core\system\WeatherSystem::isRaining($weather)
+            ? LevelEventPacket::EVENT_START_RAIN
+            : LevelEventPacket::EVENT_STOP_RAIN;
+        $rain->data = $strength1;
+        $this->queuePacket($player, $rain);
+
+        $thunder = new LevelEventPacket();
+        $thunder->evid = \pocketmine\core\system\WeatherSystem::isThundering($weather)
+            ? LevelEventPacket::EVENT_START_THUNDER
+            : LevelEventPacket::EVENT_STOP_THUNDER;
+        $thunder->data = $strength2;
+        $this->queuePacket($player, $thunder);
+    }
+
+    /**
+     * A lightning bolt at the highest solid block near a random online player
+     * of the given world, broadcast to everyone in that world (legacy
+     * Level::spawnLightning - visual entity only, no fire damage in 0.15).
+     */
+    private function strikeLightning(int $worldId): void {
+        $targets = [];
+        foreach ($this->sessions as $session) {
+            if ($session['worldId'] !== $worldId) {
+                continue;
+            }
+            $pos = $session['entityRef']->getPosition();
+            if ($pos !== null) {
+                $targets[] = $pos;
+            }
+        }
+        if ($targets === []) {
+            return;
+        }
+        $near = $targets[array_rand($targets)];
+        $x = (float)((int)$near->x + mt_rand(-64, 64));
+        $z = (float)((int)$near->z + mt_rand(-64, 64));
+        $store = $this->resourceRegistry->get(\pocketmine\core\resource\ChunkStore::class);
+        $y = $store instanceof \pocketmine\core\resource\ChunkStore
+            ? (float)$store->getHighestBlockAt((int)$x, (int)$z)
+            : 64.0;
+
+        $pk = new AddEntityPacket();
+        $pk->eid = mt_rand(10000000, 100000000);
+        $pk->type = 93; // Lightning (legacy entity network id)
+        $pk->x = $x;
+        $pk->y = $y;
+        $pk->z = $z;
+        $pk->metadata = [];
+        foreach ($this->sessions as $session) {
+            if ($session['worldId'] === $worldId) {
+                $this->queuePacket($session['playerRef'], clone $pk);
+            }
         }
     }
 
