@@ -14,6 +14,7 @@ use pocketmine\core\component\tags\PlayerTag;
 use pocketmine\core\ecs\EntityBuilder;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\BlockRegistry;
 use pocketmine\core\resource\ChunkStore;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\PlayerRef;
@@ -78,6 +79,20 @@ final class PlayerJoinService {
                 
                 // Restore components from saved data
                 $this->restoreComponents($entityRef, $savedData);
+
+                // Suffocation guard: a returning player restores their saved
+                // position, but that spot may now be inside solid terrain
+                // (the seed used to reset every boot, so older saves are
+                // buried under newly generated hills). Fall back to the
+                // terrain-aware safe spawn when the saved spot is unsafe.
+                $position = $entity->get(PositionComponent::class);
+                if ($position !== null
+                    && !$this->isSafePosition($position->x, $position->y, $position->z)) {
+                    $safe = $this->getWorldSpawn();
+                    $position->x = $safe->x;
+                    $position->y = $safe->y;
+                    $position->z = $safe->z;
+                }
             }
             
             return $entityRef;
@@ -121,6 +136,27 @@ final class PlayerJoinService {
         }
         
         return $entityRef;
+    }
+
+    /**
+     * Is a spot safe to stand on? Both the feet block and the block above
+     * the head must be non-solid in the loaded terrain. Falls back to
+     * "unsafe" when the store/registry are unavailable, so the caller lands
+     * on the (always safe) world spawn.
+     */
+    private function isSafePosition(float $x, float $y, float $z): bool {
+        $registry = $this->world->getResourceRegistry();
+        $store = $registry->get(ChunkStore::class);
+        $blocks = $registry->get(BlockRegistry::class);
+        if (!$store instanceof ChunkStore || !$blocks instanceof BlockRegistry) {
+            return false;
+        }
+        $this->chunkLoadService->loadChunk((int)floor($x / 16), (int)floor($z / 16));
+        $bx = (int)floor($x);
+        $by = (int)floor($y);
+        $bz = (int)floor($z);
+        return !$blocks->isSolid($store->getBlock($bx, $by, $bz))
+            && !$blocks->isSolid($store->getBlock($bx, $by + 1, $bz));
     }
 
     private function getWorldSpawn(): PositionComponent {

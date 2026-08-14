@@ -758,7 +758,7 @@ final class NetworkSessionService {
             $pos->z = $z;
             $rotation = $entity->get(RotationComponent::class);
             $pk = new MovePlayerPacket();
-            $pk->eid = $entityId;
+            $pk->eid = 0; // protocol 84: the player's own entity is always 0
             $pk->x = $x;
             $pk->y = $y;
             $pk->z = $z;
@@ -1786,7 +1786,7 @@ final class NetworkSessionService {
 
         // Teleport the client back to the (terrain-safe) spawn point.
         $move = new MovePlayerPacket();
-        $move->eid = $playerRef->entityId;
+        $move->eid = 0; // protocol 84: the player's own entity is always 0
         $move->x = $pos?->x ?? 0.0;
         $move->y = $pos?->y ?? 0.0;
         $move->z = $pos?->z ?? 0.0;
