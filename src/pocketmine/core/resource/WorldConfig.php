@@ -27,5 +27,12 @@ final class WorldConfig {
         public string $generator = 'normal',
         public int $maxPlayers = 20,
         public int $viewDistance = 10,
+        // Weather (14.22): current state (0 clear / 1 rain / 2 rain+thunder /
+        // 3 thunder), ticks of weather left before the next transition, and a
+        // per-tick counter the WeatherSystem advances during storms that the
+        // network layer reads to time lightning strikes.
+        public int $weather = 0,
+        public int $weatherDuration = 0,
+        public int $lightningTick = 0,
     ) {}
 }

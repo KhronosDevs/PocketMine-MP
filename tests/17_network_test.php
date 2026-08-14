@@ -646,6 +646,20 @@ function aeFields(string $buf): array {
     ];
 }
 
+/**
+ * LevelEventPacket (0x1a): evid short, x/y/z floats, data int.
+ */
+function leFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    return [
+        'evid' => $s->getShort(),
+        'x' => $s->getFloat(),
+        'y' => $s->getFloat(),
+        'z' => $s->getFloat(),
+        'data' => $s->getInt(),
+    ];
+}
+
 function aieFields(string $buf): array {
     $s = new BinaryStream($buf, 1);
     return [
@@ -4137,6 +4151,97 @@ test('chunk stream follows the player across chunk boundaries', function () use 
     }
     ok($after > $baseline, "chunk stream followed the player: $baseline -> $after chunks");
     $streamer->close();
+});
+
+test('weather transitions and lightning strike hit the wire', function () use ($kernel, $port): void {
+    $wc = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
+    ok($wc instanceof \pocketmine\core\resource\WorldConfig, 'WorldConfig resource present');
+    if (!$wc instanceof \pocketmine\core\resource\WorldConfig) {
+        return;
+    }
+    // The earlier tests have ticked the world for minutes of game time, so the
+    // weather may be mid-spell. Pin a long clear spell so the login-burst
+    // assertions below are deterministic (the system only rolls a new spell
+    // when the current one expires).
+    $wc->weather = \pocketmine\core\system\WeatherSystem::CLEAR;
+    $wc->weatherDuration = 600000;
+    $wc->lightningTick = 0;
+
+    $weatherClient = new FakeClient($port);
+    $weatherClient->handshake(fn() => $kernel->run(1));
+    $weatherClient->connect(fn() => $kernel->run(1));
+    $weatherClient->sendLogin('Weather', 'c0000000-0000-0000-0000-0000000000c1');
+
+    // The login burst must carry the current weather state (two LevelEvent
+    // packets - rain + thunder - both STOP when the world starts clear).
+    $deadline = microtime(true) + 10.0;
+    $sawChunk = false;
+    $loginWeather = [];
+    while (microtime(true) < $deadline && (!$sawChunk || count($loginWeather) < 2)) {
+        foreach ($weatherClient->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::FULL_CHUNK_DATA_PACKET) {
+                $sawChunk = true;
+            }
+            if ($id === Info::LEVEL_EVENT_PACKET) {
+                $loginWeather[] = leFields($buffer)['evid'];
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawChunk, 'weather client received login chunks');
+    ok(in_array(\pocketmine\protocol\LevelEventPacket::EVENT_STOP_RAIN, $loginWeather, true), 'login burst stopped rain (clear start)');
+    ok(in_array(\pocketmine\protocol\LevelEventPacket::EVENT_STOP_THUNDER, $loginWeather, true), 'login burst stopped thunder (clear start)');
+
+    // A server-side rain transition must push START_RAIN over the wire.
+    $wc->weather = \pocketmine\core\system\WeatherSystem::RAIN;
+    $wc->weatherDuration = 600000; // long spell: no mid-test roll back to clear
+    $deadline = microtime(true) + 5.0;
+    $sawRain = false;
+    while (microtime(true) < $deadline && !$sawRain) {
+        foreach ($weatherClient->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::LEVEL_EVENT_PACKET
+                && leFields($buffer)['evid'] === \pocketmine\protocol\LevelEventPacket::EVENT_START_RAIN) {
+                $sawRain = true;
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawRain, 'START_RAIN pushed on the rain transition');
+
+    // Escalating to a storm pushes START_THUNDER (rain stays on).
+    $wc->weather = \pocketmine\core\system\WeatherSystem::RAINY_THUNDER;
+    $deadline = microtime(true) + 5.0;
+    $sawThunder = false;
+    while (microtime(true) < $deadline && !$sawThunder) {
+        foreach ($weatherClient->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::LEVEL_EVENT_PACKET
+                && leFields($buffer)['evid'] === \pocketmine\protocol\LevelEventPacket::EVENT_START_THUNDER) {
+                $sawThunder = true;
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawThunder, 'START_THUNDER pushed when the storm starts');
+
+    // One tick before the strike interval: the next world tick crosses 200
+    // and the network layer must broadcast a lightning bolt (AddEntityPacket
+    // type 93) to everyone in the world.
+    $wc->lightningTick = \pocketmine\core\system\WeatherSystem::LIGHTNING_INTERVAL - 1;
+    $deadline = microtime(true) + 5.0;
+    $sawBolt = false;
+    while (microtime(true) < $deadline && !$sawBolt) {
+        foreach ($weatherClient->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::ADD_ENTITY_PACKET) {
+                $ae = aeFields($buffer);
+                if ($ae['type'] === 93) {
+                    $sawBolt = true;
+                }
+            }
+        }
+        $kernel->run(1);
+    }
+    ok($sawBolt, 'lightning bolt (AddEntityPacket type 93) broadcast during the storm');
+    $weatherClient->close();
 });
 
 test('server shuts down cleanly with active sessions', function () use ($kernel, $client): void {
