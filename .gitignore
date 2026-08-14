@@ -8,6 +8,7 @@ timings/
 banned-*.txt
 genisys.yml
 khronos.yml
+khronos.json
 !src/pocketmine/resources/khronos.yml
 ops.txt
 pocketmine.yml

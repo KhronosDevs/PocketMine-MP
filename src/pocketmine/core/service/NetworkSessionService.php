@@ -22,6 +22,7 @@ use pocketmine\core\ecs\World;
 use pocketmine\core\resource\ChestStore;
 use pocketmine\core\resource\Hunger;
 use pocketmine\core\resource\ItemRegistry;
+use pocketmine\core\resource\KhronosConfig;
 use pocketmine\core\resource\ProjectileRegistry;
 use pocketmine\core\resource\ChunkStore;
 use pocketmine\core\resource\ServerConfig;
@@ -110,27 +111,19 @@ final class NetworkSessionService {
     private const DEFAULT_RADIUS = 4;
     private const MAX_RADIUS = 12;
 
-    // --- Blocker 2 anti-cheat limits ---------------------------------------
-    // Movement caps per tick, generous enough for legit sprint-jumps + packet
-    // latency (a sprint-jump peaks ~0.6 blocks in a tick; the client sends a
-    // MovePlayerPacket roughly every tick) while making teleport/fly hacks
-    // obvious. Horizontal 1.2/tick = 24 m/s; vertical ascent 0.8/tick (the
-    // jump peak is ~0.42); total 2.0 covers the diagonal corner case.
-    private const MAX_MOVE_HORIZONTAL_PER_TICK = 1.2;
-    private const MAX_MOVE_ASCENT_PER_TICK = 0.8;
-    private const MAX_MOVE_TOTAL_PER_TICK = 2.0;
-    /** Rejected moves accumulate; this many within the window kicks. */
-    private const MAX_MOVE_VIOLATIONS = 5;
-    private const MOVE_VIOLATION_WINDOW_TICKS = 100;
-    // Chat: one message per 400ms minimum; commands 100ms.
-    private const CHAT_MIN_INTERVAL_SECONDS = 0.4;
-    private const COMMAND_MIN_INTERVAL_SECONDS = 0.1;
-    private const MAX_CHAT_LENGTH = 256;
-    // Login throttle: at most this many login attempts per IP per minute
-    // (generous enough for a NAT'd LAN, tight enough to stop a brute-force
-    // flood). Plus a hard cap on concurrent sessions per IP.
-    private const LOGIN_ATTEMPTS_PER_MINUTE = 30;
-    private const MAX_SESSIONS_PER_IP = 25;
+    /**
+     * Blocker 2 anti-cheat limits, read from khronos.json (KhronosConfig
+     * resource) instead of hardcoded constants so admins can tune thresholds
+     * and punishments without touching code. Baseline values (see
+     * KhronosConfig): movement caps per tick generous enough for legit
+     * sprint-jumps + packet latency (a sprint-jump peaks ~0.6 blocks/tick;
+     * horizontal 1.2/tick = 24 m/s; ascent 0.8/tick, jump peak ~0.42; total
+     * 2.0 covers the diagonal corner case) while making teleport/fly hacks
+     * obvious; violations inside the window escalate from rubber-band to
+     * kick; chat/command intervals are spam limits; login limits throttle
+     * per-IP brute force.
+     */
+    private KhronosConfig $antiCheat;
 
     private ?Protocol84NetworkAdapter $adapter;
     private readonly World $world;
@@ -251,6 +244,14 @@ final class NetworkSessionService {
         $this->commandPort = $commandPort;
         $this->eventPort = $eventPort;
         $this->wireTrace = getenv('KHRONOS_WIRE_TRACE') === '1';
+        // The live KhronosConfig resource (defaults when a kernel was built
+        // without bootstrap, the file-loaded instance otherwise). The service
+        // keeps the reference, so mutating the resource at runtime (tests,
+        // future /reload) is picked up immediately.
+        $antiCheat = $resourceRegistry->get(\pocketmine\core\resource\KhronosConfig::class);
+        $this->antiCheat = $antiCheat instanceof \pocketmine\core\resource\KhronosConfig
+            ? $antiCheat
+            : new \pocketmine\core\resource\KhronosConfig();
     }
 
     /**
@@ -665,12 +666,12 @@ final class NetworkSessionService {
         }
         $attempts++;
         $this->loginAttempts[$host] = [$attempts, $windowStart];
-        if ($attempts > self::LOGIN_ATTEMPTS_PER_MINUTE) {
+        if ($attempts > $this->antiCheat->loginAttemptsPerMinute) {
             $this->disconnectLogin($addrKey, 'Too many login attempts. Please try again later.');
             return;
         }
         // Hard cap on concurrent sessions per IP (NAT-burst protection).
-        if ($this->countSessionsForIp($host) >= self::MAX_SESSIONS_PER_IP) {
+        if ($this->countSessionsForIp($host) >= $this->antiCheat->maxSessionsPerIp) {
             $this->disconnectLogin($addrKey, 'Too many connections from your IP address.');
             return;
         }
@@ -865,12 +866,18 @@ final class NetworkSessionService {
      * authoritative; a move beyond the per-tick speed caps (teleport / speed
      * hacks) or an unallowed vertical ascent (fly hacks) is rejected. On
      * rejection the client is rubber-banded to the authoritative position and
-     * a violation is recorded - MAX_MOVE_VIOLATIONS inside the window kicks.
+     * a violation is recorded - max-violations inside the window kicks (both
+     * configurable in khronos.json anti-cheat.movement).
      *
      * @param array<string, mixed> $session
      */
     private function validateMove(string $addrKey, MovePlayerPacket $pk, ?PositionComponent $pos, array &$session): bool {
         if ($pos === null) {
+            return true;
+        }
+        // khronos.json anti-cheat.enabled=false turns movement validation off
+        // entirely (a LAN/debug server that trusts its clients).
+        if (!$this->antiCheat->antiCheatEnabled) {
             return true;
         }
         $tick = $this->resourceRegistry->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0;
@@ -901,14 +908,14 @@ final class NetworkSessionService {
         $allowFlight = \pocketmine\api\server\Server::getInstance()->isAllowFlight();
 
         $violation = false;
-        if ($total > self::MAX_MOVE_TOTAL_PER_TICK || $horizontal > self::MAX_MOVE_HORIZONTAL_PER_TICK) {
+        if ($total > $this->antiCheat->maxMoveTotalPerTick || $horizontal > $this->antiCheat->maxMoveHorizontalPerTick) {
             $violation = true; // speed / teleport hack
-        } elseif ($dy > self::MAX_MOVE_ASCENT_PER_TICK * $ticks && !$creative && !$allowFlight) {
+        } elseif ($dy > $this->antiCheat->maxMoveAscentPerTick * $ticks && !$creative && !$allowFlight) {
             $violation = true; // flying without permission
         }
         if (!$violation) {
             // Reset the violation counter on a clean streak.
-            if ($session['moveViolations'] > 0 && $tick - $session['moveViolationStartTick'] > self::MOVE_VIOLATION_WINDOW_TICKS) {
+            if ($session['moveViolations'] > 0 && $tick - $session['moveViolationStartTick'] > $this->antiCheat->moveViolationWindowTicks) {
                 $session['moveViolations'] = 0;
             }
             return true;
@@ -917,10 +924,13 @@ final class NetworkSessionService {
         // Reject: do not apply the move; snap the client back to the
         // authoritative position and count the violation. No teleport grace -
         // the next move is validated strictly so a repeat hack is still caught.
+        // Both punishments (rubber-band, kick) are configurable in khronos.json.
         $session['moveViolations']++;
         $session['moveViolationStartTick'] = $tick;
-        $this->sendTeleportTo($session['playerRef']->entityId, $pos->x, $pos->y, $pos->z, false);
-        if ($session['moveViolations'] >= self::MAX_MOVE_VIOLATIONS) {
+        if ($this->antiCheat->rubberBandOnViolation) {
+            $this->sendTeleportTo($session['playerRef']->entityId, $pos->x, $pos->y, $pos->z, false);
+        }
+        if ($this->antiCheat->kickOnViolations && $session['moveViolations'] >= $this->antiCheat->maxMoveViolations) {
             $this->kick($session['playerRef']->entityId, 'Movement speed exceeded');
         }
         $this->sessions[$addrKey] = $session;
@@ -932,10 +942,11 @@ final class NetworkSessionService {
         if ($session === null) {
             return;
         }
-        // Blocker 2: oversized or too-frequent chat is dropped (spam limit).
+        // Blocker 2: oversized or too-frequent chat is dropped (spam limit;
+        // thresholds from khronos.json anti-cheat.chat).
         $now = microtime(true);
-        if (strlen($pk->message) > self::MAX_CHAT_LENGTH
-            || $now - $session['lastChatAt'] < self::CHAT_MIN_INTERVAL_SECONDS) {
+        if (strlen($pk->message) > $this->antiCheat->maxChatLength
+            || $now - $session['lastChatAt'] < $this->antiCheat->chatMinIntervalSeconds) {
             return;
         }
         $session['lastChatAt'] = $now;
@@ -986,7 +997,7 @@ final class NetworkSessionService {
         // of commands is dropped silently - the legitimate caller never
         // notices, the macro spammer gets nothing.
         $now = microtime(true);
-        if ($now - $session['lastCommandAt'] < self::COMMAND_MIN_INTERVAL_SECONDS) {
+        if ($now - $session['lastCommandAt'] < $this->antiCheat->commandMinIntervalSeconds) {
             return;
         }
         $session['lastCommandAt'] = $now;

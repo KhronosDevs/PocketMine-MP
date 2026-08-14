@@ -279,9 +279,16 @@ final class Kernel {
             $seed = $serverConfig instanceof \pocketmine\core\resource\ServerConfig ? $serverConfig->seed : 0;
             $worldConfig = $this->resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
             $chunkStore = $this->resourceRegistry->get(\pocketmine\core\resource\ChunkStore::class);
+            // khronos.json default-world picks the default world's folder (and
+            // display name); the storage adapter was already routed to that
+            // folder at port creation.
+            $khronos = $this->resourceRegistry->get(\pocketmine\core\resource\KhronosConfig::class);
+            $defaultWorld = $khronos instanceof \pocketmine\core\resource\KhronosConfig && $khronos->defaultWorld !== ''
+                ? $khronos->defaultWorld
+                : 'world';
             $worldRegistry->registerDefaultWorld(
-                'world',
-                'world',
+                $defaultWorld,
+                $defaultWorld,
                 $seed,
                 $chunkStore instanceof \pocketmine\core\resource\ChunkStore ? $chunkStore : new \pocketmine\core\resource\ChunkStore(),
                 $worldConfig instanceof \pocketmine\core\resource\WorldConfig ? $worldConfig : new \pocketmine\core\resource\WorldConfig(),
@@ -1597,9 +1604,14 @@ final class Kernel {
 }
 
 function createKernel(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): Kernel {
+    // khronos.json is loaded BEFORE any port is created: its default-world
+    // folder routes the storage adapter (which folder the world lives in), so
+    // the file is written/read first and the folder is passed down.
+    $khronosConfig = loadKhronosConfig();
+
     $threadingPort = createThreadingPort();
     $networkPort = createNetworkPort();
-    $storagePort = createStoragePort();
+    $storagePort = createStoragePort($khronosConfig->defaultWorld);
     $worldGenPort = createWorldGenPort($threadingPort);
     $eventPort = createEventPort();
     $commandPort = createCommandPort($eventPort);
@@ -1618,6 +1630,9 @@ function createKernel(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): 
 
     // Register built-in resources
     registerBuiltinResources($resourceRegistry);
+    // Replace the default KhronosConfig with the file-loaded instance so every
+    // reader (services, commands, plugins) sees the admin's values.
+    $resourceRegistry->set($khronosConfig);
 
     // Register built-in crafting recipes
     registerBuiltinRecipes($resourceRegistry);
@@ -1638,6 +1653,12 @@ function createKernel(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): 
     // network adapter. Persisted world meta takes precedence over the file's
     // level-seed, so apply the file AFTER applyPersistedWorldMeta.
     applyServerProperties($networkPort, $resourceRegistry);
+
+    // khronos.json wins for the keys it owns (server.properties and the
+    // persisted world meta stay authoritative for theirs): explicit spawn
+    // coordinates override the world spawn, the default-world folder is
+    // mirrored into the WorldConfig display name.
+    applyKhronosConfig($resourceRegistry, $khronosConfig);
 
     return new Kernel(
         $networkPort,
@@ -1665,10 +1686,11 @@ function createNetworkPort(): NetworkPort {
     return new Protocol84NetworkAdapter("0.0.0.0", 19132);
 }
 
-function createStoragePort(): StoragePort {
+function createStoragePort(string $levelName = 'world'): StoragePort {
     // Auto-detect the default world's format on disk (Anvil / McRegion /
-    // LevelDB-with-error), falling back to a fresh Anvil world.
-    return LevelProviderManager::create(LevelProviderManager::DEFAULT_DATA_PATH, 'world');
+    // LevelDB-with-error), falling back to a fresh Anvil world. The folder
+    // comes from khronos.json default-world when configured.
+    return LevelProviderManager::create(LevelProviderManager::DEFAULT_DATA_PATH, $levelName);
 }
 
 function createWorldGenPort(ThreadingPort $threadingPort): WorldGenPort {
@@ -1677,6 +1699,47 @@ function createWorldGenPort(ThreadingPort $threadingPort): WorldGenPort {
 
 function createCommandPort(EventPort $eventPort): CommandPort {
     return new \pocketmine\api\command\CommandMap($eventPort);
+}
+
+/**
+ * Read khronos.json from the data path, generating the default file on first
+ * boot (mirroring server.properties). The world-folder it selects must be
+ * known before the storage port is created, so this runs first in createKernel.
+ */
+function loadKhronosConfig(): \pocketmine\core\resource\KhronosConfig {
+    $dataPath = getcwd() . DIRECTORY_SEPARATOR;
+    $path = $dataPath . 'khronos.json';
+    if (!is_file($path)) {
+        \pocketmine\core\resource\KhronosConfig::writeDefaults($path);
+    }
+    return \pocketmine\core\resource\KhronosConfig::load($path);
+}
+
+/**
+ * Apply the khronos.json values that override other config surfaces: an
+ * explicit default-spawn wins over the persisted world spawn, and the
+ * default-world folder is mirrored into the WorldConfig display name.
+ */
+function applyKhronosConfig(ResourceRegistry $resourceRegistry, \pocketmine\core\resource\KhronosConfig $config): void {
+    if ($config->spawnX !== null && $config->spawnY !== null && $config->spawnZ !== null) {
+        $serverConfig = $resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
+        if ($serverConfig instanceof \pocketmine\core\resource\ServerConfig) {
+            $serverConfig->spawnX = $config->spawnX;
+            $serverConfig->spawnY = $config->spawnY;
+            $serverConfig->spawnZ = $config->spawnZ;
+        }
+        $worldConfig = $resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
+        if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+            $worldConfig->spawnX = $config->spawnX;
+            $worldConfig->spawnY = $config->spawnY;
+            $worldConfig->spawnZ = $config->spawnZ;
+        }
+    }
+    $worldConfig = $resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
+    if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+        $worldConfig->name = $config->defaultWorld;
+        $worldConfig->folderName = $config->defaultWorld;
+    }
 }
 
 /**
@@ -1807,6 +1870,9 @@ function registerBuiltinComponents(ComponentRegistry $registry): void {
 function registerBuiltinResources(ResourceRegistry $registry): void {
     $registry->set(new \pocketmine\api\permission\PermissionManager());
     $registry->set(new \pocketmine\core\resource\TickCounter());
+    // khronos.json defaults are registered so registry lookups never fail;
+    // createKernel replaces this with the file-loaded instance when present.
+    $registry->set(new \pocketmine\core\resource\KhronosConfig());
     $registry->set(new \pocketmine\core\resource\ServerConfig());
     $registry->set(new \pocketmine\core\resource\SpatialIndex());
     $registry->set(new \pocketmine\core\resource\WorldConfig());
