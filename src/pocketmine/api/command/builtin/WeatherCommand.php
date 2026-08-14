@@ -29,6 +29,7 @@ final class WeatherCommand extends BuiltinCommand {
             'Show or set the world weather',
             '/weather [<clear|rain|thunder|storm> [duration]]',
             [],
+            'khronos.command.weather',
         );
     }
 

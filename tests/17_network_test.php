@@ -791,6 +791,15 @@ if ($worldCfg instanceof \pocketmine\core\resource\ServerConfig) {
     $worldCfg->spawnMobs = false;
 }
 
+// Blocker 1: admin commands are gated behind op, so grant Alice op before she
+// joins - the command wire tests below (/gamemode /give /tp /time /weather
+// /kill) exercise the happy path (the gating itself has its own test in
+// tests/30).
+$lists = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\PlayerListManager::class);
+if ($lists instanceof \pocketmine\core\resource\PlayerListManager) {
+    $lists->addOp('alice');
+}
+
 $kernel->run(1); // bind socket + start the RakNet thread + first tick
 
 $client = new FakeClient($port);
@@ -4293,6 +4302,54 @@ test('weather transitions and lightning strike hit the wire', function () use ($
     }
     ok($sawBolt, 'lightning bolt (AddEntityPacket type 93) broadcast during the storm');
     $weatherClient->close();
+});
+
+test('bans and the whitelist reject logins with a DisconnectPacket', function () use ($kernel, $port, $lists): void {
+    $lists = $lists ?? $kernel->getResourceRegistry()->get(\pocketmine\core\resource\PlayerListManager::class);
+    if (!$lists instanceof \pocketmine\core\resource\PlayerListManager) {
+        ok(false, 'PlayerListManager available');
+        return;
+    }
+    $serverCfg = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
+
+    $tryLogin = static function (string $name, string $uuid) use ($kernel, $port): array {
+        $c = new FakeClient($port);
+        $c->handshake(fn() => $kernel->run(1));
+        $c->connect(fn() => $kernel->run(1));
+        $c->sendLogin($name, $uuid);
+        $deadline = microtime(true) + 8.0;
+        $ids = [];
+        while (microtime(true) < $deadline) {
+            foreach ($c->readGamePackets() as [$id, $buffer]) {
+                $ids[$id] = true;
+            }
+            $kernel->run(1);
+            if (isset($ids[Info::DISCONNECT_PACKET])) {
+                break;
+            }
+        }
+        $c->close();
+        return array_keys($ids);
+    };
+
+    // Name ban: login must be rejected with a DisconnectPacket and never
+    // reach the login-success burst.
+    $lists->ban('Nono');
+    $ids = $tryLogin('Nono', 'abababab-abab-abab-abab-abababababab');
+    ok(in_array(Info::DISCONNECT_PACKET, $ids, true), 'banned name gets a DisconnectPacket');
+    ok(!in_array(Info::START_GAME_PACKET, $ids, true), 'banned login never reaches StartGame');
+    $lists->pardon('Nono');
+
+    // Whitelist on: only whitelisted names may join.
+    if ($serverCfg instanceof \pocketmine\core\resource\ServerConfig) {
+        $serverCfg->whiteList = true;
+        $lists->addWhitelist('alice');
+        $ids = $tryLogin('Nono', 'abababab-abab-abab-abab-abababababac');
+        ok(in_array(Info::DISCONNECT_PACKET, $ids, true), 'non-whitelisted name rejected while whitelist is on');
+        ok(!in_array(Info::START_GAME_PACKET, $ids, true), 'rejected login never reaches StartGame');
+        $serverCfg->whiteList = false;
+        $lists->removeWhitelist('alice');
+    }
 });
 
 test('server shuts down cleanly with active sessions', function () use ($kernel, $client): void {

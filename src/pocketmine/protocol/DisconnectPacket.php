@@ -31,6 +31,9 @@ class DisconnectPacket extends DataPacket{
 	const NETWORK_ID = Info::DISCONNECT_PACKET;
 
 	public string $message = "";
+	// Declared for the adapter/kick path (legacy kept it out of the wire
+	// format, so it is intentionally not encoded).
+	public bool $hideDisconnectionScreen = false;
 
 	public function decode() : void{
 		$this->message = $this->getString();

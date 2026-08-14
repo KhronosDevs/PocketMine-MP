@@ -19,6 +19,7 @@ final class TimeCommand extends BuiltinCommand {
             'Set the world time',
             '/time set <value|day|night>',
             [],
+            'khronos.command.time',
         );
     }
 

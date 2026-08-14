@@ -20,6 +20,7 @@ final class TeleportCommand extends BuiltinCommand {
             'Teleport a player to coordinates',
             '/tp <x y z> | /tp <player> <x y z>',
             ['tp'],
+            'khronos.command.tp',
         );
     }
 

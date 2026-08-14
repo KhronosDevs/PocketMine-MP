@@ -43,8 +43,9 @@ use pocketmine\protocol\ContainerSetContentPacket;
 use pocketmine\protocol\ContainerSetSlotPacket;
 use pocketmine\protocol\CraftingDataPacket;
 use pocketmine\protocol\CraftingEventPacket;
-use pocketmine\protocol\DropItemPacket;
 use pocketmine\protocol\DataPacket;
+use pocketmine\protocol\DisconnectPacket;
+use pocketmine\protocol\DropItemPacket;
 use pocketmine\protocol\EntityEventPacket;
 use pocketmine\protocol\FullChunkDataPacket;
 use pocketmine\protocol\HurtArmorPacket;
@@ -283,6 +284,44 @@ final class NetworkSessionService {
         if ($this->adapter !== null) {
             $this->adapter->unregisterPlayer($session['playerRef']);
         }
+    }
+
+    /**
+     * Kick one online player by entity id (ban command). The disconnect
+     * reaches the client with a reason, the session closes and the player is
+     * persisted through the leave service.
+     */
+    public function kick(int $entityId, string $reason = ''): bool {
+        if ($this->adapter === null) {
+            return false;
+        }
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId === $entityId) {
+                $this->adapter->disconnect($session['playerRef'], $reason !== '' ? $reason : 'Kicked');
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Kick every session connected from an IP address (ban-ip command).
+     * @return int number of sessions kicked
+     */
+    public function kickByIp(string $ip, string $reason = ''): int {
+        if ($this->adapter === null) {
+            return 0;
+        }
+        $kicked = 0;
+        foreach ($this->sessions as $addrKey => $session) {
+            // addrKey is "ip:port" - match on the host part only.
+            $host = str_contains($addrKey, ':') ? explode(':', $addrKey)[0] : $addrKey;
+            if ($host === $ip) {
+                $this->adapter->disconnect($session['playerRef'], $reason !== '' ? $reason : 'IP banned');
+                $kicked++;
+            }
+        }
+        return $kicked;
     }
 
     public function shutdown(): void {
@@ -567,6 +606,23 @@ final class NetworkSessionService {
             ? UUID::fromString($pk->clientUUID)
             : UUID::fromData($addrKey, (string)$pk->clientId);
 
+        // Blocker 1: enforce bans and the whitelist BEFORE the ECS entity is
+        // created. A rejected login gets a DisconnectPacket and nothing else.
+        $lists = $this->resourceRegistry->get(\pocketmine\core\resource\PlayerListManager::class);
+        if ($lists instanceof \pocketmine\core\resource\PlayerListManager) {
+            $host = str_contains($addrKey, ':') ? explode(':', $addrKey)[0] : $addrKey;
+            if ($lists->isBanned($pk->username) || $lists->isBanned($uuid->toString()) || $lists->isIpBanned($host)) {
+                $this->disconnectLogin($addrKey, 'You have been banned from this server.');
+                return;
+            }
+            $config = $this->resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
+            if (($config instanceof \pocketmine\core\resource\ServerConfig && $config->whiteList)
+                && !$lists->isWhitelisted($pk->username) && !$lists->isWhitelisted($uuid->toString())) {
+                $this->disconnectLogin($addrKey, 'You are not white-listed on this server.');
+                return;
+            }
+        }
+
         // Disambiguate duplicate usernames with a numeric suffix.
         $base = $username;
         $suffix = 1;
@@ -613,6 +669,22 @@ final class NetworkSessionService {
             'lastWeather' => $this->getWorldConfig(0)?->weather ?? 0,
         ];
 
+        // Blocker 1: an ops.txt operator gets the op permission on their
+        // entity so every permission check (builtin + plugin defaults) treats
+        // them as an operator immediately, including mid-session op grants.
+        if ($lists instanceof \pocketmine\core\resource\PlayerListManager) {
+            if ($lists->isOp($uuid->toString()) || $lists->isOp($username)) {
+                $meta = $entityRef->getEntity()?->get(\pocketmine\core\component\MetadataComponent::class);
+                if ($meta !== null) {
+                    $perms = (array)$meta->get('permissions', []);
+                    if (!in_array('pocketmine.op', $perms, true)) {
+                        $perms[] = 'pocketmine.op';
+                        $meta->set('permissions', $perms);
+                    }
+                }
+            }
+        }
+
         // Broadcast the new player to everyone (including themselves) and
         // hand the newcomer the list entries of everyone already online so
         // their skins/names render (they see the players as entities on the
@@ -621,6 +693,14 @@ final class NetworkSessionService {
         $this->sendExistingPlayerList($addrKey);
         $this->sendLoginBurst($addrKey);
         $this->queueChunks($addrKey);
+    }
+
+    /** Reject a login with a DisconnectPacket (ban / whitelist / cap). */
+    private function disconnectLogin(string $addrKey, string $reason): void {
+        $packet = new DisconnectPacket();
+        $packet->message = $reason;
+        $packet->hideDisconnectionScreen = false;
+        $this->sendDirectToAddress($addrKey, $packet);
     }
 
     private function handleChunkRadius(string $addrKey, RequestChunkRadiusPacket $pk): void {

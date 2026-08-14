@@ -1,0 +1,44 @@
+<?php
+
+declare(strict_types=1);
+
+namespace pocketmine\api\command\builtin;
+
+use pocketmine\api\command\CommandSender;
+
+/**
+ * /list — show who is online. Available to everyone (like legacy /list).
+ */
+final class ListCommand extends BuiltinCommand {
+    public function __construct() {
+        parent::__construct(
+            'list',
+            'List players online',
+            '/list',
+            ['players'],
+            'khronos.command.list',
+        );
+    }
+
+    public function execute(CommandSender $sender, array $args): bool {
+        $kernel = $this->kernel();
+        if ($kernel === null) {
+            return false;
+        }
+        $players = $kernel->getNetworkSessionService()->getOnlinePlayers();
+        $max = $kernel->getWorldRegistry()->getConfig(0)?->maxPlayers ?? 20;
+        $sender->sendMessage(sprintf(
+            'There are %d/%d players online:',
+            count($players),
+            $max,
+        ));
+        if ($players !== []) {
+            $names = [];
+            foreach ($players as $p) {
+                $names[] = $p['username'];
+            }
+            $sender->sendMessage(implode(', ', $names));
+        }
+        return true;
+    }
+}

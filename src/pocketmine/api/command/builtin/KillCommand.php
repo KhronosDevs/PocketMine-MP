@@ -19,6 +19,7 @@ final class KillCommand extends BuiltinCommand {
             'Kill yourself or another player',
             '/kill [player]',
             [],
+            'khronos.command.kill',
         );
     }
 

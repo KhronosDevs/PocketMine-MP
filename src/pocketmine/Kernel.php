@@ -73,6 +73,13 @@ final class Kernel {
      * clean up afterwards.
      */
     private bool $autoShutdownOnRun = true;
+    /**
+     * Interactive console: when enabled (default) and stdin is a TTY, run()
+     * reads admin command lines each tick and dispatches them through the
+     * command map with a ConsoleCommandSender. Tests and pipelines that run
+     * with a non-TTY stdin are unaffected.
+     */
+    private bool $consoleEnabled = true;
     private array $tickDurations = [];
     /** Per-phase timing accumulation (mirror / world tick / drain / balance),
      *  enabled via setPhaseProfiling() for benchmarking the pipeline. */
@@ -245,6 +252,9 @@ final class Kernel {
         $this->scheduler = new \pocketmine\api\scheduler\Scheduler($world, $systemScheduler, $threadingPort);
 
         $this->permissionManager = new \pocketmine\api\permission\PermissionManager();
+        // Blocker 1: the builtin command permissions (khronos.command.*)
+        // default to OP so only operators can use the admin commands.
+        registerBuiltinPermissions($this->permissionManager);
         // Override the default instance the resource registry was seeded with so
         // plugins that look it up from the registry get the SAME instance the
         // plugin manager registers plugin.yml permissions into.
@@ -333,6 +343,23 @@ final class Kernel {
         $this->autoShutdownOnRun = $autoShutdown;
     }
 
+    public function setConsoleEnabled(bool $enabled): void {
+        $this->consoleEnabled = $enabled;
+    }
+
+    public function isConsoleEnabled(): bool {
+        return $this->consoleEnabled;
+    }
+
+    /**
+     * Ask the run() loop to exit cleanly (the "stop" console command). The
+     * loop breaks on the next tick; with auto-shutdown on (the default for
+     * the real server) shutdown() then saves the world and stops threads.
+     */
+    public function requestShutdown(): void {
+        $this->running = false;
+    }
+
     /** Opt into real client serving: binds the UDP socket in run(). */
     public function setNetworkingEnabled(bool $enabled): void {
         $this->networkingEnabled = $enabled;
@@ -382,6 +409,17 @@ final class Kernel {
                 $regionThread->start(Thread::INHERIT_ALL);
             }
             $this->threadsStarted = true;
+        }
+
+        // Interactive console: only a TTY stdin is consumed (interactive
+        // start.sh runs). A pipe or /dev/null stdin (tests, CI, nohup) skips
+        // the console entirely - polling it would busy-read an EOF forever.
+        $consoleActive = $this->consoleEnabled
+            && defined('STDIN') && is_resource(STDIN)
+            && @stream_isatty(STDIN);
+        if ($consoleActive) {
+            stream_set_blocking(STDIN, false);
+            echo '[Khronos] Console ready - type "help" or "stop".' . PHP_EOL;
         }
 
         // Bind the UDP socket and start serving clients (opt-in: off by
@@ -448,9 +486,20 @@ final class Kernel {
             // 2. Flush network sync from all regions
             $this->flushNetworkSync();
 
+            // 2b. Interactive console: dispatch admin commands typed on a TTY
+            // stdin (start.sh). Disabled under a non-TTY stdin so headless
+            // tests and pipelines never consume the piped input stream.
+            if ($consoleActive) {
+                $this->pollConsole();
+            }
+
             // 3. Storage autosave (periodic): flush resident chunks + world
             // meta (14.4) so a crash or restart loses at most the interval.
-            if ($tick % 6000 === 0) {
+            $autosaveConfig = $this->resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
+            $autosaveTicks = $autosaveConfig instanceof \pocketmine\core\resource\ServerConfig
+                ? max(1, $autosaveConfig->autosaveIntervalTicks)
+                : 6000;
+            if ($tick % $autosaveTicks === 0) {
                 $this->saveWorld();
             }
 
@@ -1145,10 +1194,35 @@ final class Kernel {
             $this->networkPort->shutdown();
         }
         $this->threadingPort->shutdown();
+        // Blocker 1: persist the player lists (ops/bans/whitelist) so the
+        // text files on disk never lag the in-memory state.
+        $lists = $this->resourceRegistry->get(\pocketmine\core\resource\PlayerListManager::class);
+        if ($lists instanceof \pocketmine\core\resource\PlayerListManager) {
+            $lists->saveAll();
+        }
         // 14.4: persist everything before the process exits.
         $this->saveWorld();
         $this->storagePort->saveAll();
         $this->shutdownComplete = true;
+    }
+
+    /**
+     * Read one or more complete console lines from the non-blocking TTY stdin
+     * and dispatch each through the shared command map as the console sender.
+     */
+    private function pollConsole(): void {
+        while (($raw = fgets(STDIN)) !== false) {
+            $line = trim($raw);
+            if ($line === '') {
+                continue;
+            }
+            echo '[CONSOLE] > ' . $line . PHP_EOL;
+            // Accept both 'stop' and '/stop' (the player-command prefix).
+            $this->commandPort->execute(
+                new \pocketmine\api\command\ConsoleCommandSender(),
+                ltrim($line, '/')
+            );
+        }
     }
 
     /**
@@ -1499,6 +1573,12 @@ function createKernel(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): 
     // spawn use the saved seed - never a fresh random one.
     applyPersistedWorldMeta($storagePort, $resourceRegistry);
 
+    // Blocker 1: read server.properties (generating it with defaults when
+    // missing) and apply it to the configs, the Server facade, and the
+    // network adapter. Persisted world meta takes precedence over the file's
+    // level-seed, so apply the file AFTER applyPersistedWorldMeta.
+    applyServerProperties($networkPort, $resourceRegistry);
+
     return new Kernel(
         $networkPort,
         $storagePort,
@@ -1537,6 +1617,101 @@ function createWorldGenPort(ThreadingPort $threadingPort): WorldGenPort {
 
 function createCommandPort(EventPort $eventPort): CommandPort {
     return new \pocketmine\api\command\CommandMap($eventPort);
+}
+
+/**
+ * Blocker 1: load server.properties from the data path (writing a default
+ * file on first boot), then apply every understood key to the shared configs
+ * and the Server facade. Unknown or malformed values keep the defaults.
+ */
+function applyServerProperties(NetworkPort $networkPort, ResourceRegistry $resourceRegistry): void {
+    $dataPath = getcwd() . DIRECTORY_SEPARATOR;
+    $path = $dataPath . 'server.properties';
+    if (!is_file($path)) {
+        \pocketmine\core\resource\ServerProperties::writeDefaults($path);
+    }
+    $props = \pocketmine\core\resource\ServerProperties::load($path);
+
+    $serverConfig = $resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
+    if ($serverConfig instanceof \pocketmine\core\resource\ServerConfig) {
+        $serverConfig->viewDistance = \pocketmine\core\resource\ServerProperties::int($props, 'view-distance', $serverConfig->viewDistance);
+        $serverConfig->pvpEnabled = \pocketmine\core\resource\ServerProperties::bool($props, 'pvp', $serverConfig->pvpEnabled);
+        $serverConfig->spawnAnimals = \pocketmine\core\resource\ServerProperties::bool($props, 'spawn-animals', $serverConfig->spawnAnimals);
+        $serverConfig->spawnMobs = \pocketmine\core\resource\ServerProperties::bool($props, 'spawn-mobs', $serverConfig->spawnMobs);
+        $serverConfig->difficulty = \pocketmine\core\resource\ServerProperties::int($props, 'difficulty', $serverConfig->difficulty);
+        $serverConfig->whiteList = \pocketmine\core\resource\ServerProperties::bool($props, 'white-list', $serverConfig->whiteList);
+        $serverConfig->defaultGameMode = \pocketmine\core\resource\ServerProperties::int($props, 'gamemode', $serverConfig->defaultGameMode);
+        $serverConfig->autosaveIntervalTicks = max(1,
+            \pocketmine\core\resource\ServerProperties::int($props, 'autosave-interval', 60) * 20
+        );
+
+        // level-seed only pins when no world meta restored a seed: an
+        // existing world's saved seed is authoritative over the file.
+        $seedProp = (string)($props['level-seed'] ?? '');
+        if ($seedProp !== '' && $serverConfig->seed === 0) {
+            $seed = (int)$seedProp;
+            $serverConfig->seed = $seed;
+            $worldConfig = $resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
+            if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig && $worldConfig->seed === 0) {
+                $worldConfig->seed = $seed;
+            }
+        }
+    }
+
+    // The WorldConfig mirrors max-players / view-distance / gamemode for the
+    // world-bundle readers (StartGame, chunk streaming budget, login burst).
+    $worldConfig = $resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
+    if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+        $worldConfig->maxPlayers = \pocketmine\core\resource\ServerProperties::int($props, 'max-players', $worldConfig->maxPlayers);
+        $worldConfig->viewDistance = $serverConfig?->viewDistance ?? $worldConfig->viewDistance;
+        $worldConfig->gameMode = $serverConfig?->defaultGameMode ?? $worldConfig->gameMode;
+    }
+
+    // The Server facade is what plugins read for server-level config.
+    \pocketmine\api\server\Server::getInstance()->configure($props);
+
+    // Adapter: bind port + structured motd name from the file.
+    if ($networkPort instanceof Protocol84NetworkAdapter) {
+        $networkPort->setBindPort(\pocketmine\core\resource\ServerProperties::int($props, 'server-port', 19132));
+        $networkPort->setServerName((string)($props['server-name'] ?? 'Khronos Server'));
+    }
+
+    // Blocker 1: the player lists (ops/whitelist/bans) live in the data path;
+    // register so the login path and admin commands share one instance.
+    $resourceRegistry->set(new \pocketmine\core\resource\PlayerListManager($dataPath));
+}
+
+/**
+ * Blocker 1: register the builtin command permissions so the PermissionManager
+ * defaults apply them to ops (and /help + /list to everyone) without any
+ * plugin.yml.
+ */
+function registerBuiltinPermissions(\pocketmine\api\permission\PermissionManager $manager): void {
+    $op = \pocketmine\api\permission\Permission::DEFAULT_OP;
+    $everyone = \pocketmine\api\permission\Permission::DEFAULT_TRUE;
+    foreach ([
+        'khronos.command.gamemode' => 'Change player gamemodes',
+        'khronos.command.tp' => 'Teleport players',
+        'khronos.command.give' => 'Give items',
+        'khronos.command.kill' => 'Kill players',
+        'khronos.command.time' => 'Set the world clock',
+        'khronos.command.weather' => 'Set the weather',
+        'khronos.command.world' => 'List and switch worlds',
+        'khronos.command.stop' => 'Stop the server',
+        'khronos.command.save-all' => 'Save the world now',
+        'khronos.command.op' => 'Grant operator',
+        'khronos.command.deop' => 'Revoke operator',
+        'khronos.command.ban' => 'Ban a player',
+        'khronos.command.pardon' => 'Unban a player',
+        'khronos.command.ban-ip' => 'Ban an IP address',
+        'khronos.command.pardon-ip' => 'Unban an IP address',
+        'khronos.command.whitelist' => 'Manage the whitelist',
+        'khronos.command.plugins' => 'List loaded plugins',
+    ] as $name => $description) {
+        $manager->addPermission(new \pocketmine\api\permission\Permission($name, $description, $op));
+    }
+    $manager->addPermission(new \pocketmine\api\permission\Permission('khronos.command.help', 'Show command help', $everyone));
+    $manager->addPermission(new \pocketmine\api\permission\Permission('khronos.command.list', 'List online players', $everyone));
 }
 
 function createEventPort(): EventPort {
