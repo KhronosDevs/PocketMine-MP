@@ -29,6 +29,7 @@ final class BuiltinCommands {
         $port->register(new OpCommand());
         $port->register(new DeopCommand());
         $port->register(new BanCommand());
+        $port->register(new KickCommand());
         $port->register(new PardonCommand());
         $port->register(new BanIpCommand());
         $port->register(new PardonIpCommand());

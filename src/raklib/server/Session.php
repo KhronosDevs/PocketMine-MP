@@ -569,6 +569,12 @@ class Session{
 	public function close() : void{
 		$data = "\x60\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x15";
 		$this->addEncapsulatedToQueue(EncapsulatedPacket::fromBinary($data)); //CLIENT_DISCONNECT packet 0x15
+		// Flush the send queue so the queued disconnect frames (a game-level
+		// DisconnectPacket queued just before close, plus this CLIENT_DISCONNECT
+		// control) actually reach the client. Without this the session is
+		// dropped silently and the client only notices at its own disconnect
+		// timeout - a kick/ban feels delayed instead of immediate.
+		$this->sendQueue();
 		$this->sessionManager = null;
 	}
 }

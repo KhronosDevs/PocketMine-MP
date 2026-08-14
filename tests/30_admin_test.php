@@ -106,6 +106,23 @@ test('/ban /pardon /ban-ip /pardon-ip manage the ban lists', function () use ($p
     ok(!$lists->isIpBanned('9.9.9.9'), 'ip pardon recorded');
 });
 
+test('/kick is registered, permission-gated and reports offline targets', function () use ($port, $console, $kernel): void {
+    // Headless kernel: no sessions, so an explicit target is not found.
+    ok($port->execute($console, 'kick alice') === false, '/kick with an offline target fails');
+    ok($port->execute($console, 'kick') === false, '/kick without a target fails');
+
+    // A non-op player is denied the command (khronos.command.kick defaults to OP).
+    $world = $kernel->getWorld();
+    $ref = $world->spawn(
+        (new EntityBuilder())
+            ->with(new PositionComponent(0, 65, 0))
+            ->with(new MetadataComponent())
+            ->withTag('player')
+    );
+    $sender = new PlayerCommandSender($ref->getId(), 'nobody');
+    ok(!$port->execute($sender, 'kick alice'), 'non-op player denied /kick');
+});
+
 test('/whitelist manages entries and the on/off toggle', function () use ($port, $console, $lists, $kernel): void {
     ok($port->execute($console, 'whitelist add bob'), '/whitelist add executes');
     ok($lists->isWhitelisted('bob'), 'bob whitelisted');
