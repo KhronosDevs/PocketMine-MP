@@ -21,6 +21,7 @@ final class GiveCommand extends BuiltinCommand {
             'Give an item to a player',
             '/give <player> <item> [count]',
             [],
+            'khronos.command.give',
         );
     }
 

@@ -26,10 +26,56 @@ class Server {
     private bool $spawnMobs = true;
     private bool $forceGamemode = false;
     private int $gamemode = 0;
+    private int $viewDistance = 10;
     private bool $allowFlight = false;
     private string $language = 'eng';
+    private bool $whiteList = false;
 
     private function __construct() {}
+
+    /**
+     * Apply parsed server.properties values (called at bootstrap before the
+     * kernel starts). Unknown keys keep the current defaults.
+     *
+     * @param array<string, string> $props
+     */
+    public function configure(array $props): void {
+        $this->name = (string)($props['server-name'] ?? $this->name);
+        $this->motd = (string)($props['motd'] ?? $this->motd);
+        $this->ip = (string)($props['server-ip'] ?? $this->ip);
+        $this->maxPlayers = (int)($props['max-players'] ?? $this->maxPlayers);
+        $this->port = (int)($props['server-port'] ?? $this->port);
+        $this->difficulty = (int)($props['difficulty'] ?? $this->difficulty);
+        $this->gamemode = (int)($props['gamemode'] ?? $this->gamemode);
+        $this->viewDistance = (int)($props['view-distance'] ?? $this->viewDistance);
+        $this->pvp = self::toBool($props['pvp'] ?? null, $this->pvp);
+        $this->spawnAnimals = self::toBool($props['spawn-animals'] ?? null, $this->spawnAnimals);
+        $this->spawnMobs = self::toBool($props['spawn-mobs'] ?? null, $this->spawnMobs);
+        $this->onlineMode = self::toBool($props['online-mode'] ?? null, $this->onlineMode);
+        $this->forceGamemode = self::toBool($props['force-gamemode'] ?? null, $this->forceGamemode);
+        $this->allowFlight = self::toBool($props['allow-flight'] ?? null, $this->allowFlight);
+        $this->whiteList = self::toBool($props['white-list'] ?? null, $this->whiteList);
+        $this->language = (string)($props['language'] ?? $this->language);
+    }
+
+    public function setWhitelist(bool $enabled): void {
+        $this->whiteList = $enabled;
+    }
+
+    public function isWhitelistEnabled(): bool {
+        return $this->whiteList;
+    }
+
+    private static function toBool(mixed $v, bool $current): bool {
+        if (!is_string($v)) {
+            return $current;
+        }
+        return match (strtolower($v)) {
+            'true', 'on', '1', 'yes' => true,
+            'false', 'off', '0', 'no' => false,
+            default => $current,
+        };
+    }
 
     public static function getInstance(): self {
         if (self::$instance === null) {

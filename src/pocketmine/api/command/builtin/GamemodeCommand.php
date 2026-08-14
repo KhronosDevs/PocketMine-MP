@@ -20,6 +20,7 @@ final class GamemodeCommand extends BuiltinCommand {
             'Change a player\'s gamemode',
             '/gamemode <0|1|survival|creative> [player]',
             ['gm'],
+            'khronos.command.gamemode',
         );
     }
 

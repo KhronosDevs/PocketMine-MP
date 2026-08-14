@@ -34,7 +34,19 @@ final class PlayerJoinService {
         // Create or load player entity (returning players are restored from
         // their persisted snapshot inside createOrLoadPlayer).
         $entityRef = $this->createOrLoadPlayer($playerRef, $username);
-        
+
+        // Blocker 1: the server-default gamemode (server.properties gamemode=)
+        // applies to new players, and to returning players when force-gamemode
+        // is on. Returning players otherwise keep their saved gamemode.
+        $meta = $entityRef->getEntity()?->get(\pocketmine\core\component\MetadataComponent::class);
+        $force = \pocketmine\api\server\Server::getInstance()->isForceGamemode();
+        if ($meta !== null && ($meta->get('gamemode') === null || $force)) {
+            $worldConfig = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
+            if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+                $meta->set('gamemode', $worldConfig->gameMode);
+            }
+        }
+
         // Send join packets (spawn position, inventory, etc.)
         $this->sendJoinPackets($entityRef);
         

@@ -13,6 +13,7 @@ use pocketmine\port\driving\CommandPort;
  */
 final class BuiltinCommands {
     public static function registerAll(CommandPort $port): void {
+        // Player commands.
         $port->register(new GamemodeCommand());
         $port->register(new TeleportCommand());
         $port->register(new GiveCommand());
@@ -21,5 +22,17 @@ final class BuiltinCommands {
         $port->register(new WeatherCommand());
         $port->register(new WorldCommand());
         $port->register(new HelpCommand());
+        $port->register(new ListCommand());
+        // Blocker 1 admin commands (console + ops).
+        $port->register(new StopCommand());
+        $port->register(new SaveAllCommand());
+        $port->register(new OpCommand());
+        $port->register(new DeopCommand());
+        $port->register(new BanCommand());
+        $port->register(new PardonCommand());
+        $port->register(new BanIpCommand());
+        $port->register(new PardonIpCommand());
+        $port->register(new WhitelistCommand());
+        $port->register(new PluginsCommand());
     }
 }

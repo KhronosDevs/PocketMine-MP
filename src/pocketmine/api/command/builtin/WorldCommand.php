@@ -22,6 +22,7 @@ final class WorldCommand extends BuiltinCommand {
             'List, switch, or create worlds',
             '/world [list|create <name> [seed]] [name]',
             ['worlds'],
+            'khronos.command.world',
         );
     }
 

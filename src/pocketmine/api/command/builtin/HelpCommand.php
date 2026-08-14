@@ -16,6 +16,7 @@ final class HelpCommand extends BuiltinCommand {
             'List available commands',
             '/help',
             ['?'],
+            'khronos.command.help',
         );
     }
 

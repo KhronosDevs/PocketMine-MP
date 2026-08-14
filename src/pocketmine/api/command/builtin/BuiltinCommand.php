@@ -57,4 +57,28 @@ abstract class BuiltinCommand extends Command {
         }
         return 'Player';
     }
+
+    /** The shared PlayerListManager (ops/whitelist/bans) or null. */
+    protected function playerLists(): ?\pocketmine\core\resource\PlayerListManager {
+        $kernel = $this->kernel();
+        if ($kernel === null) {
+            return null;
+        }
+        $lists = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\PlayerListManager::class);
+        return $lists instanceof \pocketmine\core\resource\PlayerListManager ? $lists : null;
+    }
+
+    /** Online entity id for a player name (case-insensitive), else null. */
+    protected function findOnlineId(string $name): ?int {
+        $kernel = $this->kernel();
+        if ($kernel === null) {
+            return null;
+        }
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            if (strcasecmp($p['username'], $name) === 0) {
+                return $p['entityId'];
+            }
+        }
+        return null;
+    }
 }

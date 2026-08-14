@@ -19,6 +19,15 @@ final class ServerConfig {
         public int $spawnX = 0,
         public int $spawnY = 64,
         public int $spawnZ = 0,
+        // Blocker 1: server.properties white-list=on restricts joins to the
+        // white-list.txt entries. Enforced at login alongside bans.
+        public bool $whiteList = false,
+        // Blocker 1: gamemode new players start in (mirrors the Server facade
+        // gamemode from server.properties; applied by PlayerJoinService).
+        public int $defaultGameMode = 0,
+        // Blocker 1: autosave interval in ticks (server.properties
+        // autosave-interval is in seconds; 6000 ticks = 5 minutes).
+        public int $autosaveIntervalTicks = 6000,
     ) {}
 
     public function getSeed(): int {
