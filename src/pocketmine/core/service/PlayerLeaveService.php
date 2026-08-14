@@ -9,18 +9,27 @@ use pocketmine\core\ecs\World;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\PlayerRef;
+use pocketmine\port\driving\EventPort;
 
 final class PlayerLeaveService {
     public function __construct(
         private readonly World $world,
         private readonly NetworkPort $networkPort,
         private readonly StoragePort $storagePort,
+        private readonly EventPort $eventPort,
     ) {}
 
     public function handleLeave(EntityRef $entityRef, string $reason = ""): void {
         $entity = $entityRef->getEntity();
         if (!$entity) return;
         
+        // Blocker 4: PlayerLeaveEvent fires before the entity is saved and
+        // despawned so plugins see the player as still valid.
+        $this->eventPort->emit(new \pocketmine\api\event\PlayerLeaveEvent(
+            $this->wrapApiPlayer($entityRef),
+            $reason,
+        ));
+
         // Save player data before removing
         $this->savePlayer($entityRef);
         
@@ -29,6 +38,13 @@ final class PlayerLeaveService {
         
         // Despawn entity
         $this->world->despawn($entity);
+    }
+
+    private function wrapApiPlayer(EntityRef $ref): \pocketmine\api\entity\Player {
+        $entity = \pocketmine\api\entity\Entity::wrap($ref, $this->world);
+        return $entity instanceof \pocketmine\api\entity\Player
+            ? $entity
+            : new \pocketmine\api\entity\Player($ref, $this->world);
     }
 
     public function handleDisconnect(PlayerRef $playerRef, string $reason = ""): void {

@@ -89,6 +89,8 @@ final class Kernel {
     private CoordinationThread $coordinationThread;
     private array $regionThreads = [];
     private bool $threadsStarted = false;
+    /** Blocker 4: plugins/<dataPath> is scanned once, on the first run(). */
+    private bool $pluginsLoaded = false;
     private string $dataPath;
     private int $startTime;
 
@@ -205,21 +207,21 @@ final class Kernel {
         // requires loading the spawn chunk.
         $this->chunkUnloadService = new ChunkUnloadService($world, $storagePort);
         $this->chunkLoadService = new ChunkLoadService($world, $storagePort, $worldGenPort, $this->chunkUnloadService);
-        $this->playerJoinService = new PlayerJoinService($world, $networkPort, $storagePort, $worldGenPort, $this->chunkLoadService);
-        $this->playerLeaveService = new PlayerLeaveService($world, $networkPort, $storagePort);
-        $this->playerRespawnService = new PlayerRespawnService($world, $storagePort);
+        $this->playerJoinService = new PlayerJoinService($world, $networkPort, $storagePort, $worldGenPort, $this->chunkLoadService, $eventPort);
+        $this->playerLeaveService = new PlayerLeaveService($world, $networkPort, $storagePort, $eventPort);
+        $this->playerRespawnService = new PlayerRespawnService($world, $storagePort, $eventPort);
         $this->chunkSendService = new ChunkSendService($world, $networkPort);
         // Block services are built before the session service: the network
         // layer must be able to translate client block actions (break/place)
         // straight into the ECS services.
-        $this->blockBreakService = new BlockBreakService($world, $storagePort);
-        $this->blockPlaceService = new BlockPlaceService($world);
+        $this->blockBreakService = new BlockBreakService($world, $storagePort, $eventPort);
+        $this->blockPlaceService = new BlockPlaceService($world, $eventPort);
         // 14.3: combat + interaction services are built before the session
         // service so client attack packets (InteractPacket) route straight
         // into the combat pipeline.
-        $this->entitySpawnService = new EntitySpawnService($world, $storagePort);
+        $this->entitySpawnService = new EntitySpawnService($world, $storagePort, $eventPort);
         $this->combatService = new CombatService($world, $eventPort, $this->entitySpawnService);
-        $this->entityInteractionService = new EntityInteractionService($world, $this->combatService);
+        $this->entityInteractionService = new EntityInteractionService($world, $this->combatService, $eventPort);
         $this->blockUpdateService = new BlockUpdateService($world, $storagePort);
         $this->entityDespawnService = new EntityDespawnService($world, $storagePort);
         $this->damageService = new DamageService($world, $this->combatService);
@@ -245,6 +247,7 @@ final class Kernel {
             $this->craftingService,
             $this->resourceRegistry,
             $this->commandPort,
+            $eventPort,
         );
 
         // Single scheduler instance: it registers a tick system that runs tasks,
@@ -433,6 +436,22 @@ final class Kernel {
                 $this->networkPort->setMaxPlayers($worldConfig->maxPlayers);
             }
             $this->networkPort->start();
+        }
+
+        // Blocker 4: auto-load plugins from <dataPath>/plugins/ on the first
+        // run() (the real server start). The folder is created when missing,
+        // mirroring server.properties; an empty folder loads nothing. Runs
+        // before the tick loop so plugin systems/commands are live from tick 0.
+        if (!$this->pluginsLoaded) {
+            $this->pluginsLoaded = true;
+            $pluginsDir = $this->dataPath . 'plugins';
+            if (!is_dir($pluginsDir)) {
+                @mkdir($pluginsDir, 0755, true);
+            }
+            $n = $this->loadPluginsFromDirectory($pluginsDir);
+            if ($n > 0) {
+                echo "[Khronos] Loaded $n plugin(s)." . PHP_EOL;
+            }
         }
 
         // Profiling closure is created once (not per tick) so the hot loop
@@ -1411,6 +1430,47 @@ final class Kernel {
             throw new \LogicException('Plugin port is not backed by the api PluginManager');
         }
         return $this->pluginPort;
+    }
+
+    /**
+     * Blocker 4: load every plugin found in a directory. Accepts .phar
+     * archives and directories carrying a plugin.yml (the two formats
+     * PluginManager::loadPlugin supports; .jar archives are rejected there).
+     * Per-plugin failures are logged by the manager and never abort startup.
+     *
+     * @return int number of plugins successfully loaded and enabled
+     */
+    public function loadPluginsFromDirectory(string $dir): int {
+        if (!is_dir($dir)) {
+            return 0;
+        }
+        $manager = $this->getPluginManager();
+        $base = rtrim($dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        $loaded = 0;
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $base . $entry;
+            if (is_file($path)) {
+                // Only .phar archives are plugin candidates; anything else
+                // (README, logs, etc.) in the folder is ignored.
+                if (strtolower(pathinfo($entry, PATHINFO_EXTENSION)) !== 'phar') {
+                    continue;
+                }
+            } elseif (is_dir($path)) {
+                // A directory is only a plugin when it carries a plugin.yml.
+                if (!is_file($path . DIRECTORY_SEPARATOR . 'plugin.yml')) {
+                    continue;
+                }
+            } else {
+                continue;
+            }
+            if ($manager->loadPlugin($path) !== null) {
+                $loaded++;
+            }
+        }
+        return $loaded;
     }
 
     public function getCoordinationThread(): CoordinationThread {

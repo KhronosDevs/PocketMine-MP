@@ -1544,6 +1544,122 @@ test('chat is echoed back to the sender', function () use ($client, $kernel): vo
     ok(false, 'chat echo received');
 });
 
+test('PlayerChatEvent fires and can cancel the broadcast', function () use ($client, $kernel): void {
+    // Guard: only cancel this exact message so other chat tests are unaffected.
+    $kernel->getEventPort()->subscribe(\pocketmine\api\event\PlayerChatEvent::class, function (\pocketmine\api\event\PlayerChatEvent $e): void {
+        if ($e->getMessage() === 'event-cancel-me') {
+            $e->setCancelled(true);
+        }
+    });
+
+    $chat = new TextPacket();
+    $chat->type = TextPacket::TYPE_CHAT;
+    $chat->source = 'Alice';
+    $chat->message = 'event-cancel-me';
+    $client->sendGamePacket($chat);
+    $kernel->run(2);
+
+    // A cancelled chat must NOT be echoed back within a generous window.
+    $deadline = microtime(true) + 1.5;
+    $echoes = 0;
+    while (microtime(true) < $deadline) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::TEXT_PACKET) {
+                $tp = textPacket($buffer);
+                if ($tp['type'] === TextPacket::TYPE_RAW && str_contains($tp['message'], 'event-cancel-me')) {
+                    $echoes++;
+                }
+            }
+        }
+        $kernel->run(1);
+        usleep(5000);
+    }
+    same(0, $echoes, 'cancelled chat is never broadcast');
+});
+
+test('PlayerChatEvent can rewrite the message before broadcast', function () use ($client, $kernel): void {
+    $kernel->getEventPort()->subscribe(\pocketmine\api\event\PlayerChatEvent::class, function (\pocketmine\api\event\PlayerChatEvent $e): void {
+        if ($e->getMessage() === 'event-rewrite-me') {
+            $e->setMessage('rewritten by plugin');
+        }
+    });
+
+    $chat = new TextPacket();
+    $chat->type = TextPacket::TYPE_CHAT;
+    $chat->source = 'Alice';
+    $chat->message = 'event-rewrite-me';
+    $client->sendGamePacket($chat);
+    $kernel->run(1);
+
+    $deadline = microtime(true) + 3.0;
+    while (microtime(true) < $deadline) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::TEXT_PACKET) {
+                $tp = textPacket($buffer);
+                if ($tp['type'] === TextPacket::TYPE_RAW) {
+                    same('Alice: rewritten by plugin', $tp['message'], 'rewritten message broadcast');
+                    return;
+                }
+            }
+        }
+        $kernel->run(1);
+        usleep(10000);
+    }
+    ok(false, 'rewritten chat echo received');
+});
+
+test('PlayerMoveEvent fires with from/to on an accepted move', function () use ($client, $kernel): void {
+    $before = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $before = $p;
+        }
+    }
+    if ($before === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+
+    $from = null;
+    $to = null;
+    $kernel->getEventPort()->subscribe(\pocketmine\api\event\PlayerMoveEvent::class, function (\pocketmine\api\event\PlayerMoveEvent $e) use (&$from, &$to): void {
+        if ($e->getPlayer()->getName() !== 'Alice' || $from !== null) {
+            return; // record only the first Alice move after subscribing
+        }
+        $from = $e->getFrom();
+        $to = $e->getTo();
+    });
+
+    $tx = $before['x'] + 0.5;
+    $ty = $before['y'];
+    $tz = $before['z'];
+    $move = new MovePlayerPacket();
+    $move->eid = 0;
+    $move->x = $tx;
+    $move->y = $ty;
+    $move->z = $tz;
+    $move->yaw = 0.0;
+    $move->bodyYaw = 0.0;
+    $move->pitch = 0.0;
+    $move->mode = MovePlayerPacket::MODE_NORMAL;
+    $move->onGround = true;
+    $client->sendGamePacket($move);
+
+    $deadline = microtime(true) + 6.0;
+    while (microtime(true) < $deadline && $from === null) {
+        $client->readGamePackets();
+        $kernel->run(1);
+        usleep(10000);
+    }
+    ok($from !== null, 'PlayerMoveEvent fired for the accepted move');
+    if ($from === null) {
+        return;
+    }
+    near($before['x'], $from[0], 1e-6, 'event from.x is the pre-move x');
+    near($tx, $to[0], 1e-6, 'event to.x is the applied x');
+    near($tz, $to[2], 1e-6, 'event to.z is the applied z');
+});
+
 // --- Second player ---------------------------------------------------------
 test('a second client can join and sees the same world', function () use ($kernel, $port, $client): void {
     $client2 = new FakeClient($port);

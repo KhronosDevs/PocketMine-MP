@@ -20,6 +20,7 @@ use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\PlayerRef;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\WorldGenPort;
+use pocketmine\port\driving\EventPort;
 
 final class PlayerJoinService {
     public function __construct(
@@ -28,6 +29,7 @@ final class PlayerJoinService {
         private readonly StoragePort $storagePort,
         private readonly WorldGenPort $worldGenPort,
         private readonly ChunkLoadService $chunkLoadService,
+        private readonly EventPort $eventPort,
     ) {}
 
     public function handleJoin(PlayerRef $playerRef, string $username): EntityRef {
@@ -52,8 +54,22 @@ final class PlayerJoinService {
         
         // Notify other players
         $this->broadcastPlayerJoin($entityRef);
+
+        // Blocker 4: PlayerJoinEvent lets plugins react to (and announce)
+        // joins. Fired after the ECS entity and session state exist so the
+        // event player is fully valid.
+        $this->eventPort->emit(new \pocketmine\api\event\PlayerJoinEvent(
+            $this->wrapApiPlayer($entityRef),
+        ));
         
         return $entityRef;
+    }
+
+    private function wrapApiPlayer(EntityRef $ref): \pocketmine\api\entity\Player {
+        $entity = \pocketmine\api\entity\Entity::wrap($ref, $this->world);
+        return $entity instanceof \pocketmine\api\entity\Player
+            ? $entity
+            : new \pocketmine\api\entity\Player($ref, $this->world);
     }
 
     private function createOrLoadPlayer(PlayerRef $playerRef, string $username): EntityRef {
