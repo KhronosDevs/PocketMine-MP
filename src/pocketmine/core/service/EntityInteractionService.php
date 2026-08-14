@@ -11,11 +11,13 @@ use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\Hunger;
 use pocketmine\core\resource\ItemDurability;
+use pocketmine\port\driving\EventPort;
 
 final class EntityInteractionService {
     public function __construct(
         private readonly World $world,
         private readonly CombatService $combatService,
+        private readonly EventPort $eventPort,
     ) {}
 
     public function interact(EntityRef $playerRef, EntityRef $targetRef): bool {
@@ -23,6 +25,18 @@ final class EntityInteractionService {
         $target = $targetRef->getEntity();
         
         if (!$player || !$target) return false;
+
+        // Blocker 4: cancellable PlayerInteractEvent (right-click on an
+        // entity) fires before any interaction handling.
+        $event = new \pocketmine\api\event\PlayerInteractEvent(
+            $this->wrapApiPlayer($playerRef),
+            \pocketmine\api\event\PlayerInteractEvent::RIGHT_CLICK_BLOCK,
+            \pocketmine\api\entity\Entity::wrap($targetRef, $this->world),
+        );
+        $this->eventPort->emit($event);
+        if ($event->isCancelled()) {
+            return false;
+        }
         
         // Check interaction distance
         if (!$this->canInteract($playerRef, $targetRef)) {
@@ -163,6 +177,18 @@ final class EntityInteractionService {
         $target = $targetRef->getEntity();
         
         if (!$attacker || !$target) return false;
+
+        // Blocker 4: cancellable PlayerInteractEvent (left-click attack on an
+        // entity) fires before damage so plugins can veto PvP/mob hits.
+        $event = new \pocketmine\api\event\PlayerInteractEvent(
+            $this->wrapApiPlayer($attackerRef),
+            \pocketmine\api\event\PlayerInteractEvent::LEFT_CLICK_BLOCK,
+            \pocketmine\api\entity\Entity::wrap($targetRef, $this->world),
+        );
+        $this->eventPort->emit($event);
+        if ($event->isCancelled()) {
+            return false;
+        }
         
         // Check attack distance
         if (!$this->canAttack($attackerRef, $targetRef)) {
@@ -243,5 +269,12 @@ final class EntityInteractionService {
             279 => 3, // Diamond axe
             default => 1,
         };
+    }
+
+    private function wrapApiPlayer(EntityRef $ref): \pocketmine\api\entity\Player {
+        $entity = \pocketmine\api\entity\Entity::wrap($ref, $this->world);
+        return $entity instanceof \pocketmine\api\entity\Player
+            ? $entity
+            : new \pocketmine\api\entity\Player($ref, $this->world);
     }
 }

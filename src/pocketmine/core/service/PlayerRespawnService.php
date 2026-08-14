@@ -14,16 +14,24 @@ use pocketmine\core\component\tags\DeadTag;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
 use pocketmine\port\driven\StoragePort;
+use pocketmine\port\driving\EventPort;
 
 final class PlayerRespawnService {
     public function __construct(
         private readonly World $world,
         private readonly StoragePort $storagePort,
+        private readonly EventPort $eventPort,
     ) {}
 
     public function respawn(EntityRef $entityRef): void {
         $entity = $entityRef->getEntity();
         if (!$entity) return;
+
+        // Blocker 4: PlayerRespawnEvent fires before the respawn mutation so
+        // plugins can intercept (e.g. set a custom respawn point).
+        $this->eventPort->emit(new \pocketmine\api\event\PlayerRespawnEvent(
+            $this->wrapApiPlayer($entityRef),
+        ));
         
         // Remove dead tag
         $entity->remove(DeadTag::class);
@@ -53,6 +61,13 @@ final class PlayerRespawnService {
         
         // Reset metadata
         $this->resetMetadata($entity);
+    }
+
+    private function wrapApiPlayer(EntityRef $ref): \pocketmine\api\entity\Player {
+        $entity = \pocketmine\api\entity\Entity::wrap($ref, $this->world);
+        return $entity instanceof \pocketmine\api\entity\Player
+            ? $entity
+            : new \pocketmine\api\entity\Player($ref, $this->world);
     }
 
     private function handleInventoryOnRespawn(\pocketmine\core\ecs\Entity $entity): void {

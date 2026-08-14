@@ -148,6 +148,7 @@ final class NetworkSessionService {
     private readonly CraftingService $craftingService;
     private readonly ResourceRegistry $resourceRegistry;
     private readonly CommandPort $commandPort;
+    private readonly \pocketmine\port\driving\EventPort $eventPort;
 
     /**
      * MCPE block-face -> placement offset: the block a player places when
@@ -232,6 +233,7 @@ final class NetworkSessionService {
         CraftingService $craftingService,
         ResourceRegistry $resourceRegistry,
         CommandPort $commandPort,
+        \pocketmine\port\driving\EventPort $eventPort,
     ) {
         $this->adapter = $networkPort instanceof Protocol84NetworkAdapter ? $networkPort : null;
         $this->world = $world;
@@ -247,6 +249,7 @@ final class NetworkSessionService {
         $this->craftingService = $craftingService;
         $this->resourceRegistry = $resourceRegistry;
         $this->commandPort = $commandPort;
+        $this->eventPort = $eventPort;
         $this->wireTrace = getenv('KHRONOS_WIRE_TRACE') === '1';
     }
 
@@ -820,6 +823,9 @@ final class NetworkSessionService {
         // Persist the accepted move's bookkeeping (lastMoveTick / grace).
         $this->sessions[$addrKey] = $session;
 
+        // The pre-move position, captured before the mutation below so the
+        // event's from/to reflect the actual movement.
+        $from = $pos !== null ? [$pos->x, $pos->y, $pos->z] : [0.0, 0.0, 0.0];
         if ($pos !== null) {
             $pos->x = $pk->x;
             $pos->y = $pk->y;
@@ -829,6 +835,15 @@ final class NetworkSessionService {
             $rot->yaw = $pk->yaw;
             $rot->pitch = $pk->pitch;
         }
+
+        // Blocker 4: PlayerMoveEvent (non-cancellable) fires after the move is
+        // accepted so plugins observe the same authoritative position the
+        // rest of the server sees.
+        $this->eventPort->emit(new \pocketmine\api\event\PlayerMoveEvent(
+            $this->wrapApiPlayer($session['entityRef']),
+            $from,
+            [$pk->x, $pk->y, $pk->z],
+        ));
 
         // The world is infinite: queueChunks() only fires on login / radius
         // change / world switch, so a player who walks beyond the initially
@@ -934,12 +949,32 @@ final class NetworkSessionService {
             $this->dispatchCommand($addrKey, substr($pk->message, 1));
             return;
         }
+
+        // Blocker 4: cancellable PlayerChatEvent - plugins can block or
+        // rewrite the message before it is broadcast.
+        $event = new \pocketmine\api\event\PlayerChatEvent(
+            $this->wrapApiPlayer($session['entityRef']),
+            $pk->message,
+        );
+        $this->eventPort->emit($event);
+        if ($event->isCancelled()) {
+            return;
+        }
+        $message = $event->getMessage();
+
         $echo = new TextPacket();
         $echo->type = TextPacket::TYPE_RAW;
-        $echo->message = $session['username'] . ': ' . $pk->message;
+        $echo->message = $session['username'] . ': ' . $message;
         foreach ($this->sessions as $s) {
             $this->queuePacket($s['playerRef'], clone $echo);
         }
+    }
+
+    private function wrapApiPlayer(EntityRef $ref): \pocketmine\api\entity\Player {
+        $entity = \pocketmine\api\entity\Entity::wrap($ref, $this->world);
+        return $entity instanceof \pocketmine\api\entity\Player
+            ? $entity
+            : new \pocketmine\api\entity\Player($ref, $this->world);
     }
 
     private function dispatchCommand(string $addrKey, string $commandLine): void {
