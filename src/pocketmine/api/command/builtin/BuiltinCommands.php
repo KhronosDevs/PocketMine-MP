@@ -18,6 +18,7 @@ final class BuiltinCommands {
         $port->register(new GiveCommand());
         $port->register(new KillCommand());
         $port->register(new TimeCommand());
+        $port->register(new WeatherCommand());
         $port->register(new WorldCommand());
         $port->register(new HelpCommand());
     }

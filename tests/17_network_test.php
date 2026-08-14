@@ -2901,6 +2901,57 @@ test('a /time command sets the world clock', function () use ($client, $kernel):
     ok($sawTime, 'clients synced to the new dawn time');
 });
 
+test('a /weather command changes the world weather over the wire', function () use ($client, $kernel): void {
+    $cmd = new TextPacket();
+    $cmd->type = TextPacket::TYPE_CHAT;
+    $cmd->source = 'Alice';
+    $cmd->message = '/weather rain';
+    $client->sendGamePacket($cmd);
+
+    $deadline = microtime(true) + 3.0;
+    $sawRain = false;
+    $sawReply = false;
+    while (microtime(true) < $deadline && !($sawRain && $sawReply)) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::LEVEL_EVENT_PACKET) {
+                if (leFields($buffer)['evid'] === \pocketmine\protocol\LevelEventPacket::EVENT_START_RAIN) {
+                    $sawRain = true;
+                }
+            }
+            if ($id === Info::TEXT_PACKET) {
+                if (str_contains(textPacket($buffer)['message'] ?? '', 'Weather set to rain')) {
+                    $sawReply = true;
+                }
+            }
+        }
+        usleep(10000);
+    }
+    ok($sawReply, '/weather reply received');
+    ok($sawRain, 'clients received START_RAIN after /weather rain');
+
+    // Back to clear: STOP_RAIN goes out.
+    $cmd2 = new TextPacket();
+    $cmd2->type = TextPacket::TYPE_CHAT;
+    $cmd2->source = 'Alice';
+    $cmd2->message = '/weather clear';
+    $client->sendGamePacket($cmd2);
+
+    $deadline = microtime(true) + 3.0;
+    $sawClear = false;
+    while (microtime(true) < $deadline && !$sawClear) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::LEVEL_EVENT_PACKET
+                && leFields($buffer)['evid'] === \pocketmine\protocol\LevelEventPacket::EVENT_STOP_RAIN) {
+                $sawClear = true;
+            }
+        }
+        usleep(10000);
+    }
+    ok($sawClear, 'clients received STOP_RAIN after /weather clear');
+});
+
 test('a /help command lists the commands', function () use ($client, $kernel): void {
     $cmd = new TextPacket();
     $cmd->type = TextPacket::TYPE_CHAT;
