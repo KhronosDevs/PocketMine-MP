@@ -4682,6 +4682,55 @@ test('/ban kicks an online player immediately (DisconnectPacket + offline + bann
     }
 });
 
+test('anti-cheat can be disabled via khronos.json config', function () use ($kernel, $port): void {
+    $cfg = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\KhronosConfig::class);
+    if (!$cfg instanceof \pocketmine\core\resource\KhronosConfig) {
+        ok(false, 'KhronosConfig registered');
+        return;
+    }
+    $prev = $cfg->antiCheatEnabled;
+    $cfg->antiCheatEnabled = false;
+    [$daisy] = joinFreshClient($kernel, $port, 'Daisy', 'e0000000-0000-0000-0000-0000000000d3');
+    try {
+        $before = null;
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            if ($p['username'] === 'Daisy') {
+                $before = $p;
+            }
+        }
+        if ($before === null) {
+            ok(false, 'Daisy is online');
+            return;
+        }
+
+        // A 100-block teleport that the anti-cheat would rubber-band.
+        $hack = new MovePlayerPacket();
+        $hack->eid = 0;
+        $hack->x = $before['x'] + 100.0;
+        $hack->y = $before['y'];
+        $hack->z = $before['z'];
+        $hack->yaw = 0.0;
+        $hack->bodyYaw = 0.0;
+        $hack->pitch = 0.0;
+        $hack->mode = MovePlayerPacket::MODE_NORMAL;
+        $hack->onGround = true;
+        $daisy->sendGamePacket($hack);
+        $kernel->run(2);
+
+        $applied = false;
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            if ($p['username'] === 'Daisy') {
+                near($before['x'] + 100.0, $p['x'], 1e-6, 'overspeed move applied with anti-cheat off');
+                $applied = true;
+            }
+        }
+        ok($applied, 'moved position read back');
+    } finally {
+        $cfg->antiCheatEnabled = $prev;
+        $daisy->close();
+    }
+});
+
 test('server shuts down cleanly with active sessions', function () use ($kernel, $client): void {
     $adapter = $kernel->getNetworkPort();
     if ($adapter instanceof Protocol84NetworkAdapter) {
