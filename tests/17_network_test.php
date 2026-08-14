@@ -2834,6 +2834,7 @@ test('a /tp command teleports the player', function () use ($client, $kernel): v
     $deadline = microtime(true) + 3.0;
     $sawTeleport = false;
     $packetY = null;
+    $packetEid = null;
     while (microtime(true) < $deadline && !$sawTeleport) {
         $kernel->run(1);
         foreach ($client->readGamePackets() as [$id, $buffer]) {
@@ -2841,6 +2842,7 @@ test('a /tp command teleports the player', function () use ($client, $kernel): v
                 $mp = mpFields($buffer);
                 if ($mp['mode'] === MovePlayerPacket::MODE_RESET && abs($mp['x'] - 10.0) < 0.01) {
                     $packetY = $mp['y'];
+                    $packetEid = $mp['eid'];
                     $sawTeleport = true;
                 }
             }
@@ -2848,6 +2850,7 @@ test('a /tp command teleports the player', function () use ($client, $kernel): v
         usleep(10000);
     }
     ok($sawTeleport, 'teleport MovePlayerPacket (MODE_RESET) sent');
+    ok($packetEid === 0, 'teleport packet eid is 0 (protocol 84 self-entity)');
     ok(abs($pos->x - 10.0) < 0.01, 'position x updated to 10');
     ok(abs($pos->z - (-10.0)) < 0.01, 'position z updated to -10');
     ok($packetY !== null && $packetY >= 79.0 && $packetY <= 81.0, 'teleport packet y is ~80');

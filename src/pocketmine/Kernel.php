@@ -1208,8 +1208,14 @@ final class Kernel {
         }
         $config = $this->resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
         if ($config instanceof \pocketmine\core\resource\ServerConfig) {
+            // Prefer the WorldConfig seed when it was pinned; fall through to
+            // the ServerConfig seed otherwise. WorldConfig defaults to 0 and is
+            // only set when the meta was restored or a world was created with
+            // an explicit seed - writing that 0 here would wipe the seed and
+            // make the world regenerate on every restart.
+            $seed = ($worldConfig !== null && $worldConfig->seed !== 0) ? $worldConfig->seed : $config->getSeed();
             $storage->saveWorldMeta([
-                'seed' => (string)($worldConfig?->seed ?? $config->getSeed()),
+                'seed' => (string)$seed,
                 'spawnX' => (string)($worldConfig?->spawnX ?? $config->spawnX),
                 'spawnY' => (string)($worldConfig?->spawnY ?? $config->spawnY),
                 'spawnZ' => (string)($worldConfig?->spawnZ ?? $config->spawnZ),
@@ -1722,6 +1728,13 @@ function applyPersistedWorldMeta(StoragePort $storagePort, ResourceRegistry $res
     }
     if (isset($meta['seed']) && $meta['seed'] !== '' && (int)$meta['seed'] !== 0) {
         $config->seed = (int)$meta['seed'];
+        // Keep the WorldConfig in sync so every reader (StartGame seed, the
+        // save path, the World facade, per-world WorldRegistry bundles) sees
+        // the same restored seed - not a stale 0 default.
+        $restoredSeed = $resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
+        if ($restoredSeed instanceof \pocketmine\core\resource\WorldConfig) {
+            $restoredSeed->seed = (int)$meta['seed'];
+        }
     }
     if (isset($meta['spawnX']) && $meta['spawnX'] !== '') {
         $config->spawnX = (int)$meta['spawnX'];

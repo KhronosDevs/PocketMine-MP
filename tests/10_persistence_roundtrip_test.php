@@ -316,10 +316,16 @@ test('applyPersistedWorldMeta restores the saved world config at boot', function
 
         $registry = new \pocketmine\core\ecs\ResourceRegistry();
         $registry->set(new \pocketmine\core\resource\ServerConfig());
+        $registry->set(new \pocketmine\core\resource\WorldConfig());
         \pocketmine\applyPersistedWorldMeta($adapter, $registry);
 
         $config = $registry->get(\pocketmine\core\resource\ServerConfig::class);
         same(987654321, $config->seed, 'seed restored');
+        // The WorldConfig must be kept in sync: the save path prefers it over
+        // the ServerConfig seed, and a stale 0 there wipes the seed on disk
+        // (which made the world regenerate with a new random seed every boot).
+        $worldConfig = $registry->get(\pocketmine\core\resource\WorldConfig::class);
+        same(987654321, $worldConfig->seed, 'WorldConfig seed synced on restore');
         same(7, $config->spawnX, 'spawnX restored');
         same(68, $config->spawnY, 'spawnY restored');
         same(-2, $config->spawnZ, 'spawnZ restored');
