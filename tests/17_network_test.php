@@ -1059,11 +1059,27 @@ test('a large view distance request streams many chunks without exhausting memor
 
 // --- Movement --------------------------------------------------------------
 test('client movement is applied to the ECS entity', function () use ($client, $kernel): void {
+    // One small walking step (well under the anti-cheat caps) - the same
+    // single-round-trip shape as the original test, which the slow-tick test
+    // environment tolerates (multi-step walks time the RakLib thread out).
+    $before = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $before = $p;
+        }
+    }
+    if ($before === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $tx = $before['x'] + 0.5;
+    $ty = $before['y'];
+    $tz = $before['z'] - 0.5;
     $move = new MovePlayerPacket();
     $move->eid = 0;
-    $move->x = 12.5;
-    $move->y = 65.0;
-    $move->z = -3.25;
+    $move->x = $tx;
+    $move->y = $ty;
+    $move->z = $tz;
     $move->yaw = 90.0;
     $move->bodyYaw = 90.0;
     $move->pitch = 10.0;
@@ -1071,24 +1087,176 @@ test('client movement is applied to the ECS entity', function () use ($client, $
     $move->onGround = true;
     $client->sendGamePacket($move);
 
-    // The packet now travels client socket -> RakLib thread -> kernel, so a
-    // single tick may not be enough: poll until the position lands.
-    $deadline = microtime(true) + 3.0;
+    // The packet travels client socket -> RakLib thread -> kernel, so poll
+    // until the position lands.
+    $deadline = microtime(true) + 6.0;
     while (microtime(true) < $deadline) {
+        $client->readGamePackets();
         $kernel->run(1);
-        $online = $kernel->getNetworkSessionService()->getOnlinePlayers();
-        if (isset($online[0]) && abs($online[0]['x'] - 12.5) < 1e-6) {
-            same(1, count($online), 'one online player');
-            $alice = $online[0];
-            same('Alice', $alice['username'], 'username');
-            near(12.5, $alice['x'], 1e-6, 'x applied');
-            near(65.0, $alice['y'], 1e-6, 'y applied');
-            near(-3.25, $alice['z'], 1e-6, 'z applied');
-            return;
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            if ($p['username'] === 'Alice' && abs($p['x'] - $tx) < 1e-6) {
+                near($tx, $p['x'], 1e-6, 'x applied');
+                near($ty, $p['y'], 1e-6, 'y applied');
+                near($tz, $p['z'], 1e-6, 'z applied');
+                return;
+            }
         }
         usleep(10000);
     }
     ok(false, 'movement applied to the ECS entity');
+});
+
+// --- Blocker 2 anti-cheat ------------------------------------------------
+test('an overspeed move is rejected and the client is rubber-banded', function () use ($client, $kernel): void {
+    // Alice's position before the hack attempt.
+    $before = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $before = $p;
+        }
+    }
+    if ($before === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+
+    // A teleport hack: 100 blocks in one packet (4000+ blocks/sec).
+    $hack = new MovePlayerPacket();
+    $hack->eid = 0;
+    $hack->x = $before['x'] + 100.0;
+    $hack->y = $before['y'];
+    $hack->z = $before['z'];
+    $hack->yaw = 0.0;
+    $hack->bodyYaw = 0.0;
+    $hack->pitch = 0.0;
+    $hack->mode = MovePlayerPacket::MODE_NORMAL;
+    $hack->onGround = true;
+    $client->sendGamePacket($hack);
+
+    // The server must NOT apply the move, and must snap the client back with
+    // a rubber-band MovePlayerPacket (eid 0 = self, MODE_RESET).
+    $deadline = microtime(true) + 4.0;
+    $sawRubberBand = false;
+    while (microtime(true) < $deadline) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) { // drains + ACKs
+            if ($id === Info::MOVE_PLAYER_PACKET) {
+                $mp = mpFields($buffer);
+                if ($mp['eid'] === 0 && $mp['mode'] === MovePlayerPacket::MODE_RESET) {
+                    $sawRubberBand = true;
+                }
+            }
+        }
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            if ($p['username'] === 'Alice') {
+                near($before['x'], $p['x'], 1e-6, 'rejected move never applied (x)');
+                near($before['z'], $p['z'], 1e-6, 'rejected move never applied (z)');
+                break;
+            }
+        }
+        if ($sawRubberBand) {
+            break;
+        }
+        usleep(10000);
+    }
+    ok($sawRubberBand, 'client was rubber-banded to the authoritative position');
+});
+
+test('repeated overspeed moves end in a kick', function () use ($kernel, $port): void {
+    // A dedicated cheater so the kick does not disturb Alice's session.
+    $cheater = new FakeClient($port);
+    $cheater->handshake(fn() => $kernel->run(1));
+    $cheater->connect(fn() => $kernel->run(1));
+    $cheater->sendLogin('Cheater', 'eeeeeeee-dddd-cccc-bbbb-aaaaaaaaaaaa');
+    $deadline = microtime(true) + 6.0;
+    while (microtime(true) < $deadline) {
+        $kernel->run(1);
+        $online = false;
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            if ($p['username'] === 'Cheater') {
+                $online = true;
+            }
+        }
+        if ($online) {
+            break;
+        }
+        usleep(10000);
+    }
+
+    $pos = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Cheater') {
+            $pos = $p;
+        }
+    }
+    if ($pos === null) {
+        ok(false, 'Cheater joined');
+        $cheater->close();
+        return;
+    }
+
+    // 5 instant teleports (way over MAX_MOVE_VIOLATIONS) back-to-back.
+    $deadline = microtime(true) + 6.0;
+    $kicked = false;
+    while (microtime(true) < $deadline && !$kicked) {
+        $hack = new MovePlayerPacket();
+        $hack->eid = 0;
+        $hack->x = $pos['x'] + 50.0;
+        $hack->y = $pos['y'];
+        $hack->z = $pos['z'] + 50.0;
+        $hack->yaw = 0.0;
+        $hack->bodyYaw = 0.0;
+        $hack->pitch = 0.0;
+        $hack->mode = MovePlayerPacket::MODE_NORMAL;
+        $hack->onGround = true;
+        $cheater->sendGamePacket($hack);
+        $cheater->readGamePackets();
+        $kernel->run(1);
+        // Drain the server's rubber-band frames too (they ride reliable
+        // channels the ACK window must keep clear).
+        $cheater->readGamePackets();
+        $kicked = true;
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            if ($p['username'] === 'Cheater') {
+                $kicked = false;
+            }
+        }
+        usleep(20000);
+    }
+    ok($kicked, 'repeat overspeed violator was kicked');
+    $cheater->close();
+});
+
+test('a spam flood of chat is throttled to one message', function () use ($client, $kernel): void {
+    // Send 10 messages instantly - only the first (within the 400ms window)
+    // should be echoed; the rest are dropped as spam.
+    for ($i = 0; $i < 10; $i++) {
+        $chat = new TextPacket();
+        $chat->type = TextPacket::TYPE_CHAT;
+        $chat->source = 'Alice';
+        $chat->message = "spam message $i";
+        $client->sendGamePacket($chat);
+    }
+    $kernel->run(3);
+
+    $deadline = microtime(true) + 3.0;
+    $echoes = 0;
+    while (microtime(true) < $deadline) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::TEXT_PACKET) {
+                $tp = textPacket($buffer);
+                if ($tp['type'] === TextPacket::TYPE_RAW && str_starts_with($tp['message'], 'Alice: spam message')) {
+                    $echoes++;
+                }
+            }
+        }
+        $kernel->run(1);
+        if ($echoes >= 2) {
+            break; // over the limit - fail fast
+        }
+        usleep(10000);
+    }
+    ok($echoes === 1, "spam throttled: 1 echo for 10 messages (got $echoes)");
 });
 
 // --- Block interaction (14.1) ----------------------------------------------
@@ -1136,17 +1304,17 @@ function findSurfaceBlockNearSpawn(\pocketmine\Kernel $kernel): array {
  * instead of silently continuing with Alice somewhere else.
  */
 function teleportAliceOnto(\pocketmine\Kernel $kernel, FakeClient $client, int $x, int $y, int $z): void {
-    $move = new MovePlayerPacket();
-    $move->eid = 0;
-    $move->x = $x + 0.5;
-    $move->y = $y + 1;
-    $move->z = $z + 0.5;
-    $move->yaw = 0.0;
-    $move->bodyYaw = 0.0;
-    $move->pitch = 0.0;
-    $move->mode = MovePlayerPacket::MODE_NORMAL;
-    $move->onGround = true;
-    $client->sendGamePacket($move);
+    $id = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $id = $p['entityId'];
+            break;
+        }
+    }
+    if ($id === null) {
+        throw new RuntimeException('Alice is not online');
+    }
+    $kernel->getNetworkSessionService()->sendTeleportTo($id, $x + 0.5, $y + 1, $z + 0.5);
 
     $deadline = microtime(true) + 3.0;
     while (microtime(true) < $deadline) {
@@ -1165,17 +1333,7 @@ function teleportAliceOnto(\pocketmine\Kernel $kernel, FakeClient $client, int $
 
 /** Teleport a specific entity (by id) onto a block and wait for it to land. */
 function teleportEntityOnto(\pocketmine\Kernel $kernel, FakeClient $client, int $entityId, int $x, int $y, int $z): void {
-    $move = new MovePlayerPacket();
-    $move->eid = $entityId;
-    $move->x = $x + 0.5;
-    $move->y = $y + 1;
-    $move->z = $z + 0.5;
-    $move->yaw = 0.0;
-    $move->bodyYaw = 0.0;
-    $move->pitch = 0.0;
-    $move->mode = MovePlayerPacket::MODE_NORMAL;
-    $move->onGround = true;
-    $client->sendGamePacket($move);
+    $kernel->getNetworkSessionService()->sendTeleportTo($entityId, $x + 0.5, $y + 1, $z + 0.5);
 
     $deadline = microtime(true) + 3.0;
     while (microtime(true) < $deadline) {
@@ -1234,9 +1392,12 @@ test('breaking a block requires holding and then confirms via RemoveBlockPacket'
 
     // Phase 2: hold the button for the server-side requirement (grass/dirt
     // needs ~12 ticks), then the client's local crack timer finishes and it
-    // confirms with REMOVE_BLOCK_PACKET.
+    // confirms with REMOVE_BLOCK_PACKET. Drain the client every tick so ACKs
+    // flow and the RakLib session never times out (a real client ACKs
+    // continuously; a silent hold loop starves the session on slow ticks).
     for ($i = 0; $i < 20; $i++) {
         $kernel->run(1);
+        $client->readGamePackets();
     }
     $rm = new RemoveBlockPacket();
     $rm->eid = 0;
@@ -1498,18 +1659,9 @@ test('two players see each other as AddPlayerPacket entities', function () use (
 });
 
 test('player movement is relayed to other players via MovePlayerPacket', function () use ($kernel, $client, &$clientBob2, &$bob2Eid): void {
-    // Bob2 walks to a new spot (eid 0 is the client's own entity).
-    $move = new MovePlayerPacket();
-    $move->eid = 0;
-    $move->x = 30.5;
-    $move->y = 66.0;
-    $move->z = 5.5;
-    $move->yaw = 90.0;
-    $move->bodyYaw = 90.0;
-    $move->pitch = 0.0;
-    $move->mode = MovePlayerPacket::MODE_NORMAL;
-    $move->onGround = true;
-    $clientBob2->sendGamePacket($move);
+    // Bob2 teleports to a new spot (server-authoritative: /tp uses the same
+    // sendTeleportTo path; the per-tick broadcast then relays it to Alice).
+    $kernel->getNetworkSessionService()->sendTeleportTo($bob2Eid, 30.5, 66.0, 5.5);
 
     // Drain BOTH sockets every iteration: Bob2 must keep ACKing the server's
     // frames or his reliable window fills and the server stalls (the relay to
@@ -4182,18 +4334,10 @@ test('chunk stream follows the player across chunk boundaries', function () use 
     }
     ok($baseline > 0, "chunks already streamed before the move ($baseline)");
 
-    // Jump ~10 chunk columns away - beyond the initially streamed window.
-    $move = new MovePlayerPacket();
-    $move->eid = $eid;
-    $move->x = 168.5; // chunk (10)
-    $move->y = 80.0;
-    $move->z = 168.5; // chunk (10)
-    $move->yaw = 0.0;
-    $move->bodyYaw = 0.0;
-    $move->pitch = 0.0;
-    $move->mode = MovePlayerPacket::MODE_NORMAL;
-    $move->onGround = true;
-    $streamer->sendGamePacket($move);
+    // Jump ~10 chunk columns away - beyond the initially streamed window. A
+    // server teleport (/tp) must re-queue the new area, exactly like walking
+    // across a chunk boundary does.
+    $kernel->getNetworkSessionService()->sendTeleportTo($eid, 168.5, 80.0, 168.5);
 
     $after = $baseline;
     $deadline = microtime(true) + 8.0;

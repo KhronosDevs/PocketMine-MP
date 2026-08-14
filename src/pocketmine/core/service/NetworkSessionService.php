@@ -110,6 +110,28 @@ final class NetworkSessionService {
     private const DEFAULT_RADIUS = 4;
     private const MAX_RADIUS = 12;
 
+    // --- Blocker 2 anti-cheat limits ---------------------------------------
+    // Movement caps per tick, generous enough for legit sprint-jumps + packet
+    // latency (a sprint-jump peaks ~0.6 blocks in a tick; the client sends a
+    // MovePlayerPacket roughly every tick) while making teleport/fly hacks
+    // obvious. Horizontal 1.2/tick = 24 m/s; vertical ascent 0.8/tick (the
+    // jump peak is ~0.42); total 2.0 covers the diagonal corner case.
+    private const MAX_MOVE_HORIZONTAL_PER_TICK = 1.2;
+    private const MAX_MOVE_ASCENT_PER_TICK = 0.8;
+    private const MAX_MOVE_TOTAL_PER_TICK = 2.0;
+    /** Rejected moves accumulate; this many within the window kicks. */
+    private const MAX_MOVE_VIOLATIONS = 5;
+    private const MOVE_VIOLATION_WINDOW_TICKS = 100;
+    // Chat: one message per 400ms minimum; commands 100ms.
+    private const CHAT_MIN_INTERVAL_SECONDS = 0.4;
+    private const COMMAND_MIN_INTERVAL_SECONDS = 0.1;
+    private const MAX_CHAT_LENGTH = 256;
+    // Login throttle: at most this many login attempts per IP per minute
+    // (generous enough for a NAT'd LAN, tight enough to stop a brute-force
+    // flood). Plus a hard cap on concurrent sessions per IP.
+    private const LOGIN_ATTEMPTS_PER_MINUTE = 30;
+    private const MAX_SESSIONS_PER_IP = 25;
+
     private ?Protocol84NetworkAdapter $adapter;
     private readonly World $world;
     private readonly PlayerJoinService $playerJoinService;
@@ -163,12 +185,20 @@ final class NetworkSessionService {
      *   breaking: array{x: int, y: int, z: int, startTick: int}|null,
      *   openContainer: array{x: int, y: int, z: int, type: string}|null,
      *   bowDraw: int|null,
-     *   lastWeather: int
+     *   lastWeather: int,
+     *   lastMoveTick: int,
+     *   moveViolations: int,
+     *   moveViolationStartTick: int,
+     *   teleportGraceTicks: int,
+     *   lastChatAt: float,
+     *   lastCommandAt: float
      * }>
      */
     private array $sessions = [];
     /** @var array<string, list<DataPacket>> addrKey => packets awaiting this poll's flush */
     private array $outbound = [];
+    /** Blocker 2: ip => [count, windowStart] login attempts (throttle). */
+    private array $loginAttempts = [];
 
     /**
      * Mob type name -> protocol-84 AddEntityPacket network id. These are the
@@ -284,6 +314,18 @@ final class NetworkSessionService {
         if ($this->adapter !== null) {
             $this->adapter->unregisterPlayer($session['playerRef']);
         }
+    }
+
+    /** Count established sessions connected from one IP host. */
+    private function countSessionsForIp(string $host): int {
+        $count = 0;
+        foreach ($this->sessions as $addrKey => $session) {
+            $h = str_contains($addrKey, ':') ? explode(':', $addrKey)[0] : $addrKey;
+            if ($h === $host) {
+                $count++;
+            }
+        }
+        return $count;
     }
 
     /**
@@ -422,6 +464,9 @@ final class NetworkSessionService {
             // The new world's weather must be pushed on the next poll (the
             // old world's state was already delivered to this client).
             $session['lastWeather'] = -1;
+            // Blocker 2: the hard move below was produced server-side - grace
+            // the client's converging moves so they are not flagged.
+            $session['teleportGraceTicks'] = 3;
             $this->sessions[$addrKey] = $session;
             $this->queueChunks($addrKey);
 
@@ -606,11 +651,39 @@ final class NetworkSessionService {
             ? UUID::fromString($pk->clientUUID)
             : UUID::fromData($addrKey, (string)$pk->clientId);
 
+        // Blocker 2: throttle login attempts per IP so a brute-forcer or a
+        // stuck reconnecting client cannot flood the login pipeline.
+        $host = str_contains($addrKey, ':') ? explode(':', $addrKey)[0] : $addrKey;
+        $now = time();
+        [$attempts, $windowStart] = $this->loginAttempts[$host] ?? [0, $now];
+        if ($now - $windowStart >= 60) {
+            $attempts = 0;
+            $windowStart = $now;
+        }
+        $attempts++;
+        $this->loginAttempts[$host] = [$attempts, $windowStart];
+        if ($attempts > self::LOGIN_ATTEMPTS_PER_MINUTE) {
+            $this->disconnectLogin($addrKey, 'Too many login attempts. Please try again later.');
+            return;
+        }
+        // Hard cap on concurrent sessions per IP (NAT-burst protection).
+        if ($this->countSessionsForIp($host) >= self::MAX_SESSIONS_PER_IP) {
+            $this->disconnectLogin($addrKey, 'Too many connections from your IP address.');
+            return;
+        }
+
+        // Blocker 1/2: enforce the max-players cap (server.properties
+        // max-players) before the ECS entity is created.
+        $maxPlayers = $this->getWorldConfig(0)?->maxPlayers ?? 20;
+        if (count($this->sessions) >= $maxPlayers) {
+            $this->disconnectLogin($addrKey, 'The server is full. Try again later.');
+            return;
+        }
+
         // Blocker 1: enforce bans and the whitelist BEFORE the ECS entity is
         // created. A rejected login gets a DisconnectPacket and nothing else.
         $lists = $this->resourceRegistry->get(\pocketmine\core\resource\PlayerListManager::class);
         if ($lists instanceof \pocketmine\core\resource\PlayerListManager) {
-            $host = str_contains($addrKey, ':') ? explode(':', $addrKey)[0] : $addrKey;
             if ($lists->isBanned($pk->username) || $lists->isBanned($uuid->toString()) || $lists->isIpBanned($host)) {
                 $this->disconnectLogin($addrKey, 'You have been banned from this server.');
                 return;
@@ -667,6 +740,13 @@ final class NetworkSessionService {
             // burst sends the current state explicitly, so tracking it here
             // means only actual transitions go out afterwards.
             'lastWeather' => $this->getWorldConfig(0)?->weather ?? 0,
+            // Blocker 2 anti-cheat / spam state.
+            'lastMoveTick' => $this->resourceRegistry->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0,
+            'moveViolations' => 0,
+            'moveViolationStartTick' => $this->resourceRegistry->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0,
+            'teleportGraceTicks' => 0,
+            'lastChatAt' => 0.0,
+            'lastCommandAt' => 0.0,
         ];
 
         // Blocker 1: an ops.txt operator gets the op permission on their
@@ -727,12 +807,24 @@ final class NetworkSessionService {
             return;
         }
         $pos = $entity->get(PositionComponent::class);
+        $rot = $entity->get(RotationComponent::class);
+
+        // Blocker 2 anti-cheat: validate the claimed move against the last
+        // server-known position BEFORE applying it. A too-fast move (speed /
+        // teleport hack) or an airborne ascent without creative/allow-flight
+        // is rejected: the client is rubber-banded back to the authoritative
+        // position, and repeated violations end in a kick.
+        if (!$this->validateMove($addrKey, $pk, $pos, $session)) {
+            return;
+        }
+        // Persist the accepted move's bookkeeping (lastMoveTick / grace).
+        $this->sessions[$addrKey] = $session;
+
         if ($pos !== null) {
             $pos->x = $pk->x;
             $pos->y = $pk->y;
             $pos->z = $pk->z;
         }
-        $rot = $entity->get(RotationComponent::class);
         if ($rot !== null) {
             $rot->yaw = $pk->yaw;
             $rot->pitch = $pk->pitch;
@@ -753,11 +845,87 @@ final class NetworkSessionService {
         }
     }
 
+    /**
+     * Blocker 2: is this client move acceptable? The server-owned position is
+     * authoritative; a move beyond the per-tick speed caps (teleport / speed
+     * hacks) or an unallowed vertical ascent (fly hacks) is rejected. On
+     * rejection the client is rubber-banded to the authoritative position and
+     * a violation is recorded - MAX_MOVE_VIOLATIONS inside the window kicks.
+     *
+     * @param array<string, mixed> $session
+     */
+    private function validateMove(string $addrKey, MovePlayerPacket $pk, ?PositionComponent $pos, array &$session): bool {
+        if ($pos === null) {
+            return true;
+        }
+        $tick = $this->resourceRegistry->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0;
+        // After a server teleport the client's in-flight moves were produced
+        // at the old position: grace a few ticks so they converge without
+        // being flagged, then return to strict validation.
+        if (($session['teleportGraceTicks'] ?? 0) > 0) {
+            $session['teleportGraceTicks']--;
+            $session['lastMoveTick'] = $tick;
+            return true;
+        }
+
+        // Normalize by the ticks between accepted moves so a client that lags
+        // (covers more distance in one packet) is not falsely flagged.
+        $ticks = max(1, $tick - $session['lastMoveTick']);
+        $session['lastMoveTick'] = $tick;
+
+        $dx = $pk->x - $pos->x;
+        $dy = $pk->y - $pos->y;
+        $dz = $pk->z - $pos->z;
+        $horizontal = sqrt($dx * $dx + $dz * $dz) / $ticks;
+        $total = sqrt($dx * $dx + $dy * $dy + $dz * $dz) / $ticks;
+
+        // Creative flight and the allow-flight property are the only legal
+        // ways to ascend freely.
+        $entity = $session['entityRef']->getEntity();
+        $creative = $entity?->get(MetadataComponent::class)?->get('gamemode') === 1;
+        $allowFlight = \pocketmine\api\server\Server::getInstance()->isAllowFlight();
+
+        $violation = false;
+        if ($total > self::MAX_MOVE_TOTAL_PER_TICK || $horizontal > self::MAX_MOVE_HORIZONTAL_PER_TICK) {
+            $violation = true; // speed / teleport hack
+        } elseif ($dy > self::MAX_MOVE_ASCENT_PER_TICK * $ticks && !$creative && !$allowFlight) {
+            $violation = true; // flying without permission
+        }
+        if (!$violation) {
+            // Reset the violation counter on a clean streak.
+            if ($session['moveViolations'] > 0 && $tick - $session['moveViolationStartTick'] > self::MOVE_VIOLATION_WINDOW_TICKS) {
+                $session['moveViolations'] = 0;
+            }
+            return true;
+        }
+
+        // Reject: do not apply the move; snap the client back to the
+        // authoritative position and count the violation. No teleport grace -
+        // the next move is validated strictly so a repeat hack is still caught.
+        $session['moveViolations']++;
+        $session['moveViolationStartTick'] = $tick;
+        $this->sendTeleportTo($session['playerRef']->entityId, $pos->x, $pos->y, $pos->z, false);
+        if ($session['moveViolations'] >= self::MAX_MOVE_VIOLATIONS) {
+            $this->kick($session['playerRef']->entityId, 'Movement speed exceeded');
+        }
+        $this->sessions[$addrKey] = $session;
+        return false;
+    }
+
     private function handleChat(string $addrKey, TextPacket $pk): void {
         $session = $this->sessions[$addrKey] ?? null;
         if ($session === null) {
             return;
         }
+        // Blocker 2: oversized or too-frequent chat is dropped (spam limit).
+        $now = microtime(true);
+        if (strlen($pk->message) > self::MAX_CHAT_LENGTH
+            || $now - $session['lastChatAt'] < self::CHAT_MIN_INTERVAL_SECONDS) {
+            return;
+        }
+        $session['lastChatAt'] = $now;
+        $this->sessions[$addrKey] = $session;
+
         // Commands: a leading '/' routes to the server-wide command map
         // instead of being broadcast as chat (legacy command handling; the
         // same map the console and plugins use, so builtins + plugin commands
@@ -779,6 +947,16 @@ final class NetworkSessionService {
         if ($session === null) {
             return;
         }
+        // Blocker 2: command spam throttle (100ms between commands). A flood
+        // of commands is dropped silently - the legitimate caller never
+        // notices, the macro spammer gets nothing.
+        $now = microtime(true);
+        if ($now - $session['lastCommandAt'] < self::COMMAND_MIN_INTERVAL_SECONDS) {
+            return;
+        }
+        $session['lastCommandAt'] = $now;
+        $this->sessions[$addrKey] = $session;
+
         $sender = new PlayerCommandSender(
             $session['playerRef']->entityId,
             $session['username'],
@@ -835,8 +1013,8 @@ final class NetworkSessionService {
      * broadcast moves them for every viewer) and send an immediate
      * MovePlayerPacket (MODE_RESET) to the actor.
      */
-    public function sendTeleportTo(int $entityId, float $x, float $y, float $z): void {
-        foreach ($this->sessions as $session) {
+    public function sendTeleportTo(int $entityId, float $x, float $y, float $z, bool $grace = true): void {
+        foreach ($this->sessions as $addrKey => $session) {
             if ($session['playerRef']->entityId !== $entityId) {
                 continue;
             }
@@ -860,6 +1038,25 @@ final class NetworkSessionService {
             $pk->mode = MovePlayerPacket::MODE_RESET;
             $pk->onGround = true;
             $this->queuePacket($session['playerRef'], $pk);
+            // Blocker 2: the client's in-flight move packets were produced at
+            // the OLD position - grace the next few ticks so converging moves
+            // are not misread as a teleport/speed hack. A rubber-band (grace
+            // off) keeps strict validation so the next hack is still caught.
+            if ($grace) {
+                $session['teleportGraceTicks'] = 3;
+            }
+            // A far teleport must stream the new area (walking across a chunk
+            // boundary re-queues in handleMove; a server teleport /tp must do
+            // the same - queueChunks is idempotent, already-sent chunks are
+            // skipped).
+            $chunkX = (int)floor($pos->x / 16);
+            $chunkZ = (int)floor($pos->z / 16);
+            if ($chunkX !== $session['lastChunkX'] || $chunkZ !== $session['lastChunkZ']) {
+                $session['lastChunkX'] = $chunkX;
+                $session['lastChunkZ'] = $chunkZ;
+                $this->queueChunks($addrKey);
+            }
+            $this->sessions[$addrKey] = $session;
             return;
         }
     }
@@ -1888,6 +2085,9 @@ final class NetworkSessionService {
         $move->mode = MovePlayerPacket::MODE_RESET;
         $move->onGround = true;
         $this->queuePacket($playerRef, $move);
+        // Blocker 2: the respawn teleport was server-side - grace the client's
+        // converging moves so they are not misread as a speed/fly hack.
+        $this->sessions[$addrKey]['teleportGraceTicks'] = 3;
 
         // Reset the HUD health bar (the per-tick pass also catches the jump).
         $hp = new SetHealthPacket();
