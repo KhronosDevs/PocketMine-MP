@@ -17,6 +17,7 @@ use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\ProjectileRegistry;
 use pocketmine\port\driven\StoragePort;
+use pocketmine\port\driving\EventPort;
 use function atan2;
 use function sqrt;
 
@@ -43,6 +44,7 @@ final class EntitySpawnService {
     public function __construct(
         private readonly World $world,
         private readonly StoragePort $storagePort,
+        private readonly EventPort $eventPort,
     ) {}
 
     public function spawnEntity(string $entityType, float $x, float $y, float $z, float $yaw = 0, float $pitch = 0, array $metadata = [], int $worldId = 0): EntityRef {
@@ -70,6 +72,12 @@ final class EntitySpawnService {
             // Apply type-specific initialization
             $this->initializeEntity($entityRef, $entityType);
         }
+
+        // Blocker 4: EntitySpawnEvent fires after initialization so the API
+        // entity carries its type metadata (Entity::wrap dispatches on it).
+        $this->eventPort->emit(new \pocketmine\api\event\EntitySpawnEvent(
+            \pocketmine\api\entity\Entity::wrap($entityRef, $this->world),
+        ));
 
         return $entityRef;
     }
@@ -120,6 +128,10 @@ final class EntitySpawnService {
                 $meta->set('pickupDelay', 10);
             }
         }
+
+        $this->eventPort->emit(new \pocketmine\api\event\EntitySpawnEvent(
+            \pocketmine\api\entity\Entity::wrap($entityRef, $this->world),
+        ));
 
         return $entityRef;
     }

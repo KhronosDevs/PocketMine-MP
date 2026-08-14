@@ -19,11 +19,13 @@ use pocketmine\core\resource\WorldRegistry;
 use pocketmine\core\resource\Hunger;
 use pocketmine\core\resource\ItemDurability;
 use pocketmine\port\driven\StoragePort;
+use pocketmine\port\driving\EventPort;
 
 final class BlockBreakService {
     public function __construct(
         private readonly World $world,
         private readonly StoragePort $storagePort,
+        private readonly EventPort $eventPort,
     ) {}
 
     public function breakBlock(EntityRef $playerRef, int $x, int $y, int $z, int $face): bool {
@@ -41,6 +43,17 @@ final class BlockBreakService {
             return false;
         }
         
+        // Blocker 4: cancellable BlockBreakEvent - a plugin can veto the
+        // break before anything mutates (block stays, no drops, no wear).
+        $event = new \pocketmine\api\event\BlockBreakEvent(
+            $this->wrapApiPlayer($playerRef),
+            $this->apiBlock($x, $y, $z, $worldId),
+        );
+        $this->eventPort->emit($event);
+        if ($event->isCancelled()) {
+            return false;
+        }
+
         // Get tool from player's hand
         $tool = $this->getHeldItem($playerRef);
         
@@ -277,5 +290,22 @@ final class BlockBreakService {
     private function getBlockRegistry(): BlockRegistry {
         $registry = $this->world->getResourceRegistry()->get(BlockRegistry::class);
         return $registry instanceof BlockRegistry ? $registry : new BlockRegistry();
+    }
+
+    private function wrapApiPlayer(EntityRef $ref): \pocketmine\api\entity\Player {
+        $entity = \pocketmine\api\entity\Entity::wrap($ref, $this->world);
+        return $entity instanceof \pocketmine\api\entity\Player
+            ? $entity
+            : new \pocketmine\api\entity\Player($ref, $this->world);
+    }
+
+    /**
+     * The API Block facade for a position in the player's world. Falls back
+     * to the default world when the world id has no registered bundle.
+     */
+    private function apiBlock(int $x, int $y, int $z, int $worldId = 0): \pocketmine\api\block\Block {
+        $server = \pocketmine\api\server\Server::getInstance();
+        $apiWorld = $server->getWorldById($worldId) ?? $server->getDefaultWorld();
+        return new \pocketmine\api\block\Block($apiWorld, $x, $y, $z);
     }
 }

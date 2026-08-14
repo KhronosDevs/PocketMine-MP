@@ -15,10 +15,12 @@ use pocketmine\core\component\WorldComponent;
 use pocketmine\core\resource\BlockRegistry;
 use pocketmine\core\resource\ChunkStore;
 use pocketmine\core\resource\WorldRegistry;
+use pocketmine\port\driving\EventPort;
 
 final class BlockPlaceService {
     public function __construct(
         private readonly World $world,
+        private readonly EventPort $eventPort,
     ) {}
 
     public function placeBlock(EntityRef $playerRef, int $x, int $y, int $z, int $face, int $blockId, int $meta = 0): bool {
@@ -41,7 +43,19 @@ final class BlockPlaceService {
         if (!$this->isValidPlacement($x, $y, $z, $this->worldIdOf($playerRef))) {
             return false;
         }
-        
+
+        // Blocker 4: cancellable BlockPlaceEvent - a plugin can veto the
+        // placement before the inventory item is consumed or the block set.
+        $event = new \pocketmine\api\event\BlockPlaceEvent(
+            $this->wrapApiPlayer($playerRef),
+            $this->apiBlock($x, $y, $z, $this->worldIdOf($playerRef)),
+            $face,
+        );
+        $this->eventPort->emit($event);
+        if ($event->isCancelled()) {
+            return false;
+        }
+
         // Consume block from inventory
         $this->consumeBlock($playerRef, $blockId, $meta);
         
@@ -150,6 +164,23 @@ final class BlockPlaceService {
     private function getBlockRegistry(): BlockRegistry {
         $registry = $this->world->getResourceRegistry()->get(BlockRegistry::class);
         return $registry instanceof BlockRegistry ? $registry : new BlockRegistry();
+    }
+
+    private function wrapApiPlayer(EntityRef $ref): \pocketmine\api\entity\Player {
+        $entity = \pocketmine\api\entity\Entity::wrap($ref, $this->world);
+        return $entity instanceof \pocketmine\api\entity\Player
+            ? $entity
+            : new \pocketmine\api\entity\Player($ref, $this->world);
+    }
+
+    /**
+     * The API Block facade for a position in the player's world. Falls back
+     * to the default world when the world id has no registered bundle.
+     */
+    private function apiBlock(int $x, int $y, int $z, int $worldId = 0): \pocketmine\api\block\Block {
+        $server = \pocketmine\api\server\Server::getInstance();
+        $apiWorld = $server->getWorldById($worldId) ?? $server->getDefaultWorld();
+        return new \pocketmine\api\block\Block($apiWorld, $x, $y, $z);
     }
 
     private function playPlaceEffects(int $x, int $y, int $z, int $blockId): void {
