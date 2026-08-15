@@ -179,12 +179,19 @@ final class BlockBreakService {
     }
 
     private function doBreakBlock(EntityRef $playerRef, int $x, int $y, int $z, ?ItemStack $tool, int $worldId = 0): bool {
-        // Get block drops
-        $drops = $this->getBlockDrops($x, $y, $z, $tool, $worldId);
-        
+        // Creative mode drops nothing (legacy BlockBreakEvent defaults
+        // drops to [] unless the player is in survival).
+        $player = $playerRef->getEntity();
+        $metadata = $player?->get(MetadataComponent::class);
+        $creative = \pocketmine\core\enum\GameMode::coerce($metadata?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) === \pocketmine\core\enum\GameMode::Creative;
+
+        // Drops must be resolved BEFORE the block is cleared - getBlockDrops
+        // reads the block id out of the store.
+        $drops = $creative ? [] : $this->getBlockDrops($x, $y, $z, $tool, $worldId);
+
         // Set block to air
         $this->setBlock($x, $y, $z, 0, $worldId); // Air
-        
+
         // Spawn drop entities
         foreach ($drops as $drop) {
             $this->spawnDropEntity($x + 0.5, $y + 0.5, $z + 0.5, $drop, $worldId);
@@ -238,7 +245,7 @@ final class BlockBreakService {
     }
 
     private function spawnDropEntity(float $x, float $y, float $z, \pocketmine\core\component\ItemStack $item, int $worldId = 0): void {
-        $this->world->spawn(
+        $entityRef = $this->world->spawn(
             (new \pocketmine\core\ecs\EntityBuilder())
                 ->with(new \pocketmine\core\component\PositionComponent($x, $y, $z))
                 ->with(new \pocketmine\core\component\VelocityComponent(
@@ -251,11 +258,20 @@ final class BlockBreakService {
                 ->with(new \pocketmine\core\component\MetadataComponent())
                 ->with(new \pocketmine\core\component\WorldComponent($worldId))
                 ->withTag(\pocketmine\core\constants\EntityTags::ITEM)
-                
         );
-        
-        // Set the item in the entity's inventory
-        // This would need to be done after spawn
+
+        // A drop is only visible/pickup-able once its item is in the
+        // metadata (the network renderer keys AddItemEntityPacket off
+        // MetadataKeys::ITEM). Mirror EntitySpawnService::spawnItem.
+        $entity = $entityRef->getEntity();
+        if ($entity) {
+            $meta = $entity->get(MetadataComponent::class);
+            if ($meta) {
+                $meta->set(\pocketmine\core\constants\MetadataKeys::ENTITY_TYPE, 'item');
+                $meta->set(\pocketmine\core\constants\MetadataKeys::ITEM, $item);
+                $meta->set(\pocketmine\core\constants\MetadataKeys::PICKUP_DELAY, 10);
+            }
+        }
     }
 
     private function playBreakEffects(int $x, int $y, int $z): void {

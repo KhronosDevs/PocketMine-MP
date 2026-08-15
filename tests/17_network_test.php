@@ -1460,6 +1460,102 @@ test('an instant RemoveBlock confirm is rejected (no insta-mining)', function ()
     ok($store->getBlock($bx, $by, $bz) === $before, 'block survives an instant confirm');
 });
 
+test('creative mode breaks instantly on REMOVE_BLOCK alone (no crack, no START_BREAK)', function () use ($client, $kernel): void {
+    // The 0.15 creative client never sends ACTION_START_BREAK: blocks break
+    // instantly with no crack animation, so only REMOVE_BLOCK arrives. The
+    // server must honour it without an in-progress break.
+    $eid = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $eid = $p['entityId'];
+            break;
+        }
+    }
+    ok($eid !== null, 'Alice online');
+    $entity = $kernel->getWorld()->getEntity($eid);
+    $meta = $entity?->get(\pocketmine\core\component\MetadataComponent::class);
+    if ($meta !== null) {
+        $meta->set('gamemode', 1); // creative
+    }
+
+    [$bx, $by, $bz] = findSurfaceBlockNearSpawn($kernel);
+    teleportAliceOnto($kernel, $client, $bx, $by, $bz);
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+    ok($store !== null && $store->getBlock($bx, $by, $bz) !== 0, 'target block is solid before break');
+
+    // Only REMOVE_BLOCK - no prior START_BREAK, no hold.
+    $rm = new RemoveBlockPacket();
+    $rm->eid = 0;
+    $rm->x = $bx;
+    $rm->y = $by;
+    $rm->z = $bz;
+    $client->sendGamePacket($rm);
+
+    $deadline = microtime(true) + 3.0;
+    while (microtime(true) < $deadline && ($store === null || $store->getBlock($bx, $by, $bz) !== 0)) {
+        $kernel->run(1);
+        $client->readGamePackets();
+        usleep(10000);
+    }
+    ok($store !== null && $store->getBlock($bx, $by, $bz) === 0, 'creative REMOVE_BLOCK breaks the block');
+
+    // Back to survival for the rest of the suite.
+    if ($meta !== null) {
+        $meta->set('gamemode', 0);
+    }
+});
+
+test('survival break drops the item with visible metadata (grass drops dirt)', function () use ($client, $kernel): void {
+    [$bx, $by, $bz] = findSurfaceBlockNearSpawn($kernel);
+    teleportAliceOnto($kernel, $client, $bx, $by, $bz);
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+    ok($store !== null, 'chunk store present');
+    if ($store === null) {
+        return;
+    }
+    $blockId = $store->getBlock($bx, $by, $bz);
+    ok($blockId !== 0, 'target block solid before break');
+
+    // Break via the service directly (the wire path is covered by the break
+    // tests): survival break must spawn a visible, pickup-able drop.
+    $eid = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $eid = $p['entityId'];
+            break;
+        }
+    }
+    ok($eid !== null, 'Alice online');
+    $entity = $kernel->getWorld()->getEntity($eid);
+    $entity?->get(\pocketmine\core\component\MetadataComponent::class)?->set('gamemode', 0);
+
+    $kernel->getBlockBreakService()->breakBlock(
+        \pocketmine\core\ecs\EntityRef::create($eid, $kernel->getWorld()),
+        $bx, $by, $bz, 1,
+    );
+
+    // The expected drop: grass (2) -> dirt (3), otherwise the block itself.
+    $expected = $blockId === 2 ? 3 : $blockId;
+    $dropped = null;
+    foreach ($kernel->getWorld()->query()->with(\pocketmine\core\component\MetadataComponent::class)->build() as $e) {
+        $m = $e->get(\pocketmine\core\component\MetadataComponent::class);
+        if ($m !== null && $m->get('entityType') === 'item') {
+            $item = $m->get(\pocketmine\core\constants\MetadataKeys::ITEM);
+            if ($item instanceof \pocketmine\core\component\ItemStack && $item->itemId === $expected) {
+                $pos = $e->get(\pocketmine\core\component\PositionComponent::class);
+                if ($pos !== null && abs($pos->x - $bx - 0.5) < 2 && abs($pos->z - $bz - 0.5) < 2) {
+                    $dropped = $item;
+                    break;
+                }
+            }
+        }
+    }
+    ok($dropped instanceof \pocketmine\core\component\ItemStack, 'drop entity carries its item in metadata');
+    ok($store->getBlock($bx, $by, $bz) === 0, 'broken block is air in the world');
+});
+
 test('placing a block consumes inventory and broadcasts UpdateBlockPacket', function () use ($client, $kernel): void {
     // Ensure Alice holds planks (hotbar slot 0 of the starter kit).
     $me = new MobEquipmentPacket();

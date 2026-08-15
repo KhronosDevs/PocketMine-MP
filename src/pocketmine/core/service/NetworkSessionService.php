@@ -1184,6 +1184,16 @@ final class NetworkSessionService {
 
     private function finishBreak(string $addrKey, array $session, int $x, int $y, int $z): void {
         $breaking = $session['breaking'];
+        // Creative mode: the 0.15 client breaks instantly and sends only
+        // REMOVE_BLOCK_PACKET (no crack animation, no ACTION_START_BREAK), so
+        // there is never an in-progress break to time-check. Break directly.
+        $creative = \pocketmine\core\enum\GameMode::coerce(
+            $session['entityRef']->getEntity()?->get(MetadataComponent::class)?->get(MetadataKeys::GAMEMODE)
+        ) === \pocketmine\core\enum\GameMode::Creative;
+        if ($creative) {
+            $this->breakBlockNow($addrKey, $session, $x, $y, $z);
+            return;
+        }
         if ($breaking === null || $breaking['x'] !== $x || $breaking['y'] !== $y || $breaking['z'] !== $z) {
             return; // no in-progress break on this block (or moved away)
         }
@@ -1194,6 +1204,14 @@ final class NetworkSessionService {
         if ($required < 0 || $elapsed < $required) {
             return; // released early / hostile instant confirm: block stays
         }
+        $this->breakBlockNow($addrKey, $session, $x, $y, $z);
+    }
+
+    /**
+     * Shared tail of the break paths: remove the block, broadcast the new
+     * state, and clean up any container/furnace tile at the position.
+     */
+    private function breakBlockNow(string $addrKey, array $session, int $x, int $y, int $z): void {
         $wasChest = $this->isChestBlock($x, $y, $z, $session['worldId']);
         $wasFurnace = $this->isFurnaceBlock($x, $y, $z, $session['worldId']);
         if ($this->blockBreakService->breakBlock($session['entityRef'], $x, $y, $z, 1)) {
