@@ -64,7 +64,7 @@ final class ChunkSendService {
         
         foreach ($query as $entity) {
             $metadata = $entity->get(\pocketmine\core\component\MetadataComponent::class);
-            if ($metadata && $metadata->get('uniqueId') === $playerRef->uniqueId) {
+            if ($metadata && $metadata->get(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID) === $playerRef->uniqueId) {
                 return \pocketmine\core\ecs\EntityRef::create($entity->id, $this->world);
             }
         }

@@ -336,7 +336,9 @@ Spawning a mob and killing it, for example:
 ```php
 use pocketmine\core\component\ItemStack;
 
-$ref = $this->getEntitySpawnService()->spawnMob('Zombie', 100, 64, 100);
+use pocketmine\core\enum\EntityType;
+
+$ref = $this->getEntitySpawnService()->spawnMob(EntityType::Zombie, 100, 64, 100);
 $item = $this->getEntitySpawnService()->spawnItem(101, 65, 101, new ItemStack(1, 0, 5)); // 5 stone
 ```
 

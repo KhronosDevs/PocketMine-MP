@@ -29,7 +29,7 @@ class ItemEntity extends Entity {
 
     public function getItem(): ItemStack {
         $metadata = $this->ref->getMetadata();
-        $item = $metadata?->get('item');
+        $item = $metadata?->get(\pocketmine\core\constants\MetadataKeys::ITEM);
         return $item instanceof \pocketmine\core\component\ItemStack
             ? ItemStack::fromCore($item)
             : new ItemStack(0, 0, 0);
@@ -41,12 +41,12 @@ class ItemEntity extends Entity {
             $metadata = new \pocketmine\core\component\MetadataComponent();
             $this->ref->setComponent(\pocketmine\core\component\MetadataComponent::class, $metadata);
         }
-        $metadata->set('item', $item->toCore());
+        $metadata->set(\pocketmine\core\constants\MetadataKeys::ITEM, $item->toCore());
     }
 
     public function getPickupDelay(): int {
         $metadata = $this->ref->getMetadata();
-        return (int)($metadata?->get('pickupDelay') ?? 0);
+        return (int)($metadata?->get(\pocketmine\core\constants\MetadataKeys::PICKUP_DELAY) ?? 0);
     }
 
     public function setPickupDelay(int $ticks): void {

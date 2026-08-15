@@ -16,7 +16,7 @@ use pocketmine\core\resource\ProjectileRegistry;
 /**
  * Phase 14.17: bows / arrows.
  *
- * spawnProjectile('Arrow', ...) creates a projectile entity tagged with
+ * spawnProjectile(\pocketmine\core\enum\EntityType::Arrow, ...) creates a projectile entity tagged with
  * projectileType='Arrow'; the ArrowSystem ticks it: drag, gravity via the
  * generic pipeline, block stick, entity-hit damage (via CombatService), and
  * age-based despawn. The bow wire flow (USE_ITEM starts the draw,
@@ -46,9 +46,9 @@ for ($x = 6; $x <= 14; $x++) {
 }
 
 test('an arrow flies along its velocity and despawns after 1200 ticks', function () use ($kernel, $world, $pathY): void {
-    $shooter = $kernel->getEntitySpawnService()->spawnMob('Zombie', 30, $pathY, 30);
+    $shooter = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 30, $pathY, 30);
     $arrow = $kernel->getEntitySpawnService()->spawnProjectile(
-        'Arrow', 8, $pathY, 8, // start
+        \pocketmine\core\enum\EntityType::Arrow, 8, $pathY, 8, // start
         20, 0, 0,              // velocity (blocks/s), legacy 1 block/tick
         $shooter,
     );
@@ -79,9 +79,9 @@ test('an arrow sticks into a solid block (velocity zeroed, entity kept)', functi
         $chunks->setBlock(13, $y, 9, 1);
     }
 
-    $shooter = $kernel->getEntitySpawnService()->spawnMob('Zombie', 30, $pathY, 30);
+    $shooter = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 30, $pathY, 30);
     $arrow = $kernel->getEntitySpawnService()->spawnProjectile(
-        'Arrow', 8, $pathY, 8,
+        \pocketmine\core\enum\EntityType::Arrow, 8, $pathY, 8,
         20, 0, 0,
         $shooter,
     );
@@ -110,15 +110,15 @@ test('an arrow sticks into a solid block (velocity zeroed, entity kept)', functi
 });
 
 test('an arrow sticks into the entity it hits and rides it', function () use ($kernel, $world, $chunks, $pathY): void {
-    $shooter = $kernel->getEntitySpawnService()->spawnMob('Zombie', 30, $pathY, 30);
-    $target = $kernel->getEntitySpawnService()->spawnMob('Pig', 11, $pathY, 8);
+    $shooter = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 30, $pathY, 30);
+    $target = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Pig, 11, $pathY, 8);
     $targetId = $target->getId();
     $healthBefore = $world->getEntity($targetId)?->get(\pocketmine\core\component\HealthComponent::class)?->current;
     ok($healthBefore !== null && $healthBefore > 0, 'target pig alive before the hit');
 
     // Full-charge arrow speed (40 blocks/s) 1 block away: ~4 base damage.
     $arrow = $kernel->getEntitySpawnService()->spawnProjectile(
-        'Arrow', 10, $pathY, 8,
+        \pocketmine\core\enum\EntityType::Arrow, 10, $pathY, 8,
         40, 0, 0,
         $shooter,
     );
@@ -174,10 +174,10 @@ test('an arrow sticks into the entity it hits and rides it', function () use ($k
 });
 
 test('an arrow falls to the ground when its victim dies', function () use ($kernel, $world, $chunks, $pathY): void {
-    $shooter = $kernel->getEntitySpawnService()->spawnMob('Zombie', 30, $pathY, 30);
-    $target = $kernel->getEntitySpawnService()->spawnMob('Pig', 11, $pathY, 8);
+    $shooter = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 30, $pathY, 30);
+    $target = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Pig, 11, $pathY, 8);
     $arrow = $kernel->getEntitySpawnService()->spawnProjectile(
-        'Arrow', 10, $pathY, 8,
+        \pocketmine\core\enum\EntityType::Arrow, 10, $pathY, 8,
         40, 0, 0,
         $shooter,
     );
@@ -228,13 +228,13 @@ test('an arrow falls to the ground when its victim dies', function () use ($kern
 });
 
 test('a critical arrow deals at least the base arrow damage', function () use ($kernel, $world, $pathY): void {
-    $shooter = $kernel->getEntitySpawnService()->spawnMob('Zombie', 30, $pathY, 30);
-    $target = $kernel->getEntitySpawnService()->spawnMob('Pig', 11, $pathY, 9);
+    $shooter = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 30, $pathY, 30);
+    $target = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Pig, 11, $pathY, 9);
     $targetId = $target->getId();
     $healthBefore = $world->getEntity($targetId)?->get(\pocketmine\core\component\HealthComponent::class)?->current;
 
     $arrow = $kernel->getEntitySpawnService()->spawnProjectile(
-        'Arrow', 10, $pathY, 9,
+        \pocketmine\core\enum\EntityType::Arrow, 10, $pathY, 9,
         40, 0, 0,
         $shooter,
     );
@@ -249,9 +249,9 @@ test('a critical arrow deals at least the base arrow damage', function () use ($
 });
 
 test('arrow metadata carries the shooter id (used for attribution and rendering)', function () use ($kernel, $pathY): void {
-    $shooter = $kernel->getEntitySpawnService()->spawnMob('Zombie', 30, $pathY, 30);
+    $shooter = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 30, $pathY, 30);
     $arrow = $kernel->getEntitySpawnService()->spawnProjectile(
-        'Arrow', 8, $pathY, 8,
+        \pocketmine\core\enum\EntityType::Arrow, 8, $pathY, 8,
         10, 0, 0,
         $shooter,
     );
@@ -264,9 +264,9 @@ test('arrow metadata carries the shooter id (used for attribution and rendering)
 });
 
 test('an in-flight arrow points along its velocity (in-flight rendering)', function () use ($kernel, $world, $pathY): void {
-    $shooter = $kernel->getEntitySpawnService()->spawnMob('Zombie', 30, $pathY, 30);
+    $shooter = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 30, $pathY, 30);
     $arrow = $kernel->getEntitySpawnService()->spawnProjectile(
-        'Arrow', 8, $pathY, 8,
+        \pocketmine\core\enum\EntityType::Arrow, 8, $pathY, 8,
         10, 5, 0, // mostly +X, climbing
         $shooter,
     );
@@ -300,11 +300,13 @@ test('the projectile registry is the single source of truth for projectiles', fu
         same(null, $registry->getNetworkId('NotAThing'), 'unknown names resolve to no network id');
     }
 
-    // Unknown projectile types are rejected at spawn (fail fast).
-    $shooter = $kernel->getEntitySpawnService()->spawnMob('Zombie', 30, $pathY, 30);
+    // Unknown projectile types are rejected at spawn (fail fast). A mob
+    // entity type is not a registered projectile, so spawnProjectile must
+    // reject it against the registry.
+    $shooter = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 30, $pathY, 30);
     $threw = false;
     try {
-        $kernel->getEntitySpawnService()->spawnProjectile('Snowball', 8, $pathY, 8, 10, 0, 0, $shooter);
+        $kernel->getEntitySpawnService()->spawnProjectile(\pocketmine\core\enum\EntityType::Zombie, 8, $pathY, 8, 10, 0, 0, $shooter);
     } catch (\InvalidArgumentException) {
         $threw = true;
     }

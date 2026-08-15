@@ -22,99 +22,99 @@ class Player extends Entity
     public function getName(): string
     {
         $metadata = $this->getMetadata();
-        return $metadata->get('username', 'Player_' . $this->getId());
+        return $metadata->get(\pocketmine\core\constants\MetadataKeys::USERNAME, 'Player_' . $this->getId());
     }
 
     public function setName(string $name): void
     {
-        $this->getMetadata()->set('username', $name);
+        $this->getMetadata()->set(\pocketmine\core\constants\MetadataKeys::USERNAME, $name);
     }
 
     public function getDisplayName(): string
     {
         $metadata = $this->getMetadata();
-        return $metadata->get('displayName', $this->getName());
+        return $metadata->get(\pocketmine\core\constants\MetadataKeys::DISPLAY_NAME, $this->getName());
     }
 
     public function setDisplayName(string $name): void
     {
-        $this->getMetadata()->set('displayName', $name);
+        $this->getMetadata()->set(\pocketmine\core\constants\MetadataKeys::DISPLAY_NAME, $name);
     }
 
     public function getSkin(): array
     {
         $metadata = $this->getMetadata();
         return [
-            'skinId' => $metadata->get('skinId', ''),
-            'skinData' => $metadata->get('skinData', ''),
+            'skinId' => $metadata->get(\pocketmine\core\constants\MetadataKeys::SKIN_ID, ''),
+            'skinData' => $metadata->get(\pocketmine\core\constants\MetadataKeys::SKIN_DATA, ''),
         ];
     }
 
     public function setSkin(string $skinId, string $skinData): void
     {
         $metadata = $this->getMetadata();
-        $metadata->set('skinId', $skinId);
-        $metadata->set('skinData', $skinData);
+        $metadata->set(\pocketmine\core\constants\MetadataKeys::SKIN_ID, $skinId);
+        $metadata->set(\pocketmine\core\constants\MetadataKeys::SKIN_DATA, $skinData);
     }
 
     public function getGamemode(): int
     {
         $metadata = $this->getMetadata();
-        return $metadata->get('gamemode', 0);
+        return \pocketmine\core\enum\GameMode::coerce($metadata->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE))->value;
     }
 
     public function setGamemode(int $gamemode): void
     {
         $metadata = $this->getMetadata();
-        $metadata->set('gamemode', $gamemode);
+        $metadata->set(\pocketmine\core\constants\MetadataKeys::GAMEMODE, \pocketmine\core\enum\GameMode::coerce($gamemode)->value);
     }
 
     public function getExperience(): int
     {
         $metadata = $this->getMetadata();
-        return $metadata->get('experience', 0);
+        return $metadata->get(\pocketmine\core\constants\MetadataKeys::EXPERIENCE, 0);
     }
 
     public function setExperience(int $exp): void
     {
         $metadata = $this->getMetadata();
-        $metadata->set('experience', $exp);
+        $metadata->set(\pocketmine\core\constants\MetadataKeys::EXPERIENCE, $exp);
     }
 
     public function getLevel(): int
     {
         $attributes = $this->getAttributes();
-        return (int)$attributes->get('experience_level');
+        return (int)$attributes->get(\pocketmine\core\constants\AttributeKeys::EXPERIENCE_LEVEL);
     }
 
     public function setLevel(int $level): void
     {
         $attributes = $this->getAttributes();
-        $attributes->set('experience_level', (float)$level);
+        $attributes->set(\pocketmine\core\constants\AttributeKeys::EXPERIENCE_LEVEL, (float)$level);
     }
 
     public function getFoodLevel(): float
     {
         $attributes = $this->getAttributes();
-        return $attributes->get('hunger');
+        return $attributes->get(\pocketmine\core\constants\AttributeKeys::HUNGER);
     }
 
     public function setFoodLevel(float $level): void
     {
         $attributes = $this->getAttributes();
-        $attributes->set('hunger', max(0, min(20, $level)));
+        $attributes->set(\pocketmine\core\constants\AttributeKeys::HUNGER, max(0, min(20, $level)));
     }
 
     public function getSaturation(): float
     {
         $attributes = $this->getAttributes();
-        return $attributes->get('saturation');
+        return $attributes->get(\pocketmine\core\constants\AttributeKeys::SATURATION);
     }
 
     public function getExhaustion(): float
     {
         $attributes = $this->getAttributes();
-        return $attributes->get('exhaustion');
+        return $attributes->get(\pocketmine\core\constants\AttributeKeys::EXHAUSTION);
     }
 
     public function isOp(): bool
@@ -125,7 +125,7 @@ class Player extends Entity
     public function setOp(bool $op): void
     {
         $metadata = $this->getMetadata();
-        $perms = $metadata->get('permissions', []);
+        $perms = $metadata->get(\pocketmine\core\constants\MetadataKeys::PERMISSIONS, []);
         if ($op) {
             if (!in_array('pocketmine.op', $perms)) {
                 $perms[] = 'pocketmine.op';
@@ -133,7 +133,7 @@ class Player extends Entity
         } else {
             $perms = array_diff($perms, ['pocketmine.op']);
         }
-        $metadata->set('permissions', $perms);
+        $metadata->set(\pocketmine\core\constants\MetadataKeys::PERMISSIONS, $perms);
     }
 
     public function hasPermission(string $permission): bool
@@ -145,7 +145,7 @@ class Player extends Entity
             return $kernel->getPermissionManager()->hasPermission($this, $permission);
         }
         $metadata = $this->getMetadata();
-        $perms = $metadata->get('permissions', []);
+        $perms = $metadata->get(\pocketmine\core\constants\MetadataKeys::PERMISSIONS, []);
         return in_array($permission, $perms) || in_array('*', $perms) || in_array('pocketmine.op', $perms);
     }
 
@@ -189,10 +189,10 @@ class Player extends Entity
     public function getEnderChestInventory(): InventoryComponent
     {
         $metadata = $this->getMetadata();
-        $enderChest = $metadata->get('enderChestInventory');
+        $enderChest = $metadata->get(\pocketmine\core\constants\MetadataKeys::ENDER_CHEST_INVENTORY);
         if (!$enderChest) {
             $enderChest = new \pocketmine\core\component\InventoryComponent(27);
-            $metadata->set('enderChestInventory', $enderChest);
+            $metadata->set(\pocketmine\core\constants\MetadataKeys::ENDER_CHEST_INVENTORY, $enderChest);
         }
         return $enderChest;
     }
@@ -200,9 +200,9 @@ class Player extends Entity
     public function getExperienceProgress(): float
     {
         $attributes = $this->getAttributes();
-        $level = (int)$attributes->get('experience_level');
+        $level = (int)$attributes->get(\pocketmine\core\constants\AttributeKeys::EXPERIENCE_LEVEL);
         if ($level <= 0) return 0;
-        $xp = $attributes->get('experience');
+        $xp = $attributes->get(\pocketmine\core\constants\AttributeKeys::EXPERIENCE);
         $required = $this->getXpRequiredForLevel($level);
         return $required > 0 ? $xp / $required : 0;
     }
@@ -245,31 +245,31 @@ class Player extends Entity
     public function isOnline(): bool
     {
         $metadata = $this->getMetadata();
-        return $metadata->get('online', false);
+        return $metadata->get(\pocketmine\core\constants\MetadataKeys::ONLINE, false);
     }
 
     public function setOnline(bool $online): void
     {
         $metadata = $this->getMetadata();
-        $metadata->set('online', $online);
+        $metadata->set(\pocketmine\core\constants\MetadataKeys::ONLINE, $online);
     }
 
     public function getAddress(): string
     {
         $metadata = $this->getMetadata();
-        return $metadata->get('address', '');
+        return $metadata->get(\pocketmine\core\constants\MetadataKeys::ADDRESS, '');
     }
 
     public function getClientId(): int
     {
         $metadata = $this->getMetadata();
-        return $metadata->get('clientId', 0);
+        return $metadata->get(\pocketmine\core\constants\MetadataKeys::CLIENT_ID, 0);
     }
 
     public function getPing(): int
     {
         $metadata = $this->getMetadata();
-        return $metadata->get('ping', 0);
+        return $metadata->get(\pocketmine\core\constants\MetadataKeys::PING, 0);
     }
 
     public function kick(string $reason = ''): void
@@ -283,7 +283,7 @@ class Player extends Entity
             );
             $kernel->getNetworkPort()->disconnect($ref, $reason);
         }
-        $this->getMetadata()->set('online', false);
+        $this->getMetadata()->set(\pocketmine\core\constants\MetadataKeys::ONLINE, false);
     }
 
     public function teleport(float $x, float $y, float $z, float $yaw = 0, float $pitch = 0): bool
@@ -299,12 +299,12 @@ class Player extends Entity
     public function getAbsorption(): float
     {
         $metadata = $this->getMetadata();
-        return (float)$metadata->get('absorption', 0);
+        return (float)$metadata->get(\pocketmine\core\constants\MetadataKeys::ABSORPTION, 0);
     }
 
     public function setAbsorption(float $amount): void
     {
-        $this->getMetadata()->set('absorption', max(0.0, $amount));
+        $this->getMetadata()->set(\pocketmine\core\constants\MetadataKeys::ABSORPTION, max(0.0, $amount));
     }
 }
 

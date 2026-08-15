@@ -15,7 +15,11 @@ use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\component\tags\DeadTag;
 use pocketmine\core\component\tags\PlayerTag;
+use pocketmine\core\constants\ItemIds;
+use pocketmine\core\constants\MetadataKeys;
 use pocketmine\core\ecs\EntityBuilder;
+use pocketmine\core\enum\EntityType;
+use pocketmine\core\enum\GameMode;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\Hunger;
@@ -32,14 +36,14 @@ final class CombatService {
      * @var array<string, list<array{0: int, 1: int, 2: int, 3: float}>>
      */
     private const MOB_LOOT = [
-        'Zombie' => [[367, 0, 2, 1.0], [263, 0, 1, 0.25]],   // rotten flesh, coal
-        'Skeleton' => [[352, 0, 2, 1.0], [262, 0, 2, 0.5]],  // bone, arrow
-        'Creeper' => [[289, 0, 2, 1.0]],                     // gunpowder
-        'Spider' => [[287, 0, 2, 1.0], [375, 0, 1, 0.33]],   // string, spider eye
-        'Cow' => [[363, 1, 3, 1.0], [334, 0, 2, 0.75]],      // raw beef, leather
-        'Pig' => [[319, 1, 3, 1.0]],                         // raw porkchop
-        'Sheep' => [[35, 1, 2, 1.0], [418, 1, 2, 1.0]],      // wool, mutton
-        'Chicken' => [[365, 1, 1, 1.0], [288, 0, 2, 0.5]],   // raw chicken, feather
+        EntityType::Zombie->value => [[ItemIds::ROTTEN_FLESH, 0, 2, 1.0], [ItemIds::COAL, 0, 1, 0.25]],
+        EntityType::Skeleton->value => [[ItemIds::BONE, 0, 2, 1.0], [ItemIds::ARROW, 0, 2, 0.5]],
+        EntityType::Creeper->value => [[ItemIds::GUNPOWDER, 0, 2, 1.0]],
+        EntityType::Spider->value => [[ItemIds::STRING, 0, 2, 1.0], [ItemIds::SPIDER_EYE, 0, 1, 0.33]],
+        EntityType::Cow->value => [[ItemIds::RAW_BEEF, 1, 3, 1.0], [ItemIds::LEATHER, 0, 2, 0.75]],
+        EntityType::Pig->value => [[ItemIds::RAW_PORKCHOP, 1, 3, 1.0]],
+        EntityType::Sheep->value => [[ItemIds::WOOL, 1, 2, 1.0], [ItemIds::MUTTON, 1, 2, 1.0]],
+        EntityType::Chicken->value => [[ItemIds::RAW_CHICKEN, 1, 1, 1.0], [ItemIds::FEATHER, 0, 2, 0.5]],
     ];
 
     public function __construct(
@@ -66,7 +70,7 @@ final class CombatService {
         // so command kills keep working in creative.
         if ($cause === EntityDamageEvent::CAUSE_ENTITY_ATTACK) {
             $meta = $target->get(\pocketmine\core\component\MetadataComponent::class);
-            if ($meta !== null && ($meta->get('gamemode') ?? 0) === 1) {
+            if ($meta !== null && GameMode::coerce($meta->get(MetadataKeys::GAMEMODE)) === GameMode::Creative) {
                 return false;
             }
         }
@@ -347,7 +351,7 @@ final class CombatService {
                 ->with(new HealthComponent(1, 1))
                 ->with(new MetadataComponent(['xp' => $xpAmount]))
                 ->with(new \pocketmine\core\component\WorldComponent($worldId))
-                ->withTag('xp_orb')
+                ->withTag(\pocketmine\core\constants\EntityTags::XP_ORB)
         );
     }
 
@@ -356,13 +360,15 @@ final class CombatService {
         if (!$entity) return 5;
 
         $meta = $entity->get(MetadataComponent::class);
-        $entityType = $meta?->get('entityType') ?? '';
+        $entityType = EntityType::tryFrom((string)($meta?->get(MetadataKeys::ENTITY_TYPE) ?? ''));
 
         return match ($entityType) {
-            'Zombie', 'Skeleton', 'Spider' => 5,
-            'Creeper' => 5,
-            'Cow', 'Pig', 'Sheep', 'Chicken' => 1 + mt_rand(0, 3),
-            default => $entity->has(PlayerTag::class) ? 7 : 5,
+            EntityType::Zombie, EntityType::Skeleton, EntityType::Spider => 5,
+            EntityType::Creeper => 5,
+            EntityType::Cow, EntityType::Pig, EntityType::Sheep, EntityType::Chicken => 1 + mt_rand(0, 3),
+            // Projectiles drop no XP when they despawn.
+            EntityType::Arrow => 0,
+            null => $entity->has(PlayerTag::class) ? 7 : 5,
         };
     }
 
@@ -384,9 +390,9 @@ final class CombatService {
 
         // 2. Drop mob loot table rolls.
         $meta = $entity->get(MetadataComponent::class);
-        $entityType = $meta?->get('entityType') ?? '';
+        $entityType = EntityType::tryFrom((string)($meta?->get(MetadataKeys::ENTITY_TYPE) ?? ''));
         $worldId = $this->worldIdOf($entityRef);
-        foreach (self::MOB_LOOT[$entityType] ?? [] as [$itemId, $min, $max, $chance]) {
+        foreach (self::MOB_LOOT[$entityType?->value ?? ''] ?? [] as [$itemId, $min, $max, $chance]) {
             if (mt_rand() / mt_getrandmax() > $chance) {
                 continue;
             }
@@ -419,12 +425,12 @@ final class CombatService {
         if (!$target) return '';
 
         $meta = $target->get(MetadataComponent::class);
-        $name = (string)($meta?->get('username') ?? $meta?->get('displayName') ?? 'Entity');
+        $name = (string)($meta?->get(MetadataKeys::USERNAME) ?? $meta?->get(MetadataKeys::DISPLAY_NAME) ?? 'Entity');
 
         if ($killerRef !== null) {
             $killer = $killerRef->getEntity();
             $killerMeta = $killer?->get(MetadataComponent::class);
-            $killerName = (string)($killerMeta?->get('username') ?? $killerMeta?->get('displayName') ?? 'Entity');
+            $killerName = (string)($killerMeta?->get(MetadataKeys::USERNAME) ?? $killerMeta?->get(MetadataKeys::DISPLAY_NAME) ?? 'Entity');
             return "$name was slain by $killerName";
         }
         return "$name died";
@@ -441,8 +447,8 @@ final class CombatService {
         $targetMeta = $target->get(MetadataComponent::class);
 
         if ($attackerMeta && $targetMeta) {
-            $attackerPvP = $attackerMeta->get('pvpEnabled') ?? true;
-            $targetPvP = $targetMeta->get('pvpEnabled') ?? true;
+            $attackerPvP = $attackerMeta->get(MetadataKeys::PVP_ENABLED) ?? true;
+            $targetPvP = $targetMeta->get(MetadataKeys::PVP_ENABLED) ?? true;
 
             if (!$attackerPvP || !$targetPvP) {
                 return false;

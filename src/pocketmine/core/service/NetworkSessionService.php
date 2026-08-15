@@ -15,6 +15,8 @@ use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\RotationComponent;
 use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\component\WorldComponent;
+use pocketmine\core\constants\ItemIds;
+use pocketmine\core\constants\MetadataKeys;
 use pocketmine\core\ecs\Entity;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\ResourceRegistry;
@@ -27,6 +29,9 @@ use pocketmine\core\resource\ProjectileRegistry;
 use pocketmine\core\resource\ChunkStore;
 use pocketmine\core\resource\ServerConfig;
 use pocketmine\core\resource\WorldConfig;
+use pocketmine\core\enum\Difficulty;
+use pocketmine\core\enum\EntityType;
+use pocketmine\core\enum\GameMode;
 use pocketmine\core\resource\WorldRegistry;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\PlayerRef;
@@ -194,20 +199,6 @@ final class NetworkSessionService {
     /** Blocker 2: ip => [count, windowStart] login attempts (throttle). */
     private array $loginAttempts = [];
 
-    /**
-     * Mob type name -> protocol-84 AddEntityPacket network id. These are the
-     * legacy Entity::NETWORK_ID values (authoritative for 0.15.x clients).
-     */
-    private const MOB_NETWORK_IDS = [
-        'Zombie' => 32,
-        'Skeleton' => 34,
-        'Creeper' => 33,
-        'Spider' => 35,
-        'Cow' => 11,
-        'Pig' => 12,
-        'Sheep' => 13,
-        'Chicken' => 10,
-    ];
     /** Movement packets are only re-sent when an entity moves this far. */
     private const MOVE_EPSILON = 0.01;
 
@@ -763,7 +754,7 @@ final class NetworkSessionService {
                     $perms = (array)$meta->get('permissions', []);
                     if (!in_array('pocketmine.op', $perms, true)) {
                         $perms[] = 'pocketmine.op';
-                        $meta->set('permissions', $perms);
+                        $meta->set(MetadataKeys::PERMISSIONS, $perms);
                     }
                 }
             }
@@ -904,7 +895,7 @@ final class NetworkSessionService {
         // Creative flight and the allow-flight property are the only legal
         // ways to ascend freely.
         $entity = $session['entityRef']->getEntity();
-        $creative = $entity?->get(MetadataComponent::class)?->get('gamemode') === 1;
+        $creative = GameMode::coerce($entity?->get(MetadataComponent::class)?->get(MetadataKeys::GAMEMODE)) === GameMode::Creative;
         $allowFlight = \pocketmine\api\server\Server::getInstance()->isAllowFlight();
 
         $violation = false;
@@ -1034,7 +1025,7 @@ final class NetworkSessionService {
      * flags; legacy parity for the 0.15 client). The authoritative gamemode
      * lives in MetadataComponent('gamemode') - this only mirrors it.
      */
-    public function sendGamemodeTo(int $entityId, int $mode): void {
+    public function sendGamemodeTo(int $entityId, GameMode $mode): void {
         foreach ($this->sessions as $session) {
             if ($session['playerRef']->entityId !== $entityId) {
                 continue;
@@ -1043,12 +1034,12 @@ final class NetworkSessionService {
             // both required to fully flip the client UI (hotbar, flight toggle,
             // block-breaking animation).
             $settings = new AdventureSettingsPacket();
-            $settings->flags = $mode === 1 ? 0x7D : 0x4E;
+            $settings->flags = $mode === GameMode::Creative ? AdventureSettingsPacket::FLAGS_CREATIVE : AdventureSettingsPacket::FLAGS_SURVIVAL;
             $settings->userPermission = 2;
             $settings->globalPermission = 2;
             $this->queuePacket($session['playerRef'], $settings);
             $typePk = new SetPlayerGameTypePacket();
-            $typePk->gamemode = $mode;
+            $typePk->gamemode = $mode->value;
             $this->queuePacket($session['playerRef'], $typePk);
             return;
         }
@@ -1240,7 +1231,7 @@ final class NetworkSessionService {
             return;
         }
         $held = $inventory->get($inventory->heldSlot);
-        if ($held === null || $held->itemId !== 261 || $held->count <= 0) {
+        if ($held === null || $held->itemId !== ItemIds::BOW || $held->count <= 0) {
             return; // no longer holding a bow
         }
 
@@ -1252,12 +1243,12 @@ final class NetworkSessionService {
             return; // released too fast / barely drawn (legacy cancel)
         }
 
-        $creative = ($entity->get(MetadataComponent::class)?->get('gamemode') ?? 0) === 1;
+        $creative = GameMode::coerce($entity->get(MetadataComponent::class)?->get(MetadataKeys::GAMEMODE)) === GameMode::Creative;
         // Survival needs an arrow in the inventory (any meta, legacy ARROW).
         $arrowSlot = -1;
         if (!$creative) {
             foreach ($inventory->getContents() as $slot => $item) {
-                if ($slot < InventoryComponent::ARMOR_OFFSET && $item->itemId === 262 && $item->count > 0) {
+                if ($slot < InventoryComponent::ARMOR_OFFSET && $item->itemId === ItemIds::ARROW && $item->count > 0) {
                     $arrowSlot = $slot;
                     break;
                 }
@@ -1283,7 +1274,7 @@ final class NetworkSessionService {
         $speed = $f * 20; // blocks/second
 
         $arrow = $this->entitySpawnService->spawnProjectile(
-            'Arrow',
+            EntityType::Arrow,
             $pos->x,
             $pos->y + 1.62, // eye height (legacy getEyeHeight())
             $pos->z,
@@ -1296,7 +1287,7 @@ final class NetworkSessionService {
         if ($arrowEntity) {
             $meta = $arrowEntity->get(MetadataComponent::class);
             if ($meta) {
-                $meta->set('critical', $f >= 2.0);
+                $meta->set(MetadataKeys::CRITICAL, $f >= 2.0);
             }
         }
 
@@ -1332,7 +1323,7 @@ final class NetworkSessionService {
         $store = $this->getChunkStore($session['worldId']);
         if ($store !== null) {
             $block = $store->getBlock($pk->x, $pk->y, $pk->z);
-            if ($block === 54) {
+            if ($block === ItemIds::CHEST) {
                 $this->openChest($addrKey, $pk->x, $pk->y, $pk->z);
                 return;
             }
@@ -1348,7 +1339,7 @@ final class NetworkSessionService {
         }
         // 14.17: a bow starts charging on use (legacy Player sets startAction
         // on USE_ITEM; the later ACTION_RELEASE_ITEM fires the arrow).
-        if ($held->itemId === 261) {
+        if ($held->itemId === ItemIds::BOW) {
             $session['bowDraw'] = $this->currentTick();
             $this->sessions[$addrKey] = $session;
             return;
@@ -2076,8 +2067,8 @@ final class NetworkSessionService {
                 continue;
             }
             $meta = $session['entityRef']->getEntity()?->get(MetadataComponent::class);
-            $xpLevel = (int)($meta?->get('xpLevel') ?? 0);
-            $xp = (int)($meta?->get('xp') ?? 0);
+            $xpLevel = (int)($meta?->get(MetadataKeys::XP_LEVEL) ?? 0);
+            $xp = (int)($meta?->get(MetadataKeys::XP) ?? 0);
             $need = self::xpNeedForLevel($xpLevel);
             $progress = $need > 0 ? min(1.0, $xp / $need) : 0.0;
 
@@ -2201,7 +2192,7 @@ final class NetworkSessionService {
 
     private function isChestBlock(int $x, int $y, int $z, int $worldId = 0): bool {
         $store = $this->getChunkStore($worldId);
-        return $store !== null && $store->getBlock($x, $y, $z) === 54;
+        return $store !== null && $store->getBlock($x, $y, $z) === ItemIds::CHEST;
     }
 
     /**
@@ -2311,7 +2302,7 @@ final class NetworkSessionService {
         // windowId 0x79 = player 2x2 crafting grid; 0x7e = crafting table
         // (3x3). The type field mirrors this (0 = small, 1 = big) but the
         // window id is the reliable discriminator on the 0.15.10 wire.
-        $gridWidth = ($pk->windowId === 0x7e || $pk->type === 1) ? 3 : 2;
+        $gridWidth = ($pk->windowId === CraftingEventPacket::WINDOW_CRAFTING_TABLE || $pk->type === CraftingEventPacket::TYPE_BIG) ? 3 : 2;
         $cells = $gridWidth * $gridWidth;
 
         $grid = [];
@@ -2465,7 +2456,7 @@ final class NetworkSessionService {
         // Gamemode from the player's metadata (saved on disconnect, or 0 for
         // fresh players). The client needs the initial mode to render the
         // correct UI (survival: hotbar, creative: flight toggle).
-        $startGame->gamemode = $entity?->get(\pocketmine\core\component\MetadataComponent::class)?->get('gamemode') ?? 0;
+        $startGame->gamemode = GameMode::coerce($entity?->get(\pocketmine\core\component\MetadataComponent::class)?->get(MetadataKeys::GAMEMODE))->value;
         $startGame->eid = 0; // protocol 84 always uses entity id 0 for the player
         $startGame->spawnX = $spawnX;
         $startGame->spawnY = $spawnY;
@@ -2495,7 +2486,7 @@ final class NetworkSessionService {
         $this->queuePacket($playerRef, $hp);
 
         $difficulty = new SetDifficultyPacket();
-        $difficulty->difficulty = $config instanceof ServerConfig ? $config->difficulty : 1;
+        $difficulty->difficulty = $config instanceof ServerConfig ? $config->difficulty->value : Difficulty::Easy->value;
         $this->queuePacket($playerRef, $difficulty);
 
         $settings = new AdventureSettingsPacket();
@@ -2820,7 +2811,7 @@ final class NetworkSessionService {
             return $this->buildAddPlayerPacket($playerSessions[$entityId]);
         }
         $meta = $entity->get(MetadataComponent::class);
-        $item = $meta?->get('item');
+        $item = $meta?->get(MetadataKeys::ITEM);
         if ($item instanceof ItemStack) {
             $pk = new AddItemEntityPacket();
             $pk->eid = $entityId;
@@ -2837,7 +2828,8 @@ final class NetworkSessionService {
         }
         // 14.9: XP orbs render as legacy XPOrb (network id 69) with the
         // DATA_NO_AI flag so the client does not give them mob AI behaviour.
-        if ($meta?->get('xp') !== null && $entity->has('xp_orb')) {            $pk = new AddEntityPacket();
+        if ($meta?->get(MetadataKeys::XP) !== null && $entity->has(\pocketmine\core\constants\EntityTags::XP_ORB)) {
+            $pk = new AddEntityPacket();
             $pk->eid = $entityId;
             $pk->type = 69; // legacy XPOrb::NETWORK_ID
             $pos = $entity->get(PositionComponent::class);
@@ -2857,7 +2849,7 @@ final class NetworkSessionService {
         // projectile types (snowballs, eggs, ...) render without touching
         // this method. Unregistered types return null so we never leak
         // garbage entity ids to clients.
-        $projectileType = $meta?->get('projectileType');
+        $projectileType = $meta?->get(MetadataKeys::PROJECTILE_TYPE);
         if (is_string($projectileType)) {
             $projectiles = $this->resourceRegistry->get(ProjectileRegistry::class);
             $networkId = $projectiles instanceof ProjectileRegistry ? $projectiles->getNetworkId($projectileType) : null;
@@ -2881,11 +2873,11 @@ final class NetworkSessionService {
             $pk->metadata = $this->legacyMetadataDefaults();
             // DATA_SHOOTER_ID (17): lets the client render the pulled-back bow
             // for the shooter (legacy Projectile::DATA_SHOOTER_ID).
-            $pk->metadata[17] = [\pocketmine\utils\Binary::DATA_TYPE_LONG, (int)$meta->get('shooterId', 0)];
+            $pk->metadata[17] = [\pocketmine\utils\Binary::DATA_TYPE_LONG, (int)$meta->get(MetadataKeys::SHOOTER_ID, 0)];
             return $pk;
         }
-        $type = $meta?->get('mobType') ?? $meta?->get('entityType');
-        $networkId = self::MOB_NETWORK_IDS[$type] ?? null;
+        $type = EntityType::tryFrom((string)($meta?->get(MetadataKeys::MOB_TYPE) ?? $meta?->get(MetadataKeys::ENTITY_TYPE) ?? ''));
+        $networkId = $type?->networkId();
         if ($networkId === null) {
             return null;
         }
@@ -2906,7 +2898,7 @@ final class NetworkSessionService {
         $pk->metadata = $this->legacyMetadataDefaults();
         // Override the nametag with the mob's type name (legacy mobs carried
         // their type as the nametag string).
-        $pk->metadata[2] = [\pocketmine\utils\Binary::DATA_TYPE_STRING, (string)$type];
+        $pk->metadata[2] = [\pocketmine\utils\Binary::DATA_TYPE_STRING, $type->value];
         return $pk;
     }
 

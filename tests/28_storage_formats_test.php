@@ -79,7 +79,7 @@ function fmt_sample_chunk(int $chunkX, int $chunkZ): ChunkData {
 
     $entity = new EntitySnapshot(
         'uuid-fmt-entity',
-        'Zombie',
+        \pocketmine\core\enum\EntityType::Zombie->value,
         1.5, 64.0, -3.25,
         90.0, 45.0,
         ['health' => '20', 'customName' => 'Bob']
@@ -271,7 +271,7 @@ test('anvil: legacy pre-NBT chunks still load (old worlds keep working)', functi
         same(1, ord($chunk->sections[0]['blocks'][$idx]), 'legacy stone at y=3');
         same(1, count($chunk->entities), 'legacy entity parsed');
         same('uuid-legacy', $chunk->entities[0]->id, 'legacy entity id');
-        same('Zombie', $chunk->entities[0]->type, 'legacy entity type');
+        same(\pocketmine\core\enum\EntityType::Zombie->value, $chunk->entities[0]->type, 'legacy entity type');
         same(['health' => '20'], $chunk->entities[0]->components, 'legacy entity components');
 
         // Re-saving converts the chunk to real Anvil NBT.

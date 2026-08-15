@@ -18,6 +18,14 @@ use pocketmine\utils\UUID;
 class CraftingEventPacket extends DataPacket {
     const NETWORK_ID = Info::CRAFTING_EVENT_PACKET;
 
+    /** 0x79 = player 2x2 crafting grid (windowId on the 0.15.10 wire). */
+    const WINDOW_PLAYER_CRAFTING = 0x79;
+    /** 0x7e = crafting table (3x3 grid). */
+    const WINDOW_CRAFTING_TABLE = 0x7e;
+    /** Crafting type: 0 = 2x2 (player grid), 1 = 3x3 (crafting table). */
+    const TYPE_SMALL = 0;
+    const TYPE_BIG = 1;
+
     public int $windowId = 0;
     public int $type = 0;
     public UUID $id;

@@ -50,7 +50,7 @@ class ItemStack {
     }
 
     public function isNull(): bool {
-        return $this->itemId === 0 || $this->count <= 0;
+        return $this->itemId === \pocketmine\core\constants\ItemIds::AIR || $this->count <= 0;
     }
 
     public function isSimilar(ItemStack $other): bool {

@@ -1814,7 +1814,7 @@ test('a spawned mob is broadcast as AddEntityPacket and followed with move/remov
     }
 
     // Spawn a zombie near Alice.
-    $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', $alice['x'] + 3, $alice['y'] + 1, $alice['z']);
+    $mob = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, $alice['x'] + 3, $alice['y'] + 1, $alice['z']);
     $mobEid = $mob->getId();
 
     $deadline = microtime(true) + 5.0;
@@ -2155,7 +2155,7 @@ test('attacking a mob via InteractPacket damages it and broadcasts the hurt anim
     // A zombie 2.5 blocks from Alice, at ground level: it settles on the
     // terrain (mobs have collision + gravity now) and stays inside the
     // 3-block attack reach of Alice's feet.
-    $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', $alice['x'] + 2.5, $alice['y'] - 1.0, $alice['z']);
+    $mob = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, $alice['x'] + 2.5, $alice['y'] - 1.0, $alice['z']);
     $mobEid = $mob->getId();
     $mobEntity = $kernel->getWorld()->getEntity($mobEid);
     $healthBefore = $mobEntity?->get(\pocketmine\core\component\HealthComponent::class)?->current;
@@ -2344,7 +2344,7 @@ test('a sword wears out on a landed attack', function () use ($kernel): void {
     $inv->set(0, new \pocketmine\core\component\ItemStack(268, 0, 1));
     $inv->setHeldSlot(0);
 
-    $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', $alice['x'] + 2.5, $alice['y'] - 1.0, $alice['z']);
+    $mob = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, $alice['x'] + 2.5, $alice['y'] - 1.0, $alice['z']);
     $mobRef = \pocketmine\core\ecs\EntityRef::create($mob->getId(), $kernel->getWorld());
     $aliceRef = \pocketmine\core\ecs\EntityRef::create($alice['entityId'], $kernel->getWorld());
 
@@ -2468,7 +2468,7 @@ test('armor reduces attack damage', function () use ($kernel): void {
         if ($alice === null) {
             return 0.0;
         }
-        $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', $alice['x'] + 2.5, $alice['y'] - 1.0, $alice['z']);
+        $mob = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, $alice['x'] + 2.5, $alice['y'] - 1.0, $alice['z']);
         $mobRef = \pocketmine\core\ecs\EntityRef::create($mob->getId(), $kernel->getWorld());
         $aliceRef = \pocketmine\core\ecs\EntityRef::create($alice['entityId'], $kernel->getWorld());
         $healthBefore = $kernel->getWorld()->getEntity($alice['entityId'])?->get(\pocketmine\core\component\HealthComponent::class)?->current ?? 20.0;
@@ -2534,7 +2534,7 @@ test('armor wears out on hits and breaks at max durability', function () use ($k
         if ($alice === null) {
             return;
         }
-        $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', $alice['x'] + 2.5, $alice['y'] - 1.0, $alice['z']);
+        $mob = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, $alice['x'] + 2.5, $alice['y'] - 1.0, $alice['z']);
         $mobRef = \pocketmine\core\ecs\EntityRef::create($mob->getId(), $kernel->getWorld());
         $aliceRef = \pocketmine\core\ecs\EntityRef::create($alice['entityId'], $kernel->getWorld());
         $kernel->getCombatService()->heal($aliceRef, 20);
@@ -2830,7 +2830,7 @@ test('attacking and mining add exhaustion', function () use ($kernel): void {
     // A landed sword hit (legacy CAUSE_ATTACK 0.3).
     $inv->set(0, new \pocketmine\core\component\ItemStack(268, 0, 1));
     $inv->setHeldSlot(0);
-    $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', $alice['x'] + 2.5, $alice['y'] - 1.0, $alice['z']);
+    $mob = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, $alice['x'] + 2.5, $alice['y'] - 1.0, $alice['z']);
     $mobRef = \pocketmine\core\ecs\EntityRef::create($mob->getId(), $kernel->getWorld());
     $landed = $kernel->getEntityInteractionService()->attack($aliceRef, $mobRef);
     ok($landed, 'attack landed');
@@ -2853,7 +2853,7 @@ test('an XP orb dropped by a mob death is broadcast as AddEntityPacket type 69',
 
     // Kill a zombie right next to Alice: the death pipeline drops an XP orb
     // (CombatService::dropExperience) at the death position.
-    $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', $alice['x'] + 2.0, $alice['y'] - 1.0, $alice['z']);
+    $mob = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, $alice['x'] + 2.0, $alice['y'] - 1.0, $alice['z']);
     $mobRef = \pocketmine\core\ecs\EntityRef::create($mob->getId(), $kernel->getWorld());
     $kernel->getCombatService()->applyDamage($mobRef, 1000.0);
 

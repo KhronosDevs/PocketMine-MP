@@ -47,7 +47,7 @@ final class EntityRef {
 
     public function getUniqueId(): ?string {
         $metadata = $this->getMetadata();
-        $value = $metadata?->get('uniqueId');
+        $value = $metadata?->get(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID);
         return is_string($value) ? $value : null;
     }
 

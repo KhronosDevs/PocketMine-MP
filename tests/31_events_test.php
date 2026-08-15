@@ -216,7 +216,7 @@ test('EntitySpawnEvent fires for mobs and item drops', function () use ($kernel,
         }
     });
 
-    $kernel->getEntitySpawnService()->spawnMob('Zombie', 500, 65, 500);
+    $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 500, 65, 500);
     $kernel->getEntitySpawnService()->spawnItem(501, 65, 501, new ItemStack(1, 0, 1));
     same(1, $mobs, 'EntitySpawnEvent fired for the mob');
     same(1, $items, 'EntitySpawnEvent fired for the item drop');

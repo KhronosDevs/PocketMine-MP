@@ -52,7 +52,7 @@ final class ContainerService {
         $playerMeta = $player->get(MetadataComponent::class);
         if (!$playerMeta) return;
         
-        $containerId = $playerMeta->get('openContainer');
+        $containerId = $playerMeta->get(\pocketmine\core\constants\MetadataKeys::OPEN_CONTAINER);
         if (!$containerId) return;
         
         $containerRef = \pocketmine\core\ecs\EntityRef::create($containerId, $this->world);
@@ -74,7 +74,7 @@ final class ContainerService {
         $playerMeta = $player->get(MetadataComponent::class);
         if (!$playerMeta) return null;
         
-        $containerId = $playerMeta->get('openContainer');
+        $containerId = $playerMeta->get(\pocketmine\core\constants\MetadataKeys::OPEN_CONTAINER);
         if (!$containerId) return null;
         
         $containerRef = \pocketmine\core\ecs\EntityRef::create($containerId, $this->world);
@@ -94,7 +94,7 @@ final class ContainerService {
         $playerMeta = $player->get(MetadataComponent::class);
         if (!$playerMeta) return false;
         
-        $containerId = $playerMeta->get('openContainer');
+        $containerId = $playerMeta->get(\pocketmine\core\constants\MetadataKeys::OPEN_CONTAINER);
         if (!$containerId) return false;
         
         $containerRef = \pocketmine\core\ecs\EntityRef::create($containerId, $this->world);
@@ -182,6 +182,6 @@ final class ContainerService {
         $meta = $container->get(MetadataComponent::class);
         if (!$meta) return 'chest';
         
-        return $meta->get('containerType') ?? 'chest';
+        return $meta->get(\pocketmine\core\constants\MetadataKeys::CONTAINER_TYPE) ?? 'chest';
     }
 }

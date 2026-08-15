@@ -1327,14 +1327,14 @@ final class Kernel {
                 'spawnX' => (string)($worldConfig?->spawnX ?? $config->spawnX),
                 'spawnY' => (string)($worldConfig?->spawnY ?? $config->spawnY),
                 'spawnZ' => (string)($worldConfig?->spawnZ ?? $config->spawnZ),
-                'difficulty' => (string)$config->difficulty,
+                'difficulty' => (string)$config->difficulty->value,
                 'time' => (string)($worldConfig?->time ?? 0),
                 // 14.22: resume the weather spell and its remaining duration.
                 'weather' => (string)($worldConfig?->weather ?? 0),
                 'weatherDuration' => (string)($worldConfig?->weatherDuration ?? 0),
                 // 14.20b: persist the world's generator (normal/flat/void) so
                 // it survives restarts and is restored on load.
-                'generator' => (string)($worldConfig?->generator ?? 'normal'),
+                'generator' => ($worldConfig?->generator ?? \pocketmine\core\enum\GeneratorType::Normal)->value,
             ]);
         }
     }
@@ -1772,9 +1772,9 @@ function applyServerProperties(NetworkPort $networkPort, ResourceRegistry $resou
         $serverConfig->pvpEnabled = \pocketmine\core\resource\ServerProperties::bool($props, 'pvp', $serverConfig->pvpEnabled);
         $serverConfig->spawnAnimals = \pocketmine\core\resource\ServerProperties::bool($props, 'spawn-animals', $serverConfig->spawnAnimals);
         $serverConfig->spawnMobs = \pocketmine\core\resource\ServerProperties::bool($props, 'spawn-mobs', $serverConfig->spawnMobs);
-        $serverConfig->difficulty = \pocketmine\core\resource\ServerProperties::int($props, 'difficulty', $serverConfig->difficulty);
+        $serverConfig->difficulty = \pocketmine\core\enum\Difficulty::coerce(\pocketmine\core\resource\ServerProperties::int($props, 'difficulty', $serverConfig->difficulty->value));
         $serverConfig->whiteList = \pocketmine\core\resource\ServerProperties::bool($props, 'white-list', $serverConfig->whiteList);
-        $serverConfig->defaultGameMode = \pocketmine\core\resource\ServerProperties::int($props, 'gamemode', $serverConfig->defaultGameMode);
+        $serverConfig->defaultGameMode = \pocketmine\core\enum\GameMode::coerce(\pocketmine\core\resource\ServerProperties::int($props, 'gamemode', $serverConfig->defaultGameMode->value));
         $serverConfig->autosaveIntervalTicks = max(1,
             \pocketmine\core\resource\ServerProperties::int($props, 'autosave-interval', 60) * 20
         );
@@ -1906,7 +1906,7 @@ function registerBuiltinProjectiles(ResourceRegistry $registry): void {
 
     // Arrow: legacy Arrow::NETWORK_ID 80, damage 2, gravity 0.05, drag 0.01,
     // sticky (embeds in entities it hits).
-    $projectiles->register('Arrow', 80, 2.0, 0.05, 0.01, true);
+    $projectiles->register(\pocketmine\core\enum\EntityType::Arrow->value, 80, 2.0, 0.05, 0.01, true);
 }
 
 function registerBuiltinRecipes(ResourceRegistry $registry): void {
@@ -1918,56 +1918,56 @@ function registerBuiltinRecipes(ResourceRegistry $registry): void {
     $recipes->registerShaped(
         'planks_from_log',
         ['L'],
-        ['L' => new \pocketmine\core\component\ItemStack(17, -1)], // any log (meta wildcard)
-        new \pocketmine\core\component\ItemStack(5, 0, 4),     // 4 planks
+        ['L' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::LOG, -1)], // any log (meta wildcard)
+        new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::PLANKS, 0, 4),
     );
     $recipes->registerShaped(
         'sticks',
         ['P', 'P'],
-        ['P' => new \pocketmine\core\component\ItemStack(5)],
-        new \pocketmine\core\component\ItemStack(280, 0, 4),   // 4 sticks
+        ['P' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::PLANKS)],
+        new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::STICK, 0, 4),
     );
     $recipes->registerShaped(
         'crafting_table',
         ['PP', 'PP'],
-        ['P' => new \pocketmine\core\component\ItemStack(5)],
-        new \pocketmine\core\component\ItemStack(58, 0, 1),
+        ['P' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::PLANKS)],
+        new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::CRAFTING_TABLE, 0, 1),
     );
     $recipes->registerShaped(
         'furnace',
         ['CCC', 'C C', 'CCC'],
-        ['C' => new \pocketmine\core\component\ItemStack(4)],
-        new \pocketmine\core\component\ItemStack(61, 0, 1),
+        ['C' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::COBBLESTONE)],
+        new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::FURNACE, 0, 1),
     );
     $recipes->registerShaped(
         'chest',
         ['PPP', 'P P', 'PPP'],
-        ['P' => new \pocketmine\core\component\ItemStack(5)],
-        new \pocketmine\core\component\ItemStack(54, 0, 1),
+        ['P' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::PLANKS)],
+        new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::CHEST, 0, 1),
     );
     $recipes->registerShaped(
         'wooden_pickaxe',
         ['PPP', ' S ', ' S '],
-        ['P' => new \pocketmine\core\component\ItemStack(5), 'S' => new \pocketmine\core\component\ItemStack(280)],
-        new \pocketmine\core\component\ItemStack(270, 0, 1),
+        ['P' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::PLANKS), 'S' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::STICK)],
+        new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::WOODEN_PICKAXE, 0, 1),
     );
     $recipes->registerShaped(
         'wooden_axe',
         ['PP ', 'PS ', ' S '],
-        ['P' => new \pocketmine\core\component\ItemStack(5), 'S' => new \pocketmine\core\component\ItemStack(280)],
-        new \pocketmine\core\component\ItemStack(271, 0, 1),
+        ['P' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::PLANKS), 'S' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::STICK)],
+        new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::WOODEN_AXE, 0, 1),
     );
     $recipes->registerShaped(
         'wooden_sword',
         ['P', 'P', 'S'],
-        ['P' => new \pocketmine\core\component\ItemStack(5), 'S' => new \pocketmine\core\component\ItemStack(280)],
-        new \pocketmine\core\component\ItemStack(268, 0, 1),
+        ['P' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::PLANKS), 'S' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::STICK)],
+        new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::WOODEN_SWORD, 0, 1),
     );
     $recipes->registerShaped(
         'torches',
         ['C', 'S'],
-        ['C' => new \pocketmine\core\component\ItemStack(263), 'S' => new \pocketmine\core\component\ItemStack(280)],
-        new \pocketmine\core\component\ItemStack(50, 0, 4),    // 4 torches
+        ['C' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::COAL), 'S' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::STICK)],
+        new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::TORCH, 0, 4),
     );
 
     // 14.16 furnace smelting recipes + fuel (legacy recipes.json type 2/3
@@ -1983,50 +1983,50 @@ function registerBuiltinSmelting(ResourceRegistry $registry): void {
     $item = static fn(int $id, int $meta = 0, int $count = 1) => new \pocketmine\core\component\ItemStack($id, $meta, $count);
 
     // Ores / blocks -> refined products.
-    $smelting->registerSmelting($item(4), $item(1));          // cobblestone -> stone
-    $smelting->registerSmelting($item(12), $item(20));        // sand -> glass
-    $smelting->registerSmelting($item(14), $item(266));       // gold ore -> gold ingot
-    $smelting->registerSmelting($item(15), $item(265));       // iron ore -> iron ingot
-    $smelting->registerSmelting($item(16), $item(263));       // coal ore -> coal
-    $smelting->registerSmelting($item(17, -1), $item(263, 1)); // logs -> charcoal
-    $smelting->registerSmelting($item(162, -1), $item(263, 1)); // acacia/dark oak logs -> charcoal
-    $smelting->registerSmelting($item(21), $item(351, 4));    // lapis ore -> lapis lazuli
-    $smelting->registerSmelting($item(56), $item(264));       // diamond ore -> diamond
-    $smelting->registerSmelting($item(73), $item(331));       // redstone ore -> redstone
-    $smelting->registerSmelting($item(81), $item(351, 2));    // cactus -> cactus green
-    $smelting->registerSmelting($item(82), $item(172));       // clay block -> hardened clay
-    $smelting->registerSmelting($item(87), $item(405));       // netherrack -> nether brick
-    $smelting->registerSmelting($item(129), $item(388));      // emerald ore -> emerald
-    $smelting->registerSmelting($item(153), $item(406));      // nether quartz ore -> quartz
-    $smelting->registerSmelting($item(98, 0), $item(98, 2));  // stone bricks -> cracked stone bricks
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::COBBLESTONE), $item(\pocketmine\core\constants\ItemIds::STONE));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::SAND), $item(\pocketmine\core\constants\ItemIds::GLASS));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::GOLD_ORE), $item(\pocketmine\core\constants\ItemIds::GOLD_INGOT));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::IRON_ORE), $item(\pocketmine\core\constants\ItemIds::IRON_INGOT));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::COAL_ORE), $item(\pocketmine\core\constants\ItemIds::COAL));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::LOG, -1), $item(\pocketmine\core\constants\ItemIds::COAL, 1)); // logs -> charcoal
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::LOG_ACACIA, -1), $item(\pocketmine\core\constants\ItemIds::COAL, 1)); // acacia/dark oak logs -> charcoal
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::LAPIS_ORE), $item(\pocketmine\core\constants\ItemIds::DYE, 4)); // lapis ore -> lapis lazuli
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::DIAMOND_ORE), $item(\pocketmine\core\constants\ItemIds::DIAMOND));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::REDSTONE_ORE), $item(\pocketmine\core\constants\ItemIds::REDSTONE));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::CACTUS), $item(\pocketmine\core\constants\ItemIds::DYE, 2)); // cactus -> cactus green
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::CLAY_BLOCK), $item(\pocketmine\core\constants\ItemIds::HARDENED_CLAY));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::NETHERRACK), $item(\pocketmine\core\constants\ItemIds::NETHER_BRICK));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::EMERALD_ORE), $item(\pocketmine\core\constants\ItemIds::EMERALD));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::NETHER_QUARTZ_ORE), $item(\pocketmine\core\constants\ItemIds::QUARTZ));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::STONE_BRICKS, 0), $item(\pocketmine\core\constants\ItemIds::STONE_BRICKS, 2)); // stone bricks -> cracked stone bricks
 
     // Food.
-    $smelting->registerSmelting($item(319), $item(320));      // raw porkchop -> cooked porkchop
-    $smelting->registerSmelting($item(337), $item(336));      // raw chicken -> cooked chicken
-    $smelting->registerSmelting($item(349), $item(350));      // raw fish -> cooked fish
-    $smelting->registerSmelting($item(363), $item(364));      // raw beef -> steak
-    $smelting->registerSmelting($item(365), $item(366));      // raw mutton -> cooked mutton
-    $smelting->registerSmelting($item(392), $item(393));      // potato -> baked potato
-    $smelting->registerSmelting($item(411), $item(412));      // raw rabbit -> cooked rabbit
-    $smelting->registerSmelting($item(460), $item(463));      // raw salmon -> cooked salmon
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::RAW_PORKCHOP), $item(\pocketmine\core\constants\ItemIds::COOKED_PORKCHOP));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::CLAY_BALL), $item(\pocketmine\core\constants\ItemIds::BRICK)); // clay ball -> brick
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::RAW_FISH), $item(\pocketmine\core\constants\ItemIds::COOKED_FISH));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::RAW_BEEF), $item(\pocketmine\core\constants\ItemIds::STEAK));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::RAW_CHICKEN), $item(\pocketmine\core\constants\ItemIds::COOKED_CHICKEN));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::POTATO), $item(\pocketmine\core\constants\ItemIds::BAKED_POTATO));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::RAW_RABBIT), $item(\pocketmine\core\constants\ItemIds::COOKED_RABBIT));
+    $smelting->registerSmelting($item(\pocketmine\core\constants\ItemIds::RAW_SALMON), $item(\pocketmine\core\constants\ItemIds::COOKED_SALMON));
 
     // Fuel (legacy Fuel::$duration; -1 = any meta).
-    $smelting->registerFuel(263, -1, 1600);    // coal
-    $smelting->registerFuel(173, -1, 16000);   // coal block
-    $smelting->registerFuel(17, -1, 300);      // logs
-    $smelting->registerFuel(162, -1, 300);     // acacia/dark oak logs
-    $smelting->registerFuel(5, -1, 300);       // planks
-    $smelting->registerFuel(6, -1, 100);       // sapling
-    $smelting->registerFuel(280, -1, 100);     // stick
-    $smelting->registerFuel(268, -1, 200);     // wooden sword
-    $smelting->registerFuel(269, -1, 200);     // wooden shovel
-    $smelting->registerFuel(270, -1, 200);     // wooden pickaxe
-    $smelting->registerFuel(271, -1, 200);     // wooden axe
-    $smelting->registerFuel(290, -1, 200);     // wooden hoe
-    $smelting->registerFuel(58, -1, 300);      // crafting table
-    $smelting->registerFuel(54, -1, 300);      // chest
-    $smelting->registerFuel(369, -1, 2400);    // blaze rod
-    $smelting->registerFuel(325, 10, 20000);   // lava bucket
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::COAL, -1, 1600);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::COAL_BLOCK, -1, 16000);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::LOG, -1, 300);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::LOG_ACACIA, -1, 300);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::PLANKS, -1, 300);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::SAPLING, -1, 100);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::STICK, -1, 100);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::WOODEN_SWORD, -1, 200);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::WOODEN_SHOVEL, -1, 200);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::WOODEN_PICKAXE, -1, 200);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::WOODEN_AXE, -1, 200);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::WOODEN_HOE, -1, 200);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::CRAFTING_TABLE, -1, 300);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::CHEST, -1, 300);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::BLAZE_ROD, -1, 2400);
+    $smelting->registerFuel(\pocketmine\core\constants\ItemIds::BUCKET, 10, 20000);
 }
 
 /**
@@ -2042,7 +2042,7 @@ function applyPersistedWorldMeta(StoragePort $storagePort, ResourceRegistry $res
         // never regenerates terrain around whatever the user placed there.
         $worldConfig = $resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
         if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig && $storagePort->worldFolderExists()) {
-            $worldConfig->generator = 'void';
+            $worldConfig->generator = \pocketmine\core\enum\GeneratorType::Void;
         }
         return;
     }
@@ -2068,7 +2068,7 @@ function applyPersistedWorldMeta(StoragePort $storagePort, ResourceRegistry $res
     // VOID so the world is never regenerated around the player's build.
     $worldConfigGen = $resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
     if ($worldConfigGen instanceof \pocketmine\core\resource\WorldConfig) {
-        $worldConfigGen->generator = (string)($meta['generator'] ?? 'void');
+        $worldConfigGen->generator = \pocketmine\core\enum\GeneratorType::coerce($meta['generator'] ?? 'void');
     }
     if (isset($meta['spawnY']) && $meta['spawnY'] !== '') {
         $config->spawnY = (int)$meta['spawnY'];
@@ -2077,7 +2077,7 @@ function applyPersistedWorldMeta(StoragePort $storagePort, ResourceRegistry $res
         $config->spawnZ = (int)$meta['spawnZ'];
     }
     if (isset($meta['difficulty']) && $meta['difficulty'] !== '') {
-        $config->difficulty = (int)$meta['difficulty'];
+        $config->difficulty = \pocketmine\core\enum\Difficulty::coerce((int)$meta['difficulty']);
     }
     // 14.6: resume the persisted time of day (wrapped to a valid day range).
     $worldConfig = $resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);

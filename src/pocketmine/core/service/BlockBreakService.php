@@ -62,9 +62,9 @@ final class BlockBreakService {
         
         // For instant break (creative mode), break immediately
         $metadata = $player->get(MetadataComponent::class);
-        $gamemode = $metadata?->get('gamemode') ?? 0;
+        $gamemode = \pocketmine\core\enum\GameMode::coerce($metadata?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE));
         
-        if ($gamemode === 1) { // Creative
+        if ($gamemode === \pocketmine\core\enum\GameMode::Creative) {
             return $this->doBreakBlock($playerRef, $x, $y, $z, $tool, $worldId);
         }
         
@@ -160,7 +160,7 @@ final class BlockBreakService {
             return -1;
         }
         $metadata = $player->get(MetadataComponent::class);
-        if (($metadata?->get('gamemode') ?? 0) === 1) {
+        if (\pocketmine\core\enum\GameMode::coerce($metadata?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) === \pocketmine\core\enum\GameMode::Creative) {
             return 0; // creative: instant
         }
         $worldId = $this->worldIdOf($playerRef);
@@ -250,7 +250,7 @@ final class BlockBreakService {
                 ->with(new \pocketmine\core\component\InventoryComponent(1))
                 ->with(new \pocketmine\core\component\MetadataComponent())
                 ->with(new \pocketmine\core\component\WorldComponent($worldId))
-                ->withTag('item')
+                ->withTag(\pocketmine\core\constants\EntityTags::ITEM)
                 
         );
         

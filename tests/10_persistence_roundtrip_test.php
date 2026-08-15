@@ -73,7 +73,7 @@ function sample_chunk(int $chunkX, int $chunkZ): ChunkData {
 
     $entity = new EntitySnapshot(
         'uuid-9f8e7d6c-5b4a-3c2d-1e0f-a1b2c3d4e5f6', // string id must survive, not become 0
-        'Zombie',
+        \pocketmine\core\enum\EntityType::Zombie->value,
         1.5, 64.0, -3.25,
         90.0, 45.0,
         ['health' => '20', 'customName' => 'Bob']
@@ -329,7 +329,7 @@ test('applyPersistedWorldMeta restores the saved world config at boot', function
         same(7, $config->spawnX, 'spawnX restored');
         same(68, $config->spawnY, 'spawnY restored');
         same(-2, $config->spawnZ, 'spawnZ restored');
-        same(3, $config->difficulty, 'difficulty restored');
+        same(\pocketmine\core\enum\Difficulty::Hard, $config->difficulty, 'difficulty restored');
     } finally {
         rmdir_recursive($dir);
     }

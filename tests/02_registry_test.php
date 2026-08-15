@@ -108,17 +108,17 @@ test('world config defaults + mutation', function () {
     same('world', $c->name, 'default name');
     same(0, $c->seed, 'default seed');
     same(64, $c->spawnY, 'default spawn y');
-    same('normal', $c->generator, 'default generator');
+    same(\pocketmine\core\enum\GeneratorType::Normal, $c->generator, 'default generator');
     same(20, $c->maxPlayers, 'default max players');
 
     $c->name = 'nether';
     $c->seed = 42;
     $c->time = 6000;
-    $c->difficulty = 2;
+    $c->difficulty = \pocketmine\core\enum\Difficulty::Normal;
     same('nether', $c->name, 'name mutated');
     same(42, $c->seed, 'seed mutated');
     same(6000, $c->time, 'time mutated');
-    same(2, $c->difficulty, 'difficulty mutated');
+    same(\pocketmine\core\enum\Difficulty::Normal, $c->difficulty, 'difficulty mutated');
 });
 
 exit(runTests());

@@ -66,7 +66,7 @@ final class ChunkLoadService {
             return [];
         }
         $config = new \pocketmine\port\driven\GeneratorConfig(
-            $this->getWorldGenerator($worldId),
+            $this->getWorldGenerator($worldId)->value,
             $this->getWorldSeed($worldId),
             []
         );
@@ -157,7 +157,7 @@ final class ChunkLoadService {
         // and re-running the pass would place a second, different feature set.
         // Void worlds skip population entirely: a lobby platform must stay
         // exactly as generated (no trees/grass sprouting on it).
-        if ($populate && $this->getWorldGenerator($worldId) !== 'void') {
+        if ($populate && $this->getWorldGenerator($worldId) !== \pocketmine\core\enum\GeneratorType::Void) {
             $chunkData = $this->worldGenPort->populateChunk($chunkX, $chunkZ, $chunkData, $seed);
         }
         
@@ -198,26 +198,26 @@ final class ChunkLoadService {
         return $chunkData;
     }
 
-    private function getWorldGenerator(int $worldId = 0): string {
-        // Read the world's own generator type (WorldConfig->generator,
-        // e.g. 'normal'/'flat'/'void'); non-default worlds resolve strictly
-        // through the registry, the default world (id 0) falls back to the
-        // resource WorldConfig. Unknown/absent config defaults to 'normal'.
+    private function getWorldGenerator(int $worldId = 0): \pocketmine\core\enum\GeneratorType {
+        // Read the world's own generator type (WorldConfig->generator);
+        // non-default worlds resolve strictly through the registry, the
+        // default world (id 0) falls back to the resource WorldConfig.
+        // Unknown/absent config defaults to Normal.
         $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
         if ($registry instanceof WorldRegistry && $registry->getWorld($worldId) !== null) {
             $config = $registry->getConfig($worldId);
-            if ($config instanceof \pocketmine\core\resource\WorldConfig && $config->generator !== '') {
+            if ($config instanceof \pocketmine\core\resource\WorldConfig) {
                 return $config->generator;
             }
         }
         $kernel = \pocketmine\Kernel::getInstance();
         if ($kernel !== null) {
             $resource = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
-            if ($resource instanceof \pocketmine\core\resource\WorldConfig && $resource->generator !== '') {
+            if ($resource instanceof \pocketmine\core\resource\WorldConfig) {
                 return $resource->generator;
             }
         }
-        return 'normal';
+        return \pocketmine\core\enum\GeneratorType::Normal;
     }
 
     private function getWorldSeed(int $worldId = 0): int {

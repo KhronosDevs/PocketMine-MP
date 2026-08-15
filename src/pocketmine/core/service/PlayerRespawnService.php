@@ -72,7 +72,7 @@ final class PlayerRespawnService {
 
     private function handleInventoryOnRespawn(\pocketmine\core\ecs\Entity $entity): void {
         $metadata = $entity->get(MetadataComponent::class);
-        $keepInventory = $metadata?->get('keepInventory') ?? false;
+        $keepInventory = $metadata?->get(\pocketmine\core\constants\MetadataKeys::KEEP_INVENTORY) ?? false;
         
         if (!$keepInventory) {
             $inventory = $entity->get(InventoryComponent::class);
@@ -107,12 +107,12 @@ final class PlayerRespawnService {
         $metadata = $entity->get(MetadataComponent::class);
         if ($metadata) {
             // Keep persistent metadata (uniqueId, username, etc.)
-            $uniqueId = $metadata->get('uniqueId');
-            $username = $metadata->get('username');
+            $uniqueId = $metadata->get(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID);
+            $username = $metadata->get(\pocketmine\core\constants\MetadataKeys::USERNAME);
             
             $metadata->data = [];
             
-            if ($uniqueId) $metadata->set('uniqueId', $uniqueId);
+            if ($uniqueId) $metadata->set(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID, $uniqueId);
             if ($username) $metadata->set('username', $username);
         }
     }

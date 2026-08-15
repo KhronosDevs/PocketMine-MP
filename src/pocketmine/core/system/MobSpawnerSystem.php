@@ -8,8 +8,11 @@ use pocketmine\core\component\HealthComponent;
 use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\tags\PlayerTag;
+use pocketmine\core\constants\BlockIds;
+use pocketmine\core\constants\MetadataKeys;
 use pocketmine\core\ecs\System;
 use pocketmine\core\ecs\World;
+use pocketmine\core\enum\EntityType;
 use pocketmine\core\resource\ChunkStore;
 use pocketmine\core\resource\ServerConfig;
 use pocketmine\core\resource\WorldConfig;
@@ -38,7 +41,7 @@ final class MobSpawnerSystem implements System {
     public const MIN_SPAWN_DISTANCE = 8;
     public const SPAWN_RADIUS = 24;
 
-    private const HOSTILE_TYPES = ['Zombie', 'Skeleton', 'Creeper', 'Spider'];
+    private const HOSTILE_TYPES = [EntityType::Zombie, EntityType::Skeleton, EntityType::Creeper, EntityType::Spider];
 
     private int $tickCounter = 0;
 
@@ -119,7 +122,7 @@ final class MobSpawnerSystem implements System {
                     $top = $store->getHighestBlockAt((int)floor($x), (int)floor($z));
                     // Skip water/lava columns: mobs must not spawn in liquid.
                     // The next attempt picks a different spot.
-                    if ($top > 0 && !in_array($store->getBlock((int)floor($x), $top, (int)floor($z)), [8, 9, 10, 11], true)) {
+                    if ($top > 0 && !in_array($store->getBlock((int)floor($x), $top, (int)floor($z)), BlockIds::LIQUIDS, true)) {
                         $y = $top + 1;
                         $found = true;
                     }
@@ -138,7 +141,7 @@ final class MobSpawnerSystem implements System {
         $count = 0;
         foreach ($world->getEntities() as $entity) {
             $meta = $entity->get(MetadataComponent::class);
-            if ($meta !== null && $meta->get('hostile')) {
+            if ($meta !== null && $meta->get(MetadataKeys::HOSTILE)) {
                 $count++;
             }
         }
@@ -150,7 +153,7 @@ final class MobSpawnerSystem implements System {
         $rangeSq = self::SPAWN_RADIUS * self::SPAWN_RADIUS;
         foreach ($world->getEntities() as $entity) {
             $meta = $entity->get(MetadataComponent::class);
-            if ($meta === null || !$meta->get('hostile')) {
+            if ($meta === null || !$meta->get(MetadataKeys::HOSTILE)) {
                 continue;
             }
             $pos = $entity->get(PositionComponent::class);
