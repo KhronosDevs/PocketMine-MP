@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace pocketmine\core\resource;
 
 use pocketmine\core\ecs\Resource;
+use pocketmine\core\enum\Difficulty;
+use pocketmine\core\enum\GameMode;
+use pocketmine\core\enum\GeneratorType;
 
 /**
  * Per-world configuration and mutable world state (time, spawn, rules).
@@ -22,9 +25,9 @@ final class WorldConfig {
         public int $spawnX = 0,
         public int $spawnY = 64,
         public int $spawnZ = 0,
-        public int $difficulty = 1,
-        public int $gameMode = 0,
-        public string $generator = 'normal',
+        public Difficulty $difficulty = Difficulty::Easy,
+        public GameMode $gameMode = GameMode::Survival,
+        public GeneratorType $generator = GeneratorType::Normal,
         public int $maxPlayers = 20,
         public int $viewDistance = 10,
         // Weather (14.22): current state (0 clear / 1 rain / 2 rain+thunder /

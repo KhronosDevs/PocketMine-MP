@@ -16,12 +16,12 @@ abstract class Animal extends Living {
 
     public function getAge(): int {
         $metadata = $this->getMetadata();
-        return $metadata->get('age', 0);
+        return $metadata->get(\pocketmine\core\constants\MetadataKeys::AGE, 0);
     }
 
     public function setAge(int $age): void {
         $metadata = $this->getMetadata();
-        $metadata->set('age', $age);
+        $metadata->set(\pocketmine\core\constants\MetadataKeys::AGE, $age);
     }
 
     public function isBaby(): bool {
@@ -34,12 +34,12 @@ abstract class Animal extends Living {
 
     public function getLoveTimer(): int {
         $metadata = $this->getMetadata();
-        return $metadata->get('loveTimer', 0);
+        return $metadata->get(\pocketmine\core\constants\MetadataKeys::LOVE_TIMER, 0);
     }
 
     public function setLoveTimer(int $ticks): void {
         $metadata = $this->getMetadata();
-        $metadata->set('loveTimer', $ticks);
+        $metadata->set(\pocketmine\core\constants\MetadataKeys::LOVE_TIMER, $ticks);
     }
 
     public function canBreed(): bool {
@@ -76,12 +76,12 @@ abstract class Animal extends Living {
                 ))
                 ->with(new \pocketmine\core\component\HealthComponent(10, 10))
                 ->with(new MetadataComponent([
-                    'entityType' => $metadata->get('entityType', get_class($this)),
+                    'entityType' => $metadata->get(\pocketmine\core\constants\MetadataKeys::ENTITY_TYPE, get_class($this)),
                     'age' => -1, // baby
-                    'owner' => $metadata->get('owner'),
+                    'owner' => $metadata->get(\pocketmine\core\constants\MetadataKeys::OWNER),
                 ]))
                 ->with(new \pocketmine\core\component\WorldComponent($worldId))
-                ->withTag('animal')
+                ->withTag(\pocketmine\core\constants\EntityTags::ANIMAL)
         );
 
         $class = get_class($this);
@@ -90,12 +90,12 @@ abstract class Animal extends Living {
 
     public function setOwner(\pocketmine\api\entity\Player $player): void {
         $metadata = $this->getMetadata();
-        $metadata->set('owner', $player->getUniqueId());
+        $metadata->set(\pocketmine\core\constants\MetadataKeys::OWNER, $player->getUniqueId());
     }
 
     public function getOwner(): ?\pocketmine\api\entity\Player {
         $metadata = $this->getMetadata();
-        $ownerId = $metadata->get('owner');
+        $ownerId = $metadata->get(\pocketmine\core\constants\MetadataKeys::OWNER);
         if (!is_string($ownerId) || $ownerId === '') {
             return null;
         }
@@ -107,7 +107,7 @@ abstract class Animal extends Living {
 
         foreach ($query as $entity) {
             $entityMeta = $entity->get(MetadataComponent::class);
-            if ($entityMeta && $entityMeta->get('uniqueId') === $ownerId) {
+            if ($entityMeta && $entityMeta->get(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID) === $ownerId) {
                 return new \pocketmine\api\entity\Player(
                     \pocketmine\core\ecs\EntityRef::create($entity->id, $this->world),
                     $this->world
@@ -119,11 +119,11 @@ abstract class Animal extends Living {
 
     public function isTamed(): bool {
         $metadata = $this->getMetadata();
-        return $metadata->get('tamed', false);
+        return $metadata->get(\pocketmine\core\constants\MetadataKeys::TAMED, false);
     }
 
     public function setTamed(bool $tamed): void {
         $metadata = $this->getMetadata();
-        $metadata->set('tamed', $tamed);
+        $metadata->set(\pocketmine\core\constants\MetadataKeys::TAMED, $tamed);
     }
 }

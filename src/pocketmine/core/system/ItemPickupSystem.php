@@ -66,7 +66,7 @@ final class ItemPickupSystem implements System {
             // 14.9: XP orbs (tagged 'xp_orb') credit the player's XP bar
             // instead of the inventory. No pickup delay (legacy orbs were
             // collectible immediately; the XP is server-side anyway).
-            if ($entity->has('xp_orb')) {
+            if ($entity->has(\pocketmine\core\constants\EntityTags::XP_ORB)) {
                 $amount = (int)$meta->get('xp', 0);
                 if ($amount <= 0) {
                     $world->despawn($entity); // nothing to credit: don't linger
@@ -87,7 +87,7 @@ final class ItemPickupSystem implements System {
             }
 
             // Item entities are tagged 'item' at spawn (withTag('item')).
-            if (!$entity->has('item')) {
+            if (!$entity->has(\pocketmine\core\constants\EntityTags::ITEM)) {
                 continue;
             }
             // Count down the drop's pickup delay before it can be collected.

@@ -30,6 +30,11 @@ namespace pocketmine\protocol;
 class AdventureSettingsPacket extends DataPacket{
 	const NETWORK_ID = Info::ADVENTURE_SETTINGS_PACKET;
 
+	/** Full AdventureSettings flag set for survival (0.15.10). */
+	const FLAGS_SURVIVAL = 0x4E;
+	/** Full AdventureSettings flag set for creative (0.15.10). */
+	const FLAGS_CREATIVE = 0x7D;
+
 	public int $flags = 0;
 	public int $userPermission = 0;
 	public int $globalPermission = 0;

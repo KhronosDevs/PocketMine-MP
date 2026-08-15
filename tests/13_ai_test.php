@@ -55,7 +55,7 @@ function xzDist(PositionComponent $a, PositionComponent $b): float {
 }
 
 test('hostile mob spawns with AI state and stats, no AI component for plain entities', function () use ($spawn, $world) {
-    $zombie = $spawn->spawnMob('Zombie', 300, 65, 300);
+    $zombie = $spawn->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 300, 65, 300);
     $ai = $zombie->getAIState();
     ok($ai instanceof AIStateComponent, 'zombie has AIStateComponent');
     same(20.0, $zombie->getEntity()?->get(HealthComponent::class)->max, 'zombie health from stat table');
@@ -64,7 +64,7 @@ test('hostile mob spawns with AI state and stats, no AI component for plain enti
     near(16.0, $ai->followRange, 1e-9, 'zombie follow range');
     ok($zombie->getEntity()?->has(MonsterTag::class), 'zombie has MonsterTag');
 
-    $cow = $spawn->spawnMob('Cow', 310, 65, 300);
+    $cow = $spawn->spawnMob(\pocketmine\core\enum\EntityType::Cow, 310, 65, 300);
     $cowAi = $cow->getAIState();
     ok($cowAi instanceof AIStateComponent, 'cow has AIStateComponent');
     near(0.0, $cowAi->attackDamage, 1e-9, 'cow does not attack');
@@ -82,7 +82,7 @@ test('hostile mob spawns with AI state and stats, no AI component for plain enti
 
 test('hostile mob acquires nearest player as target', function () use ($world, $spawn) {
     $player = spawnPlayer($world, 330, 300);
-    $zombie = $spawn->spawnMob('Zombie', 335, 65, 300); // 5 blocks east
+    $zombie = $spawn->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 335, 65, 300); // 5 blocks east
 
     // Zombie should acquire the player within a few ticks.
     $acquired = false;
@@ -98,7 +98,7 @@ test('hostile mob acquires nearest player as target', function () use ($world, $
 
     // A zombie far beyond follow range never acquires.
     $far = spawnPlayer($world, 400, 400);
-    $farZombie = $spawn->spawnMob('Zombie', 500, 65, 400); // 100 blocks away
+    $farZombie = $spawn->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 500, 65, 400); // 100 blocks away
     for ($i = 0; $i < 10; $i++) {
         tickWorld($world);
     }
@@ -112,7 +112,7 @@ test('hostile mob acquires nearest player as target', function () use ($world, $
 
 test('zombie chases the player', function () use ($world, $spawn) {
     $player = spawnPlayer($world, 330, 320);
-    $zombie = $spawn->spawnMob('Zombie', 345, 65, 320); // 15 blocks east
+    $zombie = $spawn->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 345, 65, 320); // 15 blocks east
 
     $startPos = $zombie->getEntity()?->get(PositionComponent::class);
     $playerPos = $player->getEntity()?->get(PositionComponent::class);
@@ -138,7 +138,7 @@ test('zombie chases the player', function () use ($world, $spawn) {
 
 test('zombie attacks through combat pipeline with cooldown', function () use ($world, $spawn, $kernel) {
     $player = spawnPlayer($world, 330, 340);
-    $zombie = $spawn->spawnMob('Zombie', 331, 65, 340); // 1 block east -> in range
+    $zombie = $spawn->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 331, 65, 340); // 1 block east -> in range
 
     $damageEvents = 0;
     $kernel->getEventPort()->subscribe(EntityDamageEvent::class, function (EntityDamageEvent $e) use (&$damageEvents) {
@@ -170,7 +170,7 @@ test('fatal AI damage kills the player through the combat pipeline', function ()
     $player = spawnPlayer($world, 330, 360);
     $playerHealth = $player->getEntity()?->get(HealthComponent::class);
     $playerHealth->current = 2.0;
-    $zombie = $spawn->spawnMob('Zombie', 331, 65, 360); // 1 block -> in range
+    $zombie = $spawn->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 331, 65, 360); // 1 block -> in range
 
     $deathEvents = 0;
     $kernel->getEventPort()->subscribe(\pocketmine\api\event\PlayerDeathEvent::class, function ($e) use (&$deathEvents) {
@@ -196,7 +196,7 @@ test('fatal AI damage kills the player through the combat pipeline', function ()
 
 test('mob flees when hurt below retreat threshold, then stops when safe', function () use ($world, $spawn) {
     $player = spawnPlayer($world, 330, 380);
-    $cow = $spawn->spawnMob('Cow', 332, 65, 380); // 2 blocks away, passive
+    $cow = $spawn->spawnMob(\pocketmine\core\enum\EntityType::Cow, 332, 65, 380); // 2 blocks away, passive
     // Hurt the cow below its 30% retreat threshold (max 10 => <= 3).
     $cowHealth = $cow->getEntity()?->get(HealthComponent::class);
     $cowHealth->current = 2.0;
@@ -224,7 +224,7 @@ test('mob flees when hurt below retreat threshold, then stops when safe', functi
 
 test('target death clears the mob target', function () use ($world, $spawn) {
     $player = spawnPlayer($world, 330, 400);
-    $zombie = $spawn->spawnMob('Zombie', 331, 65, 400);
+    $zombie = $spawn->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 331, 65, 400);
 
     for ($i = 0; $i < 10; $i++) {
         tickWorld($world);
@@ -253,7 +253,7 @@ test('target death clears the mob target', function () use ($world, $spawn) {
 
 test('healthy passive mob never acquires or chases a player', function () use ($world, $spawn) {
     $player = spawnPlayer($world, 330, 420);
-    $cow = $spawn->spawnMob('Cow', 331, 65, 420); // 1 block away, healthy
+    $cow = $spawn->spawnMob(\pocketmine\core\enum\EntityType::Cow, 331, 65, 420); // 1 block away, healthy
 
     for ($i = 0; $i < 20; $i++) {
         tickWorld($world);
@@ -272,7 +272,7 @@ test('healthy passive mob never acquires or chases a player', function () use ($
 
 test('attack cooldown gates even the first hit', function () use ($world, $spawn, $kernel) {
     $player = spawnPlayer($world, 330, 440);
-    $zombie = $spawn->spawnMob('Zombie', 331, 65, 440);
+    $zombie = $spawn->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 331, 65, 440);
 
     $attackEvents = 0;
     $kernel->getEventPort()->subscribe(EntityDamageEvent::class, function (EntityDamageEvent $e) use (&$attackEvents) {

@@ -52,11 +52,11 @@ final class EntityInteractionService {
         // Dropped item entities carry the 'item' stack in metadata but no
         // entityType - route them to pickup before the type dispatch (they
         // used to fall through to the no-op default interaction).
-        if ($targetMeta->get('item') instanceof ItemStack) {
+        if ($targetMeta->get(\pocketmine\core\constants\MetadataKeys::ITEM) instanceof ItemStack) {
             return $this->pickup($playerRef, $targetRef);
         }
 
-        $targetType = $targetMeta->get('entityType') ?? 'unknown';
+        $targetType = $targetMeta->get(\pocketmine\core\constants\MetadataKeys::ENTITY_TYPE) ?? 'unknown';
         
         // Handle interaction based on target type
         return match ($targetType) {
@@ -129,12 +129,12 @@ final class EntityInteractionService {
         $itemMeta = $itemEntity->get(MetadataComponent::class);
         if (!$itemMeta) return false;
         
-        $itemStack = $itemMeta->get('item');
+        $itemStack = $itemMeta->get(\pocketmine\core\constants\MetadataKeys::ITEM);
         if (!$itemStack instanceof ItemStack) return false;
         
         // Freshly dropped items are uncollectable for a short time (legacy
         // pickupDelay) so a drop cannot instantly re-enter the inventory.
-        if ((int)$itemMeta->get('pickupDelay', 0) > 0) {
+        if ((int)$itemMeta->get(\pocketmine\core\constants\MetadataKeys::PICKUP_DELAY, 0) > 0) {
             return false;
         }
         
@@ -255,7 +255,7 @@ final class EntityInteractionService {
         // Check attributes
         $attributes = $attacker->get(\pocketmine\core\component\AttributeComponent::class);
         if ($attributes) {
-            $damage += $attributes->get('attack_damage');
+            $damage += $attributes->get(\pocketmine\core\constants\AttributeKeys::ATTACK_DAMAGE);
         }
         
         return $damage;

@@ -12,7 +12,9 @@ use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\RotationComponent;
 use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\component\tags\MonsterTag;
+use pocketmine\core\constants\MetadataKeys;
 use pocketmine\core\ecs\EntityBuilder;
+use pocketmine\core\enum\EntityType;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\ProjectileRegistry;
@@ -30,15 +32,15 @@ final class EntitySpawnService {
      */
     private const MOB_STATS = [
         // Hostile
-        'Zombie' => ['health' => 20, 'damage' => 3.0, 'speed' => 1.0, 'follow' => 16.0, 'range' => 2.0, 'retreat' => 0.0],
-        'Skeleton' => ['health' => 20, 'damage' => 2.5, 'speed' => 1.0, 'follow' => 24.0, 'range' => 3.0, 'retreat' => 0.0],
-        'Creeper' => ['health' => 20, 'damage' => 4.0, 'speed' => 1.1, 'follow' => 16.0, 'range' => 1.5, 'retreat' => 0.0],
-        'Spider' => ['health' => 16, 'damage' => 2.0, 'speed' => 1.4, 'follow' => 16.0, 'range' => 2.0, 'retreat' => 0.0],
+        EntityType::Zombie->value => ['health' => 20, 'damage' => 3.0, 'speed' => 1.0, 'follow' => 16.0, 'range' => 2.0, 'retreat' => 0.0],
+        EntityType::Skeleton->value => ['health' => 20, 'damage' => 2.5, 'speed' => 1.0, 'follow' => 24.0, 'range' => 3.0, 'retreat' => 0.0],
+        EntityType::Creeper->value => ['health' => 20, 'damage' => 4.0, 'speed' => 1.1, 'follow' => 16.0, 'range' => 1.5, 'retreat' => 0.0],
+        EntityType::Spider->value => ['health' => 16, 'damage' => 2.0, 'speed' => 1.4, 'follow' => 16.0, 'range' => 2.0, 'retreat' => 0.0],
         // Passive - low speed, no attack, retreat when hurt
-        'Cow' => ['health' => 10, 'damage' => 0.0, 'speed' => 0.8, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
-        'Pig' => ['health' => 10, 'damage' => 0.0, 'speed' => 0.8, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
-        'Sheep' => ['health' => 8, 'damage' => 0.0, 'speed' => 0.8, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
-        'Chicken' => ['health' => 4, 'damage' => 0.0, 'speed' => 0.9, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
+        EntityType::Cow->value => ['health' => 10, 'damage' => 0.0, 'speed' => 0.8, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
+        EntityType::Pig->value => ['health' => 10, 'damage' => 0.0, 'speed' => 0.8, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
+        EntityType::Sheep->value => ['health' => 8, 'damage' => 0.0, 'speed' => 0.8, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
+        EntityType::Chicken->value => ['health' => 4, 'damage' => 0.0, 'speed' => 0.9, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
     ];
 
     public function __construct(
@@ -47,7 +49,7 @@ final class EntitySpawnService {
         private readonly EventPort $eventPort,
     ) {}
 
-    public function spawnEntity(string $entityType, float $x, float $y, float $z, float $yaw = 0, float $pitch = 0, array $metadata = [], int $worldId = 0): EntityRef {
+    public function spawnEntity(EntityType $entityType, float $x, float $y, float $z, float $yaw = 0, float $pitch = 0, array $metadata = [], int $worldId = 0): EntityRef {
         $entityRef = $this->world->spawn(
             (new EntityBuilder())
                 ->with(new PositionComponent($x, $y, $z))
@@ -63,7 +65,7 @@ final class EntitySpawnService {
             // Set entity type metadata
             $meta = $entity->get(MetadataComponent::class);
             if ($meta) {
-                $meta->set('entityType', $entityType);
+                $meta->set(MetadataKeys::ENTITY_TYPE, $entityType->value);
                 foreach ($metadata as $key => $value) {
                     $meta->set($key, $value);
                 }
@@ -82,14 +84,14 @@ final class EntitySpawnService {
         return $entityRef;
     }
 
-    public function spawnMob(string $mobType, float $x, float $y, float $z, int $worldId = 0): EntityRef {
+    public function spawnMob(EntityType $mobType, float $x, float $y, float $z, int $worldId = 0): EntityRef {
         $entityRef = $this->spawnEntity($mobType, $x, $y, $z, 0, 0, [], $worldId);
 
         $entity = $entityRef->getEntity();
         if ($entity) {
             $meta = $entity->get(MetadataComponent::class);
             if ($meta) {
-                $meta->set('mobType', $mobType);
+                $meta->set(MetadataKeys::MOB_TYPE, $mobType->value);
             }
         }
 
@@ -112,7 +114,7 @@ final class EntitySpawnService {
                 // ground (BlockCollisionSystem) instead of sinking through.
                 ->with(new CollisionComponent(width: 0.25, height: 0.25))
                 ->with(new \pocketmine\core\component\WorldComponent($worldId))
-                ->withTag('item')
+                ->withTag(\pocketmine\core\constants\EntityTags::ITEM)
 
         );
 
@@ -120,12 +122,12 @@ final class EntitySpawnService {
         if ($entity) {
             $meta = $entity->get(\pocketmine\core\component\MetadataComponent::class);
             if ($meta) {
-                $meta->set('entityType', 'item');
-                $meta->set('item', $item);
+                $meta->set(MetadataKeys::ENTITY_TYPE, 'item');
+                $meta->set(MetadataKeys::ITEM, $item);
                 // Legacy pickupDelay: a fresh drop is uncollectable for 10
                 // ticks so it cannot instantly re-enter the thrower's own
                 // inventory (the ItemPickupSystem honours this countdown).
-                $meta->set('pickupDelay', 10);
+                $meta->set(MetadataKeys::PICKUP_DELAY, 10);
             }
         }
 
@@ -136,13 +138,13 @@ final class EntitySpawnService {
         return $entityRef;
     }
 
-    public function spawnProjectile(string $projectileType, float $x, float $y, float $z, float $velX, float $velY, float $velZ, EntityRef $shooter): EntityRef {
+    public function spawnProjectile(EntityType $projectileType, float $x, float $y, float $z, float $velX, float $velY, float $velZ, EntityRef $shooter): EntityRef {
         // The projectile registry is the single source of truth: an unregistered
         // type is a programming error (the client would have no entity id to
         // render, so the arrow could never be seen).
         $registry = $this->world->getResourceRegistry()->get(ProjectileRegistry::class);
-        if (!$registry instanceof ProjectileRegistry || !$registry->isProjectile($projectileType)) {
-            throw new \InvalidArgumentException("Unknown projectile type: {$projectileType}");
+        if (!$registry instanceof ProjectileRegistry || !$registry->isProjectile($projectileType->value)) {
+            throw new \InvalidArgumentException("Unknown projectile type: {$projectileType->value}");
         }
 
         // 14.20: the projectile belongs to the shooter's world so the entity
@@ -164,8 +166,8 @@ final class EntitySpawnService {
 
             $meta = $entity->get(MetadataComponent::class);
             if ($meta) {
-                $meta->set('projectileType', $projectileType);
-                $meta->set('shooterId', $shooter->getId());
+                $meta->set(MetadataKeys::PROJECTILE_TYPE, $projectileType->value);
+                $meta->set(MetadataKeys::SHOOTER_ID, $shooter->getId());
             }
 
             // Legacy Projectile::onUpdate: a projectile renders pointing along
@@ -183,7 +185,7 @@ final class EntitySpawnService {
         return $entityRef;
     }
 
-    private function initializeEntity(EntityRef $entityRef, string $entityType): void {
+    private function initializeEntity(EntityRef $entityRef, EntityType $entityType): void {
         $entity = $entityRef->getEntity();
         if (!$entity) return;
 
@@ -192,15 +194,14 @@ final class EntitySpawnService {
 
         // Type-specific initialization
         match ($entityType) {
-            'Zombie', 'Skeleton', 'Creeper', 'Spider' => $this->initHostileMob($entityRef, $entityType),
-            'Cow', 'Pig', 'Sheep', 'Chicken' => $this->initPassiveMob($entityRef, $entityType),
-            'Item' => $this->initItem($entityRef),
+            EntityType::Zombie, EntityType::Skeleton, EntityType::Creeper, EntityType::Spider => $this->initHostileMob($entityRef, $entityType),
+            EntityType::Cow, EntityType::Pig, EntityType::Sheep, EntityType::Chicken => $this->initPassiveMob($entityRef, $entityType),
             default => null,
         };
     }
 
-    private function applyMobStats(EntityRef $entityRef, string $entityType): void {
-        $stats = self::MOB_STATS[$entityType] ?? null;
+    private function applyMobStats(EntityRef $entityRef, EntityType $entityType): void {
+        $stats = self::MOB_STATS[$entityType->value] ?? null;
         if ($stats === null) return;
 
         $entity = $entityRef->getEntity();
@@ -234,7 +235,7 @@ final class EntitySpawnService {
         $ai->retreatHealthPercent = $stats['retreat'];
     }
 
-    private function initHostileMob(EntityRef $entityRef, string $entityType): void {
+    private function initHostileMob(EntityRef $entityRef, EntityType $entityType): void {
         $entity = $entityRef->getEntity();
         if (!$entity) return;
 
@@ -242,8 +243,8 @@ final class EntitySpawnService {
 
         $meta = $entity->get(MetadataComponent::class);
         if ($meta) {
-            $meta->set('hostile', true);
-            $meta->set('detectionRange', 16.0);
+            $meta->set(MetadataKeys::HOSTILE, true);
+            $meta->set(MetadataKeys::DETECTION_RANGE, 16.0);
         }
 
         // MonsterTag marks the entity as a monster for queries/API wrapping.
@@ -252,7 +253,7 @@ final class EntitySpawnService {
         }
     }
 
-    private function initPassiveMob(EntityRef $entityRef, string $entityType): void {
+    private function initPassiveMob(EntityRef $entityRef, EntityType $entityType): void {
         $entity = $entityRef->getEntity();
         if (!$entity) return;
 
@@ -260,17 +261,7 @@ final class EntitySpawnService {
 
         $meta = $entity->get(MetadataComponent::class);
         if ($meta) {
-            $meta->set('passive', true);
-        }
-    }
-
-    private function initItem(EntityRef $entityRef): void {
-        $entity = $entityRef->getEntity();
-        if (!$entity) return;
-
-        $meta = $entity->get(MetadataComponent::class);
-        if ($meta) {
-            $meta->set('pickupDelay', 10); // 10 ticks before pickup
+            $meta->set(MetadataKeys::PASSIVE, true);
         }
     }
 }

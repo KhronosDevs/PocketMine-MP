@@ -16,7 +16,7 @@ class Creeper extends Monster {
         $kernel = \pocketmine\Kernel::getInstance();
         $spawnService = $kernel->getEntitySpawnService();
         
-        $entityRef = $spawnService->spawnEntity('Creeper', func_get_arg(0), func_get_arg(1), func_get_arg(2));
+        $entityRef = $spawnService->spawnEntity(\pocketmine\core\enum\EntityType::Creeper, func_get_arg(0), func_get_arg(1), func_get_arg(2));
         
         $kernel = \pocketmine\Kernel::getInstance();
         $world = $kernel->getWorld();

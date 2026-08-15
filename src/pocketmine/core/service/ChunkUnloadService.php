@@ -136,7 +136,7 @@ final class ChunkUnloadService {
         if (!$entity) return;
         
         $metadata = $entity->get(\pocketmine\core\component\MetadataComponent::class);
-        $uniqueId = $metadata?->get('uniqueId');
+        $uniqueId = $metadata?->get(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID);
         
         if (!$uniqueId) return;
         

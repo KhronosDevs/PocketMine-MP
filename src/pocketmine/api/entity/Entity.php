@@ -97,7 +97,7 @@ class Entity {
         if ($ref->hasComponent(PlayerTag::class)) {
             return new Player($ref, $world);
         }
-        $type = strtolower((string)($ref->getMetadata()?->get('entityType', '')));
+        $type = strtolower((string)($ref->getMetadata()?->get(\pocketmine\core\constants\MetadataKeys::ENTITY_TYPE, '')));
         return match ($type) {
             'zombie' => new Zombie($ref, $world),
             'skeleton' => new Skeleton($ref, $world),

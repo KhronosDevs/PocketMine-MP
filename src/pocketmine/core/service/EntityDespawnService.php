@@ -44,7 +44,7 @@ final class EntityDespawnService {
         foreach ($query as $entity) {
             // Skip players
             $meta = $entity->get(MetadataComponent::class);
-            if ($meta && $meta->has('uniqueId')) {
+            if ($meta && $meta->has(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID)) {
                 continue;
             }
             
@@ -73,7 +73,7 @@ final class EntityDespawnService {
         if (!$entity) return;
         
         $meta = $entity->get(MetadataComponent::class);
-        $uniqueId = $meta?->get('uniqueId');
+        $uniqueId = $meta?->get(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID);
         
         // Only entities with a REAL persistent id (players, named entities)
         // are saved. Ephemeral mobs get no file: nothing restores them yet,

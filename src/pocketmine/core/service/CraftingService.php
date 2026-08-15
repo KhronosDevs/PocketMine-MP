@@ -32,7 +32,7 @@ final class CraftingService {
         // 3x3 grids require a crafting table (metadata flag set on use).
         if ($gridWidth === 3) {
             $metadata = $player->get(MetadataComponent::class);
-            if (($metadata?->get('craftingTable') ?? false) !== true) {
+            if (($metadata?->get(\pocketmine\core\constants\MetadataKeys::CRAFTING_TABLE) ?? false) !== true) {
                 return null;
             }
         }

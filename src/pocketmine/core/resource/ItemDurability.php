@@ -27,7 +27,7 @@ final class ItemDurability {
             return;
         }
         $metadata = $player->get(MetadataComponent::class);
-        if (($metadata?->get('gamemode') ?? 0) === 1) {
+        if (\pocketmine\core\enum\GameMode::coerce($metadata?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) === \pocketmine\core\enum\GameMode::Creative) {
             return; // creative: no wear
         }
         $inventory = $player->get(InventoryComponent::class);

@@ -69,7 +69,7 @@ final class AISystem implements System {
                 $ai->attackCooldown--;
             }
 
-            $hostile = (bool)$meta->get('hostile', false);
+            $hostile = (bool)$meta->get(\pocketmine\core\constants\MetadataKeys::HOSTILE, false);
 
             // Validate the current target: gone, dead, or out of follow range.
             if ($ai->targetEntity !== null) {
@@ -308,7 +308,7 @@ final class AISystem implements System {
             // Creative players are not valid targets (legacy: mobs ignore
             // creative players entirely).
             $candidateMeta = $candidate->get(MetadataComponent::class);
-            if ($candidateMeta !== null && ($candidateMeta->get('gamemode') ?? 0) === 1) {
+            if ($candidateMeta !== null && \pocketmine\core\enum\GameMode::coerce($candidateMeta->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) === \pocketmine\core\enum\GameMode::Creative) {
                 continue;
             }
             $candidatePos = $candidate->get(PositionComponent::class);

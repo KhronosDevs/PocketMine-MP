@@ -66,7 +66,7 @@ final class PlayerLeaveService {
         
         foreach ($query as $entity) {
             $metadata = $entity->get(\pocketmine\core\component\MetadataComponent::class);
-            if ($metadata && $metadata->get('uniqueId') === $uniqueId) {
+            if ($metadata && $metadata->get(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID) === $uniqueId) {
                 return \pocketmine\core\ecs\EntityRef::create($entity->id, $this->world);
             }
         }
@@ -85,7 +85,7 @@ final class PlayerLeaveService {
         if (!$entity) return;
         
         $metadata = $entity->get(\pocketmine\core\component\MetadataComponent::class);
-        $uniqueId = $metadata?->get('uniqueId');
+        $uniqueId = $metadata?->get(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID);
         
         if (!$uniqueId) return;
         

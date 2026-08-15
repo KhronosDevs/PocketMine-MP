@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\core\enum\GeneratorType;
 
 /**
  * 14.20 multi-world:
@@ -41,13 +42,13 @@ final class WorldCommand extends BuiltinCommand {
                 return false;
             }
             $seed = isset($args[2]) && is_numeric($args[2]) ? (int)$args[2] : 0;
-            $generator = $args[3] ?? 'normal';
-            if (!in_array($generator, ['normal', 'flat', 'void'], true)) {
-                $sender->sendMessage("Unknown generator '{$generator}'. Use normal, flat or void.");
+            $generator = GeneratorType::tryFrom($args[3] ?? '');
+            if ($generator === null) {
+                $sender->sendMessage("Unknown generator '{$args[3]}'. Use normal, flat or void.");
                 return false;
             }
             $world = $server->generateWorld($name, $seed, $generator);
-            $sender->sendMessage("World '{$world->getName()}' created (seed {$world->getSeed()}, generator {$generator}).");
+            $sender->sendMessage("World '{$world->getName()}' created (seed {$world->getSeed()}, generator {$generator->value}).");
             return true;
         }
 

@@ -8,12 +8,12 @@ use pocketmine\core\component\PositionComponent;
 
 final class EntityBuilder {
     private const TAG_MAP = [
-        'player' => \pocketmine\core\component\tags\PlayerTag::class,
-        'monster' => \pocketmine\core\component\tags\MonsterTag::class,
-        'dead' => \pocketmine\core\component\tags\DeadTag::class,
-        'invisible' => \pocketmine\core\component\tags\InvisibleTag::class,
-        'on_ground' => \pocketmine\core\component\tags\OnGroundTag::class,
-        'spectator' => \pocketmine\core\component\tags\SpectatorTag::class,
+        \pocketmine\core\constants\EntityTags::PLAYER => \pocketmine\core\component\tags\PlayerTag::class,
+        \pocketmine\core\constants\EntityTags::MONSTER => \pocketmine\core\component\tags\MonsterTag::class,
+        \pocketmine\core\constants\EntityTags::DEAD => \pocketmine\core\component\tags\DeadTag::class,
+        \pocketmine\core\constants\EntityTags::INVISIBLE => \pocketmine\core\component\tags\InvisibleTag::class,
+        \pocketmine\core\constants\EntityTags::ON_GROUND => \pocketmine\core\component\tags\OnGroundTag::class,
+        \pocketmine\core\constants\EntityTags::SPECTATOR => \pocketmine\core\component\tags\SpectatorTag::class,
     ];
 
     private array $components = [];

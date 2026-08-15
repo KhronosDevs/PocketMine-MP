@@ -108,7 +108,7 @@ test('spawned entities carry a WorldComponent; block placement routes via it', f
     $second = $server->getWorldByName('nether_test');
     $worldId = $second->getWorldId();
 
-    $mob = $kernel->getEntitySpawnService()->spawnMob('Zombie', 200, 65, 200, $worldId);
+    $mob = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 200, 65, 200, $worldId);
     $entity = $mob->getEntity();
     $wc = $entity?->get(WorldComponent::class);
     ok($wc instanceof WorldComponent, 'spawned mob has a WorldComponent');
@@ -117,7 +117,7 @@ test('spawned entities carry a WorldComponent; block placement routes via it', f
     // A player-less placement through the service with an explicit world: the
     // ECS player entity carries the world, and BlockPlaceService resolves the
     // store from it.
-    $player = $kernel->getEntitySpawnService()->spawnMob('Zombie', 210, 65, 210, $worldId);
+    $player = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, 210, 65, 210, $worldId);
     $playerEntity = $player->getEntity();
     $playerWc = $playerEntity?->get(WorldComponent::class);
     if ($playerWc instanceof WorldComponent) {
@@ -135,8 +135,8 @@ test('spawned entities carry a WorldComponent; block placement routes via it', f
 
 test('a void world generates air with a platform at spawn only', function () use ($kernel): void {
     $server = \pocketmine\api\server\Server::getInstance();
-    $void = $server->generateWorld('void_test', 1234, 'void');
-    same('void', $void->getGenerator(), 'world carries the void generator');
+    $void = $server->generateWorld('void_test', 1234, \pocketmine\core\enum\GeneratorType::Void);
+    same(\pocketmine\core\enum\GeneratorType::Void, $void->getGenerator(), 'world carries the void generator');
 
     // A far chunk is pure air.
     $far = $void->getChunkData(20, 20);
@@ -162,8 +162,8 @@ test('a void world generates air with a platform at spawn only', function () use
 
 test('a flat world generates its flat terrain (generator flows through ChunkLoadService)', function () use ($kernel): void {
     $server = \pocketmine\api\server\Server::getInstance();
-    $flat = $server->generateWorld('flat_test', 99, 'flat');
-    same('flat', $flat->getGenerator(), 'world carries the flat generator');
+    $flat = $server->generateWorld('flat_test', 99, \pocketmine\core\enum\GeneratorType::Flat);
+    same(\pocketmine\core\enum\GeneratorType::Flat, $flat->getGenerator(), 'world carries the flat generator');
     $flat->loadChunk(0, 0);
     // Flat surface: grass at y=4, stone below, air above.
     same(2, $flat->getBlock(0, 4, 0), 'flat grass at y=4');
@@ -181,7 +181,7 @@ test('a void world persists its generator and restores it on load', function () 
     ok($server->unloadWorld('void_test', false), 'unload void_test');
     $reloaded = $server->loadWorld('void_test');
     ok($reloaded !== null, 'reload void_test from disk');
-    same('void', $reloaded->getGenerator(), 'generator restored from persisted level.dat');
+    same(\pocketmine\core\enum\GeneratorType::Void, $reloaded->getGenerator(), 'generator restored from persisted level.dat');
     same(1234, $reloaded->getSeed(), 'void seed restored');
     $reloaded->loadChunk(0, 0);
     same(2, $reloaded->getBlock(0, 64, 0), 'void platform survives the round-trip');
@@ -209,7 +209,7 @@ test('a foreign level.dat with no generator info loads as void (no regeneration)
 
     $loaded = $server->loadWorld('foreign_test');
     ok($loaded !== null, 'foreign world loads');
-    same('void', $loaded->getGenerator(), 'no generator info -> void default');
+    same(\pocketmine\core\enum\GeneratorType::Void, $loaded->getGenerator(), 'no generator info -> void default');
     // Terrain must not generate around the foreign world: a chunk loads as
     // air except the spawn platform.
     $loaded->loadChunk(3, 3);
@@ -231,7 +231,7 @@ test('a dropped world folder without any level.dat loads as void at boot', funct
     $registry = $kernel->getResourceRegistry();
     \pocketmine\applyPersistedWorldMeta($storage, $registry);
     $cfg = $registry->get(\pocketmine\core\resource\WorldConfig::class);
-    same('void', $cfg?->generator, 'dropped folder without level.dat -> void');
+    same(\pocketmine\core\enum\GeneratorType::Void, $cfg?->generator, 'dropped folder without level.dat -> void');
 });
 
 test('world metadata persists per folder and reloads through the Server API', function () use ($kernel, $registry): void {

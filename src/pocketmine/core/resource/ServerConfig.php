@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace pocketmine\core\resource;
 
 use pocketmine\core\ecs\Resource;
+use pocketmine\core\enum\Difficulty;
+use pocketmine\core\enum\GameMode;
 
 #[Resource]
 final class ServerConfig {
@@ -14,7 +16,7 @@ final class ServerConfig {
         public bool $pvpEnabled = true,
         public bool $spawnAnimals = true,
         public bool $spawnMobs = true,
-        public int $difficulty = 1,
+        public Difficulty $difficulty = Difficulty::Easy,
         public int $seed = 0,
         public int $spawnX = 0,
         public int $spawnY = 64,
@@ -24,7 +26,7 @@ final class ServerConfig {
         public bool $whiteList = false,
         // Blocker 1: gamemode new players start in (mirrors the Server facade
         // gamemode from server.properties; applied by PlayerJoinService).
-        public int $defaultGameMode = 0,
+        public GameMode $defaultGameMode = GameMode::Survival,
         // Blocker 1: autosave interval in ticks (server.properties
         // autosave-interval is in seconds; 6000 ticks = 5 minutes).
         public int $autosaveIntervalTicks = 6000,

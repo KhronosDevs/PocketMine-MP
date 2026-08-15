@@ -17,7 +17,7 @@ class Zombie extends Monster {
         $kernel = \pocketmine\Kernel::getInstance();
         $spawnService = $kernel->getEntitySpawnService();
         
-        $entityRef = $spawnService->spawnEntity('Zombie', $x, $y, $z);
+        $entityRef = $spawnService->spawnEntity(\pocketmine\core\enum\EntityType::Zombie, $x, $y, $z);
         
         $kernel = \pocketmine\Kernel::getInstance();
         $world = $kernel->getWorld();

@@ -21,11 +21,11 @@ class Server {
     private int $port = 19132;
     private bool $onlineMode = false;
     private bool $pvp = true;
-    private int $difficulty = 1;
+    private \pocketmine\core\enum\Difficulty $difficulty = \pocketmine\core\enum\Difficulty::Easy;
     private bool $spawnAnimals = true;
     private bool $spawnMobs = true;
     private bool $forceGamemode = false;
-    private int $gamemode = 0;
+    private \pocketmine\core\enum\GameMode $gamemode = \pocketmine\core\enum\GameMode::Survival;
     private int $viewDistance = 10;
     private bool $allowFlight = false;
     private string $language = 'eng';
@@ -45,8 +45,8 @@ class Server {
         $this->ip = (string)($props['server-ip'] ?? $this->ip);
         $this->maxPlayers = (int)($props['max-players'] ?? $this->maxPlayers);
         $this->port = (int)($props['server-port'] ?? $this->port);
-        $this->difficulty = (int)($props['difficulty'] ?? $this->difficulty);
-        $this->gamemode = (int)($props['gamemode'] ?? $this->gamemode);
+        $this->difficulty = \pocketmine\core\enum\Difficulty::coerce($props['difficulty'] ?? $this->difficulty->value);
+        $this->gamemode = \pocketmine\core\enum\GameMode::coerce($props['gamemode'] ?? $this->gamemode->value);
         $this->viewDistance = (int)($props['view-distance'] ?? $this->viewDistance);
         $this->pvp = self::toBool($props['pvp'] ?? null, $this->pvp);
         $this->spawnAnimals = self::toBool($props['spawn-animals'] ?? null, $this->spawnAnimals);
@@ -148,11 +148,11 @@ class Server {
         $this->pvp = $pvp;
     }
 
-    public function getDifficulty(): int {
+    public function getDifficulty(): \pocketmine\core\enum\Difficulty {
         return $this->difficulty;
     }
 
-    public function setDifficulty(int $difficulty): void {
+    public function setDifficulty(\pocketmine\core\enum\Difficulty $difficulty): void {
         $this->difficulty = $difficulty;
     }
 
@@ -180,11 +180,11 @@ class Server {
         $this->forceGamemode = $force;
     }
 
-    public function getDefaultGamemode(): int {
+    public function getDefaultGamemode(): \pocketmine\core\enum\GameMode {
         return $this->gamemode;
     }
 
-    public function setDefaultGamemode(int $gamemode): void {
+    public function setDefaultGamemode(\pocketmine\core\enum\GameMode $gamemode): void {
         $this->gamemode = $gamemode;
     }
 
@@ -303,11 +303,11 @@ class Server {
             // it (normal/flat/void). Foreign or legacy level.dat files (no
             // generator info) default to VOID: the world is not regenerated
             // around the player - a dropped-in lobby stays as-is.
-            $config->generator = (string)($meta['generator'] ?? 'void');
+            $config->generator = \pocketmine\core\enum\GeneratorType::coerce($meta['generator'] ?? 'void');
         } else {
             // No level.dat at all (a hand-dropped folder): treat as void so
             // nothing generates around whatever the user placed.
-            $config->generator = 'void';
+            $config->generator = \pocketmine\core\enum\GeneratorType::Void;
         }
         $worldId = $registry->registerWorld($name, $name, $seed, $store, $config, $storage);
         $info = $registry->getWorld($worldId);
@@ -319,7 +319,7 @@ class Server {
      * folder (worlds/<name>/). The world becomes immediately playable - a
      * player switched to it (via /world) streams freshly generated terrain.
      */
-    public function generateWorld(string $name, int $seed = 0, string $generator = 'normal', array $options = []): World {
+    public function generateWorld(string $name, int $seed = 0, \pocketmine\core\enum\GeneratorType $generator = \pocketmine\core\enum\GeneratorType::Normal, array $options = []): World {
         $kernel = \pocketmine\Kernel::getInstance();
         if ($kernel === null) {
             throw new \RuntimeException('Kernel not initialized');
@@ -452,7 +452,7 @@ class Server {
         
         foreach ($query as $entity) {
             $metadata = $entity->get(\pocketmine\core\component\MetadataComponent::class);
-            if ($metadata && $metadata->get('uniqueId') === $uniqueId) {
+            if ($metadata && $metadata->get(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID) === $uniqueId) {
                 return new \pocketmine\api\entity\Player(
                     EntityRef::create($entity->id, $world),
                     $world

@@ -6,6 +6,8 @@ namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
 use pocketmine\core\component\MetadataComponent;
+use pocketmine\core\constants\MetadataKeys;
+use pocketmine\core\enum\GameMode;
 
 /**
  * /gamemode <0|1|survival|creative> [player] — switches a player between
@@ -27,8 +29,8 @@ final class GamemodeCommand extends BuiltinCommand {
     public function execute(CommandSender $sender, array $args): bool {
         $modeArg = array_shift($args) ?? '';
         $mode = match (strtolower($modeArg)) {
-            '0', 'survival', 's' => 0,
-            '1', 'creative', 'c' => 1,
+            '0', 'survival', 's' => GameMode::Survival,
+            '1', 'creative', 'c' => GameMode::Creative,
             default => null,
         };
         if ($mode === null) {
@@ -51,11 +53,11 @@ final class GamemodeCommand extends BuiltinCommand {
             return false;
         }
 
-        $metadata->set('gamemode', $mode);
+        $metadata->set(MetadataKeys::GAMEMODE, $mode->value);
         $kernel->getNetworkSessionService()->sendGamemodeTo($targetId, $mode);
 
         $name = $this->playerName($targetId);
-        $sender->sendMessage($mode === 1 ? "$name is now in creative mode." : "$name is now in survival mode.");
+        $sender->sendMessage($mode === GameMode::Creative ? "$name is now in creative mode." : "$name is now in survival mode.");
         return true;
     }
 }

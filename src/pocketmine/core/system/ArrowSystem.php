@@ -79,7 +79,7 @@ final class ArrowSystem implements System {
 
         foreach ($query as $entity) {
             $meta = $entity->get(MetadataComponent::class);
-            $projectileType = $meta?->get('projectileType');
+            $projectileType = $meta?->get(\pocketmine\core\constants\MetadataKeys::PROJECTILE_TYPE);
             if (!is_string($projectileType)) {
                 continue;
             }
@@ -94,8 +94,8 @@ final class ArrowSystem implements System {
             }
 
             // Age: legacy arrows live 1200 ticks then despawn.
-            $age = (int)($meta->get('arrowAge', 0)) + 1;
-            $meta->set('arrowAge', $age);
+            $age = (int)($meta->get(\pocketmine\core\constants\MetadataKeys::ARROW_AGE, 0)) + 1;
+            $meta->set(\pocketmine\core\constants\MetadataKeys::ARROW_AGE, $age);
             if ($age > 1200) {
                 $despawn->despawn(EntityRef::create($entity->id, $world), false);
                 continue;
@@ -110,11 +110,11 @@ final class ArrowSystem implements System {
             // is re-synced to the victim every tick, so the client sees it
             // embedded and following. When the victim dies/despawns, the arrow
             // unsticks and falls to the ground like a normal arrow.
-            if ($meta->get('stuck') === true) {
+            if ($meta->get(\pocketmine\core\constants\MetadataKeys::STUCK) === true) {
                 $vel->x = 0;
                 $vel->y = 0;
                 $vel->z = 0;
-                $stuckTargetId = (int)$meta->get('stuckTargetId', -1);
+                $stuckTargetId = (int)$meta->get(\pocketmine\core\constants\MetadataKeys::STUCK_TARGET_ID, -1);
                 if ($stuckTargetId !== -1) {
                     $victim = $world->getEntity($stuckTargetId);
                     $victimHealth = $victim?->get(HealthComponent::class);
@@ -132,8 +132,8 @@ final class ArrowSystem implements System {
                         continue;
                     }
                     // Victim is gone: the projectile drops out and falls.
-                    $meta->set('stuck', false);
-                    $meta->set('stuckTargetId', -1);
+                    $meta->set(\pocketmine\core\constants\MetadataKeys::STUCK, false);
+                    $meta->set(\pocketmine\core\constants\MetadataKeys::STUCK_TARGET_ID, -1);
                 }
                 continue;
             }
@@ -185,7 +185,7 @@ final class ArrowSystem implements System {
                     $vel->x = 0;
                     $vel->y = 0;
                     $vel->z = 0;
-                    $meta->set('stuck', true);
+                    $meta->set(\pocketmine\core\constants\MetadataKeys::STUCK, true);
                     // The arrow keeps its current (pre-move) position so it
                     // renders just in front of the wall face; the movement
                     // systems will not move it again while velocity is zero.
@@ -194,16 +194,16 @@ final class ArrowSystem implements System {
                 }
 
                 // Entity collision: nearest living target near this sample.
-                $target = $this->findHitTarget($world, $sx, $sy, $sz, $age, (int)($meta->get('shooterId', -1)));
+                $target = $this->findHitTarget($world, $sx, $sy, $sz, $age, (int)($meta->get(\pocketmine\core\constants\MetadataKeys::SHOOTER_ID, -1)));
                 if ($target !== null) {
                     // Legacy: damage = ceil(motion_blocksPerTick * damage); our
                     // velocity is blocks/second, so divide by 20 for per tick.
                     $damage = (int)ceil(($speed / 20.0) * $projectile['damage']);
-                    $critical = (bool)$meta->get('critical', false);
+                    $critical = (bool)$meta->get(\pocketmine\core\constants\MetadataKeys::CRITICAL, false);
                     if ($critical) {
                         $damage += mt_rand(0, (int)($damage / 2) + 1);
                     }
-                    $shooter = EntityRef::create((int)$meta->get('shooterId', -1), $world);
+                    $shooter = EntityRef::create((int)$meta->get(\pocketmine\core\constants\MetadataKeys::SHOOTER_ID, -1), $world);
                     $combat->applyDamage(
                         EntityRef::create($target, $world),
                         (float)max(0, $damage),
@@ -217,8 +217,8 @@ final class ArrowSystem implements System {
                         $vel->x = 0;
                         $vel->y = 0;
                         $vel->z = 0;
-                        $meta->set('stuck', true);
-                        $meta->set('stuckTargetId', $target);
+                        $meta->set(\pocketmine\core\constants\MetadataKeys::STUCK, true);
+                        $meta->set(\pocketmine\core\constants\MetadataKeys::STUCK_TARGET_ID, $target);
                     } else {
                         // Non-sticky projectiles (future snowballs/eggs)
                         // despawn on impact, like legacy Projectile::kill().
@@ -247,11 +247,11 @@ final class ArrowSystem implements System {
                 continue;
             }
             $cMeta = $candidate->get(MetadataComponent::class);
-            if ($cMeta?->get('projectileType') !== null) {
+            if ($cMeta?->get(\pocketmine\core\constants\MetadataKeys::PROJECTILE_TYPE) !== null) {
                 continue; // arrows do not hit other projectiles
             }
             // Creative players are invulnerable to projectiles (legacy).
-            if (($cMeta?->get('gamemode') ?? 0) === 1) {
+            if (\pocketmine\core\enum\GameMode::coerce($cMeta?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) === \pocketmine\core\enum\GameMode::Creative) {
                 continue;
             }
             $health = $candidate->get(HealthComponent::class);

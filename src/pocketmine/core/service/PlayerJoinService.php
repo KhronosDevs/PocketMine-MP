@@ -42,10 +42,10 @@ final class PlayerJoinService {
         // is on. Returning players otherwise keep their saved gamemode.
         $meta = $entityRef->getEntity()?->get(\pocketmine\core\component\MetadataComponent::class);
         $force = \pocketmine\api\server\Server::getInstance()->isForceGamemode();
-        if ($meta !== null && ($meta->get('gamemode') === null || $force)) {
+        if ($meta !== null && ($meta->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE) === null || $force)) {
             $worldConfig = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
             if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
-                $meta->set('gamemode', $worldConfig->gameMode);
+                $meta->set(\pocketmine\core\constants\MetadataKeys::GAMEMODE, $worldConfig->gameMode->value);
             }
         }
 
@@ -92,7 +92,7 @@ final class PlayerJoinService {
                     ->with(new \pocketmine\core\component\HungerComponent())
                     // 14.20: players join the default world (id 0).
                     ->with(new \pocketmine\core\component\WorldComponent(0))
-                    ->withTag('player')
+                    ->withTag(\pocketmine\core\constants\EntityTags::PLAYER)
             );
             
             $entity = $entityRef->getEntity();
@@ -101,8 +101,8 @@ final class PlayerJoinService {
                 // save without those keys still yields a named, owned player).
                 $meta = $entity->get(MetadataComponent::class);
                 if ($meta) {
-                    $meta->set('username', $username);
-                    $meta->set('uniqueId', $playerRef->uniqueId);
+                    $meta->set(\pocketmine\core\constants\MetadataKeys::USERNAME, $username);
+                    $meta->set(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID, $playerRef->uniqueId);
                 }
                 
                 // Restore components from saved data
@@ -140,15 +140,15 @@ final class PlayerJoinService {
                 ->with(new \pocketmine\core\component\HungerComponent())
                 // 14.20: players join the default world (id 0).
                 ->with(new \pocketmine\core\component\WorldComponent(0))
-                ->withTag('player')
+                ->withTag(\pocketmine\core\constants\EntityTags::PLAYER)
                 
         );
         
         // Store mapping
         $entity = $entityRef->getEntity();
         if ($entity) {
-            $entity->get(MetadataComponent::class)?->set('username', $username);
-            $entity->get(MetadataComponent::class)?->set('uniqueId', $playerRef->uniqueId);
+            $entity->get(MetadataComponent::class)?->set(\pocketmine\core\constants\MetadataKeys::USERNAME, $username);
+            $entity->get(MetadataComponent::class)?->set(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID, $playerRef->uniqueId);
         }
 
         // Starter kit (hotbar): a few placeable blocks so block placement

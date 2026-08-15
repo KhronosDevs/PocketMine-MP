@@ -282,7 +282,7 @@ class World {
                 ->with(new \pocketmine\core\component\HealthComponent(1, 1))
                 ->with(new MetadataComponent(['xp' => $amount]))
                 ->with(new WorldComponent($this->worldId))
-                ->withTag('xp_orb')
+                ->withTag(\pocketmine\core\constants\EntityTags::XP_ORB)
         );
     }
 
@@ -298,26 +298,26 @@ class World {
         $this->getChunkStore()?->load($data);
     }
 
-    public function getGenerator(): string {
-        return $this->getWorldConfig()?->generator ?? 'normal';
+    public function getGenerator(): \pocketmine\core\enum\GeneratorType {
+        return $this->getWorldConfig()?->generator ?? \pocketmine\core\enum\GeneratorType::Normal;
     }
 
-    public function getDifficulty(): int {
-        return $this->getWorldConfig()?->difficulty ?? 1;
+    public function getDifficulty(): \pocketmine\core\enum\Difficulty {
+        return $this->getWorldConfig()?->difficulty ?? \pocketmine\core\enum\Difficulty::Easy;
     }
 
-    public function setDifficulty(int $difficulty): void {
+    public function setDifficulty(\pocketmine\core\enum\Difficulty $difficulty): void {
         $config = $this->getWorldConfig();
         if ($config !== null) {
             $config->difficulty = $difficulty;
         }
     }
 
-    public function getGameMode(): int {
-        return $this->getWorldConfig()?->gameMode ?? 0;
+    public function getGameMode(): \pocketmine\core\enum\GameMode {
+        return $this->getWorldConfig()?->gameMode ?? \pocketmine\core\enum\GameMode::Survival;
     }
 
-    public function setGameMode(int $gamemode): void {
+    public function setGameMode(\pocketmine\core\enum\GameMode $gamemode): void {
         $config = $this->getWorldConfig();
         if ($config !== null) {
             $config->gameMode = $gamemode;
