@@ -11,6 +11,7 @@ use pocketmine\core\ecs\World;
 use pocketmine\core\resource\ChunkStore;
 use pocketmine\core\resource\FurnaceStore;
 use pocketmine\core\resource\SmeltingRegistry;
+use pocketmine\core\resource\WorldRegistry;
 use pocketmine\core\service\NetworkSessionService;
 
 /**
@@ -29,10 +30,8 @@ final class FurnaceSystem implements System {
 
     public function run(World $world, float $deltaTime): void {
         $resources = $world->getResourceRegistry();
-        $store = $resources->get(FurnaceStore::class);
         $smelting = $resources->get(SmeltingRegistry::class);
-        $chunks = $resources->get(ChunkStore::class);
-        if (!$store instanceof FurnaceStore || !$smelting instanceof SmeltingRegistry) {
+        if (!$smelting instanceof SmeltingRegistry) {
             return;
         }
         $network = \pocketmine\Kernel::getInstance()?->getNetworkSessionService();
@@ -40,6 +39,31 @@ final class FurnaceSystem implements System {
             $network = null;
         }
 
+        // Furnace state is per-world (like chests): tick every bundle's store
+        // with that world's ChunkStore for block-state flips and pass the
+        // world id through to the network sync. The default world (id 0)
+        // falls back to the global resource instances.
+        $registry = $resources->get(WorldRegistry::class);
+        if ($registry instanceof WorldRegistry) {
+            foreach ($registry->getWorlds() as $worldId => $_) {
+                $store = $registry->getFurnaceStore((int)$worldId);
+                $chunks = $registry->getStore((int)$worldId);
+                if ($store instanceof FurnaceStore) {
+                    $this->tickFurnaces($store, $chunks, $smelting, $network, (int)$worldId);
+                }
+            }
+        } else {
+            // Registry-less path (tests constructing the kernel bare): the
+            // classic single global store, world 0.
+            $store = $resources->get(FurnaceStore::class);
+            if ($store instanceof FurnaceStore) {
+                $this->tickFurnaces($store, $resources->get(ChunkStore::class), $smelting, $network, 0);
+            }
+        }
+    }
+
+    /** Advance every furnace in one world's store. */
+    private function tickFurnaces(FurnaceStore $store, ?ChunkStore $chunks, SmeltingRegistry $smelting, ?NetworkSessionService $network, int $worldId): void {
         foreach ($store->getAll() as $key => $state) {
             [$x, $y, $z] = array_map('intval', explode(':', $key));
             /** @var InventoryComponent $inv */
@@ -66,7 +90,7 @@ final class FurnaceSystem implements System {
                         $this->consumeOne($inv, FurnaceStore::SLOT_FUEL, $fuel);
                         $this->setBlockState($chunks, $x, $y, $z, self::BLOCK_LIT_FURNACE);
                         $changed = true;
-                        $network?->syncFurnace($x, $y, $z, FurnaceStore::SLOT_FUEL, true);
+                        $network?->syncFurnace($x, $y, $z, FurnaceStore::SLOT_FUEL, true, $worldId);
                     }
                 }
             } else {
@@ -78,7 +102,7 @@ final class FurnaceSystem implements System {
                         $state['cookTime'] -= SmeltingRegistry::COOK_TICKS;
                         $this->consumeOne($inv, FurnaceStore::SLOT_SMELTING, $input);
                         $this->produceResult($inv, $result, $recipeResult);
-                        $network?->syncFurnace($x, $y, $z, null, false);
+                        $network?->syncFurnace($x, $y, $z, null, false, $worldId);
                     }
                 } elseif ($state['cookTime'] > 0) {
                     // Input changed / recipe no longer valid: progress resets.
@@ -86,7 +110,7 @@ final class FurnaceSystem implements System {
                 }
                 if ($state['burnTime'] <= 0) {
                     $this->setBlockState($chunks, $x, $y, $z, self::BLOCK_FURNACE);
-                    $network?->syncFurnace($x, $y, $z, null, true);
+                    $network?->syncFurnace($x, $y, $z, null, true, $worldId);
                 }
             }
             // Only rewrite the store entry when something actually moved (an

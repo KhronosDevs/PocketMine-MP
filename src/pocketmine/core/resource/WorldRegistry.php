@@ -23,14 +23,15 @@ use pocketmine\port\driven\StoragePort;
  * through this registry. The default world is always id 0 and is registered
  * by the Kernel at boot.
  *
- * Known limitation: block-state stores (ChestStore/FurnaceStore) are shared
- * resources keyed by block coordinates only, so two worlds with chests at the
- * exact same coordinates share contents. World-level block data (ChunkStore)
- * is fully isolated; keying the tile stores by world id is a future pass.
+ * Block-state stores (ChestStore/FurnaceStore) are per-world too: each bundle
+ * owns its own tile stores so two worlds with chests at the exact same block
+ * coordinates never share contents (the default world's bundle is seeded with
+ * the global resource instances at boot, keeping single-world behavior
+ * unchanged).
  */
 #[Resource]
 final class WorldRegistry {
-    /** @var array<int, array{id: int, name: string, folderName: string, seed: int, store: ChunkStore, config: WorldConfig, storage: StoragePort}> */
+    /** @var array<int, array{id: int, name: string, folderName: string, seed: int, store: ChunkStore, config: WorldConfig, storage: StoragePort, chestStore: ChestStore, furnaceStore: FurnaceStore}> */
     private array $worlds = [];
     /** @var array<string, int> folderName => id (cheap lookup for load/generate dedup) */
     private array $byFolder = [];
@@ -43,6 +44,8 @@ final class WorldRegistry {
         ChunkStore $store,
         WorldConfig $config,
         StoragePort $storage,
+        ?ChestStore $chestStore = null,
+        ?FurnaceStore $furnaceStore = null,
     ): int {
         // The default world is pre-registered with id 0 by the Kernel; any
         // later registration gets the next id. A folder may only back one
@@ -60,6 +63,11 @@ final class WorldRegistry {
             'store' => $store,
             'config' => $config,
             'storage' => $storage,
+            // Every world gets its own tile stores: chests/furnaces key by
+            // block coordinate, so two worlds with containers at the same
+            // coordinates must never share contents.
+            'chestStore' => $chestStore ?? new ChestStore(),
+            'furnaceStore' => $furnaceStore ?? new FurnaceStore(),
         ];
         $this->byFolder[$folderName] = $id;
         return $id;
@@ -76,6 +84,8 @@ final class WorldRegistry {
         ChunkStore $store,
         WorldConfig $config,
         StoragePort $storage,
+        ?ChestStore $chestStore = null,
+        ?FurnaceStore $furnaceStore = null,
     ): void {
         $this->worlds[0] = [
             'id' => 0,
@@ -85,6 +95,11 @@ final class WorldRegistry {
             'store' => $store,
             'config' => $config,
             'storage' => $storage,
+            // The default world is seeded with the caller's tile stores (the
+            // kernel hands over its global resource instances) so existing
+            // single-world behavior is unchanged.
+            'chestStore' => $chestStore ?? new ChestStore(),
+            'furnaceStore' => $furnaceStore ?? new FurnaceStore(),
         ];
         $this->byFolder[$folderName] = 0;
     }
@@ -114,6 +129,16 @@ final class WorldRegistry {
     public function getStore(int $id): ?ChunkStore {
         $world = $this->worlds[$id] ?? null;
         return $world !== null ? $world['store'] : null;
+    }
+
+    public function getChestStore(int $id): ?ChestStore {
+        $world = $this->worlds[$id] ?? null;
+        return $world !== null ? $world['chestStore'] : null;
+    }
+
+    public function getFurnaceStore(int $id): ?FurnaceStore {
+        $world = $this->worlds[$id] ?? null;
+        return $world !== null ? $world['furnaceStore'] : null;
     }
 
     public function getConfig(int $id): ?WorldConfig {

@@ -286,6 +286,11 @@ final class Kernel {
             $defaultWorld = $khronos instanceof \pocketmine\core\resource\KhronosConfig && $khronos->defaultWorld !== ''
                 ? $khronos->defaultWorld
                 : 'world';
+            // The default world keeps the global tile-store instances so
+            // single-world behavior (and existing tests) is unchanged; extra
+            // worlds get their own stores when registered.
+            $chestStore = $this->resourceRegistry->get(\pocketmine\core\resource\ChestStore::class);
+            $furnaceStore = $this->resourceRegistry->get(\pocketmine\core\resource\FurnaceStore::class);
             $worldRegistry->registerDefaultWorld(
                 $defaultWorld,
                 $defaultWorld,
@@ -293,6 +298,8 @@ final class Kernel {
                 $chunkStore instanceof \pocketmine\core\resource\ChunkStore ? $chunkStore : new \pocketmine\core\resource\ChunkStore(),
                 $worldConfig instanceof \pocketmine\core\resource\WorldConfig ? $worldConfig : new \pocketmine\core\resource\WorldConfig(),
                 $storagePort,
+                $chestStore instanceof \pocketmine\core\resource\ChestStore ? $chestStore : new \pocketmine\core\resource\ChestStore(),
+                $furnaceStore instanceof \pocketmine\core\resource\FurnaceStore ? $furnaceStore : new \pocketmine\core\resource\FurnaceStore(),
             );
         }
 
@@ -1302,6 +1309,7 @@ final class Kernel {
                     $chunkData,
                     $chunkX,
                     $chunkZ,
+                    $worldId,
                 );
                 $storage->saveChunk($chunkX, $chunkZ, $chunkData);
             }

@@ -1539,8 +1539,10 @@ final class NetworkSessionService {
         $this->sessions[$addrKey] = $session;
 
         // Legacy ContainerInventory::onOpen: ContainerOpenPacket (type 0 =
-        // chest, 27 slots, block coords) then the full contents.
-        $chestStore = $this->chestStore();
+        // chest, 27 slots, block coords) then the full contents. Chest
+        // contents are per-world: the same coordinates in another world have
+        // a different inventory.
+        $chestStore = $this->chestStore($session['worldId']);
         $inv = $chestStore->get($x, $y, $z);
         $open = new ContainerOpenPacket();
         $open->windowid = self::CHEST_WINDOW_ID;
@@ -1554,7 +1556,14 @@ final class NetworkSessionService {
         $this->sendChestContents($session['playerRef'], $inv);
     }
 
-    private function chestStore(): ChestStore {
+    private function chestStore(int $worldId = 0): ChestStore {
+        // Non-default worlds resolve their own store from the registry; the
+        // default world falls back to the global resource instance.
+        if ($worldId !== 0) {
+            $registry = $this->resourceRegistry->get(WorldRegistry::class);
+            $store = $registry instanceof WorldRegistry ? $registry->getChestStore($worldId) : null;
+            return $store instanceof ChestStore ? $store : new ChestStore();
+        }
         $store = $this->resourceRegistry->get(ChestStore::class);
         return $store instanceof ChestStore ? $store : new ChestStore();
     }
@@ -1571,8 +1580,8 @@ final class NetworkSessionService {
         $this->queuePacket($player, $pk);
     }
 
-    /** Send one chest slot to every player with that chest open. */
-    private function broadcastChestSlot(int $x, int $y, int $z, int $slot, \pocketmine\core\component\InventoryComponent $inv): void {
+    /** Send one chest slot to every player with that chest open (same world). */
+    private function broadcastChestSlot(int $x, int $y, int $z, int $slot, \pocketmine\core\component\InventoryComponent $inv, int $worldId = 0): void {
         $item = $inv->get($slot);
         $pk = new ContainerSetSlotPacket();
         $pk->windowid = self::CHEST_WINDOW_ID;
@@ -1581,7 +1590,8 @@ final class NetworkSessionService {
         $pk->item = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
         foreach ($this->sessions as $s) {
             $open = $s['openContainer'];
-            if ($open !== null && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
+            if ($open !== null && $s['worldId'] === $worldId
+                && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
                 $this->queuePacket($s['playerRef'], clone $pk);
             }
         }
@@ -1599,7 +1609,7 @@ final class NetworkSessionService {
         if ($open === null) {
             return;
         }
-        $chest = $this->chestStore()->get($open['x'], $open['y'], $open['z']);
+        $chest = $this->chestStore($session['worldId'])->get($open['x'], $open['y'], $open['z']);
         $slot = $pk->slot;
         $id = (int)($pk->item[0] ?? 0);
         $count = (int)($pk->item[1] ?? 0);
@@ -1638,7 +1648,7 @@ final class NetworkSessionService {
         }
         $session['moveCredit'] = $credit;
         $this->sessions[$addrKey] = $session;
-        $this->broadcastChestSlot($open['x'], $open['y'], $open['z'], $slot, $chest);
+        $this->broadcastChestSlot($open['x'], $open['y'], $open['z'], $slot, $chest, $session['worldId']);
     }
 
     /**
@@ -1659,7 +1669,8 @@ final class NetworkSessionService {
 
         // Legacy FurnaceInventory::onOpen: ContainerOpenPacket (type 3 =
         // InventoryType::FURNACE, 3 slots, block coords) then full contents.
-        $furnaceStore = $this->furnaceStore();
+        // Furnace state is per-world like chests.
+        $furnaceStore = $this->furnaceStore($session['worldId']);
         $state = $furnaceStore->get($x, $y, $z);
         $open = new ContainerOpenPacket();
         $open->windowid = self::FURNACE_WINDOW_ID;
@@ -1673,7 +1684,12 @@ final class NetworkSessionService {
         $this->sendFurnaceContents($session['playerRef'], $state['inventory']);
     }
 
-    private function furnaceStore(): \pocketmine\core\resource\FurnaceStore {
+    private function furnaceStore(int $worldId = 0): \pocketmine\core\resource\FurnaceStore {
+        if ($worldId !== 0) {
+            $registry = $this->resourceRegistry->get(WorldRegistry::class);
+            $store = $registry instanceof WorldRegistry ? $registry->getFurnaceStore($worldId) : null;
+            return $store instanceof \pocketmine\core\resource\FurnaceStore ? $store : new \pocketmine\core\resource\FurnaceStore();
+        }
         $store = $this->resourceRegistry->get(\pocketmine\core\resource\FurnaceStore::class);
         return $store instanceof \pocketmine\core\resource\FurnaceStore ? $store : new \pocketmine\core\resource\FurnaceStore();
     }
@@ -1690,8 +1706,8 @@ final class NetworkSessionService {
         $this->queuePacket($player, $pk);
     }
 
-    /** Send one furnace slot to every player with that furnace open. */
-    private function broadcastFurnaceSlot(int $x, int $y, int $z, int $slot, \pocketmine\core\component\InventoryComponent $inv): void {
+    /** Send one furnace slot to every player with that furnace open (same world). */
+    private function broadcastFurnaceSlot(int $x, int $y, int $z, int $slot, \pocketmine\core\component\InventoryComponent $inv, int $worldId = 0): void {
         $item = $inv->get($slot);
         $pk = new ContainerSetSlotPacket();
         $pk->windowid = self::FURNACE_WINDOW_ID;
@@ -1700,7 +1716,7 @@ final class NetworkSessionService {
         $pk->item = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
         foreach ($this->sessions as $s) {
             $open = $s['openContainer'];
-            if ($open !== null && $open['type'] === 'furnace'
+            if ($open !== null && $s['worldId'] === $worldId && $open['type'] === 'furnace'
                 && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
                 $this->queuePacket($s['playerRef'], clone $pk);
             }
@@ -1717,7 +1733,7 @@ final class NetworkSessionService {
         if ($open === null) {
             return;
         }
-        $furnace = $this->furnaceStore()->get($open['x'], $open['y'], $open['z']);
+        $furnace = $this->furnaceStore($session['worldId'])->get($open['x'], $open['y'], $open['z']);
         $inv = $furnace['inventory'];
         $slot = $pk->slot;
         $id = (int)($pk->item[0] ?? 0);
@@ -1754,8 +1770,8 @@ final class NetworkSessionService {
         }
         $session['moveCredit'] = $credit;
         $this->sessions[$addrKey] = $session;
-        $this->furnaceStore()->put($open['x'], $open['y'], $open['z'], $furnace);
-        $this->broadcastFurnaceSlot($open['x'], $open['y'], $open['z'], $slot, $inv);
+        $this->furnaceStore($session['worldId'])->put($open['x'], $open['y'], $open['z'], $furnace);
+        $this->broadcastFurnaceSlot($open['x'], $open['y'], $open['z'], $slot, $inv, $session['worldId']);
     }
 
     /**
@@ -1765,18 +1781,18 @@ final class NetworkSessionService {
      * block id actually flipped - re-broadcast the block state (a produce
      * tick must not spam UpdateBlockPacket to every session).
      */
-    public function syncFurnace(int $x, int $y, int $z, ?int $slot = null, bool $blockChanged = false): void {
-        $furnace = $this->furnaceStore()->get($x, $y, $z);
+    public function syncFurnace(int $x, int $y, int $z, ?int $slot = null, bool $blockChanged = false, int $worldId = 0): void {
+        $furnace = $this->furnaceStore($worldId)->get($x, $y, $z);
         $inv = $furnace['inventory'];
         if ($blockChanged) {
-            $this->broadcastBlockState($x, $y, $z);
+            $this->broadcastBlockState($x, $y, $z, $worldId);
         }
         if ($slot !== null) {
-            $this->broadcastFurnaceSlot($x, $y, $z, $slot, $inv);
+            $this->broadcastFurnaceSlot($x, $y, $z, $slot, $inv, $worldId);
         } else {
             foreach ($this->sessions as $s) {
                 $open = $s['openContainer'];
-                if ($open !== null && $open['type'] === 'furnace'
+                if ($open !== null && $s['worldId'] === $worldId && $open['type'] === 'furnace'
                     && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
                     $this->sendFurnaceContents($s['playerRef'], $inv);
                 }
@@ -1799,14 +1815,15 @@ final class NetworkSessionService {
      * of every session that had it open.
      */
     private function onFurnaceBroken(int $x, int $y, int $z, array $breaker): void {
-        $store = $this->furnaceStore();
+        $worldId = $breaker['worldId'] ?? 0;
+        $store = $this->furnaceStore($worldId);
         $inv = $store->remove($x, $y, $z);
         foreach ($inv->getContents() as $item) {
             $this->entitySpawnService->spawnItem($x + 0.5, $y + 0.5, $z + 0.5, $item);
         }
         foreach ($this->sessions as $key => $s) {
             $open = $s['openContainer'];
-            if ($open !== null && $open['type'] === 'furnace'
+            if ($open !== null && $s['worldId'] === $worldId && $open['type'] === 'furnace'
                 && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
                 $s['openContainer'] = null;
                 $this->sessions[$key] = $s;
@@ -2223,14 +2240,16 @@ final class NetworkSessionService {
      * every session that had it open (the chest is gone).
      */
     private function onChestBroken(int $x, int $y, int $z, array $breaker): void {
-        $store = $this->chestStore();
+        $worldId = $breaker['worldId'] ?? 0;
+        $store = $this->chestStore($worldId);
         $inv = $store->remove($x, $y, $z);
         foreach ($inv->getContents() as $item) {
             $this->entitySpawnService->spawnItem($x + 0.5, $y + 0.5, $z + 0.5, $item);
         }
         foreach ($this->sessions as $key => $s) {
             $open = $s['openContainer'];
-            if ($open !== null && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
+            if ($open !== null && $s['worldId'] === $worldId
+                && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
                 $s['openContainer'] = null;
                 $this->sessions[$key] = $s;
                 $close = new ContainerClosePacket();
