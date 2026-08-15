@@ -251,6 +251,25 @@ test('player command preprocess event fires and can cancel dispatch', function (
     $eventPort->unsubscribe(PlayerCommandPreprocessEvent::class, $blocker);
 });
 
+test('EntityFactory spawns mobs and item drops by type', function () use ($world) {
+    $zombie = \pocketmine\api\entity\EntityFactory::create('zombie', 300, 65, 300);
+    ok($zombie !== null, 'zombie spawned via factory');
+    ok($zombie instanceof \pocketmine\api\entity\Zombie, 'factory returns the typed facade');
+    ok($zombie->isValid(), 'factory entity is live in the world');
+    near(300.0, $zombie->getPosition()->x, 1e-9, 'factory passes x through');
+
+    $drop = \pocketmine\api\entity\EntityFactory::create('item', 301, 65, 301, ['item' => new \pocketmine\api\inventory\ItemStack(1, 0, 5)]);
+    ok($drop !== null, 'item drop spawned via factory');
+    ok($drop instanceof \pocketmine\api\entity\ItemEntity, 'factory returns ItemEntity for item type');
+    same(5, $drop->getItem()->getCount(), 'item entity carries the requested stack');
+
+    ok(\pocketmine\api\entity\EntityFactory::create('nope', 0, 0, 0) === null, 'unknown type returns null');
+
+    foreach ($world->getEntities() as $entity) {
+        $world->despawn($entity);
+    }
+});
+
 test('disablePlugin removes the plugin and frees the name', function () use ($manager, $demoDir, $commandPort) {
     $plugin = $manager->getPlugin('Demo');
     ok($plugin !== null, 'Demo loaded');
