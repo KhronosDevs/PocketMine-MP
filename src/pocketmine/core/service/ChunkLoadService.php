@@ -174,14 +174,16 @@ final class ChunkLoadService {
             $store->load($chunkData);
             // 14.15: rehydrate chest inventories from the chunk's tile
             // snapshots (saved by Kernel::saveWorld) so chest contents
-            // survive restarts with the terrain.
-            $chestStore = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\ChestStore::class);
-            if ($chestStore instanceof \pocketmine\core\resource\ChestStore) {
+            // survive restarts with the terrain. Stores are per-world: the
+            // chunk belongs to world $worldId, so its tile entities restore
+            // into that world's store only.
+            $chestStore = $this->getChestStore($worldId);
+            if ($chestStore !== null) {
                 $chestStore->restoreFromSnapshots($chunkData->tileEntities);
             }
             // 14.16: rehydrate furnace state (slots + burn/cook) the same way.
-            $furnaceStore = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\FurnaceStore::class);
-            if ($furnaceStore instanceof \pocketmine\core\resource\FurnaceStore) {
+            $furnaceStore = $this->getFurnaceStore($worldId);
+            if ($furnaceStore !== null) {
                 $furnaceStore->restoreFromSnapshots($chunkData->tileEntities);
             }
             if (!$this->isEmptyChunk($chunkData)) {
@@ -263,6 +265,7 @@ final class ChunkLoadService {
                     $chunkData,
                     $chunkX,
                     $chunkZ,
+                    $worldId,
                 );
                 $this->getStorage($worldId)->saveChunk($chunkX, $chunkZ, $chunkData);
             }
@@ -278,12 +281,13 @@ final class ChunkLoadService {
             $store->load($data);
         }
         // Attach block-store tile snapshots so a chunk saved while resident
-        // never drops its chest/furnace contents on disk.
+        // never drops its chest/furnace contents on disk (per-world stores).
         $data = ChunkPersistence::attachTileSnapshots(
             $this->world->getResourceRegistry(),
             $data,
             $data->chunkX,
             $data->chunkZ,
+            $worldId,
         );
         $this->getStorage($worldId)->saveChunk($data->chunkX, $data->chunkZ, $data);
     }
@@ -311,5 +315,23 @@ final class ChunkLoadService {
         }
         $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
         return $store instanceof ChunkStore ? $store : null;
+    }
+
+    private function getChestStore(int $worldId = 0): ?\pocketmine\core\resource\ChestStore {
+        if ($worldId !== 0) {
+            $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getChestStore($worldId) : null;
+        }
+        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\ChestStore::class);
+        return $store instanceof \pocketmine\core\resource\ChestStore ? $store : null;
+    }
+
+    private function getFurnaceStore(int $worldId = 0): ?\pocketmine\core\resource\FurnaceStore {
+        if ($worldId !== 0) {
+            $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getFurnaceStore($worldId) : null;
+        }
+        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\FurnaceStore::class);
+        return $store instanceof \pocketmine\core\resource\FurnaceStore ? $store : null;
     }
 }

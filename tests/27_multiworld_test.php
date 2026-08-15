@@ -257,4 +257,56 @@ test('world metadata persists per folder and reloads through the Server API', fu
     same(15000, $reloaded->getTime(), 'time restored');
 });
 
+test('chests and furnaces at the same coordinates in different worlds are isolated', function () use ($kernel, $registry): void {
+    // Two worlds with a chest + furnace at the SAME block coordinates must
+    // never share contents: the tile stores are per-world bundles now.
+    $server = \pocketmine\api\server\Server::getInstance();
+    $second = $server->getWorldByName('nether_test');
+    if ($second === null) {
+        $second = $server->generateWorld('nether_test', 999);
+    }
+    $worldId = $second->getWorldId();
+    ok($worldId !== 0, 'second world has a non-default id');
+
+    $chest0 = $registry->getChestStore(0);
+    $chest1 = $registry->getChestStore($worldId);
+    ok($chest0 !== null && $chest1 !== null, 'both worlds have chest stores');
+    ok($chest0 !== $chest1, 'worlds do not share a ChestStore');
+
+    $furnace0 = $registry->getFurnaceStore(0);
+    $furnace1 = $registry->getFurnaceStore($worldId);
+    ok($furnace0 !== null && $furnace1 !== null, 'both worlds have furnace stores');
+    ok($furnace0 !== $furnace1, 'worlds do not share a FurnaceStore');
+
+    // Same coordinates, different contents per world.
+    $cx = 3333; $cy = 70; $cz = 3333;
+    $chest0->get($cx, $cy, $cz)->set(0, new \pocketmine\core\component\ItemStack(1, 0, 1));   // 1 stone
+    $chest1->get($cx, $cy, $cz)->set(0, new \pocketmine\core\component\ItemStack(5, 0, 64));   // 64 planks
+    $furnace0->get($cx, $cy, $cz)['inventory']->set(0, new \pocketmine\core\component\ItemStack(15, 0, 3)); // 3 iron ore
+    $furnace1->get($cx, $cy, $cz)['inventory']->set(0, new \pocketmine\core\component\ItemStack(16, 0, 1)); // 1 coal ore
+
+    $c0 = $chest0->get($cx, $cy, $cz)->get(0);
+    $c1 = $chest1->get($cx, $cy, $cz)->get(0);
+    ok($c0 !== null && $c0->itemId === 1 && $c0->count === 1, 'default-world chest holds its own item');
+    ok($c1 !== null && $c1->itemId === 5 && $c1->count === 64, 'second-world chest holds its own item');
+
+    $f0 = $furnace0->get($cx, $cy, $cz)['inventory']->get(0);
+    $f1 = $furnace1->get($cx, $cy, $cz)['inventory']->get(0);
+    ok($f0 !== null && $f0->itemId === 15, 'default-world furnace holds its own input');
+    ok($f1 !== null && $f1->itemId === 16, 'second-world furnace holds its own input');
+
+    // Per-world snapshot export: a chunk's snapshots come only from that
+    // world's store, so saving/loading a world can never cross-wire contents.
+    $chunkX = intdiv($cx, 16);
+    $chunkZ = intdiv($cz, 16);
+    $snaps0 = $chest0->snapshotsForChunk($chunkX, $chunkZ);
+    $snaps1 = $chest1->snapshotsForChunk($chunkX, $chunkZ);
+    same(1, count($snaps0), 'default world exports exactly its chest');
+    same(1, count($snaps1), 'second world exports exactly its chest');
+    $decoded0 = json_decode((string)base64_decode($snaps0[0]->data['nbt'] ?? ''), true);
+    $decoded1 = json_decode((string)base64_decode($snaps1[0]->data['nbt'] ?? ''), true);
+    same(1, $decoded0[0]['id'] ?? null, 'snapshot 0 carries the default-world item');
+    same(5, $decoded1[0]['id'] ?? null, 'snapshot 1 carries the second-world item');
+});
+
 runTests();

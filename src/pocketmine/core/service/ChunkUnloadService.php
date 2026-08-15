@@ -73,6 +73,7 @@ final class ChunkUnloadService {
                     $chunkData,
                     $chunkX,
                     $chunkZ,
+                    $worldId,
                 );
                 $this->getStorage($worldId)->saveChunk($chunkX, $chunkZ, $chunkData);
             }

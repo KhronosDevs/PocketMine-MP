@@ -7,6 +7,7 @@ namespace pocketmine\core\service;
 use pocketmine\core\ecs\ResourceRegistry;
 use pocketmine\core\resource\ChestStore;
 use pocketmine\core\resource\FurnaceStore;
+use pocketmine\core\resource\WorldRegistry;
 use pocketmine\port\driven\ChunkData;
 
 /**
@@ -21,19 +22,25 @@ use pocketmine\port\driven\ChunkData;
 final class ChunkPersistence {
     private function __construct() {}
 
-    public static function attachTileSnapshots(ResourceRegistry $resources, ChunkData $chunkData, int $chunkX, int $chunkZ): ChunkData {
+    public static function attachTileSnapshots(ResourceRegistry $resources, ChunkData $chunkData, int $chunkX, int $chunkZ, int $worldId = 0): ChunkData {
         // The in-memory block stores are authoritative while the chunk is
         // resident, so their snapshots REPLACE any store-owned snapshots that
         // rode in from disk (which are stale the moment a chest or furnace
         // changed in memory). Filter them out first, then attach fresh ones -
         // this also keeps a re-save from duplicating entries.
+        //
+        // Tile stores are per-world: a chest at the same coordinates in two
+        // worlds has two different inventories. Non-default worlds resolve
+        // strictly through the registry; the default world (id 0) falls back
+        // to the global resource instances so single-world behavior is
+        // unchanged.
         $fresh = [];
-        $chestStore = $resources->get(ChestStore::class);
-        if ($chestStore instanceof ChestStore) {
+        $chestStore = self::chestStore($resources, $worldId);
+        if ($chestStore !== null) {
             $fresh = array_merge($fresh, $chestStore->snapshotsForChunk($chunkX, $chunkZ));
         }
-        $furnaceStore = $resources->get(FurnaceStore::class);
-        if ($furnaceStore instanceof FurnaceStore) {
+        $furnaceStore = self::furnaceStore($resources, $worldId);
+        if ($furnaceStore !== null) {
             $fresh = array_merge($fresh, $furnaceStore->snapshotsForChunk($chunkX, $chunkZ));
         }
         if ($fresh === []) {
@@ -53,5 +60,25 @@ final class ChunkPersistence {
             $chunkData->entities,
             array_merge($tileEntities, $fresh),
         );
+    }
+
+    /** The ChestStore for a world bundle (default world falls back to the global resource). */
+    private static function chestStore(ResourceRegistry $resources, int $worldId): ?ChestStore {
+        if ($worldId !== 0) {
+            $registry = $resources->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getChestStore($worldId) : null;
+        }
+        $store = $resources->get(ChestStore::class);
+        return $store instanceof ChestStore ? $store : null;
+    }
+
+    /** The FurnaceStore for a world bundle (default world falls back to the global resource). */
+    private static function furnaceStore(ResourceRegistry $resources, int $worldId): ?FurnaceStore {
+        if ($worldId !== 0) {
+            $registry = $resources->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getFurnaceStore($worldId) : null;
+        }
+        $store = $resources->get(FurnaceStore::class);
+        return $store instanceof FurnaceStore ? $store : null;
     }
 }
