@@ -77,6 +77,14 @@ test('block break removes block and spawns drops', function () use ($kernel, $wo
     ok($placedY !== null, 'placed block position known');
     $y = $placedY;
 
+    // The player was created in creative (gamemode 1) for the place tests;
+    // drops only happen in survival, so switch before breaking.
+    $entity = $playerRef->getEntity();
+    $meta = $entity?->get(\pocketmine\core\component\MetadataComponent::class);
+    if ($meta !== null) {
+        $meta->set('gamemode', 0);
+    }
+
     // Teleport down to the stone layer, break stone (drops cobblestone).
     $playerRef->teleport(8.5, 1.5, 8.5);
     $before = count($world->getEntities());

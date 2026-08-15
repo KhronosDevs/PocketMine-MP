@@ -515,6 +515,7 @@ final class BlockRegistry {
             $id === 32 => (mt_rand(1, 3) === 1) ? [['id' => 280, 'meta' => 0, 'count' => 1]] : [], // dead bush -> stick
             $id === 13 => (mt_rand(1, 10) === 1) ? [['id' => 318, 'meta' => 0, 'count' => 1]] : [['id' => 13, 'meta' => 0, 'count' => 1]], // gravel -> flint
             $id === 1 => [['id' => 4, 'meta' => 0, 'count' => 1]],             // stone -> cobblestone (unless silk touch)
+            $id === 2 => [['id' => 3, 'meta' => 0, 'count' => 1]],             // grass -> dirt (legacy Grass::getDrops)
             $id === 60 => [['id' => 3, 'meta' => 0, 'count' => 1]],            // farmland -> dirt
             default => [['id' => $id, 'meta' => 0, 'count' => 1]],
         };
