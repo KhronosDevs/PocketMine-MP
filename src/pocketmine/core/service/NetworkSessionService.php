@@ -101,6 +101,7 @@ use function in_array;
 use function is_string;
 use function ord;
 use function pack;
+use function sort;
 use function strlen;
 use function substr;
 use function usort;
@@ -1418,6 +1419,10 @@ final class NetworkSessionService {
             $meta = $arrowEntity->get(MetadataComponent::class);
             if ($meta) {
                 $meta->set(MetadataKeys::CRITICAL, $f >= 2.0);
+                // 14.30: carry the bow's Power enchantment so ArrowSystem can
+                // add its bonus to the impact damage.
+                $held = $inventory->get($inventory->heldSlot);
+                $meta->set(MetadataKeys::POWER_ENCHANT, $held !== null ? $held->getEnchantmentLevel(19) : 0);
             }
         }
 
@@ -1474,6 +1479,17 @@ final class NetworkSessionService {
             }
             if ($block === 117) {
                 $this->openBrewing($addrKey, $pk->x, $pk->y, $pk->z);
+                return;
+            }
+            // 14.30: right-clicking an enchanting table (116) opens its
+            // window with three bookshelf-boosted options; right-clicking an
+            // anvil (145) opens the combine/repair/rename window.
+            if ($block === 116) {
+                $this->openEnchantTable($addrKey, $pk->x, $pk->y, $pk->z);
+                return;
+            }
+            if ($block === 145) {
+                $this->openAnvil($addrKey, $pk->x, $pk->y, $pk->z);
                 return;
             }
             // 14.24: right-clicking an item frame puts the held item into it
@@ -1870,6 +1886,37 @@ final class NetworkSessionService {
                 $this->handleTileContainerSetSlot($addrKey, $session, $pk);
                 return;
             }
+        } elseif ($pk->windowid === self::ENCHANT_WINDOW_ID) {
+            $open = $session['openContainer'];
+            if ($open !== null && $open['type'] === 'enchant') {
+                // Track the lapis slot state for the apply path.
+                if ($pk->slot === self::ENCHANT_SLOT_LAPIS) {
+                    $session['openContainerLapis'] = $pk->item[0] > 0
+                        ? new ItemStack((int)$pk->item[0], (int)$pk->item[2], (int)$pk->item[1])
+                        : null;
+                    $this->sessions[$addrKey] = $session;
+                    return;
+                }
+                if ($pk->slot === self::ENCHANT_SLOT_ITEM && $pk->item[0] > 0 && $pk->item[3] !== null) {
+                    // Item comes back already enchanted: the client picked an
+                    // option - validate + apply (the NBT distinguishes a
+                    // result report from a fresh placement).
+                    $this->handleEnchantResult($addrKey, $session, $pk);
+                    return;
+                }
+                $this->handleEnchantSetSlot($addrKey, $session, $pk);
+                return;
+            }
+        } elseif ($pk->windowid === self::ANVIL_WINDOW_ID) {
+            $open = $session['openContainer'];
+            if ($open !== null && $open['type'] === 'anvil') {
+                if ($pk->slot === self::ANVIL_SLOT_RESULT) {
+                    $this->handleAnvilTakeResult($addrKey, $session, $pk);
+                } else {
+                    $this->handleAnvilSetSlot($addrKey, $session, $pk);
+                }
+                return;
+            }
         } elseif ($pk->windowid === ContainerSetContentPacket::SPECIAL_CREATIVE) {
             // Creative pick: the client selected an item from the creative
             // window. Put a fresh stack of it into the target inventory slot.
@@ -2082,6 +2129,272 @@ final class NetworkSessionService {
 
     private function openBrewing(string $addrKey, int $x, int $y, int $z): void {
         $this->openTileContainer($addrKey, $x, $y, $z, 'brewing');
+    }
+
+    // --- Enchanting table + anvil (14.30) ------------------------------------
+
+    /** Enchanting table window id (after the container family 2-6). */
+    private const ENCHANT_WINDOW_ID = 7;
+    /** Anvil window id. */
+    private const ANVIL_WINDOW_ID = 8;
+    /** Slot layout: 0 = input item, 1 = lapis. */
+    private const ENCHANT_SLOT_ITEM = 0;
+    private const ENCHANT_SLOT_LAPIS = 1;
+    /** Anvil slots: 0 = target, 1 = sacrifice, 2 = result. */
+    private const ANVIL_SLOT_TARGET = 0;
+    private const ANVIL_SLOT_SACRIFICE = 1;
+    private const ANVIL_SLOT_RESULT = 2;
+
+    /**
+     * 14.30: right-clicking an enchanting table opens its window (legacy
+     * InventoryType::ENCHANT_TABLE = 9, 2 slots: item + lapis) and sends the
+     * three bookcase-boosted options as a CraftingDataPacket enchant list.
+     */
+    private function openEnchantTable(string $addrKey, int $x, int $y, int $z): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z, 'type' => 'enchant', 'options' => null];
+        $this->sessions[$addrKey] = $session;
+
+        $open = new ContainerOpenPacket();
+        $open->windowid = self::ENCHANT_WINDOW_ID;
+        $open->type = 9; // InventoryType::ENCHANT_TABLE
+        $open->slots = 2;
+        $open->x = $x;
+        $open->y = $y;
+        $open->z = $z;
+        $open->entityId = -1;
+        $this->queuePacket($session['playerRef'], $open);
+        // The item slot starts empty; options generate once the item arrives.
+    }
+
+    /**
+     * 14.30: right-clicking an anvil opens its window (legacy
+     * InventoryType::ANVIL = 8, 3 slots: target, sacrifice, result).
+     */
+    private function openAnvil(string $addrKey, int $x, int $y, int $z): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z, 'type' => 'anvil'];
+        $this->sessions[$addrKey] = $session;
+
+        $open = new ContainerOpenPacket();
+        $open->windowid = self::ANVIL_WINDOW_ID;
+        $open->type = 8; // InventoryType::ANVIL
+        $open->slots = 3;
+        $open->x = $x;
+        $open->y = $y;
+        $open->z = $z;
+        $open->entityId = -1;
+        $this->queuePacket($session['playerRef'], $open);
+    }
+
+    /**
+     * 14.30: an enchant-window item slot changed - generate the three table
+     * options (bookshelf-boosted) and send them to the client.
+     */
+    private function handleEnchantSetSlot(string $addrKey, array $session, ContainerSetSlotPacket $pk): void {
+        $open = $session['openContainer'];
+        if ($open === null || $open['type'] !== 'enchant') {
+            return;
+        }
+        $store = $this->getChunkStore($session['worldId']);
+        $enchant = $this->enchantmentService();
+        if ($store === null || $enchant === null) {
+            return;
+        }
+        $id = (int)($pk->item[0] ?? 0);
+        $count = (int)($pk->item[1] ?? 0);
+        $meta = (int)($pk->item[2] ?? 0);
+
+        // Slot 1 (lapis) is passive; only the item slot drives options.
+        if ($pk->slot !== self::ENCHANT_SLOT_ITEM) {
+            return;
+        }
+        if ($id <= 0 || $count <= 0) {
+            // Item removed: clear the options and reset the client's list.
+            $session['openContainer']['options'] = null;
+            $this->sessions[$addrKey] = $session;
+            $this->sendEnchantOptions($session['playerRef'], []);
+            return;
+        }
+        $bookshelves = $enchant->countBookshelves($store, $open['x'], $open['y'], $open['z']);
+        $item = new ItemStack($id, $meta, $count);
+        $options = $enchant->generateOptions($item, $bookshelves);
+        $session['openContainer']['options'] = $options;
+        $this->sessions[$addrKey] = $session;
+        $this->sendEnchantOptions($session['playerRef'], $options);
+    }
+
+    /** Send the three table options as a CraftingDataPacket enchant list. */
+    private function sendEnchantOptions(PlayerRef $player, array $options): void {
+        $pk = new CraftingDataPacket();
+        $pk->enchantOptions = array_map(static function (array $option): array {
+            $enchants = [];
+            foreach (($option['enchantments'] ?? []) as $id => $lvl) {
+                $enchants[] = ['id' => (int)$id, 'lvl' => (int)$lvl];
+            }
+            return [
+                'cost' => (int)($option['cost'] ?? 1),
+                'enchantments' => $enchants,
+                'name' => (string)($option['name'] ?? ''),
+            ];
+        }, $options);
+        $this->queuePacket($player, $pk);
+    }
+
+    /**
+     * 14.30: the client clicked an enchant option - it reports the enchanted
+     * item back in the item slot. Validate against our generated options,
+     * consume lapis + levels, and mirror the authoritative result.
+     */
+    private function handleEnchantResult(string $addrKey, array $session, ContainerSetSlotPacket $pk): void {
+        $open = $session['openContainer'];
+        if ($open === null || $open['type'] !== 'enchant' || $open['options'] === null) {
+            return;
+        }
+        $enchant = $this->enchantmentService();
+        if ($enchant === null) {
+            return;
+        }
+        $id = (int)($pk->item[0] ?? 0);
+        $count = (int)($pk->item[1] ?? 0);
+        $meta = (int)($pk->item[2] ?? 0);
+        $target = $id > 0 ? new ItemStack($id, $meta, $count) : null;
+        if ($target === null) {
+            return;
+        }
+        // Match the reported item's enchantments against one of the options
+        // (the client cannot pick an option that was never offered).
+        $reported = $target->getEnchantments();
+        $matched = -1;
+        foreach (($open['options'] ?? []) as $i => $option) {
+            $offered = [];
+            foreach (($option['enchantments'] ?? []) as $oid => $olvl) {
+                $offered[] = ['id' => (int)$oid, 'lvl' => (int)$olvl];
+            }
+            if ($this->enchantSetsEqual($reported, $offered)) {
+                $matched = $i;
+                break;
+            }
+        }
+        if ($matched < 0) {
+            return; // not one of our offers - ignore
+        }
+        // Lapis sits in slot 1 of the window (client-reported state).
+        $lapis = $session['openContainerLapis'] ?? null;
+        if ($lapis === null) {
+            return;
+        }
+        $applied = $enchant->applyEnchant(
+            $session['entityRef'],
+            $target,
+            $matched,
+            $open['options'][$matched],
+            $lapis,
+        );
+        if ($applied === null) {
+            return; // lapis/level shortage: keep the pre-enchant item
+        }
+        // Reflect the authoritative result + consumed lapis + new level.
+        $this->sendInventorySlot($session['playerRef'], $session['entityRef']->getEntity()?->get(InventoryComponent::class)?->heldSlot ?? 0);
+        $this->syncXpFor($session['playerRef']->entityId);
+        // Reset the window: item slot holds the enchanted item, lapis gone.
+        $session['openContainer']['options'] = null;
+        $session['openContainerLapis'] = null;
+        $this->sessions[$addrKey] = $session;
+    }
+
+    /** Two enchantment lists are equal regardless of order. */
+    private function enchantSetsEqual(array $a, array $b): bool {
+        $norm = static function (array $list): array {
+            $out = [];
+            foreach ($list as $entry) {
+                $out[] = (int)$entry['id'] . ':' . (int)$entry['lvl'];
+            }
+            sort($out);
+            return $out;
+        };
+        return $norm($a) === $norm($b);
+    }
+
+    /**
+     * 14.30: anvil slot change - when both target + sacrifice are present,
+     * compute the combine result + cost and mirror it to the result slot.
+     */
+    private function handleAnvilSetSlot(string $addrKey, array $session, ContainerSetSlotPacket $pk): void {
+        // The client computes the result locally and reports it in slot 2
+        // (legacy AnvilInventory: the server never writes the result slot
+        // directly). Store the two inputs on the session so the take-result
+        // path can validate and charge XP.
+        $session['anvilInputs'][$pk->slot] = $pk->item[0] > 0
+            ? new ItemStack((int)$pk->item[0], (int)$pk->item[2], (int)$pk->item[1])
+            : null;
+        $this->sessions[$addrKey] = $session;
+    }
+
+    /**
+     * 14.30: the client took the anvil result (or renamed). Validate the
+     * inputs, charge XP, and consume them.
+     */
+    private function handleAnvilTakeResult(string $addrKey, array $session, ContainerSetSlotPacket $pk): void {
+        $target = $session['anvilInputs'][self::ANVIL_SLOT_TARGET] ?? null;
+        $sacrifice = $session['anvilInputs'][self::ANVIL_SLOT_SACRIFICE] ?? null;
+        $enchant = $this->enchantmentService();
+        if ($enchant === null || $target === null) {
+            return;
+        }
+        $result = $pk->item[0] > 0
+            ? new ItemStack((int)$pk->item[0], (int)$pk->item[2], (int)$pk->item[1])
+            : null;
+        if ($result === null) {
+            return;
+        }
+        $cost = 0;
+        $combined = null;
+        if ($sacrifice !== null && $sacrifice->itemId !== 0 && $sacrifice->count > 0) {
+            $combined = $enchant->combine($target, $sacrifice);
+            if ($combined !== null) {
+                [$combined, $cost] = $combined;
+            }
+        }
+        // Rename path: the result differs from the target only by name.
+        $targetName = $target->getCustomName();
+        $resultName = $result->getCustomName();
+        if ($resultName !== null && $resultName !== $targetName) {
+            $rename = $enchant->rename($target, $result);
+            if ($rename !== null) {
+                [$combined, $cost] = $rename;
+            }
+        }
+        if ($combined === null) {
+            return;
+        }
+        $levels = $enchant->playerLevels($session['entityRef']);
+        if ($levels < $cost) {
+            return;
+        }
+        // Consume: charge XP, clear both inputs, drop the result into the
+        // player inventory (legacy anvils return the result to the player).
+        $enchant->takeLevels($session['entityRef'], $cost);
+        $this->syncXpFor($session['playerRef']->entityId);
+        $inventory = $session['entityRef']->getEntity()?->get(InventoryComponent::class);
+        if ($inventory !== null) {
+            $inventory->add($combined);
+            $this->sendInventoryContents($session['playerRef']);
+        }
+        $session['anvilInputs'] = [];
+        $this->sessions[$addrKey] = $session;
+    }
+
+    /** Resolve the enchantment service through the kernel (lazy). */
+    private function enchantmentService(): ?\pocketmine\core\service\EnchantmentService {
+        $kernel = \pocketmine\Kernel::getInstance();
+        return $kernel?->getEnchantmentService();
     }
 
     /**
