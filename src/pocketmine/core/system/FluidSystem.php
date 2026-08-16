@@ -62,6 +62,7 @@ final class FluidSystem implements System {
 
     private int $tickCounter = 0;
     private ?NetworkPort $network = null;
+    private ?\pocketmine\core\service\NetworkSessionService $sessions = null;
     /** @var array<string, true> seeded chunk keys (world-scoped by the store) */
     private array $seededChunks = [];
     /** @var array<string, true> active liquid cells "x:y:z" => true */
@@ -337,13 +338,18 @@ final class FluidSystem implements System {
             return;
         }
         // Collect players in this world (all sessions are world-filtered by
-        // the session service; we target every connected player).
+        // the session service; we target every connected player). The port
+        // requires PlayerRefs - resolve each entity through the session
+        // service so the wire target is the real connected client.
         $players = [];
         foreach ($world->getEntities() as $entity) {
             if (!$entity->has(\pocketmine\core\component\tags\PlayerTag::class)) {
                 continue;
             }
-            $players[] = \pocketmine\core\ecs\EntityRef::create($entity->id, $world);
+            $ref = $this->getSessions()?->getPlayerRefByEntity($entity->id);
+            if ($ref !== null) {
+                $players[] = $ref;
+            }
         }
         if (empty($players)) {
             return;
@@ -364,5 +370,10 @@ final class FluidSystem implements System {
     private function getNetwork(): ?NetworkPort {
         $this->network ??= Kernel::getInstance()?->getNetworkPort();
         return $this->network;
+    }
+
+    private function getSessions(): ?\pocketmine\core\service\NetworkSessionService {
+        $this->sessions ??= Kernel::getInstance()?->getNetworkSessionService();
+        return $this->sessions;
     }
 }

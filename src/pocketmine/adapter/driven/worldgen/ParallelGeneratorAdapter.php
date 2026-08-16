@@ -10,12 +10,16 @@ use pocketmine\port\driven\ThreadingPort;
 use pocketmine\port\driven\WorldGenPort;
 use pmmp\thread\Pool;
 use function array_fill;
+use function ceil;
 use function chr;
+use function cos;
+use function floor;
 use function intdiv;
 use function max;
 use function microtime;
 use function min;
 use function serialize;
+use function sin;
 use function str_repeat;
 use function unserialize;
 use function usleep;
@@ -72,6 +76,12 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
     public const REDSTONE_ORE = 73;
     public const LAPIS_ORE = 21;
     public const EMERALD_ORE = 129;
+    public const STILL_LAVA_BLOCK = 11; // still lava (legacy id)
+
+    /** Cave-carving tuning (14.x). */
+    private const CAVE_GRID = 48;         // world-grid spacing of cave systems
+    private const CAVE_EXTENT = 96;       // max blocks a worm can travel from its cell
+    private const CAVE_MAX_SEGMENTS = 44; // cap on worm length (safety bound)
 
     /** Legacy Biome::* ids (protocol-84 client tints grass/water by them). */
     public const BIOME_OCEAN = 0;
@@ -437,6 +447,12 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
             ];
         }
 
+        // Caves: carve 3D worm caverns into the stone core. The pass is a
+        // pure function of (chunkX, chunkZ, seed) - it never touches the
+        // surface (see carveCaves), so the heightmap/biomes built above stay
+        // valid and the population pass can still place trees on top.
+        $sections = self::carveCaves($sections, $profiles, $chunkX, $chunkZ, $seed);
+
         $biomes = [];
         foreach ($profiles as $p) {
             $biomes[] = $p['biome'];
@@ -746,6 +762,11 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
                                 if ($target !== self::STONE_BLOCK) {
                                     continue;
                                 }
+                                // Never leave an ore floating over a carved
+                                // cavity: the block below must also be stone.
+                                if ($by > 1 && self::readBlock($sections, $bx, $by - 1, $bz) !== self::STONE_BLOCK) {
+                                    continue;
+                                }
                                 $sections = self::writeBlock($sections, $bx, $by, $bz, $oreId, false);
                             }
                         }
@@ -755,6 +776,127 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
         }
 
         return new ChunkData($data->chunkX, $data->chunkZ, $sections, $data->biomes, $data->heightmap, $data->entities, $data->tileEntities);
+    }
+
+    /**
+     * Carve 3D worm caverns into the stone core. Pure in (chunkX, chunkZ,
+     * seed): cave systems are anchored to a 64-block world grid, so adjacent
+     * chunks carve the SAME global path and caverns connect across borders
+     * even though each chunk is generated independently.
+     *
+     * Safety rules: only stone is ever replaced (never air, water, dirt,
+     * sand or surface blocks); the top 2 blocks of every column are never
+     * touched (no holes in the ground, heightmap stays valid); y=0 bedrock is
+     * never touched; every write stays inside the chunk's 16x16 columns;
+     * carved cells below y=10 become lava pools, and carved cells under the
+     * ocean floor fill with water (biome ocean, below sea level).
+     *
+     * @param array $sections section strings (returned, mutated copy)
+     * @param array $profiles per-column ['h' => int, 'biome' => int]
+     * @return array updated sections
+     */
+    private static function carveCaves(array $sections, array $profiles, int $chunkX, int $chunkZ, int $seed): array {
+        $worldX0 = $chunkX * 16;
+        $worldZ0 = $chunkZ * 16;
+
+        // Grid cells that could host a cave system intersecting this chunk.
+        $gx0 = intdiv($worldX0 - self::CAVE_EXTENT, self::CAVE_GRID);
+        $gx1 = intdiv($worldX0 + 15 + self::CAVE_EXTENT, self::CAVE_GRID);
+        $gz0 = intdiv($worldZ0 - self::CAVE_EXTENT, self::CAVE_GRID);
+        $gz1 = intdiv($worldZ0 + 15 + self::CAVE_EXTENT, self::CAVE_GRID);
+
+        for ($gz = $gz0; $gz <= $gz1; $gz++) {
+            for ($gx = $gx0; $gx <= $gx1; $gx++) {
+                $cellSeed = self::seedRng($gx, $gz, $seed ^ 0xCA7EC0DE);
+                $cellSeed = self::nextRng($cellSeed);
+                if ($cellSeed % 4 === 0) {
+                    continue; // ~3/4 of cells host a cave system
+                }
+
+                $cellX = $gx * self::CAVE_GRID + self::CAVE_GRID / 2; // cell center
+                $cellZ = $gz * self::CAVE_GRID + self::CAVE_GRID / 2;
+                $worms = 2 + ($cellSeed % 3); // 2-4 worms per system
+                for ($w = 0; $w < $worms; $w++) {
+                    $rng = self::seedRng($gx * 7 + $w, $gz * 13 + $w, $seed ^ 0xDEADBEEF);
+                    $sections = self::carveWorm($sections, $profiles, $cellX, $cellZ, $worldX0, $worldZ0, $rng);
+                }
+            }
+        }
+        return $sections;
+    }
+
+    /** Carve one wandering worm tube from a cell center. */
+    private static function carveWorm(array $sections, array $profiles, float $cellX, float $cellZ, int $worldX0, int $worldZ0, int $rng): array {
+        $x = $cellX + (($rng = self::nextRng($rng)) % 2400) / 100.0 - 12.0;
+        $z = $cellZ + (($rng = self::nextRng($rng)) % 2400) / 100.0 - 12.0;
+        $y = 6.0 + (($rng = self::nextRng($rng)) % 4000) / 100.0; // 6..46 start
+        $yaw = (($rng = self::nextRng($rng)) % 62832) / 10000.0;   // 0..2pi
+        $pitch = (($rng = self::nextRng($rng)) % 2000) / 10000.0 - 0.1; // ~level
+        $radius = 1.5 + (($rng = self::nextRng($rng)) % 30) / 20.0;     // 1.5..3.0
+        $segments = 14 + (($rng = self::nextRng($rng)) % self::CAVE_MAX_SEGMENTS);
+
+        $step = 1.4;
+        for ($i = 0; $i < $segments; $i++) {
+            // Cheap cull: only carve spheres near this chunk's footprint.
+            if ($x >= $worldX0 - $radius - 1 && $x <= $worldX0 + 16 + $radius
+                && $z >= $worldZ0 - $radius - 1 && $z <= $worldZ0 + 16 + $radius) {
+                $sections = self::carveSphere($sections, $profiles, $x, $y, $z, $radius, $worldX0, $worldZ0);
+            }
+            // Gentle yaw wander + slow upward drift so worms snake and climb.
+            $yaw += (($rng = self::nextRng($rng)) % 6000) / 10000.0 - 0.3; // -0.3..0.3 rad
+            $pitch = min(0.4, $pitch + 0.005);
+            $x += cos($yaw) * cos($pitch) * $step;
+            $y += sin($pitch) * $step;
+            $z += sin($yaw) * cos($pitch) * $step;
+            if ($y < 3.0 || $y > 96.0) {
+                break;
+            }
+        }
+        return $sections;
+    }
+
+    /** Carve one sphere of a worm tube, clamped to the chunk's columns. */
+    private static function carveSphere(array $sections, array $profiles, float $cx, float $cy, float $cz, float $r, int $worldX0, int $worldZ0): array {
+        $r2 = $r * $r;
+        // Sphere bounding box clamped to the 16x16 column footprint.
+        $x0 = max(0, (int) floor($cx - $r) - $worldX0);
+        $x1 = min(15, (int) ceil($cx + $r) - $worldX0);
+        $z0 = max(0, (int) floor($cz - $r) - $worldZ0);
+        $z1 = min(15, (int) ceil($cz + $r) - $worldZ0);
+        $y0 = max(1, (int) floor($cy - $r));
+        $y1 = min(120, (int) ceil($cy + $r));
+
+        for ($bx = $x0; $bx <= $x1; $bx++) {
+            $dx = $bx + $worldX0 + 0.5 - $cx;
+            $dx *= $dx;
+            for ($bz = $z0; $bz <= $z1; $bz++) {
+                $dz = $bz + $worldZ0 + 0.5 - $cz;
+                $dz *= $dz;
+                $col = $profiles[$bz * 16 + $bx];
+                $surfaceLimit = $col['h'] - 2; // keep the top 2 blocks intact
+                for ($by = $y0; $by <= $y1; $by++) {
+                    if ($by >= $surfaceLimit) {
+                        break;
+                    }
+                    $dy = $by + 0.5 - $cy;
+                    $dy *= $dy;
+                    if ($dx + $dy + $dz >= $r2) {
+                        continue;
+                    }
+                    if (self::readBlock($sections, $bx, $by, $bz) !== self::STONE_BLOCK) {
+                        continue; // only carve stone
+                    }
+                    $replacement = 0; // air
+                    if ($by <= 10) {
+                        $replacement = self::STILL_LAVA_BLOCK; // lava pools below y=10
+                    } elseif ($col['biome'] === self::BIOME_OCEAN && $by < self::SEA_LEVEL) {
+                        $replacement = self::WATER_BLOCK; // flooded caves under the sea
+                    }
+                    $sections = self::writeBlock($sections, $bx, $by, $bz, $replacement, false);
+                }
+            }
+        }
+        return $sections;
     }
 
     /** Read a block id from the section strings. */
