@@ -27,10 +27,7 @@ in rough priority order, so anyone picking up a task knows the seams to build on
 
 ### 2. Caves
 
-The world below the surface is solid rock with no caves or lava pools.
-
-- **Already in place:** terrain heightmap + biome surface profiles (14.19); persistence via real `.mca`/`.mcr` NBT.
-- **Missing:** a carver pass. Simplest honest version: 3D value-noise caverns (worm/lattice) carved into the chunk at gen time, deterministic per `(chunkX, chunkZ, seed)`, with lava pools below Y=10 and water filling below sea level. Must not carve through the surface or into existing trees.
+**✅ DONE (PROGRESS #71)** — worm-carver pass in `generateChunkPure` (world-grid-anchored so caves connect across chunks), lava below Y=10, water in ocean-column caves, surface/bedrock intact, stone-only, chunk-local. `tests/40` covers it. Bonus: fixed a latent `EntityRef`-vs-`PlayerRef` broadcast bug in `FluidSystem`/`TNTExplosionSystem` that cave water exposed.
 
 ### 3. Block light (+ proper sky light shading)
 

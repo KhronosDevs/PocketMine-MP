@@ -63,6 +63,7 @@ final class TNTExplosionSystem implements System {
     private ?EntityDespawnService $despawn = null;
     private ?EntitySpawnService $spawn = null;
     private ?NetworkPort $network = null;
+    private ?\pocketmine\core\service\NetworkSessionService $sessions = null;
 
     public function run(World $world, float $deltaTime): void {
         $combat = $this->getCombat();
@@ -255,13 +256,17 @@ final class TNTExplosionSystem implements System {
             $pk->records[] = (object)['x' => $bx - (int)floor($x), 'y' => $by - (int)floor($y), 'z' => $bz - (int)floor($z)];
         }
 
+        // The port requires PlayerRefs - resolve each player entity through
+        // the session service so the wire target is the real connected client.
         $players = [];
         foreach ($world->getEntities() as $entity) {
             if (!$entity->has(\pocketmine\core\component\tags\PlayerTag::class)) {
                 continue;
             }
-            $ref = EntityRef::create($entity->id, $world);
-            $players[] = $ref;
+            $ref = $this->getSessions()?->getPlayerRefByEntity($entity->id);
+            if ($ref !== null) {
+                $players[] = $ref;
+            }
         }
         if (!empty($players)) {
             $network->broadcastPacket($players, $pk);
@@ -286,5 +291,10 @@ final class TNTExplosionSystem implements System {
     private function getNetwork(): ?NetworkPort {
         $this->network ??= Kernel::getInstance()?->getNetworkPort();
         return $this->network;
+    }
+
+    private function getSessions(): ?\pocketmine\core\service\NetworkSessionService {
+        $this->sessions ??= Kernel::getInstance()?->getNetworkSessionService();
+        return $this->sessions;
     }
 }
