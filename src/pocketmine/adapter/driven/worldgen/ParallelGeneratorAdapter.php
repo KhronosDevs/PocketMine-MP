@@ -64,6 +64,15 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
     public const ICE_BLOCK = 79;
     public const CACTUS_BLOCK = 81;
 
+    /** Ore block ids (legacy protocol-84 ids). */
+    public const COAL_ORE = 16;
+    public const IRON_ORE = 15;
+    public const GOLD_ORE = 14;
+    public const DIAMOND_ORE = 56;
+    public const REDSTONE_ORE = 73;
+    public const LAPIS_ORE = 21;
+    public const EMERALD_ORE = 129;
+
     /** Legacy Biome::* ids (protocol-84 client tints grass/water by them). */
     public const BIOME_OCEAN = 0;
     public const BIOME_PLAINS = 1;
@@ -631,6 +640,117 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
             }
             if ($id !== 0) {
                 $sections = self::writeBlock($sections, $x, $col['y'] + 1, $z, $id, true);
+            }
+        }
+
+        // Ores: deterministic veins in stone. Mirrors the legacy 0.15 Ore
+        // populator table (cluster count x size per chunk, Y window) with the
+        // legacy ellipsoid-blob geometry, but chunk-local (every write stays
+        // inside this chunk's 16x16 columns) and only ever replacing stone -
+        // never air, water, dirt or surface blocks. Drawn AFTER vegetation on
+        // the same RNG stream so tree/grass placement is byte-identical.
+
+        // Per-chunk vein budget, seeded from the shared stream (the legacy
+        // table: coal any depth, iron <= 64, gold/lapis <= 32, redstone/diamond
+        // <= 16). Emerald only spawns in extreme-hills terrain.
+        $oreTable = [
+            [self::COAL_ORE, 20, 16, 0, 128],
+            [self::IRON_ORE, 20, 8, 0, 64],
+            [self::REDSTONE_ORE, 8, 7, 0, 16],
+            [self::LAPIS_ORE, 1, 6, 0, 32],
+            [self::GOLD_ORE, 2, 8, 0, 32],
+            [self::DIAMOND_ORE, 1, 7, 0, 16],
+        ];
+        foreach ($surfaces as $col) {
+            if ($col['biome'] === self::BIOME_EXTREME_HILLS) {
+                $oreTable[] = [self::EMERALD_ORE, 1, 4, 4, 32];
+                break;
+            }
+        }
+
+        foreach ($oreTable as [$oreId, $clusterCount, $clusterSize, $minY, $maxY]) {
+            for ($c = 0; $c < $clusterCount; $c++) {
+                $ox = ($rng = self::nextRng($rng)) % 16;
+                $oy = $minY + ($rng = self::nextRng($rng)) % ($maxY - $minY + 1);
+                $oz = ($rng = self::nextRng($rng)) % 16;
+
+                // The vein anchor must land in stone, and the whole blob must
+                // stay underground: skip if the anchor is at/above the local
+                // surface of its column or not inside stone.
+                $col = $surfaces[$oz * 16 + $ox] ?? null;
+                if ($col === null || $col['y'] <= 0) {
+                    continue;
+                }
+                $anchor = self::readBlock($sections, $ox, $oy, $oz);
+                if ($anchor !== self::STONE_BLOCK || $oy >= $col['y']) {
+                    continue;
+                }
+
+                // Legacy ellipsoid blob: two lobes along a random horizontal
+                // angle, with a sine-weighted radius so veins read as streaks
+                // rather than perfect spheres. Chunk-local: centered on the
+                // anchor (no legacy +8 world-coordinate offset) so the blob
+                // stays inside the 16x16 columns.
+                $angle = (($rng = self::nextRng($rng)) % 62832) / 10000.0; // 0..2pi
+                $dx = (int) round(cos($angle) * $clusterSize / 8);
+                $dz = (int) round(sin($angle) * $clusterSize / 8);
+                $x1 = $ox + $dx;
+                $x2 = $ox - $dx;
+                $z1 = $oz + $dz;
+                $z2 = $oz - $dz;
+                $y1 = $oy + ($rng = self::nextRng($rng)) % 3 + 2;
+                $y2 = $oy + ($rng = self::nextRng($rng)) % 3 + 2;
+                for ($count = 0; $count <= $clusterSize; $count++) {
+                    $seedX = $x1 + ($x2 - $x1) * $count / $clusterSize;
+                    $seedY = $y1 + ($y2 - $y1) * $count / $clusterSize;
+                    $seedZ = $z1 + ($z2 - $z1) * $count / $clusterSize;
+                    $size = ((sin($count * (M_PI / $clusterSize)) + 1) * ($rng = self::nextRng($rng)) % 1000 / 1000.0 * $clusterSize / 16 + 1) / 2;
+                    $startX = (int) ($seedX - $size);
+                    $startY = (int) ($seedY - $size);
+                    $startZ = (int) ($seedZ - $size);
+                    $endX = (int) ($seedX + $size);
+                    $endY = (int) ($seedY + $size);
+                    $endZ = (int) ($seedZ + $size);
+                    for ($bx = $startX; $bx <= $endX; $bx++) {
+                        $sizeX = ($bx + 0.5 - $seedX) / $size;
+                        $sizeX *= $sizeX;
+                        if ($sizeX >= 1) {
+                            continue;
+                        }
+                        for ($by = $startY; $by <= $endY; $by++) {
+                            // Keep the blob inside the ore's Y window (the
+                            // legacy lobe offsets can push +2..4 past the
+                            // anchor, so clamp instead of overshooting).
+                            if ($by <= 0 || $by > $maxY) {
+                                continue;
+                            }
+                            $sizeY = ($by + 0.5 - $seedY) / $size;
+                            $sizeY *= $sizeY;
+                            if ($sizeX + $sizeY >= 1) {
+                                continue;
+                            }
+                            for ($bz = $startZ; $bz <= $endZ; $bz++) {
+                                // Chunk-local: skip anything outside the 16x16
+                                // column footprint (no cross-chunk writes).
+                                if ($bx < 0 || $bx > 15 || $bz < 0 || $bz > 15) {
+                                    continue;
+                                }
+                                $sizeZ = ($bz + 0.5 - $seedZ) / $size;
+                                $sizeZ *= $sizeZ;
+                                if ($sizeX + $sizeY + $sizeZ >= 1) {
+                                    continue;
+                                }
+                                // Only replace stone (never air, water, or
+                                // surface blocks).
+                                $target = self::readBlock($sections, $bx, $by, $bz);
+                                if ($target !== self::STONE_BLOCK) {
+                                    continue;
+                                }
+                                $sections = self::writeBlock($sections, $bx, $by, $bz, $oreId, false);
+                            }
+                        }
+                    }
+                }
             }
         }
 
