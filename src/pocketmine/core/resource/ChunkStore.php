@@ -8,6 +8,7 @@ use pocketmine\core\ecs\Resource;
 use pocketmine\port\driven\ChunkData;
 use function array_fill;
 use function array_key_first;
+use function array_keys;
 use function chr;
 use function count;
 use function explode;
@@ -224,12 +225,19 @@ final class ChunkStore {
         $this->chunks[$key] = $chunk;
     }
 
+    /** @var array<string, true> chunk keys whose light changed since the last wire sync */
+    private array $lightDirty = [];
+
     /**
      * Recompute sky + block light for one chunk from its live block grid
      * (LightCalculator). Called after a chunk is freshly generated/populated
      * and after block place/break so the wire's light arrays stay correct
      * (torches, glowstone, lava, ... actually emit). Disk-loaded chunks keep
      * their stored light for persistence round-trips.
+     *
+     * When the computed arrays differ from the stored ones the chunk is
+     * marked light-dirty so the network layer re-sends it to viewers (a
+     * placed torch must actually light up on the client).
      */
     public function recalculateLight(int $chunkX, int $chunkZ, BlockRegistry $registry): void {
         $key = $this->key($chunkX, $chunkZ);
@@ -238,9 +246,64 @@ final class ChunkStore {
         }
         $chunk = $this->chunks[$key];
         [$skyLight, $blockLight] = LightCalculator::calculate((string)$chunk['blocks'], $registry);
-        $chunk['skyLight'] = $skyLight;
-        $chunk['blockLight'] = $blockLight;
-        $this->chunks[$key] = $chunk;
+        if ($chunk['skyLight'] !== $skyLight || $chunk['blockLight'] !== $blockLight) {
+            $chunk['skyLight'] = $skyLight;
+            $chunk['blockLight'] = $blockLight;
+            $this->chunks[$key] = $chunk;
+            $this->lightDirty[$key] = true;
+        }
+    }
+
+    /**
+     * Drain and clear the set of chunks whose light changed since the last
+     * call (the network layer re-sends these to viewers once per tick).
+     * @return list<array{0: int, 1: int}> chunk coordinates.
+     */
+    public function takeLightDirtyChunks(): array {
+        $out = [];
+        foreach (array_keys($this->lightDirty) as $key) {
+            [$x, $z] = explode(':', $key);
+            $out[] = [(int)$x, (int)$z];
+        }
+        $this->lightDirty = [];
+        return $out;
+    }
+
+    /**
+     * Sky light level (0-15) at a world position, read from the chunk's
+     * packed nibble arrays (matches the LightCalculator output layout).
+     */
+    public function getSkyLightLevel(int $x, int $y, int $z): int {
+        $chunk = $this->chunkAt($x, $y, $z);
+        if ($chunk === null) {
+            return 0;
+        }
+        return self::readLightNibble((string)$chunk['skyLight'], $y, $z & 15, $x & 15);
+    }
+
+    /** Block light level (0-15) at a world position. */
+    public function getBlockLightLevel(int $x, int $y, int $z): int {
+        $chunk = $this->chunkAt($x, $y, $z);
+        if ($chunk === null) {
+            return 0;
+        }
+        return self::readLightNibble((string)$chunk['blockLight'], $y, $z & 15, $x & 15);
+    }
+
+    /** Combined light level (max of sky and block) at a world position. */
+    public function getLightLevel(int $x, int $y, int $z): int {
+        return max($this->getSkyLightLevel($x, $y, $z), $this->getBlockLightLevel($x, $y, $z));
+    }
+
+    /**
+     * Read one nibble from a packed per-chunk light string. Block index is
+     * (y << 8) | (z << 4) | x; byte = index >> 1; even index = low nibble,
+     * odd index = high nibble (LightCalculator::pack layout).
+     */
+    private static function readLightNibble(string $packed, int $y, int $localZ, int $localX): int {
+        $idx = ($y << 8) | ($localZ << 4) | $localX;
+        $byte = ord($packed[$idx >> 1]);
+        return ($idx & 1) === 0 ? $byte & 0x0F : $byte >> 4;
     }
 
     public function getHighestBlockAt(int $x, int $z): int {

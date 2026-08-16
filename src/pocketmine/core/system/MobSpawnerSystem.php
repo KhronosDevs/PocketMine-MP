@@ -147,6 +147,14 @@ final class MobSpawnerSystem implements System {
                     // The next attempt picks a different spot.
                     if ($top > 0 && !in_array($store->getBlock((int)floor($x), $top, (int)floor($z)), BlockIds::LIQUIDS, true)) {
                         $y = $top + 1;
+                        // 14.29: hostile mobs spawn only in darkness - a
+                        // torch-lit area (block light > 0) is protected, so
+                        // placing torches actually keeps mobs away. Sky light
+                        // is ignored because the spawner already gates on the
+                        // night window (sky light is effectively 0 at night).
+                        if ($store->getBlockLightLevel((int)floor($x), $y, (int)floor($z)) > 0) {
+                            continue;
+                        }
                         $found = true;
                     }
                 }

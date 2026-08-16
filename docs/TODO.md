@@ -31,10 +31,8 @@ in rough priority order, so anyone picking up a task knows the seams to build on
 
 ### 3. Block light (+ proper sky light shading)
 
-`calculateLight` (`ParallelGeneratorAdapter`) is a stub: **every section is full sky light, zero block light**. Torches/lava emit nothing, cave interiors are pitch-… actually fully lit. A lit mine is the difference between "mining" and "Minecraft".
-
-- **Already in place:** `LightData` wire format; the ChunkSerializer's heightmap-derived sky light; block light arrays round-trip through storage.
-- **Missing:** (a) real sky light with heightmap falloff (0xFF at surface → 0 at depth, not uniform `\xff`), (b) block-light emission table (`BlockRegistry` already has light values per block: torches 14, lava 15, glowstone 15, lit furnaces 13…) and BFS propagation (or the legacy flood-fill) so placed torches/lit furnaces actually illuminate, (c) block updates when a light source is placed/broken, (d) light-dependent mob spawning.
+- **Done (PR #89):** the full light pipeline is in. `LightCalculator` computes per-chunk sky falloff (15 at surface → 0 at depth) and BFS block-light propagation from every emitter (torches 14, lava 15, glowstone 15, lit furnaces 13…). Place/break re-runs it; `ChunkStore::recalculateLight` now marks changed chunks light-dirty and the network layer re-sends them, so a placed torch **actually lights up on the client** (UpdateBlockPacket carries no light — a full chunk re-send is the only way protocol 84 delivers it). `ChunkStore` gained a light query API (`getSkyLightLevel`/`getBlockLightLevel`/`getLightLevel`) and `MobSpawnerSystem` now refuses to spawn hostile mobs at torch-lit positions — torches protect an area for real.
+- **Remaining (minor):** light-dependent *block updates* beyond place/break (e.g. snow/ice melt, crop growth gating) — a `BlockUpdateSystem` nicety, not a wire/lighting gap.
 
 ### 4. Mob AI pathfinding
 
