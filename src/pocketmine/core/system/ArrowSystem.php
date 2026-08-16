@@ -210,6 +210,12 @@ final class ArrowSystem implements System {
                     if ($critical) {
                         $damage += mt_rand(0, (int)($damage / 2) + 1);
                     }
+                    // 14.30: Power adds 0.5 * level bonus damage (legacy
+                    // Enchantment::getDamageBonus for bows).
+                    $power = (int)$meta->get(\pocketmine\core\constants\MetadataKeys::POWER_ENCHANT, 0);
+                    if ($power > 0) {
+                        $damage += (int)ceil(0.5 * $power);
+                    }
                     $shooter = EntityRef::create((int)$meta->get(\pocketmine\core\constants\MetadataKeys::SHOOTER_ID, -1), $world);
                     $combat->applyDamage(
                         EntityRef::create($target, $world),

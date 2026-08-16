@@ -141,6 +141,15 @@ final class BlockBreakService {
             $speed *= 0.2; // wrong tool: five times slower
         }
 
+        // 14.30: Efficiency multiplies mining speed by (1 + 0.3 * level),
+        // applied after the tool multiplier (legacy Tool::getSpeed bonus).
+        if ($tool !== null) {
+            $efficiency = $tool->getEnchantmentLevel(15);
+            if ($efficiency > 0) {
+                $speed *= 1.0 + 0.3 * $efficiency;
+            }
+        }
+
         return max(0.05, $speed);
     }
 

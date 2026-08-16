@@ -249,6 +249,12 @@ final class EntityInteractionService {
             if ($heldItem) {
                 // Add weapon damage
                 $damage += $this->getWeaponDamage($heldItem->itemId);
+                // 14.30: Sharpness adds 0.5 * level bonus damage (legacy
+                // Enchantment::getDamageBonus).
+                $sharpness = $heldItem->getEnchantmentLevel(9);
+                if ($sharpness > 0) {
+                    $damage += 0.5 * $sharpness;
+                }
             }
         }
         

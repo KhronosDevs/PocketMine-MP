@@ -36,6 +36,7 @@ use pocketmine\core\service\DamageService;
 use pocketmine\core\service\KnockbackService;
 use pocketmine\core\service\InventoryService;
 use pocketmine\core\service\CraftingService;
+use pocketmine\core\service\EnchantmentService;
 use pocketmine\core\service\ContainerService;
 use pocketmine\core\service\NetworkSessionService;
 use pocketmine\core\system\ChunkUpdateSystem;
@@ -184,6 +185,7 @@ final class Kernel {
     private InventoryService $inventoryService;
     private CraftingService $craftingService;
     private ContainerService $containerService;
+    private EnchantmentService $enchantmentService;
     private \pocketmine\api\scheduler\Scheduler $scheduler;
     private \pocketmine\api\permission\PermissionManager $permissionManager;
 
@@ -231,6 +233,12 @@ final class Kernel {
         $this->inventoryService = new InventoryService($world);
         $this->craftingService = new CraftingService($world);
         $this->containerService = new ContainerService($world);
+        // 14.30: enchanting table + anvil logic (options, apply, combine).
+        $enchantRegistry = $resourceRegistry->get(\pocketmine\core\resource\EnchantmentRegistry::class);
+        $this->enchantmentService = new EnchantmentService(
+            $world,
+            $enchantRegistry instanceof \pocketmine\core\resource\EnchantmentRegistry ? $enchantRegistry : new \pocketmine\core\resource\EnchantmentRegistry(),
+        );
         // 14.23: potion application (drink + splash) - after combat so
         // harming potions can route through the damage pipeline.
         $this->potionService = new PotionService($world, $networkPort, $this->combatService);
@@ -1586,6 +1594,10 @@ final class Kernel {
         return $this->containerService;
     }
 
+    public function getEnchantmentService(): EnchantmentService {
+        return $this->enchantmentService;
+    }
+
     private function processGlobalCoordination(): void {
         // Drain global command/event queues from the coordination thread
         // and route them to the appropriate region command queues.
@@ -1915,6 +1927,7 @@ function registerBuiltinResources(ResourceRegistry $registry): void {
     $registry->set(new \pocketmine\core\resource\BrewingRegistry());
     $registry->set(new \pocketmine\core\resource\ProjectileRegistry());
     $registry->set(new \pocketmine\core\resource\PotionRegistry());
+    $registry->set(new \pocketmine\core\resource\EnchantmentRegistry());
     $registry->set(new \pocketmine\core\resource\TileEntityStore());
 }
 

@@ -48,10 +48,10 @@ No circuit engine at all.
 - **Already in place:** `BlockRegistry` covers redstone dust/wire, torches, repeaters, comparators, pistons, lamps, plates, buttons with full state metadata tables.
 - **Missing:** the whole engine — a `RedstoneSystem` (sequential) with a wire/torch/component tick model: power propagation over dust, torch powering/unpowering, repeaters/comparators, pistons pushing blocks, lamps/doors responding, and `BlockUpdateService` wiring so placement/broken blocks trigger updates. Scope it as: dust + torches + repeaters + pistons first; comparators/lamps/plates second.
 
-### 6. Enchanting / anvils / beacons
+### 6. Enchanting / anvils (beacons removed — not in MCPE 0.15.10, added in 0.16)
 
-- **Already in place:** item meta as damage counter; XP orbs + player XP/levels (14.9); `ItemDurability`; enchanting table + anvil + beacon blocks in the registry.
-- **Missing:** enchant table GUI + level-cost rolls + `Enchantment` effects on tools/armor (efficiency, fortune, protection, sharpness, power…), anvil repairs/renames, beacon buffs. This is a large chunk — split into "enchanting table + a few enchantments" then "anvils" then "beacons".
+- **Done (PR #90):** `EnchantmentRegistry` (full 0.15 catalogue: weights, max levels, slot masks, level ranges, conflicts, enchantability); `ItemStack` NBT enchant helpers (`ench` list, custom names, repair cost); `EnchantmentService` (bookshelf-boosted three-option rolls, lapis + level application, anvil combine/rename); enchanting-table + anvil windows on the wire (options ride `CraftingDataPacket` ENTRY_ENCHANT_LIST); effects wired in — Sharpness (melee), Power (arrows), Efficiency (mining), Unbreaking (durability).
+- **Remaining (minor):** Fortune/Protection/Knockback/Fire-Aspect effects, more anvil edge cases (repair material costs), enchanted book items from loot.
 
 ### 7. Nether / End dimensions
 

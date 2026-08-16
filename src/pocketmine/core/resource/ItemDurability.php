@@ -52,6 +52,13 @@ final class ItemDurability {
             return;
         }
 
+        // 14.30: Unbreaking gives a (1 - 1/(level+1)) chance to skip the wear
+        // (legacy Item::applyDamage / Unbreaking check).
+        $unbreaking = $item->getEnchantmentLevel(17);
+        if ($unbreaking > 0 && mt_rand(0, $unbreaking) !== 0) {
+            return; // the wear was absorbed
+        }
+
         $item->meta++;
         if ($item->meta >= $max) {
             $inventory->set($slot, null); // the tool broke

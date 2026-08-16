@@ -28,11 +28,21 @@ class CraftingDataPacket extends DataPacket {
 
     const ENTRY_SHAPELESS = 0;
     const ENTRY_SHAPED = 1;
+    /** 14.30: an enchanting-table option list rides a CraftingDataPacket. */
+    const ENTRY_ENCHANT_LIST = 4;
 
     /**
      * @var array<string, array{pattern: list<string>, key: array<string, ItemStack>, result: ItemStack}>
      */
     public array $recipes = [];
+
+    /**
+     * Enchanting-table options (14.30), sent when a table window opens so the
+     * client can render the three offers. Each: {cost, enchantments: list of
+     * {id, lvl}, name}.
+     * @var list<array{cost: int, enchantments: list<array{id: int, lvl: int}>, name: string}>
+     */
+    public array $enchantOptions = [];
 
     public function decode(): void {
         // server->client only
@@ -40,7 +50,7 @@ class CraftingDataPacket extends DataPacket {
 
     public function encode(): void {
         $this->reset();
-        $this->putInt(count($this->recipes));
+        $this->putInt(count($this->recipes) + ($this->enchantOptions !== [] ? 1 : 0));
 
         foreach ($this->recipes as $id => $recipe) {
             $writer = new BinaryStream();
@@ -71,6 +81,25 @@ class CraftingDataPacket extends DataPacket {
             $writer->putUUID(UUID::fromData($id));
 
             $this->putInt(self::ENTRY_SHAPED);
+            $this->putInt(strlen($writer->getBuffer()));
+            $this->put($writer->getBuffer());
+        }
+
+        // Enchant list entry (legacy writeEnchantList): the three table
+        // options with cost + enchantments + a random name per option.
+        if ($this->enchantOptions !== []) {
+            $writer = new BinaryStream();
+            $writer->putByte(count($this->enchantOptions));
+            foreach ($this->enchantOptions as $option) {
+                $writer->putInt($option['cost']);
+                $writer->putByte(count($option['enchantments']));
+                foreach ($option['enchantments'] as $entry) {
+                    $writer->putInt($entry['id']);
+                    $writer->putInt($entry['lvl']);
+                }
+                $writer->putString($option['name']);
+            }
+            $this->putInt(self::ENTRY_ENCHANT_LIST);
             $this->putInt(strlen($writer->getBuffer()));
             $this->put($writer->getBuffer());
         }

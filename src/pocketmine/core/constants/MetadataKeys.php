@@ -31,6 +31,8 @@ final class MetadataKeys {
     public const HEALTH = 'health';
     public const ITEM = 'item';
     public const SHOOTER_ID = 'shooterId';
+    /** 14.30: the firing bow's Power enchantment level (projectile meta). */
+    public const POWER_ENCHANT = 'powerEnchant';
     public const PICKUP_DELAY = 'pickupDelay';
     public const CRITICAL = 'critical';
     public const DETECTION_RANGE = 'detectionRange';
