@@ -36,6 +36,18 @@ final class ChunkStore {
     /** @var array<string, array<string, mixed>> chunkKey => chunk record */
     private array $chunks = [];
 
+    /**
+     * Optional observer fired on every setBlock(x, y, z, id) so the fluid
+     * system can register newly placed liquids without rescanning all blocks
+     * of a chunk. Set once at boot by the Kernel.
+     * @var (callable(int, int, int, int): void)|null
+     */
+    private $blockListener = null;
+
+    public function setBlockListener(?callable $listener): void {
+        $this->blockListener = $listener;
+    }
+
     public function isLoaded(int $chunkX, int $chunkZ): bool {
         return isset($this->chunks[$this->key($chunkX, $chunkZ)]);
     }
@@ -151,6 +163,20 @@ final class ChunkStore {
         return ord($chunk['blocks'][$this->index($y, $localZ, $localX)]);
     }
 
+    /**
+     * The raw 65536-byte block-id string for a chunk (index layout
+     * (y << 8) | (localZ << 4) | localX), or null when not loaded. Lets hot
+     * paths scan a whole chunk with C-speed string ops instead of 65K
+     * getBlock() calls (used by FluidSystem seeding).
+     */
+    public function getRawBlocks(int $chunkX, int $chunkZ): ?string {
+        $key = $this->key($chunkX, $chunkZ);
+        if (!isset($this->chunks[$key])) {
+            return null;
+        }
+        return (string)$this->chunks[$key]['blocks'];
+    }
+
     public function getBlockMeta(int $x, int $y, int $z): int {
         $chunk = $this->chunkAt($x, $y, $z);
         if ($chunk === null) {
@@ -174,6 +200,9 @@ final class ChunkStore {
         $chunk['blocks'][$idx] = chr($id & 0xFF);
         $chunk['meta'][$idx] = chr($meta & 0xFF);
         $this->chunks[$key] = $chunk;
+        if ($this->blockListener !== null) {
+            ($this->blockListener)($x, $y, $z, $id);
+        }
         return true;
     }
 
@@ -192,6 +221,25 @@ final class ChunkStore {
         }
         $chunk = $this->chunks[$key];
         $chunk['biomes'][($z & 15) * 16 + ($x & 15)] = chr($biome & 0xFF);
+        $this->chunks[$key] = $chunk;
+    }
+
+    /**
+     * Recompute sky + block light for one chunk from its live block grid
+     * (LightCalculator). Called after a chunk is freshly generated/populated
+     * and after block place/break so the wire's light arrays stay correct
+     * (torches, glowstone, lava, ... actually emit). Disk-loaded chunks keep
+     * their stored light for persistence round-trips.
+     */
+    public function recalculateLight(int $chunkX, int $chunkZ, BlockRegistry $registry): void {
+        $key = $this->key($chunkX, $chunkZ);
+        if (!isset($this->chunks[$key])) {
+            return;
+        }
+        $chunk = $this->chunks[$key];
+        [$skyLight, $blockLight] = LightCalculator::calculate((string)$chunk['blocks'], $registry);
+        $chunk['skyLight'] = $skyLight;
+        $chunk['blockLight'] = $blockLight;
         $this->chunks[$key] = $chunk;
     }
 

@@ -23,6 +23,4 @@ interface WorldGenPort {
      * return the populated chunk (ChunkData is immutable).
      */
     public function populateChunk(int $chunkX, int $chunkZ, ChunkData $data, int $seed): ChunkData;
-
-    public function calculateLight(int $chunkX, int $chunkZ, ChunkData $data): LightData;
 }

@@ -182,13 +182,20 @@ final class ArrowSystem implements System {
                 // arrow (legacy Entity::move -> isCollided -> motion zeroed).
                 $blockId = $chunks->getBlock((int)floor($sx), (int)floor($sy), (int)floor($sz));
                 if ($blocks->isSolid($blockId)) {
-                    $vel->x = 0;
-                    $vel->y = 0;
-                    $vel->z = 0;
-                    $meta->set(\pocketmine\core\constants\MetadataKeys::STUCK, true);
-                    // The arrow keeps its current (pre-move) position so it
-                    // renders just in front of the wall face; the movement
-                    // systems will not move it again while velocity is zero.
+                    if ($projectile['sticky'] !== true) {
+                        // Non-sticky throwables (snowball/egg/potion) shatter
+                        // on the first solid block: potions splash, the rest
+                        // just vanish (legacy Projectile::onCollideWithBlock).
+                        $this->onThrowableImpact($world, $pos, $meta, $projectileType);
+                        $despawn->despawn(EntityRef::create($entity->id, $world), false);
+                    } else {
+                        $vel->x = 0;
+                        $vel->y = 0;
+                        $vel->z = 0;
+                        $meta->set(\pocketmine\core\constants\MetadataKeys::STUCK, true);
+                    }
+                    // The projectile keeps its current (pre-move) position so
+                    // it renders just in front of the wall face.
                     $hit = true;
                     break;
                 }
@@ -232,6 +239,27 @@ final class ArrowSystem implements System {
                 continue;
             }
         }
+    }
+
+    /**
+     * A non-sticky throwable (snowball/egg/potion) hit something solid: a
+     * thrown potion splashes its PotionRegistry effect over the 6-block
+     * radius (legacy ThrownPotion::kill), snowballs/eggs do nothing.
+     */
+    private function onThrowableImpact(World $world, PositionComponent $pos, MetadataComponent $meta, string $projectileType): void {
+        if ($projectileType !== \pocketmine\core\enum\EntityType::ThrownPotion->value) {
+            return;
+        }
+        $potionId = (int)$meta->get(\pocketmine\core\constants\MetadataKeys::POTION_ID, -1);
+        $kernel = \pocketmine\Kernel::getInstance();
+        $potionService = $kernel?->getPotionService();
+        if ($potionService === null) {
+            return;
+        }
+        $registry = $world->getResourceRegistry()->get(\pocketmine\core\resource\PotionRegistry::class);
+        $effect = $registry instanceof \pocketmine\core\resource\PotionRegistry ? $registry->get($potionId) : null;
+        $shooter = EntityRef::create((int)$meta->get(\pocketmine\core\constants\MetadataKeys::SHOOTER_ID, -1), $world);
+        $potionService->applySplash($pos->x, $pos->y, $pos->z, $effect, $shooter);
     }
 
     /**

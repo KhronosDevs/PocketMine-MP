@@ -7,6 +7,7 @@ namespace pocketmine\core\service;
 use pocketmine\core\ecs\ResourceRegistry;
 use pocketmine\core\resource\ChestStore;
 use pocketmine\core\resource\FurnaceStore;
+use pocketmine\core\resource\TileEntityStore;
 use pocketmine\core\resource\WorldRegistry;
 use pocketmine\port\driven\ChunkData;
 
@@ -43,10 +44,14 @@ final class ChunkPersistence {
         if ($furnaceStore !== null) {
             $fresh = array_merge($fresh, $furnaceStore->snapshotsForChunk($chunkX, $chunkZ));
         }
+        $tileEntityStore = self::tileEntityStore($resources, $worldId);
+        if ($tileEntityStore !== null) {
+            $fresh = array_merge($fresh, $tileEntityStore->snapshotsForChunk($chunkX, $chunkZ));
+        }
         if ($fresh === []) {
             return $chunkData; // no block stores: chunk rides through untouched
         }
-        $owned = [ChestStore::TILE_TYPE => true, FurnaceStore::TILE_TYPE => true];
+        $owned = [ChestStore::TILE_TYPE => true, FurnaceStore::TILE_TYPE => true, TileEntityStore::TILE_SIGN => true, TileEntityStore::TILE_ITEM_FRAME => true];
         $tileEntities = array_values(array_filter(
             $chunkData->tileEntities,
             static fn($snapshot): bool => !isset($owned[$snapshot->type]),
@@ -80,5 +85,15 @@ final class ChunkPersistence {
         }
         $store = $resources->get(FurnaceStore::class);
         return $store instanceof FurnaceStore ? $store : null;
+    }
+
+    /** The TileEntityStore for a world bundle (default world falls back to the global resource). */
+    private static function tileEntityStore(ResourceRegistry $resources, int $worldId): ?TileEntityStore {
+        if ($worldId !== 0) {
+            $registry = $resources->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getTileEntityStore($worldId) : null;
+        }
+        $store = $resources->get(TileEntityStore::class);
+        return $store instanceof TileEntityStore ? $store : null;
     }
 }

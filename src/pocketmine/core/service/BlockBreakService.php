@@ -188,9 +188,27 @@ final class BlockBreakService {
         // Drops must be resolved BEFORE the block is cleared - getBlockDrops
         // reads the block id out of the store.
         $drops = $creative ? [] : $this->getBlockDrops($x, $y, $z, $tool, $worldId);
+        $blockId = $this->getChunkStore($worldId)?->getBlock($x, $y, $z) ?? 0;
 
         // Set block to air
         $this->setBlock($x, $y, $z, 0, $worldId); // Air
+
+        // 14.24: breaking a sign or item frame drops its tile entity (the
+        // frame's contained item is dropped with it; the block drops are
+        // handled above via the registry).
+        if ($blockId === 63 || $blockId === 68 || $blockId === 199) {
+            $tiles = $this->getTileEntityStore($worldId);
+            if ($tiles !== null) {
+                if ($blockId === 199) {
+                    $frame = $tiles->getFrame($x, $y, $z);
+                    $item = $frame['item'] ?? null;
+                    if ($item !== null && $item['id'] > 0) {
+                        $this->spawnDropEntity($x + 0.5, $y + 0.5, $z + 0.5, new \pocketmine\core\component\ItemStack($item['id'], $item['meta'], $item['count']), $worldId);
+                    }
+                }
+                $tiles->remove($x, $y, $z);
+            }
+        }
 
         // Spawn drop entities
         foreach ($drops as $drop) {
@@ -282,6 +300,9 @@ final class BlockBreakService {
         $store = $this->getChunkStore($worldId);
         if ($store !== null) {
             $store->setBlock($x, $y, $z, $blockId, 0);
+            // 14.21: removing a light source (torch/glowstone) or unblocking
+            // a column must update the chunk's light arrays.
+            $store->recalculateLight((int)floor($x / 16), (int)floor($z / 16), $this->getBlockRegistry());
         }
     }
 
@@ -295,6 +316,15 @@ final class BlockBreakService {
         }
         $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
         return $store instanceof ChunkStore ? $store : null;
+    }
+
+    private function getTileEntityStore(int $worldId = 0): ?\pocketmine\core\resource\TileEntityStore {
+        if ($worldId !== 0) {
+            $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getTileEntityStore($worldId) : null;
+        }
+        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\TileEntityStore::class);
+        return $store instanceof \pocketmine\core\resource\TileEntityStore ? $store : null;
     }
 
     private function worldIdOf(EntityRef $playerRef): int {

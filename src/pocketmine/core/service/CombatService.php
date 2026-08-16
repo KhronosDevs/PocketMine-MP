@@ -40,10 +40,31 @@ final class CombatService {
         EntityType::Skeleton->value => [[ItemIds::BONE, 0, 2, 1.0], [ItemIds::ARROW, 0, 2, 0.5]],
         EntityType::Creeper->value => [[ItemIds::GUNPOWDER, 0, 2, 1.0]],
         EntityType::Spider->value => [[ItemIds::STRING, 0, 2, 1.0], [ItemIds::SPIDER_EYE, 0, 1, 0.33]],
+        EntityType::Slime->value => [[ItemIds::SLIME_BALL, 0, 2, 1.0]],
+        EntityType::Enderman->value => [[ItemIds::ENDER_PEARL, 0, 1, 0.5]],
+        EntityType::Silverfish->value => [],
+        EntityType::CaveSpider->value => [[ItemIds::STRING, 0, 2, 1.0], [ItemIds::SPIDER_EYE, 0, 1, 0.33]],
+        EntityType::PigZombie->value => [[ItemIds::ROTTEN_FLESH, 0, 2, 1.0], [ItemIds::GOLD_INGOT, 0, 1, 0.25]],
+        EntityType::Blaze->value => [[ItemIds::BLAZE_ROD, 0, 1, 1.0]],
+        EntityType::LavaSlime->value => [],
+        EntityType::Ghast->value => [[ItemIds::GUNPOWDER, 0, 2, 1.0]],
+        EntityType::Witch->value => [[ItemIds::GLOWSTONE_DUST, 0, 2, 0.5], [ItemIds::REDSTONE, 0, 2, 0.5], [ItemIds::GUNPOWDER, 0, 2, 0.5]],
+        EntityType::Stray->value => [[ItemIds::BONE, 0, 2, 1.0], [ItemIds::ARROW, 0, 2, 0.5]],
+        EntityType::Husk->value => [[ItemIds::ROTTEN_FLESH, 0, 2, 1.0]],
+        EntityType::ZombieVillager->value => [[ItemIds::ROTTEN_FLESH, 0, 2, 1.0]],
         EntityType::Cow->value => [[ItemIds::RAW_BEEF, 1, 3, 1.0], [ItemIds::LEATHER, 0, 2, 0.75]],
         EntityType::Pig->value => [[ItemIds::RAW_PORKCHOP, 1, 3, 1.0]],
         EntityType::Sheep->value => [[ItemIds::WOOL, 1, 2, 1.0], [ItemIds::MUTTON, 1, 2, 1.0]],
         EntityType::Chicken->value => [[ItemIds::RAW_CHICKEN, 1, 1, 1.0], [ItemIds::FEATHER, 0, 2, 0.5]],
+        EntityType::Villager->value => [],
+        EntityType::Mooshroom->value => [[ItemIds::RAW_BEEF, 1, 3, 1.0], [ItemIds::LEATHER, 0, 2, 0.75]],
+        EntityType::Squid->value => [[ItemIds::INK_SAC, 0, 3, 1.0]],
+        EntityType::Rabbit->value => [[ItemIds::RABBIT_HIDE, 0, 1, 0.75], [ItemIds::RABBIT_FOOT, 0, 1, 0.1]],
+        EntityType::Bat->value => [],
+        EntityType::Ocelot->value => [],
+        EntityType::Wolf->value => [],
+        EntityType::IronGolem->value => [[ItemIds::IRON_INGOT, 3, 5, 1.0]],
+        EntityType::SnowGolem->value => [[ItemIds::SNOWBALL, 0, 15, 1.0]],
     ];
 
     public function __construct(
@@ -315,6 +336,18 @@ final class CombatService {
             return;
         }
 
+        // 14.22: a creeper explodes on death (legacy Creeper::explode). The
+        // blast is the same ray-based TNTExplosionSystem, sized to the creeper
+        // and attributed to the killer; the creeper drops no loot afterwards.
+        $meta = $target->get(MetadataComponent::class);
+        $isCreeper = $meta?->get(MetadataKeys::ENTITY_TYPE) === EntityType::Creeper->value
+            || $meta?->get(MetadataKeys::MOB_TYPE) === EntityType::Creeper->value;
+        if ($isCreeper) {
+            $this->triggerCreeperExplosion($targetRef, $killerRef);
+            $this->world->despawn($target);
+            return;
+        }
+
         // Drop experience
         $this->dropExperience($targetRef);
 
@@ -327,6 +360,34 @@ final class CombatService {
         if (!$isPlayer) {
             $this->world->despawn($target);
         }
+    }
+
+    private function triggerCreeperExplosion(EntityRef $creeperRef, ?EntityRef $killerRef): void {
+        $entity = $creeperRef->getEntity();
+        $pos = $entity?->get(PositionComponent::class);
+        if ($pos === null) {
+            return;
+        }
+        $chunks = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+        $blocks = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\BlockRegistry::class);
+        if (!$chunks instanceof \pocketmine\core\resource\ChunkStore || !$blocks instanceof \pocketmine\core\resource\BlockRegistry) {
+            return;
+        }
+        // A creeper's blast is slightly smaller than TNT and attributed to
+        // whatever killed it (legacy EntityExplodeEvent source). explode() is
+        // stateless (deps passed in), so a fresh instance is fine here.
+        (new \pocketmine\core\system\TNTExplosionSystem())->explode(
+            $this->world,
+            $chunks,
+            $blocks,
+            $this->spawnService,
+            $this,
+            $pos->x,
+            $pos->y,
+            $pos->z,
+            \pocketmine\core\system\TNTExplosionSystem::CREEPER_RADIUS,
+            $killerRef,
+        );
     }
 
     private function dropExperience(EntityRef $entityRef): void {
@@ -363,11 +424,24 @@ final class CombatService {
         $entityType = EntityType::tryFrom((string)($meta?->get(MetadataKeys::ENTITY_TYPE) ?? ''));
 
         return match ($entityType) {
-            EntityType::Zombie, EntityType::Skeleton, EntityType::Spider => 5,
+            EntityType::Zombie, EntityType::Skeleton, EntityType::Spider,
+            EntityType::Slime, EntityType::Silverfish, EntityType::CaveSpider,
+            EntityType::PigZombie, EntityType::LavaSlime, EntityType::Witch,
+            EntityType::Stray, EntityType::Husk, EntityType::ZombieVillager => 5,
             EntityType::Creeper => 5,
-            EntityType::Cow, EntityType::Pig, EntityType::Sheep, EntityType::Chicken => 1 + mt_rand(0, 3),
+            EntityType::Enderman => 5,
+            EntityType::Blaze => 10,
+            EntityType::Ghast => 10,
+            EntityType::IronGolem => 15,
+            EntityType::Cow, EntityType::Pig, EntityType::Sheep, EntityType::Chicken,
+            EntityType::Villager, EntityType::Mooshroom, EntityType::Squid,
+            EntityType::Rabbit, EntityType::Ocelot, EntityType::SnowGolem => 1 + mt_rand(0, 3),
+            EntityType::Bat => 0,
+            EntityType::Wolf => 2,
             // Projectiles drop no XP when they despawn.
-            EntityType::Arrow => 0,
+            EntityType::Arrow, EntityType::Snowball, EntityType::Egg, EntityType::XPOrb => 0,
+            // Vehicles and TNT are not mobs - no XP.
+            EntityType::Boat, EntityType::Minecart, EntityType::PrimedTNT, EntityType::ThrownPotion => 0,
             null => $entity->has(PlayerTag::class) ? 7 : 5,
         };
     }

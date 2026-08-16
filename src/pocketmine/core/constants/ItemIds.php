@@ -26,6 +26,7 @@ final class ItemIds {
     public const COAL_ORE = 16;
     public const WOOL = 35;
     public const TORCH = 50;
+    public const TNT = 46;
     public const CHEST = 54;
     public const DIAMOND_ORE = 56;
     public const CRAFTING_TABLE = 58;
@@ -41,6 +42,7 @@ final class ItemIds {
     public const HARDENED_CLAY = 172;
 
     // Materials / ingredients
+    public const FLINT_STEEL = 259;
     public const COAL = 263;
     public const DIAMOND = 264;
     public const IRON_INGOT = 265;
@@ -49,6 +51,13 @@ final class ItemIds {
     public const STRING = 287;
     public const FEATHER = 288;
     public const GUNPOWDER = 289;
+    public const SNOWBALL = 332;
+    public const EGG = 344;
+    public const POTION = 373;
+    public const GLASS_BOTTLE = 374;
+    public const SPLASH_POTION = 438;
+    public const SLIME_BALL = 341;
+    public const GLOWSTONE_DUST = 348;
     public const REDSTONE = 331;
     public const LEATHER = 334;
     public const BRICK = 336;
@@ -56,10 +65,12 @@ final class ItemIds {
     public const COAL_BLOCK = 173;
     public const DYE = 351;
     public const BONE = 352;
+    public const ENDER_PEARL = 368;
     public const SPIDER_EYE = 375;
     public const EMERALD = 388;
     public const NETHER_BRICK = 405;
     public const QUARTZ = 406;
+    public const INK_SAC = 351; // dye meta 0
 
     // Food
     public const RAW_PORKCHOP = 319;
@@ -74,6 +85,8 @@ final class ItemIds {
     public const MUTTON = 418;
     public const BAKED_POTATO = 393;
     public const POTATO = 392;
+    public const RABBIT_HIDE = 415;
+    public const RABBIT_FOOT = 414;
     // Legacy 1.0+ ids carried over from recipes.json (not present on the
     // 0.15.10 client, so these smelting entries are inert there).
     public const RAW_RABBIT = 411;
@@ -93,4 +106,8 @@ final class ItemIds {
     // Misc
     public const BUCKET = 325;
     public const BLAZE_ROD = 369;
+    public const SIGN = 323;
+    public const ITEM_FRAME = 389;
+    public const BOAT = 333;
+    public const MINECART = 328;
 }

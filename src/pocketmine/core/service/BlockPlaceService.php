@@ -140,6 +140,15 @@ final class BlockPlaceService {
         $store = $this->getChunkStore($worldId);
         if ($store !== null) {
             $store->setBlock($x, $y, $z, $blockId, $meta);
+            // 14.21: keep the chunk's light honest when a light-emitting or
+            // opaque block appears (torch placement, glass, ...).
+            $store->recalculateLight((int)floor($x / 16), (int)floor($z / 16), $this->getBlockRegistry());
+            // 14.24: tell the fluid system about a placed liquid so it flows
+            // on the next pass (buckets, water/lava blocks).
+            $fluid = $this->world->getResourceRegistry()->get(\pocketmine\core\system\FluidSystem::class);
+            if ($fluid instanceof \pocketmine\core\system\FluidSystem) {
+                $fluid->registerLiquidCell($x, $y, $z, $blockId);
+            }
         }
     }
 

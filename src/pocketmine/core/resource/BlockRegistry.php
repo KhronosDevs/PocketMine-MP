@@ -230,6 +230,7 @@ final class BlockRegistry {
         195 => ['name' => 'Jungle Door', 'hardness' => 3.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
         196 => ['name' => 'Acacia Door', 'hardness' => 3.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
         197 => ['name' => 'Dark Oak Door', 'hardness' => 3.0, 'resistance' => 15.0, 'opacity' => 0, 'flammable' => true, 'flamability' => 20, 'burnTime' => 5, 'tool' => 'axe'],
+        199 => ['name' => 'Item Frame', 'hardness' => 0.0, 'resistance' => 0.0, 'solid' => false, 'transparent' => true, 'replaceable' => false, 'silkTouch' => false],
     ];
 
     /**
@@ -517,6 +518,8 @@ final class BlockRegistry {
             $id === 1 => [['id' => 4, 'meta' => 0, 'count' => 1]],             // stone -> cobblestone (unless silk touch)
             $id === 2 => [['id' => 3, 'meta' => 0, 'count' => 1]],             // grass -> dirt (legacy Grass::getDrops)
             $id === 60 => [['id' => 3, 'meta' => 0, 'count' => 1]],            // farmland -> dirt
+            $id === 63 || $id === 68 => [['id' => 323, 'meta' => 0, 'count' => 1]], // sign -> sign item
+            $id === 199 => [['id' => 389, 'meta' => 0, 'count' => 1]],         // item frame -> item frame item
             default => [['id' => $id, 'meta' => 0, 'count' => 1]],
         };
 

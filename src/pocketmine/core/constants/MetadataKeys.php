@@ -63,4 +63,21 @@ final class MetadataKeys {
     public const ABSORPTION = 'absorption';
     public const AGE = 'age';
     public const ARROW_AGE = 'arrowAge';
+
+    // Thrown potion
+    public const POTION_ID = 'potionId';
+
+    // TNT fuse
+    public const FUSE_TICKS = 'fuseTicks';
+    public const FUSE_LENGTH = 'fuseLength';
+    public const EXPLOSION_RADIUS = 'explosionRadius';
+    public const EXPLOSION_SOURCE_ID = 'explosionSourceId';
+
+    // Vehicles / riding (14.25)
+    public const VEHICLE_TYPE = 'vehicleType';
+    public const VEHICLE_RIDER_ID = 'vehicleRiderId';
+    public const RIDING_VEHICLE_ID = 'ridingVehicleId';
+    public const VEHICLE_INPUT_X = 'vehicleInputX';
+    public const VEHICLE_INPUT_Z = 'vehicleInputZ';
+    public const VEHICLE_JUMPING = 'vehicleJumping';
 }

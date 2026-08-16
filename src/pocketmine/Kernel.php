@@ -31,6 +31,7 @@ use pocketmine\core\service\EntitySpawnService;
 use pocketmine\core\service\EntityDespawnService;
 use pocketmine\core\service\EntityInteractionService;
 use pocketmine\core\service\CombatService;
+use pocketmine\core\service\PotionService;
 use pocketmine\core\service\DamageService;
 use pocketmine\core\service\KnockbackService;
 use pocketmine\core\service\InventoryService;
@@ -177,6 +178,7 @@ final class Kernel {
     private EntityDespawnService $entityDespawnService;
     private EntityInteractionService $entityInteractionService;
     private CombatService $combatService;
+    private PotionService $potionService;
     private DamageService $damageService;
     private KnockbackService $knockbackService;
     private InventoryService $inventoryService;
@@ -229,6 +231,9 @@ final class Kernel {
         $this->inventoryService = new InventoryService($world);
         $this->craftingService = new CraftingService($world);
         $this->containerService = new ContainerService($world);
+        // 14.23: potion application (drink + splash) - after combat so
+        // harming potions can route through the damage pipeline.
+        $this->potionService = new PotionService($world, $networkPort, $this->combatService);
 
         // CraftingService must exist before NetworkSessionService: the wire
         // craft handler (CraftingEventPacket) validates grids through it.
@@ -291,6 +296,7 @@ final class Kernel {
             // worlds get their own stores when registered.
             $chestStore = $this->resourceRegistry->get(\pocketmine\core\resource\ChestStore::class);
             $furnaceStore = $this->resourceRegistry->get(\pocketmine\core\resource\FurnaceStore::class);
+            $tileEntityStore = $this->resourceRegistry->get(\pocketmine\core\resource\TileEntityStore::class);
             $worldRegistry->registerDefaultWorld(
                 $defaultWorld,
                 $defaultWorld,
@@ -300,6 +306,7 @@ final class Kernel {
                 $storagePort,
                 $chestStore instanceof \pocketmine\core\resource\ChestStore ? $chestStore : new \pocketmine\core\resource\ChestStore(),
                 $furnaceStore instanceof \pocketmine\core\resource\FurnaceStore ? $furnaceStore : new \pocketmine\core\resource\FurnaceStore(),
+                $tileEntityStore instanceof \pocketmine\core\resource\TileEntityStore ? $tileEntityStore : new \pocketmine\core\resource\TileEntityStore(),
             );
         }
 
@@ -1551,6 +1558,10 @@ final class Kernel {
         return $this->combatService;
     }
 
+    public function getPotionService(): PotionService {
+        return $this->potionService;
+    }
+
     public function getDamageService(): DamageService {
         return $this->damageService;
     }
@@ -1896,6 +1907,8 @@ function registerBuiltinResources(ResourceRegistry $registry): void {
     $registry->set(new \pocketmine\core\resource\SmeltingRegistry());
     $registry->set(new \pocketmine\core\resource\FurnaceStore());
     $registry->set(new \pocketmine\core\resource\ProjectileRegistry());
+    $registry->set(new \pocketmine\core\resource\PotionRegistry());
+    $registry->set(new \pocketmine\core\resource\TileEntityStore());
 }
 
 function registerBuiltinProjectiles(ResourceRegistry $registry): void {
@@ -1907,6 +1920,13 @@ function registerBuiltinProjectiles(ResourceRegistry $registry): void {
     // Arrow: legacy Arrow::NETWORK_ID 80, damage 2, gravity 0.05, drag 0.01,
     // sticky (embeds in entities it hits).
     $projectiles->register(\pocketmine\core\enum\EntityType::Arrow->value, 80, 2.0, 0.05, 0.01, true);
+    // 14.23 throwables: snowball (81), egg (82) and thrown potion (86) are
+    // non-sticky - they despawn on impact. Snowball/egg deal no damage (0.15
+    // parity); the potion's splash effect is applied by PotionService through
+    // the POTION_ID metadata set at throw time.
+    $projectiles->register(\pocketmine\core\enum\EntityType::Snowball->value, 81, 0.0, 0.03, 0.01, false);
+    $projectiles->register(\pocketmine\core\enum\EntityType::Egg->value, 82, 0.0, 0.03, 0.01, false);
+    $projectiles->register(\pocketmine\core\enum\EntityType::ThrownPotion->value, 86, 0.0, 0.05, 0.01, false);
 }
 
 function registerBuiltinRecipes(ResourceRegistry $registry): void {
@@ -2136,6 +2156,18 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // 14.17: arrow projectiles - drag, block stick, entity hits, age despawn.
     // After AI so targets' positions are current; before chunk work.
     $scheduler->register(new \pocketmine\core\system\ArrowSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // 14.22: primed TNT fuses and explodes (block destruction, entity
+    // damage, chain reactions, ExplodePacket broadcast). Runs after combat
+    // so creeper blasts triggered by a kill see consistent state.
+    $scheduler->register(new \pocketmine\core\system\TNTExplosionSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // 14.24: water/lava flow - liquids spread down and sideways every few
+    // ticks, hardening lava to stone on contact with water. Sequential so it
+    // sees the authoritative block state after place/break/explosion.
+    $scheduler->register(new \pocketmine\core\system\FluidSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // 14.25: vehicles - boats float on water, minecarts roll on rails, and
+    // the rider follows the vehicle. After movement/physics so the vehicle
+    // sees the integrated position; before chunk work.
+    $scheduler->register(new \pocketmine\core\system\VehicleSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     $scheduler->register(new \pocketmine\core\system\ChunkUpdateSystem(), \pocketmine\core\ecs\SystemPhase::CHUNK_PARALLEL);
     // Post-movement block collision: clamps the pending positions written by
     // the parallel systems against solid blocks before they are committed

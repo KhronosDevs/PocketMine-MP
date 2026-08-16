@@ -60,7 +60,7 @@ test('every real protocol-84 block id is registered with a real name', function 
     same(189, count($real), '189 real block ids expected (192 canonical - 12 reserved + 9 extras)');
 
     $ids = $b->getIds();
-    same(191, count($ids), 'registry has 191 explicit entries (112 + 79 added)');
+    same(192, count($ids), 'registry has 192 explicit entries (112 + 79 added + item frame)');
     $idSet = array_flip($ids);
 
     foreach ($real as $id) {

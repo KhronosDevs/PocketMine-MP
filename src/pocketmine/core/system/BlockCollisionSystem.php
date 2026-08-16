@@ -27,7 +27,10 @@ use pocketmine\core\resource\ChunkStore;
  *
  * Players are excluded - their position is client-authoritative (the client
  * enforces its own collision locally) and yanking them back would fight the
- * client's interpolation.
+ * client's interpolation. Vehicles are excluded too - VehicleSystem owns
+ * their vertical motion (boats float on water, minecarts ride rails); a
+ * generic ground clamp would pull a minecart off its rail onto the floor
+ * below it.
  */
 final class BlockCollisionSystem implements System {
     /** Nudge so a resolved box sits just outside the blocking block's face. */
@@ -42,7 +45,7 @@ final class BlockCollisionSystem implements System {
 
         $query = $world->query()
             ->with(PositionComponent::class, VelocityComponent::class, CollisionComponent::class)
-            ->without(PlayerTag::class)
+            ->without(PlayerTag::class, \pocketmine\core\constants\EntityTags::VEHICLE)
             ->build();
 
         foreach ($query as $entity) {
@@ -51,6 +54,14 @@ final class BlockCollisionSystem implements System {
             $col = $entity->get(CollisionComponent::class);
             if ($pos === null || $vel === null || $col === null
                 || !$col->canCollide || !$col->collidesWithBlocks) {
+                continue;
+            }
+            // A mounted rider is positioned by its vehicle (VehicleSystem
+            // owns both entities' motion); clamping it here would fight the
+            // seat sync and drag the rider into the rail/ground. Metadata is
+            // optional for non-riders (it is not part of the archetype query).
+            $meta = $entity->get(\pocketmine\core\component\MetadataComponent::class);
+            if ($meta !== null && ((int)($meta->get(\pocketmine\core\constants\MetadataKeys::RIDING_VEHICLE_ID) ?? 0)) > 0) {
                 continue;
             }
 
