@@ -31,7 +31,7 @@ use pocketmine\port\driven\StoragePort;
  */
 #[Resource]
 final class WorldRegistry {
-    /** @var array<int, array{id: int, name: string, folderName: string, seed: int, store: ChunkStore, config: WorldConfig, storage: StoragePort, chestStore: ChestStore, furnaceStore: FurnaceStore, tileEntityStore: TileEntityStore}> */
+    /** @var array<int, array{id: int, name: string, folderName: string, seed: int, store: ChunkStore, config: WorldConfig, storage: StoragePort, chestStore: ChestStore, furnaceStore: FurnaceStore, containerStore: ContainerStore, brewingStore: BrewingStore, tileEntityStore: TileEntityStore}> */
     private array $worlds = [];
     /** @var array<string, int> folderName => id (cheap lookup for load/generate dedup) */
     private array $byFolder = [];
@@ -46,6 +46,8 @@ final class WorldRegistry {
         StoragePort $storage,
         ?ChestStore $chestStore = null,
         ?FurnaceStore $furnaceStore = null,
+        ?ContainerStore $containerStore = null,
+        ?BrewingStore $brewingStore = null,
         ?TileEntityStore $tileEntityStore = null,
     ): int {
         // The default world is pre-registered with id 0 by the Kernel; any
@@ -64,11 +66,13 @@ final class WorldRegistry {
             'store' => $store,
             'config' => $config,
             'storage' => $storage,
-            // Every world gets its own tile stores: chests/furnaces key by
-            // block coordinate, so two worlds with containers at the same
-            // coordinates must never share contents.
+            // Every world gets its own tile stores: containers key by block
+            // coordinate, so two worlds with chests at the same coordinates
+            // must never share contents.
             'chestStore' => $chestStore ?? new ChestStore(),
             'furnaceStore' => $furnaceStore ?? new FurnaceStore(),
+            'containerStore' => $containerStore ?? new ContainerStore(),
+            'brewingStore' => $brewingStore ?? new BrewingStore(),
             'tileEntityStore' => $tileEntityStore ?? new TileEntityStore(),
         ];
         $this->byFolder[$folderName] = $id;
@@ -88,6 +92,8 @@ final class WorldRegistry {
         StoragePort $storage,
         ?ChestStore $chestStore = null,
         ?FurnaceStore $furnaceStore = null,
+        ?ContainerStore $containerStore = null,
+        ?BrewingStore $brewingStore = null,
         ?TileEntityStore $tileEntityStore = null,
     ): void {
         $this->worlds[0] = [
@@ -103,6 +109,8 @@ final class WorldRegistry {
             // single-world behavior is unchanged.
             'chestStore' => $chestStore ?? new ChestStore(),
             'furnaceStore' => $furnaceStore ?? new FurnaceStore(),
+            'containerStore' => $containerStore ?? new ContainerStore(),
+            'brewingStore' => $brewingStore ?? new BrewingStore(),
             'tileEntityStore' => $tileEntityStore ?? new TileEntityStore(),
         ];
         $this->byFolder[$folderName] = 0;
@@ -143,6 +151,16 @@ final class WorldRegistry {
     public function getFurnaceStore(int $id): ?FurnaceStore {
         $world = $this->worlds[$id] ?? null;
         return $world !== null ? $world['furnaceStore'] : null;
+    }
+
+    public function getContainerStore(int $id): ?ContainerStore {
+        $world = $this->worlds[$id] ?? null;
+        return $world !== null ? $world['containerStore'] : null;
+    }
+
+    public function getBrewingStore(int $id): ?BrewingStore {
+        $world = $this->worlds[$id] ?? null;
+        return $world !== null ? $world['brewingStore'] : null;
     }
 
     public function getTileEntityStore(int $id): ?TileEntityStore {

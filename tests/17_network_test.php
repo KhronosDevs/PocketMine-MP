@@ -3710,6 +3710,184 @@ test('breaking a chest spills its contents as item entities', function () use ($
     }
 });
 
+// --- Tile containers (14.27) ----------------------------------------------
+test('two adjacent chests open as one 54-slot double window', function () use ($kernel, $port): void {
+    [$chestClient, $eid] = joinFreshClient($kernel, $port, 'Chesty6', 'e0000000-0000-0000-0000-0000000000c6');
+    try {
+        [$cx, $cy, $cz] = placeTestChest($kernel, $chestClient, $eid);
+        // Place a second chest one block east so the pair is detected at open
+        // time (the right half is the second chest, slots 27-53).
+        $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+        $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+        if ($store === null) {
+            ok(false, 'chunk store present');
+            return;
+        }
+        $store->setBlock($cx + 1, $cy, $cz, 54);
+
+        $use = new UseItemPacket();
+        $use->x = $cx;
+        $use->y = $cy;
+        $use->z = $cz;
+        $use->face = 1;
+        $use->fx = 0.0;
+        $use->fy = 0.0;
+        $use->fz = 0.0;
+        $use->posX = $cx + 0.5;
+        $use->posY = $cy + 0.5;
+        $use->posZ = $cz + 0.5;
+        $use->slot = 0;
+        $use->item = [5, 32, 0, null];
+        $chestClient->sendGamePacket($use);
+
+        $deadline = microtime(true) + 3.0;
+        $sawOpen = null;
+        $sawContent = null;
+        while (microtime(true) < $deadline && ($sawOpen === null || $sawContent === null)) {
+            $kernel->run(1);
+            foreach ($chestClient->readGamePackets() as [$id, $buffer]) {
+                if ($id === Info::CONTAINER_OPEN_PACKET && $sawOpen === null) {
+                    $sawOpen = copFields($buffer);
+                }
+                if ($id === Info::CONTAINER_SET_CONTENT_PACKET && $sawContent === null) {
+                    $sawContent = cscFields($buffer);
+                }
+            }
+            usleep(10000);
+        }
+        ok($sawOpen !== null, 'double chest opens a window');
+        if ($sawOpen !== null) {
+            same(1, $sawOpen['type'], 'double chest window type 1');
+            same(54, $sawOpen['slots'], '54 double-chest slots');
+        }
+        ok($sawContent !== null && count($sawContent['slots']) === 54, 'merged 54-slot contents sent');
+    } finally {
+        $chestClient->close();
+    }
+});
+
+test('a double-chest move lands in the right physical half', function () use ($kernel, $port): void {
+    [$chestClient, $eid] = joinFreshClient($kernel, $port, 'Chesty7', 'e0000000-0000-0000-0000-0000000000c7');
+    try {
+        [$cx, $cy, $cz] = placeTestChest($kernel, $chestClient, $eid);
+        $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+        $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+        if ($store === null) {
+            ok(false, 'chunk store present');
+            return;
+        }
+        $store->setBlock($cx + 1, $cy, $cz, 54); // right half
+
+        // Open the pair (the helper waits for window 2 with 27 slots, so use
+        // the direct right-click + wait loop like the test above instead).
+        $use = new UseItemPacket();
+        $use->x = $cx;
+        $use->y = $cy;
+        $use->z = $cz;
+        $use->face = 1;
+        $use->fx = 0.0;
+        $use->fy = 0.0;
+        $use->fz = 0.0;
+        $use->posX = $cx + 0.5;
+        $use->posY = $cy + 0.5;
+        $use->posZ = $cz + 0.5;
+        $use->slot = 0;
+        $use->item = [5, 32, 0, null];
+        $chestClient->sendGamePacket($use);
+        $deadline = microtime(true) + 3.0;
+        $opened = false;
+        while (microtime(true) < $deadline && !$opened) {
+            $kernel->run(1);
+            foreach ($chestClient->readGamePackets() as [$id, $buffer]) {
+                if ($id === Info::CONTAINER_OPEN_PACKET) {
+                    $f = copFields($buffer);
+                    if ($f['windowid'] === 2 && $f['slots'] === 54) {
+                        $opened = true;
+                    }
+                }
+            }
+            usleep(10000);
+        }
+        ok($opened, 'double chest opened (54-slot window)');
+
+        // Move 5 planks into window slot 30 = right half slot 3: empty the
+        // player's slot 0 first (releases 32 planks into move credit), then
+        // claim slot 30 of the double window.
+        $empty = new ContainerSetSlotPacket();
+        $empty->windowid = 0;
+        $empty->slot = 0;
+        $empty->hotbarSlot = 0;
+        $empty->item = [0, 0, 0, null];
+        $chestClient->sendGamePacket($empty);
+
+        $fill = new ContainerSetSlotPacket();
+        $fill->windowid = 2;
+        $fill->slot = 30;
+        $fill->hotbarSlot = 30;
+        $fill->item = [5, 5, 0, null];
+        $chestClient->sendGamePacket($fill);
+        $kernel->run(2);
+
+        $chestStore = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChestStore::class);
+        if (!$chestStore instanceof \pocketmine\core\resource\ChestStore) {
+            ok(false, 'chest store present');
+            return;
+        }
+        // Slot 30 = right half (cx+1) local slot 3.
+        $rightInv = $chestStore->get($cx + 1, $cy, $cz);
+        $item = $rightInv->get(3);
+        ok($item !== null && $item->itemId === 5 && $item->count === 5, '5 planks landed in the right half slot 3');
+        ok($chestStore->get($cx, $cy, $cz)->get(30) === null, 'left half has no slot 30 (wrapped into the right half)');
+    } finally {
+        $chestClient->close();
+    }
+});
+
+test('breaking one half of a double chest spills both halves', function () use ($kernel, $port): void {
+    [$chestClient, $eid] = joinFreshClient($kernel, $port, 'Chesty8', 'e0000000-0000-0000-0000-0000000000c8');
+    try {
+        [$cx, $cy, $cz] = placeTestChest($kernel, $chestClient, $eid);
+        $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+        $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+        $chestStore = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChestStore::class);
+        $chestStore = $chestStore instanceof \pocketmine\core\resource\ChestStore ? $chestStore : null;
+        if ($store === null || $chestStore === null) {
+            ok(false, 'chunk + chest stores present');
+            return;
+        }
+        $store->setBlock($cx + 1, $cy, $cz, 54); // right half
+        // Seed both halves, then break the left half.
+        $chestStore->get($cx, $cy, $cz)->set(0, new \pocketmine\core\component\ItemStack(264, 0, 2));
+        $chestStore->get($cx + 1, $cy, $cz)->set(0, new \pocketmine\core\component\ItemStack(265, 0, 3));
+
+        // Creative instant break (like the existing chest-break test).
+        $entity = $kernel->getWorld()->getEntity($eid);
+        $meta = $entity?->get(\pocketmine\core\component\MetadataComponent::class);
+        if ($meta !== null) {
+            $meta->set('gamemode', 1);
+        }
+        $action = new PlayerActionPacket();
+        $action->eid = $eid;
+        $action->action = PlayerActionPacket::ACTION_START_BREAK;
+        $action->x = $cx;
+        $action->y = $cy;
+        $action->z = $cz;
+        $action->face = 1;
+        $chestClient->sendGamePacket($action);
+
+        $deadline = microtime(true) + 3.0;
+        while (microtime(true) < $deadline && $store->getBlock($cx, $cy, $cz) !== 0) {
+            $kernel->run(1);
+            usleep(10000);
+        }
+        ok($store->getBlock($cx, $cy, $cz) === 0, 'left chest block is gone');
+        ok(!$chestStore->has($cx, $cy, $cz), 'left half contents removed');
+        ok(!$chestStore->has($cx + 1, $cy, $cz), 'right half contents removed too (whole pair spilled)');
+    } finally {
+        $chestClient->close();
+    }
+});
+
 // --- Furnaces / smelting (14.16) -----------------------------------------
 test('right-clicking a furnace opens a real container window (window 3, type 3)', function () use ($kernel, $port): void {
     [$furnaceClient, $eid] = joinFreshClient($kernel, $port, 'Furny', 'f0000000-0000-0000-0000-0000000000f1');

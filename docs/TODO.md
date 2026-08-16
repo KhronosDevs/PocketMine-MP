@@ -73,8 +73,8 @@ Single overworld generator only.
 
 Chests and furnaces were fixed (per-world stores in `WorldRegistry`, PR #80) — but they were the only **block** containers audited. Verify nothing else that stores state by `(x, y, z)` can leak across worlds.
 
-- **Already in place:** `ChestStore` + `FurnaceStore` are per-world bundles now; `BlockRegistry` has state tables for slabs/stairs/doors; multi-world routing helpers (`getChunkStore`/`getChestStore`/`getFurnaceStore` by world id) exist as the pattern to copy.
-- **Missing:** (a) audit for other coordinate-keyed stores or ad-hoc state (e.g. anything a future dispenser/hopper/beacon/brewing-stand feature would add — none exist in code yet, but the *pattern* must be per-world from day one), (b) double chests / adjacent-chest merging (two chest blocks pairing into one inventory — needs a `DoubleChestStore` or merged-key handling that is also per-world), (c) any wire/container state cached on sessions or entities that should key by `WorldComponent`.
+- **Done:** dispenser/hopper/brewing-stand containers added in PR #88 are per-world from day one (`ContainerStore` + `BrewingStore` follow the `ChestStore` pattern); double chests pair into one 54-slot window with break-spill of both halves. Remaining audit surface: any future beacon store, and any wire/container state cached on sessions that should key by `WorldComponent`.
+- **Missing:** (a) audit for other coordinate-keyed stores or ad-hoc state beyond the audited set (beacon pending), (c) any wire/container state cached on sessions or entities that should key by `WorldComponent`.
 
 ---
 
