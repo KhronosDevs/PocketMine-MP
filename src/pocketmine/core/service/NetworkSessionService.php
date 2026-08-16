@@ -289,7 +289,51 @@ final class NetworkSessionService {
         // batch with the burst would blow past the UDP payload ceiling.
         $this->flushOutbound();
         $this->streamChunks();
+        // 14.29: re-send chunks whose light changed since the last sync
+        // (torch place/break, glowstone, TNT blast, ...) so the client's
+        // light arrays follow the world. The store marks these during
+        // recalculateLight; a full chunk re-send is the only way protocol 84
+        // carries light to the client (UpdateBlockPacket has none).
+        $this->flushLightUpdates();
         $this->flushOutbound();
+    }
+
+    /**
+     * 14.29: re-send every chunk whose light arrays changed since the last
+     * tick to sessions in the same world that already received it. The chunk
+     * is freshly serialized so the payload carries the updated sky/block
+     * light; sessions that never got the chunk skip it (their queue streams
+     * the current version anyway).
+     */
+    private function flushLightUpdates(): void {
+        if ($this->adapter === null) {
+            return;
+        }
+        // Group sessions by world so each world's dirty set drains once.
+        $byWorld = [];
+        foreach ($this->sessions as $addrKey => $session) {
+            $byWorld[$session['worldId']][] = $addrKey;
+        }
+        foreach ($byWorld as $worldId => $addrKeys) {
+            $store = $this->getChunkStore((int)$worldId);
+            if ($store === null) {
+                continue;
+            }
+            foreach ($store->takeLightDirtyChunks() as [$chunkX, $chunkZ]) {
+                $chunkData = $this->chunkLoadService->loadChunk($chunkX, $chunkZ, (int)$worldId);
+                $chunk = new FullChunkDataPacket();
+                $chunk->chunkX = $chunkX;
+                $chunk->chunkZ = $chunkZ;
+                $chunk->order = FullChunkDataPacket::ORDER_LAYERED;
+                $chunk->data = ChunkSerializer::serialize($chunkData);
+                foreach ($addrKeys as $addrKey) {
+                    $key = $chunkX . ',' . $chunkZ;
+                    if (isset($this->sessions[$addrKey]['chunksSent'][$key])) {
+                        $this->sendChunkBatch($addrKey, clone $chunk);
+                    }
+                }
+            }
+        }
     }
 
     /**

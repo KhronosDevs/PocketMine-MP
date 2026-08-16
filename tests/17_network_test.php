@@ -1221,6 +1221,75 @@ test('placing a block consumes inventory and broadcasts UpdateBlockPacket', func
     ok($sawSlot, 'inventory slot synced back with 31 planks (one consumed)');
 });
 
+test('placing a torch re-sends the chunk with block light (client sees it light up)', function () use ($client, $kernel): void {
+    // Alice selects hotbar slot 3 (torches from the starter kit).
+    $me = new MobEquipmentPacket();
+    $me->eid = 0;
+    $me->item = [50, 16, 0, null];
+    $me->slot = 3;
+    $me->selectedSlot = 3;
+    $client->sendGamePacket($me);
+    $kernel->run(1);
+
+    [$bx, $by, $bz] = findSurfaceBlockNearSpawn($kernel);
+    teleportAliceOnto($kernel, $client, $bx, $by, $bz);
+
+    // Place the torch into the air cell above the surface block (click the
+    // surface block's top face, face 1 = up).
+    $use = new UseItemPacket();
+    $use->x = $bx;
+    $use->y = $by;
+    $use->z = $bz;
+    $use->face = 1; // up
+    $use->fx = 0.5;
+    $use->fy = 1.0;
+    $use->fz = 0.5;
+    $use->posX = $bx + 0.5;
+    $use->posY = $by + 1.0;
+    $use->posZ = $bz + 0.5;
+    $use->slot = 3;
+    $use->item = [50, 16, 0, null];
+    $client->sendGamePacket($use);
+
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+
+    $deadline = microtime(true) + 4.0;
+    $sawLitChunk = false;
+    while (microtime(true) < $deadline && !$sawLitChunk) {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id !== Info::FULL_CHUNK_DATA_PACKET) {
+                continue;
+            }
+            $fc = fcFields($buffer);
+            // The torch chunk is the one containing the surface block. Its
+            // block-light plane (after 8*4096 ids + 8*2048 data + 8*2048 sky)
+            // must have a lit nibble near the torch after the re-send.
+            if ($fc['x'] === intdiv($bx, 16) && $fc['z'] === intdiv($bz, 16)) {
+                $payload = $fc['data'];
+                $blockLightBase = 8 * 4096 + 8 * 2048 + 8 * 2048;
+                $lit = false;
+                for ($dy = 0; $dy < 4 && !$lit; $dy++) {
+                    $lit = nibbleAt($payload, $blockLightBase, $bx & 15, $bz & 15, ($by + 1 + $dy) & 0x7f) > 0;
+                }
+                if ($lit) {
+                    $sawLitChunk = true;
+                }
+            }
+        }
+        usleep(10000);
+    }
+    ok($store !== null && $store->getBlock($bx, $by + 1, $bz) === 50, 'torch placed in the world');
+    ok($sawLitChunk, 'chunk re-sent with lit block light after the torch placement');
+
+    // Clean up: break the torch so later tests see an unchanged world.
+    if ($store !== null && $store->getBlock($bx, $by + 1, $bz) === 50) {
+        $store->setBlock($bx, $by + 1, $bz, 0, 0);
+        $store->recalculateLight(intdiv($bx, 16), intdiv($bz, 16), $kernel->getWorld()->getResourceRegistry()->get(\pocketmine\core\resource\BlockRegistry::class));
+    }
+});
+
 // --- Chat ------------------------------------------------------------------
 test('chat is echoed back to the sender', function () use ($client, $kernel): void {
     $chat = new TextPacket();
