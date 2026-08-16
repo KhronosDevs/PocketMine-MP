@@ -41,7 +41,30 @@ final class MobSpawnerSystem implements System {
     public const MIN_SPAWN_DISTANCE = 8;
     public const SPAWN_RADIUS = 24;
 
-    private const HOSTILE_TYPES = [EntityType::Zombie, EntityType::Skeleton, EntityType::Creeper, EntityType::Spider];
+    /**
+     * Hostile spawn weights - common overworld mobs dominate, rare/misc
+     * (Ghast, Blaze, Silverfish, ...) only appear occasionally. Keys are
+     * EntityType values (enums can't be array keys), values are relative
+     * weights for the night spawner.
+     */
+    private const HOSTILE_WEIGHTS = [
+        EntityType::Zombie->value => 32,
+        EntityType::Skeleton->value => 26,
+        EntityType::Spider->value => 22,
+        EntityType::Creeper->value => 20,
+        EntityType::Enderman->value => 6,
+        EntityType::Slime->value => 5,
+        EntityType::CaveSpider->value => 4,
+        EntityType::Husk->value => 3,
+        EntityType::Stray->value => 3,
+        EntityType::PigZombie->value => 2,
+        EntityType::Witch->value => 2,
+        EntityType::ZombieVillager->value => 2,
+        EntityType::LavaSlime->value => 1,
+        EntityType::Silverfish->value => 1,
+        EntityType::Ghast->value => 1,
+        EntityType::Blaze->value => 1,
+    ];
 
     private int $tickCounter = 0;
 
@@ -132,9 +155,23 @@ final class MobSpawnerSystem implements System {
                 continue; // never found loaded terrain: skip this player
             }
 
-            $spawnService->spawnMob(self::HOSTILE_TYPES[array_rand(self::HOSTILE_TYPES)], $x, $y, $z);
+            $spawnService->spawnMob(self::pickHostileType(), $x, $y, $z);
             $totalHostile++;
         }
+    }
+
+    /** Weighted random pick from HOSTILE_WEIGHTS. */
+    private function pickHostileType(): EntityType {
+        $total = array_sum(self::HOSTILE_WEIGHTS);
+        $roll = mt_rand(1, $total);
+        $cumulative = 0;
+        foreach (self::HOSTILE_WEIGHTS as $type => $weight) {
+            $cumulative += $weight;
+            if ($roll <= $cumulative) {
+                return EntityType::from($type);
+            }
+        }
+        return EntityType::Zombie; // unreachable, but keeps static analysis happy
     }
 
     private function countHostileMobs(World $world): int {

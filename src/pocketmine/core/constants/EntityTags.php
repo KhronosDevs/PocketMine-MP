@@ -20,4 +20,6 @@ final class EntityTags {
     public const ANIMAL = 'animal';
     public const ITEM = 'item';
     public const XP_ORB = 'xp_orb';
+    public const PRIMED_TNT = 'primed_tnt';
+    public const VEHICLE = 'vehicle';
 }

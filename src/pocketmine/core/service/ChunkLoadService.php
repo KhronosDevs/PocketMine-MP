@@ -161,17 +161,21 @@ final class ChunkLoadService {
             $chunkData = $this->worldGenPort->populateChunk($chunkX, $chunkZ, $chunkData, $seed);
         }
         
-        // Calculate light if needed
-        if (!$this->hasLightData($chunkData)) {
-            $lightData = $this->worldGenPort->calculateLight($chunkX, $chunkZ, $chunkData);
-            // Apply light data to chunk
-        }
-        
         // Materialize the chunk into the in-memory store so block reads/writes
         // and the API World facade operate on real data.
         $store = $this->getChunkStore($worldId);
         if ($store !== null) {
             $store->load($chunkData);
+            // 14.21: freshly generated chunks get real light computed from
+            // their block grid (sky falloff + block-light BFS), so torches/
+            // glowstone/lava actually emit and underground is dark. Disk-
+            // loaded chunks keep their stored light (persistence round-trip).
+            if ($populate) {
+                $registry = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\BlockRegistry::class);
+                if ($registry instanceof \pocketmine\core\resource\BlockRegistry) {
+                    $store->recalculateLight($chunkX, $chunkZ, $registry);
+                }
+            }
             // 14.15: rehydrate chest inventories from the chunk's tile
             // snapshots (saved by Kernel::saveWorld) so chest contents
             // survive restarts with the terrain. Stores are per-world: the
@@ -185,6 +189,11 @@ final class ChunkLoadService {
             $furnaceStore = $this->getFurnaceStore($worldId);
             if ($furnaceStore !== null) {
                 $furnaceStore->restoreFromSnapshots($chunkData->tileEntities);
+            }
+            // 14.24: rehydrate sign text and item frame contents the same way.
+            $tileEntityStore = $this->getTileEntityStore($worldId);
+            if ($tileEntityStore !== null) {
+                $tileEntityStore->restoreFromSnapshots($chunkData->tileEntities);
             }
             if (!$this->isEmptyChunk($chunkData)) {
                 $store->markGenerated($chunkX, $chunkZ);
@@ -243,15 +252,6 @@ final class ChunkLoadService {
 
     private function isEmptyChunk(ChunkData $data): bool {
         return empty($data->sections) && empty($data->entities) && empty($data->tileEntities);
-    }
-
-    private function hasLightData(ChunkData $data): bool {
-        foreach ($data->sections as $section) {
-            if (!empty($section['skyLight']) || !empty($section['blockLight'])) {
-                return true;
-            }
-        }
-        return false;
     }
 
     public function unloadChunk(int $chunkX, int $chunkZ, int $worldId = 0): void {
@@ -333,5 +333,14 @@ final class ChunkLoadService {
         }
         $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\FurnaceStore::class);
         return $store instanceof \pocketmine\core\resource\FurnaceStore ? $store : null;
+    }
+
+    private function getTileEntityStore(int $worldId = 0): ?\pocketmine\core\resource\TileEntityStore {
+        if ($worldId !== 0) {
+            $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getTileEntityStore($worldId) : null;
+        }
+        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\TileEntityStore::class);
+        return $store instanceof \pocketmine\core\resource\TileEntityStore ? $store : null;
     }
 }

@@ -22,6 +22,7 @@ use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\ResourceRegistry;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\ChestStore;
+use pocketmine\core\resource\TileEntityStore;
 use pocketmine\core\resource\Hunger;
 use pocketmine\core\resource\ItemRegistry;
 use pocketmine\core\resource\KhronosConfig;
@@ -41,6 +42,7 @@ use pocketmine\protocol\AddItemEntityPacket;
 use pocketmine\protocol\AddPlayerPacket;
 use pocketmine\protocol\AdventureSettingsPacket;
 use pocketmine\protocol\BatchPacket;
+use pocketmine\protocol\BlockEntityDataPacket;
 use pocketmine\protocol\ChunkRadiusUpdatedPacket;
 use pocketmine\protocol\ChunkSerializer;
 use pocketmine\protocol\ContainerClosePacket;
@@ -57,6 +59,7 @@ use pocketmine\protocol\FullChunkDataPacket;
 use pocketmine\protocol\HurtArmorPacket;
 use pocketmine\protocol\Info;
 use pocketmine\protocol\InteractPacket;
+use pocketmine\protocol\ItemFrameDropItemPacket;
 use pocketmine\protocol\LevelEventPacket;
 use pocketmine\protocol\LoginPacket;
 use pocketmine\protocol\MobArmorEquipmentPacket;
@@ -72,6 +75,8 @@ use pocketmine\protocol\RequestChunkRadiusPacket;
 use pocketmine\protocol\RespawnPacket;
 use pocketmine\protocol\SetDifficultyPacket;
 use pocketmine\protocol\SetEntityDataPacket;
+use pocketmine\protocol\SetEntityLinkPacket;
+use pocketmine\protocol\PlayerInputPacket;
 use pocketmine\protocol\SetPlayerGameTypePacket;
 use pocketmine\protocol\SetHealthPacket;
 use pocketmine\protocol\SetSpawnPositionPacket;
@@ -81,6 +86,13 @@ use pocketmine\protocol\TextPacket;
 use pocketmine\protocol\UpdateBlockPacket;
 use pocketmine\protocol\UpdateAttributesPacket;
 use pocketmine\protocol\UseItemPacket;
+use pocketmine\nbt\NBT;
+use pocketmine\nbt\tag\ByteTag;
+use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\FloatTag;
+use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ShortTag;
+use pocketmine\nbt\tag\StringTag;
 use pocketmine\utils\Binary;
 use pocketmine\utils\UUID;
 use function count;
@@ -289,6 +301,10 @@ final class NetworkSessionService {
         if ($session === null) {
             return;
         }
+        // 14.25: a leaving rider is dismounted so the vehicle is freed for
+        // the next player and never carries a dangling rider id.
+        $this->dismountPlayer($addrKey);
+
         // 14.2: everyone else forgets the leaving player (entity + list entry).
         foreach ($this->sessions as $otherKey => $other) {
             if ($otherKey === $addrKey) {
@@ -566,6 +582,12 @@ final class NetworkSessionService {
                 $pk->decode();
                 $this->handlePlayerAction($addrKey, $pk);
                 break;
+            case Info::PLAYER_INPUT_PACKET:
+                $pk = new PlayerInputPacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handlePlayerInput($addrKey, $pk);
+                break;
             case Info::USE_ITEM_PACKET:
                 $pk = new UseItemPacket();
                 $pk->setBuffer($buffer, 1);
@@ -619,6 +641,18 @@ final class NetworkSessionService {
                 $pk->setBuffer($buffer, 1);
                 $pk->decode();
                 $this->handleCraftingEvent($addrKey, $pk);
+                break;
+            case Info::BLOCK_ENTITY_DATA_PACKET:
+                $pk = new BlockEntityDataPacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handleBlockEntityData($addrKey, $pk);
+                break;
+            case Info::ITEM_FRAME_DROP_ITEM_PACKET:
+                $pk = new ItemFrameDropItemPacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handleItemFrameDrop($addrKey, $pk);
                 break;
         }
     }
@@ -1021,6 +1055,20 @@ final class NetworkSessionService {
     }
 
     /**
+     * The PlayerRef of the connected player with the given ECS entity id, or
+     * null when they are not online (used by services that target a session
+     * by entity).
+     */
+    public function getPlayerRefByEntity(int $entityId): ?\pocketmine\port\driven\PlayerRef {
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId === $entityId) {
+                return $session['playerRef'];
+            }
+        }
+        return null;
+    }
+
+    /**
      * Flip a player's client between survival and creative (AdventureSettings
      * flags; legacy parity for the 0.15 client). The authoritative gamemode
      * lives in MetadataComponent('gamemode') - this only mirrors it.
@@ -1350,16 +1398,69 @@ final class NetworkSessionService {
                 $this->openFurnace($addrKey, $pk->x, $pk->y, $pk->z);
                 return;
             }
+            // 14.24: right-clicking an item frame puts the held item into it
+            // (or rotates an already-filled frame). Runs before placement like
+            // the chest/furnace activation, and works with an empty hand.
+            if ($block === 199) {
+                $this->activateItemFrame($addrKey, $session, $pk->x, $pk->y, $pk->z);
+                return;
+            }
         }
         $held = $inventory->get($inventory->heldSlot);
         if ($held === null || $held->count <= 0) {
             return;
+        }
+        // 14.25: placing a boat (333) on water or a minecart (328) on a rail
+        // spawns the vehicle entity and consumes the item (legacy Boat::
+        // onActivate / Minecart::onActivate run before placement).
+        if ($store !== null
+            && ($held->itemId === ItemIds::BOAT || $held->itemId === ItemIds::MINECART)) {
+            $targetId = $store->getBlock($pk->x, $pk->y, $pk->z);
+            if ($held->itemId === ItemIds::BOAT && ($targetId === 8 || $targetId === 9)) {
+                $this->spawnVehicleFromUse($addrKey, $session, $held, \pocketmine\core\enum\EntityType::Boat, $pk->x, $pk->y, $pk->z);
+                return;
+            }
+            if ($held->itemId === ItemIds::MINECART && in_array($targetId, [27, 28, 66, 157], true)) {
+                $this->spawnVehicleFromUse($addrKey, $session, $held, \pocketmine\core\enum\EntityType::Minecart, $pk->x, $pk->y, $pk->z);
+                return;
+            }
+        }
+        // 14.22: flint & steel on a TNT block primes it (legacy TNT::onActivate
+        // runs before placement). The block becomes air and a lit PrimedTNT
+        // entity spawns in its place; flint & steel loses durability.
+        if ($held->itemId === ItemIds::FLINT_STEEL) {
+            $store = $this->getChunkStore($session['worldId']);
+            if ($store !== null && $store->getBlock($pk->x, $pk->y, $pk->z) === ItemIds::TNT) {
+                $store->setBlock($pk->x, $pk->y, $pk->z, 0, 0);
+                $kernel = \pocketmine\Kernel::getInstance();
+                $spawn = $kernel?->getEntitySpawnService();
+                if ($spawn !== null) {
+                    $spawn->spawnPrimedTNT((float)$pk->x, (float)$pk->y, (float)$pk->z, $session['worldId']);
+                }
+                $this->broadcastBlockState($pk->x, $pk->y, $pk->z, $session['worldId']);
+                \pocketmine\core\resource\ItemDurability::consume($session['entityRef']);
+                return;
+            }
         }
         // 14.17: a bow starts charging on use (legacy Player sets startAction
         // on USE_ITEM; the later ACTION_RELEASE_ITEM fires the arrow).
         if ($held->itemId === ItemIds::BOW) {
             $session['bowDraw'] = $this->currentTick();
             $this->sessions[$addrKey] = $session;
+            return;
+        }
+        // 14.23: throwables - snowball (332), egg (344) and splash potion
+        // (438) launch a projectile toward the player's facing (legacy
+        // Player::useItem -> ProjectileItem::onActivate). Potions store their
+        // item meta as POTION_ID so ArrowSystem can splash them on impact.
+        if (in_array($held->itemId, [ItemIds::SNOWBALL, ItemIds::EGG, ItemIds::SPLASH_POTION], true)) {
+            $this->throwItem($addrKey, $session, $held);
+            return;
+        }
+        // 14.23: drinkable potion (373) applies its effect directly (legacy
+        // Potion::onConsume); survival replaces it with a glass bottle (374).
+        if ($held->itemId === ItemIds::POTION) {
+            $this->drinkPotion($addrKey, $session, $held);
             return;
         }
         // 14.11: food items are eaten on use (legacy Food::onConsume). The
@@ -1371,6 +1472,13 @@ final class NetworkSessionService {
             return;
         }
         $blockId = $held->itemId;
+        // 14.24: a sign (323) or item frame (389) is placed as a block (63/68
+        // sign, 199 frame) even though its item id is above 255 - the block id
+        // only exists on the grid, not in the inventory.
+        if ($blockId === ItemIds::SIGN || $blockId === ItemIds::ITEM_FRAME) {
+            $this->placeTileEntityItem($addrKey, $session, $pk, $held);
+            return;
+        }
         // Item ids 1..255 are placeable blocks in the protocol-84 era; item
         // ids above that (tools, food...) are not placeable.
         if ($blockId <= 0 || $blockId > 255) {
@@ -1386,6 +1494,202 @@ final class NetworkSessionService {
             // so the client must see exactly what the world now holds.
             $this->broadcastBlockState($targetX, $targetY, $targetZ, $session['worldId']);
             $this->sendInventorySlot($session['playerRef'], $inventory->heldSlot);
+        }
+    }
+
+    /**
+     * 14.24: the client finished editing a sign and reports the new text
+     * (BLOCK_ENTITY_DATA_PACKET with little-endian NBT). Only the player who
+     * placed the sign may edit it (legacy Sign::Creator check). The text is
+     * stored in the per-world TileEntityStore and re-broadcast so every
+     * viewer near the sign sees the update.
+     */
+    private function handleBlockEntityData(string $addrKey, BlockEntityDataPacket $pk): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $store = $this->getChunkStore($session['worldId']);
+        if ($store === null || $store->getBlock($pk->x, $pk->y, $pk->z) !== 63 && $store->getBlock($pk->x, $pk->y, $pk->z) !== 68) {
+            return; // not a sign block
+        }
+        $nbt = new NBT(NBT::LITTLE_ENDIAN);
+        $nbt->read($pk->namedtag);
+        $data = $nbt->getData();
+        if (!$data instanceof CompoundTag || $data->getTag('id')?->getValue() !== TileEntityStore::TILE_SIGN) {
+            return;
+        }
+        $tiles = $this->tileEntityStore($session['worldId']);
+        if ($tiles === null) {
+            return;
+        }
+        $existing = $tiles->getSign($pk->x, $pk->y, $pk->z);
+        // Only the placing player may edit (legacy Sign::Creator check). A
+        // sign loaded from disk keeps its original creator string.
+        $creator = $existing['creator'] ?? (string)$session['uuid'];
+        if ($creator !== '' && $creator !== (string)$session['uuid']) {
+            return;
+        }
+        $text = [];
+        foreach (['Text1', 'Text2', 'Text3', 'Text4'] as $line) {
+            $tag = $data->getTag($line);
+            $text[] = $tag !== null ? (string)$tag->getValue() : '';
+        }
+        $tiles->setSign($pk->x, $pk->y, $pk->z, $text, (string)$session['uuid']);
+        $this->broadcastTileEntity($pk->x, $pk->y, $pk->z, $session['worldId']);
+    }
+
+    /**
+     * 14.24: the client right-clicked an item frame to remove its item
+     * (ITEM_FRAME_DROP_ITEM_PACKET). The claimed slot is validated against
+     * the authoritative frame state; on match the item drops as a normal
+     * item entity, the frame clears and everyone nearby is refreshed.
+     */
+    private function handleItemFrameDrop(string $addrKey, ItemFrameDropItemPacket $pk): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $tiles = $this->tileEntityStore($session['worldId']);
+        if ($tiles === null) {
+            return;
+        }
+        $frame = $tiles->getFrame($pk->x, $pk->y, $pk->z);
+        $stored = $frame['item'] ?? null;
+        $claimedId = (int)($pk->item[0] ?? 0);
+        if ($stored === null || $stored['id'] !== $claimedId) {
+            return; // hostile or stale claim - keep authoritative state
+        }
+        // Drop the real stored item (1), clear the frame, refresh viewers.
+        $kernel = \pocketmine\Kernel::getInstance();
+        $spawn = $kernel?->getEntitySpawnService();
+        if ($spawn !== null) {
+            $spawn->spawnItem((float)$pk->x + 0.5, (float)$pk->y + 0.5, (float)$pk->z + 0.5, new ItemStack($stored['id'], $stored['meta'], $stored['count']), $session['worldId']);
+        }
+        $tiles->clearFrame($pk->x, $pk->y, $pk->z);
+        $this->broadcastTileEntity($pk->x, $pk->y, $pk->z, $session['worldId']);
+    }
+
+    /**
+     * 14.24: right-clicking an item frame block. With an item in hand and an
+     * empty frame, the held item (1) goes into the frame (survival consumes
+     * it; creative keeps the stack). With a filled frame, the item rotates.
+     */
+    private function activateItemFrame(string $addrKey, array $session, int $x, int $y, int $z): void {
+        $tiles = $this->tileEntityStore($session['worldId']);
+        if ($tiles === null) {
+            return;
+        }
+        $entity = $session['entityRef']->getEntity();
+        $inventory = $entity?->get(InventoryComponent::class);
+        $held = $inventory?->get($inventory->heldSlot);
+        $frame = $tiles->getFrame($x, $y, $z);
+        $hasItem = ($frame['item'] ?? null) !== null;
+        if ($hasItem) {
+            $tiles->rotateFrame($x, $y, $z);
+        } elseif ($held !== null && $held->itemId > 0 && $held->count > 0) {
+            $tiles->setFrameItem($x, $y, $z, $held);
+            $metadata = $entity?->get(MetadataComponent::class);
+            $creative = \pocketmine\core\enum\GameMode::coerce($metadata?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) === \pocketmine\core\enum\GameMode::Creative;
+            if (!$creative && $inventory !== null) {
+                $inventory->remove($inventory->heldSlot, 1);
+                $this->sendInventorySlot($session['playerRef'], $inventory->heldSlot);
+            }
+        } else {
+            return;
+        }
+        $this->broadcastTileEntity($x, $y, $z, $session['worldId']);
+    }
+
+    /**
+     * 14.24: place a sign (item 323 -> block 63 post / 68 wall) or an item
+     * frame (item 389 -> block 199) from the held item, then create its tile
+     * entity. Sign placement follows legacy SignPost::place (wall faces become
+     * a wall sign with the face's meta, everything else a post with the
+     * player's yaw); frames need a side face.
+     */
+    private function placeTileEntityItem(string $addrKey, array $session, UseItemPacket $pk, ItemStack $held): void {
+        $entity = $session['entityRef']->getEntity();
+        $inventory = $entity?->get(InventoryComponent::class);
+        if ($inventory === null) {
+            return;
+        }
+        $store = $this->getChunkStore($session['worldId']);
+        if ($store === null) {
+            return;
+        }
+        [$dx, $dy, $dz] = self::FACE_OFFSETS[$pk->face] ?? self::FACE_OFFSETS[1];
+        $tx = $pk->x + $dx;
+        $ty = $pk->y + $dy;
+        $tz = $pk->z + $dz;
+        $existing = $store->getBlock($tx, $ty, $tz);
+        if ($existing !== 0 && !$this->isReplaceableBlock($existing)) {
+            return;
+        }
+        $metadata = $entity?->get(MetadataComponent::class);
+        $creative = \pocketmine\core\enum\GameMode::coerce($metadata?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) === \pocketmine\core\enum\GameMode::Creative;
+
+        if ($held->itemId === ItemIds::SIGN) {
+            // Wall sign on a horizontal face (2-5), post otherwise (legacy
+            // SignPost::place faces map).
+            $wallFaces = [2 => 2, 3 => 3, 4 => 4, 5 => 5];
+            if (isset($wallFaces[$pk->face])) {
+                $store->setBlock($tx, $ty, $tz, 68, $wallFaces[$pk->face]);
+            } else {
+                $yaw = $session['entityRef']->getRotation()?->yaw ?? 0.0;
+                $meta = (int)(floor((($yaw + 180) * 16 / 360) + 0.5)) & 0x0F;
+                $store->setBlock($tx, $ty, $tz, 63, $meta);
+            }
+            $tiles = $this->tileEntityStore($session['worldId']);
+            $tiles?->setSign($tx, $ty, $tz, ['', '', '', ''], (string)$session['uuid']);
+            if (!$creative && $inventory !== null) {
+                $inventory->remove($inventory->heldSlot, 1);
+            }
+            $this->broadcastBlockState($tx, $ty, $tz, $session['worldId']);
+            $this->broadcastTileEntity($tx, $ty, $tz, $session['worldId']);
+            $this->sendInventorySlot($session['playerRef'], $inventory->heldSlot);
+            return;
+        }
+        // Item frame: only side faces (2-5), legacy ItemFrame::place faces map
+        // (2=>3, 3=>2, 4=>1, 5=>0).
+        $faces = [2 => 3, 3 => 2, 4 => 1, 5 => 0];
+        if (!isset($faces[$pk->face])) {
+            return;
+        }
+        $store->setBlock($tx, $ty, $tz, 199, $faces[$pk->face]);
+        $tiles = $this->tileEntityStore($session['worldId']);
+        $tiles?->clearFrame($tx, $ty, $tz);
+        if (!$creative && $inventory !== null) {
+            $inventory->remove($inventory->heldSlot, 1);
+        }
+        $this->broadcastBlockState($tx, $ty, $tz, $session['worldId']);
+        $this->broadcastTileEntity($tx, $ty, $tz, $session['worldId']);
+        $this->sendInventorySlot($session['playerRef'], $inventory->heldSlot);
+    }
+
+    /**
+     * 14.25: spawn a vehicle from a held boat/minecart item used on the right
+     * block (water for boats, rails for minecarts). Consumes one item in
+     * survival; creative keeps the stack. The vehicle spawns centred on the
+     * clicked block.
+     */
+    private function spawnVehicleFromUse(string $addrKey, array $session, ItemStack $held, \pocketmine\core\enum\EntityType $type, int $x, int $y, int $z): void {
+        $entity = $session['entityRef']->getEntity();
+        $metadata = $entity?->get(MetadataComponent::class);
+        $creative = \pocketmine\core\enum\GameMode::coerce($metadata?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) === \pocketmine\core\enum\GameMode::Creative;
+        $kernel = \pocketmine\Kernel::getInstance();
+        $spawn = $kernel?->getEntitySpawnService();
+        if ($spawn === null) {
+            return;
+        }
+        $yaw = $session['entityRef']->getRotation()?->yaw ?? 0.0;
+        $spawn->spawnVehicle($type, (float)$x, (float)$y, (float)$z, $session['worldId'], $yaw);
+        if (!$creative) {
+            $inventory = $entity?->get(InventoryComponent::class);
+            if ($inventory !== null) {
+                $inventory->remove($inventory->heldSlot, 1);
+                $this->sendInventorySlot($session['playerRef'], $inventory->heldSlot);
+            }
         }
     }
 
@@ -1467,6 +1771,19 @@ final class NetworkSessionService {
                 $this->handleFurnaceSetSlot($addrKey, $session, $pk);
                 return;
             }
+        } elseif ($pk->windowid === ContainerSetContentPacket::SPECIAL_CREATIVE) {
+            // Creative pick: the client selected an item from the creative
+            // window. Put a fresh stack of it into the target inventory slot.
+            $id = (int)($pk->item[0] ?? 0);
+            if ($id > 0 && $pk->slot >= 0 && $pk->slot < InventoryComponent::ARMOR_OFFSET) {
+                // Fresh stack from the creative menu: no NBT. The wire slot's
+                // NBT field is raw binary, while ItemStack::nbt is an array -
+                // creative items never carry one.
+                $stack = new ItemStack($id, max(1, (int)($pk->item[1] ?? 1)), (int)($pk->item[2] ?? 0));
+                $inventory->set($pk->slot, $stack);
+                $this->sendInventorySlot($session['playerRef'], $pk->slot);
+            }
+            return;
         }
         if ($invSlot < 0) {
             return;
@@ -1575,6 +1892,94 @@ final class NetworkSessionService {
         }
         $store = $this->resourceRegistry->get(ChestStore::class);
         return $store instanceof ChestStore ? $store : new ChestStore();
+    }
+
+    private function tileEntityStore(int $worldId = 0): ?TileEntityStore {
+        // Non-default worlds resolve their own store from the registry; the
+        // default world falls back to the global resource instance.
+        if ($worldId !== 0) {
+            $registry = $this->resourceRegistry->get(WorldRegistry::class);
+            $store = $registry instanceof WorldRegistry ? $registry->getTileEntityStore($worldId) : null;
+            return $store instanceof TileEntityStore ? $store : null;
+        }
+        $store = $this->resourceRegistry->get(TileEntityStore::class);
+        return $store instanceof TileEntityStore ? $store : null;
+    }
+
+    private function isReplaceableBlock(int $blockId): bool {
+        $registry = $this->resourceRegistry->get(\pocketmine\core\resource\BlockRegistry::class);
+        return $registry instanceof \pocketmine\core\resource\BlockRegistry ? $registry->isReplaceable($blockId) : $blockId === 0;
+    }
+
+    /**
+     * Send the tile-entity NBT for a position to every viewer in the world
+     * (legacy Spawnable::spawnToAll). The payload is little-endian NBT: for a
+     * sign, id/x/y/z + Text1-4; for a frame, id/x/y/z + Item/ItemRotation.
+     */
+    private function broadcastTileEntity(int $x, int $y, int $z, int $worldId = 0): void {
+        $payload = $this->tileEntityPayload($x, $y, $z, $worldId);
+        if ($payload === null) {
+            return;
+        }
+        $pk = new BlockEntityDataPacket();
+        $pk->x = $x;
+        $pk->y = $y;
+        $pk->z = $z;
+        $pk->namedtag = $payload;
+        foreach ($this->sessions as $s) {
+            if ($s['worldId'] === $worldId) {
+                $this->queuePacket($s['playerRef'], clone $pk);
+            }
+        }
+    }
+
+    /**
+     * The little-endian NBT payload for a tile entity at a position, or null
+     * when the position holds no sign/frame. Mirrors legacy getSpawnCompound.
+     */
+    private function tileEntityPayload(int $x, int $y, int $z, int $worldId = 0): ?string {
+        $tiles = $this->tileEntityStore($worldId);
+        if ($tiles === null) {
+            return null;
+        }
+        $sign = $tiles->getSign($x, $y, $z);
+        if ($sign !== null) {
+            $tags = [
+                new StringTag('id', TileEntityStore::TILE_SIGN),
+                new IntTag('x', $x),
+                new IntTag('y', $y),
+                new IntTag('z', $z),
+            ];
+            foreach (['Text1', 'Text2', 'Text3', 'Text4'] as $i => $line) {
+                $tags[] = new StringTag($line, (string)($sign['text'][$i] ?? ''));
+            }
+            $nbt = new NBT(NBT::LITTLE_ENDIAN);
+            $nbt->setData(new CompoundTag('', $tags));
+            return $nbt->write();
+        }
+        $frame = $tiles->getFrame($x, $y, $z);
+        if ($frame !== null) {
+            $tags = [
+                new StringTag('id', TileEntityStore::TILE_ITEM_FRAME),
+                new IntTag('x', $x),
+                new IntTag('y', $y),
+                new IntTag('z', $z),
+                new ByteTag('ItemRotation', $frame['rotation']),
+                new FloatTag('ItemDropChance', 1.0),
+            ];
+            $item = $frame['item'];
+            if ($item !== null) {
+                $tags[] = new CompoundTag('Item', [
+                    new ShortTag('id', $item['id']),
+                    new ByteTag('Count', $item['count']),
+                    new ShortTag('Damage', $item['meta']),
+                ]);
+            }
+            $nbt = new NBT(NBT::LITTLE_ENDIAN);
+            $nbt->setData(new CompoundTag('', $tags));
+            return $nbt->write();
+        }
+        return null;
     }
 
     /** Send the full 27 chest slots as window 2 (legacy sendContents). */
@@ -1978,13 +2383,129 @@ final class NetworkSessionService {
         }
 
         if ($pk->action === InteractPacket::ACTION_RIGHT_CLICK) {
+            // 14.25: right-clicking a vehicle mounts it (link rider to
+            // vehicle), unless it already has a rider.
+            $targetEntity = $targetRef->getEntity();
+            $targetMeta = $targetEntity?->get(MetadataComponent::class);
+            if ($targetEntity?->has(\pocketmine\core\constants\EntityTags::VEHICLE) ?? false) {
+                $riderId = (int)($targetMeta?->get(\pocketmine\core\constants\MetadataKeys::VEHICLE_RIDER_ID) ?? 0);
+                if ($riderId <= 0) {
+                    $this->mountVehicle($addrKey, $pk->target, $targetEntity);
+                }
+                return;
+            }
             if ($this->entityInteractionService->interact($session['entityRef'], $targetRef)) {
                 // 14.5: the picked-up stack must appear in the actor's own
                 // inventory window (the walk-over path syncs through the
                 // public syncInventoryContents hook instead).
                 $this->syncInventoryContents($selfId);
             }
+            return;
         }
+
+        // 14.25: ACTION_LEAVE_VEHICLE dismounts the player from whatever
+        // vehicle they are riding (legacy Player::handleInteract).
+        if ($pk->action === InteractPacket::ACTION_LEAVE_VEHICLE) {
+            $this->dismountPlayer($addrKey);
+        }
+    }
+
+    /**
+     * 14.25: mount the player onto a vehicle entity. The link is stored both
+     * ways (vehicle -> rider id, rider -> vehicle id) so VehicleSystem can
+     * move the rider and the per-tick pass can render the link. Every viewer
+     * who sees the vehicle gets the SetEntityLinkPacket (type RIDE).
+     */
+    private function mountVehicle(string $addrKey, int $vehicleId, Entity $vehicle): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $riderId = $session['playerRef']->entityId;
+        $vehicleMeta = $vehicle->get(MetadataComponent::class);
+        $rider = $session['entityRef']->getEntity();
+        $riderMeta = $rider?->get(MetadataComponent::class);
+        if ($vehicleMeta === null || $riderMeta === null) {
+            return;
+        }
+        $vehicleMeta->set(\pocketmine\core\constants\MetadataKeys::VEHICLE_RIDER_ID, $riderId);
+        $riderMeta->set(\pocketmine\core\constants\MetadataKeys::RIDING_VEHICLE_ID, $vehicleId);
+        // Snap the rider onto the vehicle immediately.
+        $vehiclePos = $vehicle->get(PositionComponent::class);
+        $riderPos = $rider?->get(PositionComponent::class);
+        if ($vehiclePos !== null && $riderPos !== null) {
+            $riderPos->x = $vehiclePos->x;
+            $riderPos->y = $vehiclePos->y + 0.5;
+            $riderPos->z = $vehiclePos->z;
+        }
+        $this->broadcastLink($vehicleId, $riderId, SetEntityLinkPacket::TYPE_RIDE);
+    }
+
+    /**
+     * 14.25: dismount the player from any vehicle. Clears both link halves
+     * and broadcasts the link removal to every viewer.
+     */
+    private function dismountPlayer(string $addrKey): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $rider = $session['entityRef']->getEntity();
+        $riderMeta = $rider?->get(MetadataComponent::class);
+        $vehicleId = (int)($riderMeta?->get(\pocketmine\core\constants\MetadataKeys::RIDING_VEHICLE_ID) ?? 0);
+        if ($vehicleId <= 0) {
+            return;
+        }
+        $riderMeta?->remove(\pocketmine\core\constants\MetadataKeys::RIDING_VEHICLE_ID);
+        $vehicle = $this->world->getEntity($vehicleId);
+        $vehicleMeta = $vehicle?->get(MetadataComponent::class);
+        $vehicleMeta?->remove(\pocketmine\core\constants\MetadataKeys::VEHICLE_RIDER_ID);
+        $this->broadcastLink($vehicleId, $session['playerRef']->entityId, SetEntityLinkPacket::TYPE_REMOVE);
+    }
+
+    /** Send a SetEntityLinkPacket to every session that sees the vehicle. */
+    private function broadcastLink(int $vehicleId, int $riderId, int $type): void {
+        $pk = new SetEntityLinkPacket();
+        $pk->from = $vehicleId;
+        $pk->to = $riderId;
+        $pk->type = $type;
+        foreach ($this->sessions as $s) {
+            if (isset($s['knownEntities'][$vehicleId]) || $s['playerRef']->entityId === $riderId) {
+                $this->queuePacket($s['playerRef'], clone $pk);
+            }
+        }
+    }
+
+    /**
+     * 14.25: the client streams vehicle input while riding (motX = forward /
+     * back, motY = strafe, plus jump/sneak flags). Forward the input to the
+     * vehicle's metadata so VehicleSystem can drive it; sneaking while riding
+     * is the vanilla dismount (legacy Player also dismounts on sneak).
+     */
+    private function handlePlayerInput(string $addrKey, PlayerInputPacket $pk): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $riderMeta = $session['entityRef']->getEntity()?->get(MetadataComponent::class);
+        $vehicleId = (int)($riderMeta?->get(\pocketmine\core\constants\MetadataKeys::RIDING_VEHICLE_ID) ?? 0);
+        if ($vehicleId <= 0) {
+            return;
+        }
+        if ($pk->sneaking) {
+            $this->dismountPlayer($addrKey);
+            return;
+        }
+        $vehicle = $this->world->getEntity($vehicleId);
+        $vehicleMeta = $vehicle?->get(MetadataComponent::class);
+        if ($vehicleMeta === null) {
+            return;
+        }
+        // motX = forward/back, motY = strafe (protocol 84 layout). The yaw-
+        // relative steering happens in VehicleSystem from these values.
+        $vehicleMeta->set(\pocketmine\core\constants\MetadataKeys::VEHICLE_INPUT_Z, $pk->motX);
+        $vehicleMeta->set(\pocketmine\core\constants\MetadataKeys::VEHICLE_INPUT_X, $pk->motY);
+        $vehicleMeta->set(\pocketmine\core\constants\MetadataKeys::VEHICLE_JUMPING, $pk->jumping);
     }
 
     /**
@@ -2012,6 +2533,99 @@ final class NetworkSessionService {
             if ($session['playerRef']->entityId === $entityId) {
                 $this->sendInventorySlot($session['playerRef'], $slot);
                 return;
+            }
+        }
+    }
+
+    /**
+     * 14.23 throwing: launch the held throwable (snowball/egg/splash potion)
+     * along the player's facing at legacy speed. The projectile rides the
+     * ArrowSystem pipeline; potions carry their item meta as POTION_ID so the
+     * impact splash knows which effect to apply. Survival consumes one item;
+     * creative throws infinitely (legacy ProjectileItem::onActivate).
+     */
+    private function throwItem(string $addrKey, array $session, ItemStack $held): void {
+        $entity = $session['entityRef']->getEntity();
+        $pos = $session['entityRef']->getPosition();
+        $rot = $session['entityRef']->getRotation();
+        if ($entity === null || $pos === null || $rot === null) {
+            return;
+        }
+        $creative = GameMode::coerce($entity->get(MetadataComponent::class)?->get(MetadataKeys::GAMEMODE)) === GameMode::Creative;
+
+        // Legacy throw direction from yaw/pitch; speed = 1.5 blocks/tick.
+        $yaw = deg2rad($rot->yaw);
+        $pitch = deg2rad($rot->pitch);
+        $dx = -sin($yaw) * cos($pitch);
+        $dy = -sin($pitch);
+        $dz = cos($yaw) * cos($pitch);
+        $speed = 1.5 * 20; // blocks/second
+
+        $type = match ($held->itemId) {
+            ItemIds::SNOWBALL => EntityType::Snowball,
+            ItemIds::EGG => EntityType::Egg,
+            default => EntityType::ThrownPotion,
+        };
+        $projectile = $this->entitySpawnService->spawnProjectile(
+            $type,
+            $pos->x,
+            $pos->y + 1.62, // eye height
+            $pos->z,
+            $dx * $speed,
+            $dy * $speed,
+            $dz * $speed,
+            $session['entityRef'],
+        );
+        $projectileEntity = $projectile->getEntity();
+        if ($projectileEntity) {
+            $meta = $projectileEntity->get(MetadataComponent::class);
+            if ($meta && $held->itemId === ItemIds::SPLASH_POTION) {
+                $meta->set(MetadataKeys::POTION_ID, $held->meta);
+            }
+        }
+
+        if (!$creative) {
+            $inventory = $entity->get(InventoryComponent::class);
+            if ($inventory !== null) {
+                $inventory->remove($inventory->heldSlot, 1);
+                $this->sendInventorySlot($session['playerRef'], $inventory->heldSlot);
+            }
+        }
+    }
+
+    /**
+     * 14.23 drinking: a drinkable potion applies its effect to the player and
+     * (in survival) becomes a glass bottle, mirroring legacy Potion::onConsume.
+     */
+    private function drinkPotion(string $addrKey, array $session, ItemStack $held): void {
+        $entity = $session['entityRef']->getEntity();
+        if ($entity === null) {
+            return;
+        }
+        $kernel = \pocketmine\Kernel::getInstance();
+        $potionService = $kernel?->getPotionService();
+        if ($potionService === null) {
+            return;
+        }
+        $registry = $this->resourceRegistry->get(\pocketmine\core\resource\PotionRegistry::class);
+        $effect = $registry instanceof \pocketmine\core\resource\PotionRegistry ? $registry->get($held->meta) : null;
+        $potionService->apply($session['entityRef'], $effect, false);
+
+        // Animate USE_ITEM to the eater + viewers (legacy onConsume).
+        $event = new EntityEventPacket();
+        $event->eid = $session['playerRef']->entityId;
+        $event->event = EntityEventPacket::USE_ITEM;
+        foreach ($this->sessions as $s) {
+            $this->queuePacket($s['playerRef'], clone $event);
+        }
+
+        $creative = GameMode::coerce($entity->get(MetadataComponent::class)?->get(MetadataKeys::GAMEMODE)) === GameMode::Creative;
+        if (!$creative) {
+            $inventory = $entity->get(InventoryComponent::class);
+            if ($inventory !== null) {
+                $inventory->remove($inventory->heldSlot, 1);
+                $inventory->add(new ItemStack(ItemIds::GLASS_BOTTLE, 1, 0));
+                $this->sendInventorySlot($session['playerRef'], $inventory->heldSlot);
             }
         }
     }
@@ -2528,6 +3142,21 @@ final class NetworkSessionService {
         // 14.12: the client needs the recipe list to render the crafting UI
         // (legacy sent it in Server::onPlayerLogin, right after the burst).
         $this->sendCraftingData($playerRef);
+        // Creative inventory (window 0x79): populate the client's item picker
+        // so creative players can take any item (legacy sendContents parity).
+        $this->sendCreativeContents($playerRef);
+    }
+
+    /**
+     * Send the creative inventory (ContainerSetContentPacket, window 0x79) so
+     * the client's item picker shows the curated vanilla item list. Picks come
+     * back as ContainerSetSlotPacket with the same window id.
+     */
+    private function sendCreativeContents(PlayerRef $player): void {
+        $pk = new ContainerSetContentPacket();
+        $pk->windowid = ContainerSetContentPacket::SPECIAL_CREATIVE;
+        $pk->slots = \pocketmine\core\resource\CreativeItems::all();
+        $this->queuePacket($player, $pk);
     }
 
     /**
@@ -2917,6 +3546,15 @@ final class NetworkSessionService {
         // Override the nametag with the mob's type name (legacy mobs carried
         // their type as the nametag string).
         $pk->metadata[2] = [\pocketmine\utils\Binary::DATA_TYPE_STRING, $type->value];
+        // 14.25: a vehicle with a rider ships its link in the Add packet so a
+        // viewer who first sees the vehicle mid-ride renders the passenger
+        // immediately (legacy Vehicle::spawnTo included the link).
+        if ($entity->has(\pocketmine\core\constants\EntityTags::VEHICLE)) {
+            $riderId = (int)($meta?->get(\pocketmine\core\constants\MetadataKeys::VEHICLE_RIDER_ID) ?? 0);
+            if ($riderId > 0) {
+                $pk->links[] = [$entityId, $riderId, SetEntityLinkPacket::TYPE_RIDE];
+            }
+        }
         return $pk;
     }
 
@@ -3049,6 +3687,11 @@ final class NetworkSessionService {
                 $chunk->data = ChunkSerializer::serialize($chunkData);
                 $this->sendChunkBatch($addrKey, $chunk);
 
+                // 14.24: after the chunk, send tile-entity data (sign text,
+                // item frame contents) so the client renders them (legacy
+                // Spawnable::spawnTo per chunk viewer).
+                $this->sendChunkTiles($session['playerRef'], $chunkX, $chunkZ, $session['worldId']);
+
                 $session['chunksSent'][$key] = true;
                 $sent++;
             }
@@ -3060,6 +3703,42 @@ final class NetworkSessionService {
             }
             $this->sessions[$addrKey] = $session;
         }
+    }
+
+    /**
+     * 14.24: queue a BlockEntityDataPacket for every sign/frame tile entity
+     * inside a freshly streamed chunk so the client renders them immediately
+     * (legacy Spawnable::spawnTo). Only tiles with data are sent (an empty
+     * frame sends nothing; the client renders the block itself).
+     */
+    private function sendChunkTiles(PlayerRef $player, int $chunkX, int $chunkZ, int $worldId = 0): void {
+        $tiles = $this->tileEntityStore($worldId);
+        if ($tiles === null) {
+            return;
+        }
+        foreach ($this->allTilesInChunk($tiles, $chunkX, $chunkZ) as [$x, $y, $z]) {
+            $payload = $this->tileEntityPayload($x, $y, $z, $worldId);
+            if ($payload === null) {
+                continue;
+            }
+            $pk = new BlockEntityDataPacket();
+            $pk->x = $x;
+            $pk->y = $y;
+            $pk->z = $z;
+            $pk->namedtag = $payload;
+            $this->queuePacket($player, $pk);
+        }
+    }
+
+    /**
+     * @return list<array{0: int, 1: int, 2: int}> tile positions in a chunk.
+     */
+    private function allTilesInChunk(TileEntityStore $tiles, int $chunkX, int $chunkZ): array {
+        $out = [];
+        foreach ($tiles->snapshotsForChunk($chunkX, $chunkZ) as $snapshot) {
+            $out[] = [$snapshot->x, $snapshot->y, $snapshot->z];
+        }
+        return $out;
     }
 
     /**

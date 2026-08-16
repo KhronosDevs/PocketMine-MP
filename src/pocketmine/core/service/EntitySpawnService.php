@@ -36,11 +36,33 @@ final class EntitySpawnService {
         EntityType::Skeleton->value => ['health' => 20, 'damage' => 2.5, 'speed' => 1.0, 'follow' => 24.0, 'range' => 3.0, 'retreat' => 0.0],
         EntityType::Creeper->value => ['health' => 20, 'damage' => 4.0, 'speed' => 1.1, 'follow' => 16.0, 'range' => 1.5, 'retreat' => 0.0],
         EntityType::Spider->value => ['health' => 16, 'damage' => 2.0, 'speed' => 1.4, 'follow' => 16.0, 'range' => 2.0, 'retreat' => 0.0],
-        // Passive - low speed, no attack, retreat when hurt
+        EntityType::Slime->value => ['health' => 8, 'damage' => 2.0, 'speed' => 1.0, 'follow' => 16.0, 'range' => 1.5, 'retreat' => 0.0],
+        EntityType::Enderman->value => ['health' => 40, 'damage' => 7.0, 'speed' => 1.2, 'follow' => 32.0, 'range' => 2.0, 'retreat' => 0.0],
+        EntityType::Silverfish->value => ['health' => 8, 'damage' => 1.0, 'speed' => 1.1, 'follow' => 12.0, 'range' => 1.5, 'retreat' => 0.0],
+        EntityType::CaveSpider->value => ['health' => 12, 'damage' => 2.0, 'speed' => 1.6, 'follow' => 16.0, 'range' => 2.0, 'retreat' => 0.0],
+        EntityType::PigZombie->value => ['health' => 20, 'damage' => 5.0, 'speed' => 1.1, 'follow' => 16.0, 'range' => 2.0, 'retreat' => 0.0],
+        EntityType::Blaze->value => ['health' => 20, 'damage' => 5.0, 'speed' => 1.1, 'follow' => 24.0, 'range' => 3.0, 'retreat' => 0.0],
+        EntityType::LavaSlime->value => ['health' => 16, 'damage' => 4.0, 'speed' => 1.0, 'follow' => 16.0, 'range' => 2.0, 'retreat' => 0.0],
+        EntityType::Ghast->value => ['health' => 10, 'damage' => 6.0, 'speed' => 1.0, 'follow' => 32.0, 'range' => 6.0, 'retreat' => 0.0],
+        EntityType::Witch->value => ['health' => 26, 'damage' => 3.0, 'speed' => 1.0, 'follow' => 16.0, 'range' => 3.0, 'retreat' => 0.0],
+        EntityType::Stray->value => ['health' => 20, 'damage' => 2.5, 'speed' => 1.0, 'follow' => 24.0, 'range' => 3.0, 'retreat' => 0.0],
+        EntityType::Husk->value => ['health' => 20, 'damage' => 3.0, 'speed' => 1.0, 'follow' => 16.0, 'range' => 2.0, 'retreat' => 0.0],
+        EntityType::ZombieVillager->value => ['health' => 20, 'damage' => 3.0, 'speed' => 1.0, 'follow' => 16.0, 'range' => 2.0, 'retreat' => 0.0],
+        // Passive / neutral - low speed, no attack, retreat when hurt
         EntityType::Cow->value => ['health' => 10, 'damage' => 0.0, 'speed' => 0.8, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
         EntityType::Pig->value => ['health' => 10, 'damage' => 0.0, 'speed' => 0.8, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
         EntityType::Sheep->value => ['health' => 8, 'damage' => 0.0, 'speed' => 0.8, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
         EntityType::Chicken->value => ['health' => 4, 'damage' => 0.0, 'speed' => 0.9, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
+        EntityType::Villager->value => ['health' => 20, 'damage' => 0.0, 'speed' => 0.6, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.4],
+        EntityType::Mooshroom->value => ['health' => 10, 'damage' => 0.0, 'speed' => 0.7, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
+        EntityType::Squid->value => ['health' => 10, 'damage' => 0.0, 'speed' => 0.8, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
+        EntityType::Rabbit->value => ['health' => 3, 'damage' => 0.0, 'speed' => 1.2, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
+        EntityType::Bat->value => ['health' => 6, 'damage' => 0.0, 'speed' => 0.9, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.4],
+        EntityType::Ocelot->value => ['health' => 10, 'damage' => 0.0, 'speed' => 1.0, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.4],
+        EntityType::SnowGolem->value => ['health' => 4, 'damage' => 0.0, 'speed' => 0.6, 'follow' => 0.0, 'range' => 0.0, 'retreat' => 0.3],
+        // Neutral guardians - defend when provoked (Wolf, IronGolem)
+        EntityType::Wolf->value => ['health' => 8, 'damage' => 3.0, 'speed' => 1.1, 'follow' => 16.0, 'range' => 2.0, 'retreat' => 0.0],
+        EntityType::IronGolem->value => ['health' => 100, 'damage' => 15.0, 'speed' => 0.8, 'follow' => 16.0, 'range' => 3.0, 'retreat' => 0.0],
     ];
 
     public function __construct(
@@ -185,6 +207,88 @@ final class EntitySpawnService {
         return $entityRef;
     }
 
+    /**
+     * Spawn a lit PrimedTNT entity (14.22). The fuse counts down in
+     * TNTExplosionSystem; the TNT entity renders as legacy PrimedTNT (network
+     * id 65) and carries a small upward kick so it pops off the ground like
+     * legacy, plus a collision box so it settles on terrain. Fuse defaults to
+     * the legacy 80 ticks (4 seconds).
+     */
+    public function spawnPrimedTNT(float $x, float $y, float $z, int $worldId = 0, int $fuse = 80): EntityRef {
+        $entityRef = $this->world->spawn(
+            (new EntityBuilder())
+                ->with(new PositionComponent($x + 0.5, $y, $z + 0.5))
+                ->with(new RotationComponent(0, 0))
+                ->with(new VelocityComponent(
+                    (mt_rand(-10, 10) / 100),
+                    0.2,
+                    (mt_rand(-10, 10) / 100)
+                ))
+                ->with(new HealthComponent())
+                ->with(new MetadataComponent())
+                ->with(new CollisionComponent(width: 0.98, height: 0.98))
+                ->with(new \pocketmine\core\component\WorldComponent($worldId))
+                ->withTag(\pocketmine\core\constants\EntityTags::PRIMED_TNT)
+        );
+
+        $entity = $entityRef->getEntity();
+        if ($entity) {
+            $meta = $entity->get(MetadataComponent::class);
+            if ($meta) {
+                $meta->set(MetadataKeys::ENTITY_TYPE, EntityType::PrimedTNT->value);
+                $meta->set(MetadataKeys::FUSE_TICKS, $fuse);
+                $meta->set(MetadataKeys::FUSE_LENGTH, $fuse);
+            }
+        }
+
+        $this->eventPort->emit(new \pocketmine\api\event\EntitySpawnEvent(
+            \pocketmine\api\entity\Entity::wrap($entityRef, $this->world),
+        ));
+
+        return $entityRef;
+    }
+
+    /**
+     * 14.25: spawn a rideable vehicle (boat or minecart). Vehicles are plain
+     * ECS entities tagged VEHICLE with a wide low collision box and the type
+     * in metadata so the network renderer emits the right AddEntityPacket
+     * (Boat 90 / Minecart 84) and VehicleSystem can drive them. A vehicle
+     * starts riderless; right-clicking it mounts a player (link handled by
+     * NetworkSessionService).
+     */
+    public function spawnVehicle(EntityType $vehicleType, float $x, float $y, float $z, int $worldId = 0, float $yaw = 0.0): EntityRef {
+        if (!$vehicleType->isVehicle()) {
+            throw new \InvalidArgumentException("Not a vehicle type: {$vehicleType->value}");
+        }
+        $width = $vehicleType === EntityType::Boat ? 1.6 : 0.98;
+        $entityRef = $this->world->spawn(
+            (new EntityBuilder())
+                ->with(new PositionComponent($x + 0.5, $y, $z + 0.5))
+                ->with(new RotationComponent($yaw, 0))
+                ->with(new VelocityComponent())
+                ->with(new HealthComponent(40, 40))
+                ->with(new MetadataComponent())
+                ->with(new CollisionComponent(width: $width, height: 0.7))
+                ->with(new \pocketmine\core\component\WorldComponent($worldId))
+                ->withTag(\pocketmine\core\constants\EntityTags::VEHICLE)
+        );
+
+        $entity = $entityRef->getEntity();
+        if ($entity) {
+            $meta = $entity->get(MetadataComponent::class);
+            if ($meta) {
+                $meta->set(MetadataKeys::ENTITY_TYPE, $vehicleType->value);
+                $meta->set(MetadataKeys::VEHICLE_TYPE, $vehicleType->value);
+            }
+        }
+
+        $this->eventPort->emit(new \pocketmine\api\event\EntitySpawnEvent(
+            \pocketmine\api\entity\Entity::wrap($entityRef, $this->world),
+        ));
+
+        return $entityRef;
+    }
+
     private function initializeEntity(EntityRef $entityRef, EntityType $entityType): void {
         $entity = $entityRef->getEntity();
         if (!$entity) return;
@@ -193,11 +297,20 @@ final class EntitySpawnService {
         if (!$meta) return;
 
         // Type-specific initialization
-        match ($entityType) {
-            EntityType::Zombie, EntityType::Skeleton, EntityType::Creeper, EntityType::Spider => $this->initHostileMob($entityRef, $entityType),
-            EntityType::Cow, EntityType::Pig, EntityType::Sheep, EntityType::Chicken => $this->initPassiveMob($entityRef, $entityType),
-            default => null,
-        };
+        if ($entityType->isHostile()) {
+            $this->initHostileMob($entityRef, $entityType);
+        } elseif ($entityType->isPassive()) {
+            $this->initPassiveMob($entityRef, $entityType);
+        } elseif ($entityType->isExplosive()) {
+            // PrimedTNT is spawned through spawnPrimedTNT (not spawnEntity),
+            // but keep the guard for API callers that go through spawnEntity.
+            $meta->set(MetadataKeys::FUSE_TICKS, 80);
+            $meta->set(MetadataKeys::FUSE_LENGTH, 80);
+        } else {
+            // Neutral guardians (Wolf, IronGolem) and projectiles: stats
+            // only - no hostile/passive tag.
+            $this->applyMobStats($entityRef, $entityType);
+        }
     }
 
     private function applyMobStats(EntityRef $entityRef, EntityType $entityType): void {

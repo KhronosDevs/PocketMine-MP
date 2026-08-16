@@ -6,7 +6,6 @@ namespace pocketmine\adapter\driven\worldgen;
 
 use pocketmine\port\driven\ChunkData;
 use pocketmine\port\driven\GeneratorConfig;
-use pocketmine\port\driven\LightData;
 use pocketmine\port\driven\ThreadingPort;
 use pocketmine\port\driven\WorldGenPort;
 use pmmp\thread\Pool;
@@ -187,19 +186,6 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
      */
     public function populateChunk(int $chunkX, int $chunkZ, ChunkData $data, int $seed): ChunkData {
         return self::populateChunkPure($chunkX, $chunkZ, $data, $seed);
-    }
-
-    public function calculateLight(int $chunkX, int $chunkZ, ChunkData $data): LightData {
-        // Sky light from the top of the world down; no block light by default.
-        $skyLight = [];
-        $blockLight = [];
-
-        foreach ($data->sections as $section) {
-            $skyLight[] = str_repeat("\xff", 2048);
-            $blockLight[] = str_repeat("\x00", 2048);
-        }
-
-        return new LightData($skyLight, $blockLight);
     }
 
     /**
