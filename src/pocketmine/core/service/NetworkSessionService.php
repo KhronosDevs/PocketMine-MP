@@ -194,7 +194,7 @@ final class NetworkSessionService {
      *   knownEntities: array<int, array{0: float, 1: float, 2: float, 3: float}>,
      *   moveCredit: array<string, int>,
      *   breaking: array{x: int, y: int, z: int, startTick: int}|null,
-     *   openContainer: array{x: int, y: int, z: int, type: string}|null,
+     *   openContainer: array{x: int, y: int, z: int, type: string, pair: array{x: int, y: int, z: int}|null}|null,
      *   bowDraw: int|null,
      *   lastWeather: int,
      *   lastMoveTick: int,
@@ -1183,15 +1183,11 @@ final class NetworkSessionService {
             if ($ticks === 0) {
                 // Creative or instant-break block (torches, saplings, ...).
                 $worldId = $session['worldId'];
-                $wasChest = $this->isChestBlock($pk->x, $pk->y, $pk->z, $worldId);
-                $wasFurnace = $this->isFurnaceBlock($pk->x, $pk->y, $pk->z, $worldId);
+                $containerType = $this->containerTypeAtBlock($pk->x, $pk->y, $pk->z, $worldId);
                 if ($this->blockBreakService->breakBlock($session['entityRef'], $pk->x, $pk->y, $pk->z, $pk->face)) {
                     $this->broadcastBlockState($pk->x, $pk->y, $pk->z, $worldId);
-                    if ($wasChest) {
-                        $this->onChestBroken($pk->x, $pk->y, $pk->z, $session);
-                    }
-                    if ($wasFurnace) {
-                        $this->onFurnaceBroken($pk->x, $pk->y, $pk->z, $session);
+                    if ($containerType !== null) {
+                        $this->onContainerBroken($containerType, $pk->x, $pk->y, $pk->z, $session);
                     }
                 }
                 $session['breaking'] = null;
@@ -1260,17 +1256,41 @@ final class NetworkSessionService {
      * state, and clean up any container/furnace tile at the position.
      */
     private function breakBlockNow(string $addrKey, array $session, int $x, int $y, int $z): void {
-        $wasChest = $this->isChestBlock($x, $y, $z, $session['worldId']);
-        $wasFurnace = $this->isFurnaceBlock($x, $y, $z, $session['worldId']);
+        $containerType = $this->containerTypeAtBlock($x, $y, $z, $session['worldId']);
         if ($this->blockBreakService->breakBlock($session['entityRef'], $x, $y, $z, 1)) {
             $this->broadcastBlockState($x, $y, $z, $session['worldId']);
-            if ($wasChest) {
-                $this->onChestBroken($x, $y, $z, $session);
-            }
-            if ($wasFurnace) {
-                $this->onFurnaceBroken($x, $y, $z, $session);
+            if ($containerType !== null) {
+                $this->onContainerBroken($containerType, $x, $y, $z, $session);
             }
         }
+    }
+
+    /**
+     * The container type of the block at a position, or null when it is not
+     * a container block. Used by the break paths to spill + close windows.
+     */
+    private function containerTypeAtBlock(int $x, int $y, int $z, int $worldId = 0): ?string {
+        $store = $this->getChunkStore($worldId);
+        if ($store === null) {
+            return null;
+        }
+        return match ($store->getBlock($x, $y, $z)) {
+            54 => 'chest',
+            61, 62 => 'furnace',
+            23 => 'dispenser',
+            154 => 'hopper',
+            117 => 'brewing',
+            default => null,
+        };
+    }
+
+    /** Dispatch a broken container to its spill/close handler. */
+    private function onContainerBroken(string $type, int $x, int $y, int $z, array $breaker): void {
+        match ($type) {
+            'chest' => $this->onChestBroken($x, $y, $z, $breaker),
+            'furnace' => $this->onFurnaceBroken($x, $y, $z, $breaker),
+            default => $this->onTileContainerBroken($type, $x, $y, $z, $breaker),
+        };
     }
 
     private function currentTick(): int {
@@ -1396,6 +1416,20 @@ final class NetworkSessionService {
             // 14.16: right-clicking a furnace (lit or unlit) opens its window.
             if ($block === 61 || $block === 62) {
                 $this->openFurnace($addrKey, $pk->x, $pk->y, $pk->z);
+                return;
+            }
+            // 14.27: right-clicking a dispenser (23) / hopper (154) / brewing
+            // stand (117) opens its window.
+            if ($block === 23) {
+                $this->openDispenser($addrKey, $pk->x, $pk->y, $pk->z);
+                return;
+            }
+            if ($block === 154) {
+                $this->openHopper($addrKey, $pk->x, $pk->y, $pk->z);
+                return;
+            }
+            if ($block === 117) {
+                $this->openBrewing($addrKey, $pk->x, $pk->y, $pk->z);
                 return;
             }
             // 14.24: right-clicking an item frame puts the held item into it
@@ -1761,14 +1795,35 @@ final class NetworkSessionService {
             }
         } elseif ($pk->windowid === self::CHEST_WINDOW_ID) {
             $open = $session['openContainer'];
-            if ($open !== null && $open['type'] === 'chest' && $pk->slot >= 0 && $pk->slot < ChestStore::CHEST_SIZE) {
-                $this->handleChestSetSlot($addrKey, $session, $pk);
-                return;
+            if ($open !== null && $open['type'] === 'chest') {
+                $size = $open['pair'] !== null ? ChestStore::CHEST_SIZE * 2 : ChestStore::CHEST_SIZE;
+                if ($pk->slot >= 0 && $pk->slot < $size) {
+                    $this->handleChestSetSlot($addrKey, $session, $pk);
+                    return;
+                }
             }
         } elseif ($pk->windowid === self::FURNACE_WINDOW_ID) {
             $open = $session['openContainer'];
             if ($open !== null && $open['type'] === 'furnace' && $pk->slot >= 0 && $pk->slot < \pocketmine\core\resource\FurnaceStore::SIZE) {
                 $this->handleFurnaceSetSlot($addrKey, $session, $pk);
+                return;
+            }
+        } elseif ($pk->windowid === self::DISPENSER_WINDOW_ID) {
+            $open = $session['openContainer'];
+            if ($open !== null && $open['type'] === 'dispenser' && $pk->slot >= 0 && $pk->slot < \pocketmine\core\resource\ContainerStore::DISPENSER_SIZE) {
+                $this->handleTileContainerSetSlot($addrKey, $session, $pk);
+                return;
+            }
+        } elseif ($pk->windowid === self::HOPPER_WINDOW_ID) {
+            $open = $session['openContainer'];
+            if ($open !== null && $open['type'] === 'hopper' && $pk->slot >= 0 && $pk->slot < \pocketmine\core\resource\ContainerStore::HOPPER_SIZE) {
+                $this->handleTileContainerSetSlot($addrKey, $session, $pk);
+                return;
+            }
+        } elseif ($pk->windowid === self::BREWING_WINDOW_ID) {
+            $open = $session['openContainer'];
+            if ($open !== null && $open['type'] === 'brewing' && $pk->slot >= 0 && $pk->slot < \pocketmine\core\resource\BrewingStore::SIZE) {
+                $this->handleTileContainerSetSlot($addrKey, $session, $pk);
                 return;
             }
         } elseif ($pk->windowid === ContainerSetContentPacket::SPECIAL_CREATIVE) {
@@ -1856,30 +1911,178 @@ final class NetworkSessionService {
      */
     private const CHEST_WINDOW_ID = 2;
 
+    /**
+     * 14.27 containers: dispenser/hopper/brewing-stand windows. Window ids 4-6
+     * (legacy: the next container windows after chest=2 and furnace=3).
+     */
+    private const DISPENSER_WINDOW_ID = 4;
+    private const HOPPER_WINDOW_ID = 5;
+    private const BREWING_WINDOW_ID = 6;
+
     private function openChest(string $addrKey, int $x, int $y, int $z): void {
         $session = $this->sessions[$addrKey] ?? null;
         if ($session === null) {
             return;
         }
-        $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z, 'type' => 'chest'];
+        // 14.27: a chest next to another chest opens as one 54-slot double
+        // window (type 1 = DOUBLE_CHEST). The pair is detected at open time
+        // from block adjacency; slots 0-26 are the left half (min X, or min Z
+        // for Z-pairs) and 27-53 the right half.
+        $pair = $this->chestPair($x, $y, $z, $session['worldId']);
+        $session['openContainer'] = $pair !== null
+            ? ['x' => $pair[0], 'y' => $y, 'z' => $pair[1], 'type' => 'chest', 'pair' => ['x' => $pair[2], 'z' => $pair[3]]]
+            : ['x' => $x, 'y' => $y, 'z' => $z, 'type' => 'chest', 'pair' => null];
         $this->sessions[$addrKey] = $session;
 
         // Legacy ContainerInventory::onOpen: ContainerOpenPacket (type 0 =
-        // chest, 27 slots, block coords) then the full contents. Chest
-        // contents are per-world: the same coordinates in another world have
-        // a different inventory.
+        // chest / 1 = double chest, block coords) then the full contents.
+        // Chest contents are per-world: the same coordinates in another world
+        // have a different inventory.
         $chestStore = $this->chestStore($session['worldId']);
-        $inv = $chestStore->get($x, $y, $z);
         $open = new ContainerOpenPacket();
         $open->windowid = self::CHEST_WINDOW_ID;
-        $open->type = 0; // InventoryType::CHEST
-        $open->slots = ChestStore::CHEST_SIZE;
+        $open->x = $x;
+        $open->y = $y;
+        $open->z = $z;
+        $open->entityId = -1;
+        if ($pair !== null) {
+            $open->type = 1; // InventoryType::DOUBLE_CHEST
+            $open->slots = ChestStore::CHEST_SIZE * 2;
+            $this->queuePacket($session['playerRef'], $open);
+            // Send the merged 54-slot view: left half then right half.
+            $this->sendDoubleChestContents($session['playerRef'], $chestStore->get($pair[0], $y, $pair[1]), $chestStore->get($pair[2], $y, $pair[3]));
+        } else {
+            $open->type = 0; // InventoryType::CHEST
+            $open->slots = ChestStore::CHEST_SIZE;
+            $this->queuePacket($session['playerRef'], $open);
+            $this->sendChestContents($session['playerRef'], $chestStore->get($x, $y, $z));
+        }
+    }
+
+    /**
+     * The canonical left/right halves of a chest pair at (x,y,z), or null
+     * when no adjacent chest exists. Left = smaller X (or smaller Z for
+     * same-X Z-pairs) so both players see the same 54-slot layout regardless
+     * of which half they clicked.
+     *
+     * @return array{0: int, 1: int, 2: int, 3: int}|null [leftX, leftZ, rightX, rightZ]
+     */
+    private function chestPair(int $x, int $y, int $z, int $worldId): ?array {
+        foreach ([[-1, 0], [1, 0], [0, -1], [0, 1]] as [$dx, $dz]) {
+            if (!$this->isChestBlock($x + $dx, $y, $z + $dz, $worldId)) {
+                continue;
+            }
+            if ($dx !== 0) { // X-pair: same Z, X differs
+                return [min($x, $x + $dx), $z, max($x, $x + $dx), $z];
+            }
+            return [$x, min($z, $z + $dz), $x, max($z, $z + $dz)];
+        }
+        return null;
+    }
+
+    /** The merged 54-slot view of a double chest (left 0-26, right 27-53). */
+    private function sendDoubleChestContents(PlayerRef $player, \pocketmine\core\component\InventoryComponent $left, \pocketmine\core\component\InventoryComponent $right): void {
+        $pk = new ContainerSetContentPacket();
+        $pk->windowid = self::CHEST_WINDOW_ID;
+        $pk->slots = [];
+        foreach ([$left, $right] as $half) {
+            for ($i = 0; $i < ChestStore::CHEST_SIZE; $i++) {
+                $item = $half->get($i);
+                $pk->slots[] = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
+            }
+        }
+        $this->queuePacket($player, $pk);
+    }
+
+    /**
+     * 14.27: open a dispenser (9 slots) / hopper (5 slots) / brewing stand
+     * (4 slots) window. All three are plain N-slot inventories routed through
+     * the same set-slot + move-credit flow as chests.
+     */
+    private function openTileContainer(string $addrKey, int $x, int $y, int $z, string $type): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z, 'type' => $type, 'pair' => null];
+        $this->sessions[$addrKey] = $session;
+
+        [$windowId, $typeId, $size] = match ($type) {
+            'dispenser' => [self::DISPENSER_WINDOW_ID, 10, \pocketmine\core\resource\ContainerStore::DISPENSER_SIZE],
+            'hopper' => [self::HOPPER_WINDOW_ID, 12, \pocketmine\core\resource\ContainerStore::HOPPER_SIZE],
+            default => [self::BREWING_WINDOW_ID, 7, \pocketmine\core\resource\BrewingStore::SIZE],
+        };
+        $inv = $this->tileContainerInventory($type, $x, $y, $z, $session['worldId']);
+        if ($inv === null) {
+            return;
+        }
+        $open = new ContainerOpenPacket();
+        $open->windowid = $windowId;
+        $open->type = $typeId;
+        $open->slots = $size;
         $open->x = $x;
         $open->y = $y;
         $open->z = $z;
         $open->entityId = -1;
         $this->queuePacket($session['playerRef'], $open);
-        $this->sendChestContents($session['playerRef'], $inv);
+        $this->sendTileContainerContents($session['playerRef'], $inv, $windowId, $size);
+    }
+
+    private function openDispenser(string $addrKey, int $x, int $y, int $z): void {
+        $this->openTileContainer($addrKey, $x, $y, $z, 'dispenser');
+    }
+
+    private function openHopper(string $addrKey, int $x, int $y, int $z): void {
+        $this->openTileContainer($addrKey, $x, $y, $z, 'hopper');
+    }
+
+    private function openBrewing(string $addrKey, int $x, int $y, int $z): void {
+        $this->openTileContainer($addrKey, $x, $y, $z, 'brewing');
+    }
+
+    /**
+     * The inventory for a tile container at a position. Brewing stands keep
+     * their inventory inside the BrewingStore state struct; dispenser/hopper
+     * use the ContainerStore directly.
+     */
+    private function tileContainerInventory(string $type, int $x, int $y, int $z, int $worldId = 0): ?\pocketmine\core\component\InventoryComponent {
+        if ($type === 'brewing') {
+            return $this->brewingStore($worldId)->get($x, $y, $z)['inventory'];
+        }
+        $containerType = $type === 'hopper' ? \pocketmine\core\resource\ContainerStore::TYPE_HOPPER : \pocketmine\core\resource\ContainerStore::TYPE_DISPENSER;
+        return $this->containerStore($worldId)->get($containerType, $x, $y, $z);
+    }
+
+    private function containerStore(int $worldId = 0): \pocketmine\core\resource\ContainerStore {
+        if ($worldId !== 0) {
+            $registry = $this->resourceRegistry->get(WorldRegistry::class);
+            $store = $registry instanceof WorldRegistry ? $registry->getContainerStore($worldId) : null;
+            return $store instanceof \pocketmine\core\resource\ContainerStore ? $store : new \pocketmine\core\resource\ContainerStore();
+        }
+        $store = $this->resourceRegistry->get(\pocketmine\core\resource\ContainerStore::class);
+        return $store instanceof \pocketmine\core\resource\ContainerStore ? $store : new \pocketmine\core\resource\ContainerStore();
+    }
+
+    private function brewingStore(int $worldId = 0): \pocketmine\core\resource\BrewingStore {
+        if ($worldId !== 0) {
+            $registry = $this->resourceRegistry->get(WorldRegistry::class);
+            $store = $registry instanceof WorldRegistry ? $registry->getBrewingStore($worldId) : null;
+            return $store instanceof \pocketmine\core\resource\BrewingStore ? $store : new \pocketmine\core\resource\BrewingStore();
+        }
+        $store = $this->resourceRegistry->get(\pocketmine\core\resource\BrewingStore::class);
+        return $store instanceof \pocketmine\core\resource\BrewingStore ? $store : new \pocketmine\core\resource\BrewingStore();
+    }
+
+    /** Send all slots of a tile container as its window (legacy sendContents). */
+    private function sendTileContainerContents(PlayerRef $player, \pocketmine\core\component\InventoryComponent $inv, int $windowId, int $size): void {
+        $pk = new ContainerSetContentPacket();
+        $pk->windowid = $windowId;
+        $pk->slots = [];
+        for ($i = 0; $i < $size; $i++) {
+            $item = $inv->get($i);
+            $pk->slots[] = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
+        }
+        $this->queuePacket($player, $pk);
     }
 
     private function chestStore(int $worldId = 0): ChestStore {
@@ -1994,18 +2197,41 @@ final class NetworkSessionService {
         $this->queuePacket($player, $pk);
     }
 
-    /** Send one chest slot to every player with that chest open (same world). */
+    /**
+     * Send one chest slot to every player with that chest window open (same
+     * world). For a double chest the slot is translated to the window layout
+     * (left 0-26 / right 27-53): a change in the right half is broadcast as
+     * slot + 27, and a viewer who opened the other half sees the same layout
+     * because the pair was canonicalized at open time.
+     */
     private function broadcastChestSlot(int $x, int $y, int $z, int $slot, \pocketmine\core\component\InventoryComponent $inv, int $worldId = 0): void {
+        $pair = $this->chestPair($x, $y, $z, $worldId);
+        $windowSlot = $slot;
+        if ($pair !== null) {
+            // The changed half is the right half when it is not the canonical
+            // left position.
+            $isRight = !($x === $pair[0] && $z === $pair[1]);
+            $windowSlot = $isRight ? $slot + ChestStore::CHEST_SIZE : $slot;
+        }
         $item = $inv->get($slot);
         $pk = new ContainerSetSlotPacket();
         $pk->windowid = self::CHEST_WINDOW_ID;
-        $pk->slot = $slot;
-        $pk->hotbarSlot = $slot;
+        $pk->slot = $windowSlot;
+        $pk->hotbarSlot = $windowSlot;
         $pk->item = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
         foreach ($this->sessions as $s) {
             $open = $s['openContainer'];
-            if ($open !== null && $s['worldId'] === $worldId
-                && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
+            if ($open === null || $s['worldId'] !== $worldId || $open['type'] !== 'chest') {
+                continue;
+            }
+            // Match the window: the session opened either half of this pair,
+            // or this exact single chest.
+            $matches = $open['x'] === $x && $open['y'] === $y && $open['z'] === $z;
+            if ($pair !== null) {
+                $matches = ($open['x'] === $pair[0] && $open['z'] === $pair[1])
+                    || ($open['x'] === $pair[2] && $open['z'] === $pair[3]);
+            }
+            if ($matches) {
                 $this->queuePacket($s['playerRef'], clone $pk);
             }
         }
@@ -2023,8 +2249,17 @@ final class NetworkSessionService {
         if ($open === null) {
             return;
         }
-        $chest = $this->chestStore($session['worldId'])->get($open['x'], $open['y'], $open['z']);
+        // Route a double-chest slot to the right physical half: 0-26 = left,
+        // 27-53 = right (the pair was canonicalized at open time).
+        $targetX = $open['x'];
+        $targetZ = $open['z'];
         $slot = $pk->slot;
+        if ($open['pair'] !== null && $slot >= ChestStore::CHEST_SIZE) {
+            $targetX = $open['pair']['x'];
+            $targetZ = $open['pair']['z'];
+            $slot -= ChestStore::CHEST_SIZE;
+        }
+        $chest = $this->chestStore($session['worldId'])->get($targetX, $open['y'], $targetZ);
         $id = (int)($pk->item[0] ?? 0);
         $count = (int)($pk->item[1] ?? 0);
         $meta = (int)($pk->item[2] ?? 0);
@@ -2062,7 +2297,118 @@ final class NetworkSessionService {
         }
         $session['moveCredit'] = $credit;
         $this->sessions[$addrKey] = $session;
-        $this->broadcastChestSlot($open['x'], $open['y'], $open['z'], $slot, $chest, $session['worldId']);
+        $this->broadcastChestSlot($targetX, $open['y'], $targetZ, $slot, $chest, $session['worldId']);
+    }
+
+    /**
+     * 14.27: a dispenser/hopper/brewing-stand slot change. Same authoritative
+     * apply + session-wide move credit as the chest path; every viewer with
+     * the same container open gets the changed slot.
+     */
+    private function handleTileContainerSetSlot(string $addrKey, array $session, ContainerSetSlotPacket $pk): void {
+        $open = $session['openContainer'];
+        if ($open === null) {
+            return;
+        }
+        $inv = $this->tileContainerInventory($open['type'], $open['x'], $open['y'], $open['z'], $session['worldId']);
+        if ($inv === null) {
+            return;
+        }
+        $slot = $pk->slot;
+        $id = (int)($pk->item[0] ?? 0);
+        $count = (int)($pk->item[1] ?? 0);
+        $meta = (int)($pk->item[2] ?? 0);
+
+        /** @var array<string, int> $credit */
+        $credit = $session['moveCredit'];
+        $creditKey = $id . ':' . $meta;
+        $credit[$creditKey] = $credit[$creditKey] ?? 0;
+
+        $current = $inv->get($slot);
+        $inSlot = ($current !== null && $current->itemId === $id && $current->meta === $meta)
+            ? $current->count
+            : 0;
+
+        if ($id <= 0 || $count <= 0) {
+            if ($current !== null) {
+                $heldKey = $current->itemId . ':' . $current->meta;
+                $credit[$heldKey] = ($credit[$heldKey] ?? 0) + $current->count;
+            }
+            $inv->set($slot, null);
+        } else {
+            $need = max(0, $count - $inSlot);
+            if ($need > $credit[$creditKey]) {
+                return; // hostile claim - keep the authoritative state
+            }
+            $credit[$creditKey] -= $need;
+            if ($inSlot > $count) {
+                $credit[$creditKey] += $inSlot - $count;
+            }
+            $inv->set($slot, new ItemStack($id, $meta, $count));
+        }
+        $session['moveCredit'] = $credit;
+        $this->sessions[$addrKey] = $session;
+        // Persist brewing stands (their inventory lives in the state struct).
+        if ($open['type'] === 'brewing') {
+            $this->brewingStore($session['worldId'])->put($open['x'], $open['y'], $open['z'], $this->brewingStore($session['worldId'])->get($open['x'], $open['y'], $open['z']));
+        }
+        $this->broadcastTileContainerSlot($open['type'], $open['x'], $open['y'], $open['z'], $slot, $inv, $session['worldId']);
+    }
+
+    /** Send one slot of a tile container to every viewer with it open. */
+    private function broadcastTileContainerSlot(string $type, int $x, int $y, int $z, int $slot, \pocketmine\core\component\InventoryComponent $inv, int $worldId = 0): void {
+        $windowId = match ($type) {
+            'dispenser' => self::DISPENSER_WINDOW_ID,
+            'hopper' => self::HOPPER_WINDOW_ID,
+            default => self::BREWING_WINDOW_ID,
+        };
+        $item = $inv->get($slot);
+        $pk = new ContainerSetSlotPacket();
+        $pk->windowid = $windowId;
+        $pk->slot = $slot;
+        $pk->hotbarSlot = $slot;
+        $pk->item = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
+        foreach ($this->sessions as $s) {
+            $open = $s['openContainer'];
+            if ($open !== null && $s['worldId'] === $worldId && $open['type'] === $type
+                && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
+                $this->queuePacket($s['playerRef'], clone $pk);
+            }
+        }
+    }
+
+    /**
+     * 14.27 public hook for HopperSystem/BrewingSystem: a tile container's
+     * contents changed on the world tick. Resync the changed slot (or all
+     * slots) to every viewer with that container open in the world.
+     */
+    public function syncContainer(string $type, int $x, int $y, int $z, ?int $slot, int $worldId = 0): void {
+        $inv = $this->tileContainerInventory($type, $x, $y, $z, $worldId);
+        if ($inv === null) {
+            return;
+        }
+        if ($slot !== null) {
+            $this->broadcastTileContainerSlot($type, $x, $y, $z, $slot, $inv, $worldId);
+            return;
+        }
+        // Full resync: refresh every viewer's window contents.
+        $windowId = match ($type) {
+            'dispenser' => self::DISPENSER_WINDOW_ID,
+            'hopper' => self::HOPPER_WINDOW_ID,
+            default => self::BREWING_WINDOW_ID,
+        };
+        $size = match ($type) {
+            'dispenser' => \pocketmine\core\resource\ContainerStore::DISPENSER_SIZE,
+            'hopper' => \pocketmine\core\resource\ContainerStore::HOPPER_SIZE,
+            default => \pocketmine\core\resource\BrewingStore::SIZE,
+        };
+        foreach ($this->sessions as $s) {
+            $open = $s['openContainer'];
+            if ($open !== null && $s['worldId'] === $worldId && $open['type'] === $type
+                && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
+                $this->sendTileContainerContents($s['playerRef'], $inv, $windowId, $size);
+            }
+        }
     }
 
     /**
@@ -2214,15 +2560,6 @@ final class NetworkSessionService {
         }
     }
 
-    private function isFurnaceBlock(int $x, int $y, int $z, int $worldId = 0): bool {
-        $store = $this->getChunkStore($worldId);
-        if ($store === null) {
-            return false;
-        }
-        $block = $store->getBlock($x, $y, $z);
-        return $block === 61 || $block === 62;
-    }
-
     /**
      * 14.16: a furnace block was broken - spill its contents (input, fuel,
      * result) as dropped items, forget the store entry, and close the window
@@ -2246,6 +2583,101 @@ final class NetworkSessionService {
                 $this->queuePacket($s['playerRef'], $close);
             }
         }
+    }
+
+    /**
+     * 14.27: a dispenser/hopper/brewing-stand block was broken - spill its
+     * contents as item entities, forget the store entry, and close the window
+     * of every session that had it open.
+     */
+    private function onTileContainerBroken(string $type, int $x, int $y, int $z, array $breaker): void {
+        $worldId = $breaker['worldId'] ?? 0;
+        if ($type === 'brewing') {
+            $inv = $this->brewingStore($worldId)->remove($x, $y, $z);
+        } else {
+            $containerType = $type === 'hopper' ? \pocketmine\core\resource\ContainerStore::TYPE_HOPPER : \pocketmine\core\resource\ContainerStore::TYPE_DISPENSER;
+            $inv = $this->containerStore($worldId)->remove($containerType, $x, $y, $z);
+        }
+        foreach ($inv->getContents() as $item) {
+            $this->entitySpawnService->spawnItem($x + 0.5, $y + 0.5, $z + 0.5, $item);
+        }
+        $windowId = match ($type) {
+            'dispenser' => self::DISPENSER_WINDOW_ID,
+            'hopper' => self::HOPPER_WINDOW_ID,
+            default => self::BREWING_WINDOW_ID,
+        };
+        foreach ($this->sessions as $key => $s) {
+            $open = $s['openContainer'];
+            if ($open !== null && $s['worldId'] === $worldId && $open['type'] === $type
+                && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
+                $s['openContainer'] = null;
+                $this->sessions[$key] = $s;
+                $close = new ContainerClosePacket();
+                $close->windowid = $windowId;
+                $this->queuePacket($s['playerRef'], $close);
+            }
+        }
+    }
+
+    /**
+     * 14.27 dispenser dispense hook: ejects a random item from a random
+     * occupied slot in the direction the dispenser faces (block meta 0-5 =
+     * down, up, north, south, west, east). Called by the future redstone
+     * engine when the dispenser is powered; exposed as a public hook so tests
+     * and other systems can trigger it directly.
+     */
+    public function dispenseDispenser(int $x, int $y, int $z, int $worldId = 0): bool {
+        $store = $this->containerStore($worldId);
+        $inv = $store->get(\pocketmine\core\resource\ContainerStore::TYPE_DISPENSER, $x, $y, $z);
+        $occupied = [];
+        foreach ($inv->getContents() as $slot => $item) {
+            if ($item->count > 0) {
+                $occupied[] = $slot;
+            }
+        }
+        if ($occupied === []) {
+            return false; // empty dispenser: nothing to eject
+        }
+        $slot = $occupied[array_rand($occupied)];
+        $stack = $inv->get($slot);
+        if ($stack === null) {
+            return false;
+        }
+        $one = new ItemStack($stack->itemId, $stack->meta, 1, $stack->nbt);
+        $inv->remove($slot, 1);
+        $this->syncContainer('dispenser', $x, $y, $z, $slot, $worldId);
+
+        // Facing from block meta (legacy Dispenser block damage): 0 down,
+        // 1 up, 2 north, 3 south, 4 west, 5 east.
+        $chunks = $this->getChunkStore($worldId);
+        $meta = $chunks !== null ? $chunks->getBlockMeta($x, $y, $z) : 0;
+        [$dx, $dy, $dz] = match ($meta % 6) {
+            0 => [0, -1, 0],
+            1 => [0, 1, 0],
+            2 => [0, 0, -1],
+            3 => [0, 0, 1],
+            4 => [-1, 0, 0],
+            default => [1, 0, 0],
+        };
+        // Spawn the item just outside the dispenser face, pushed along the
+        // facing direction (a real entity so viewers see it fly out).
+        $ref = $this->entitySpawnService->spawnItem(
+            $x + 0.5 + $dx * 0.6,
+            $y + 0.5 + $dy * 0.6,
+            $z + 0.5 + $dz * 0.6,
+            $one,
+            $worldId,
+        );
+        $entity = $ref->getEntity();
+        if ($entity !== null) {
+            $vel = $entity->get(\pocketmine\core\component\VelocityComponent::class);
+            if ($vel !== null) {
+                $vel->x = $dx * 0.5;
+                $vel->y = $dy === -1 ? -0.3 : 0.2;
+                $vel->z = $dz * 0.5;
+            }
+        }
+        return true;
     }
 
     /**
@@ -2865,14 +3297,44 @@ final class NetworkSessionService {
     private function onChestBroken(int $x, int $y, int $z, array $breaker): void {
         $worldId = $breaker['worldId'] ?? 0;
         $store = $this->chestStore($worldId);
+        // 14.27: a broken chest that was part of a double chest spills BOTH
+        // halves' contents (the pair is still in the world - only the broken
+        // block was removed) and closes every viewer of the pair window.
+        $pair = $this->chestPair($x, $y, $z, $worldId);
+        $spill = [$x, $z];
+        if ($pair !== null) {
+            $spill[] = $pair[0];
+            $spill[] = $pair[1];
+            $spill[] = $pair[2];
+            $spill[] = $pair[3];
+        }
+        for ($i = 0; $i < count($spill); $i += 2) {
+            $sx = $spill[$i];
+            $sz = $spill[$i + 1];
+            if ($sx === $x && $sz === $z) {
+                continue; // the broken half is removed below
+            }
+            $inv = $store->remove($sx, $y, $sz);
+            foreach ($inv->getContents() as $item) {
+                $this->entitySpawnService->spawnItem($sx + 0.5, $y + 0.5, $sz + 0.5, $item);
+            }
+        }
         $inv = $store->remove($x, $y, $z);
         foreach ($inv->getContents() as $item) {
             $this->entitySpawnService->spawnItem($x + 0.5, $y + 0.5, $z + 0.5, $item);
         }
         foreach ($this->sessions as $key => $s) {
             $open = $s['openContainer'];
-            if ($open !== null && $s['worldId'] === $worldId
-                && $open['x'] === $x && $open['y'] === $y && $open['z'] === $z) {
+            if ($open === null || $s['worldId'] !== $worldId || $open['type'] !== 'chest') {
+                continue;
+            }
+            // Close viewers of this chest or of its pair.
+            $matches = $open['x'] === $x && $open['y'] === $y && $open['z'] === $z;
+            if ($pair !== null) {
+                $matches = ($open['x'] === $pair[0] && $open['z'] === $pair[1])
+                    || ($open['x'] === $pair[2] && $open['z'] === $pair[3]);
+            }
+            if ($matches) {
                 $s['openContainer'] = null;
                 $this->sessions[$key] = $s;
                 $close = new ContainerClosePacket();

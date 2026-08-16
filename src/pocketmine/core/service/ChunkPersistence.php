@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace pocketmine\core\service;
 
 use pocketmine\core\ecs\ResourceRegistry;
+use pocketmine\core\resource\BrewingStore;
 use pocketmine\core\resource\ChestStore;
+use pocketmine\core\resource\ContainerStore;
 use pocketmine\core\resource\FurnaceStore;
 use pocketmine\core\resource\TileEntityStore;
 use pocketmine\core\resource\WorldRegistry;
@@ -44,6 +46,14 @@ final class ChunkPersistence {
         if ($furnaceStore !== null) {
             $fresh = array_merge($fresh, $furnaceStore->snapshotsForChunk($chunkX, $chunkZ));
         }
+        $containerStore = self::containerStore($resources, $worldId);
+        if ($containerStore !== null) {
+            $fresh = array_merge($fresh, $containerStore->snapshotsForChunk($chunkX, $chunkZ));
+        }
+        $brewingStore = self::brewingStore($resources, $worldId);
+        if ($brewingStore !== null) {
+            $fresh = array_merge($fresh, $brewingStore->snapshotsForChunk($chunkX, $chunkZ));
+        }
         $tileEntityStore = self::tileEntityStore($resources, $worldId);
         if ($tileEntityStore !== null) {
             $fresh = array_merge($fresh, $tileEntityStore->snapshotsForChunk($chunkX, $chunkZ));
@@ -51,7 +61,7 @@ final class ChunkPersistence {
         if ($fresh === []) {
             return $chunkData; // no block stores: chunk rides through untouched
         }
-        $owned = [ChestStore::TILE_TYPE => true, FurnaceStore::TILE_TYPE => true, TileEntityStore::TILE_SIGN => true, TileEntityStore::TILE_ITEM_FRAME => true];
+        $owned = [ChestStore::TILE_TYPE => true, FurnaceStore::TILE_TYPE => true, ContainerStore::TILE_DISPENSER => true, ContainerStore::TILE_HOPPER => true, BrewingStore::TILE_TYPE => true, TileEntityStore::TILE_SIGN => true, TileEntityStore::TILE_ITEM_FRAME => true];
         $tileEntities = array_values(array_filter(
             $chunkData->tileEntities,
             static fn($snapshot): bool => !isset($owned[$snapshot->type]),
@@ -85,6 +95,26 @@ final class ChunkPersistence {
         }
         $store = $resources->get(FurnaceStore::class);
         return $store instanceof FurnaceStore ? $store : null;
+    }
+
+    /** The ContainerStore for a world bundle (default world falls back to the global resource). */
+    private static function containerStore(ResourceRegistry $resources, int $worldId): ?ContainerStore {
+        if ($worldId !== 0) {
+            $registry = $resources->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getContainerStore($worldId) : null;
+        }
+        $store = $resources->get(ContainerStore::class);
+        return $store instanceof ContainerStore ? $store : null;
+    }
+
+    /** The BrewingStore for a world bundle (default world falls back to the global resource). */
+    private static function brewingStore(ResourceRegistry $resources, int $worldId): ?BrewingStore {
+        if ($worldId !== 0) {
+            $registry = $resources->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getBrewingStore($worldId) : null;
+        }
+        $store = $resources->get(BrewingStore::class);
+        return $store instanceof BrewingStore ? $store : null;
     }
 
     /** The TileEntityStore for a world bundle (default world falls back to the global resource). */

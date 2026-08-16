@@ -190,6 +190,16 @@ final class ChunkLoadService {
             if ($furnaceStore !== null) {
                 $furnaceStore->restoreFromSnapshots($chunkData->tileEntities);
             }
+            // 14.27: rehydrate dispenser/hopper inventories the same way.
+            $containerStore = $this->getContainerStore($worldId);
+            if ($containerStore !== null) {
+                $containerStore->restoreFromSnapshots($chunkData->tileEntities);
+            }
+            // 14.27: rehydrate brewing stand state (slots + brew time).
+            $brewingStore = $this->getBrewingStore($worldId);
+            if ($brewingStore !== null) {
+                $brewingStore->restoreFromSnapshots($chunkData->tileEntities);
+            }
             // 14.24: rehydrate sign text and item frame contents the same way.
             $tileEntityStore = $this->getTileEntityStore($worldId);
             if ($tileEntityStore !== null) {
@@ -333,6 +343,24 @@ final class ChunkLoadService {
         }
         $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\FurnaceStore::class);
         return $store instanceof \pocketmine\core\resource\FurnaceStore ? $store : null;
+    }
+
+    private function getContainerStore(int $worldId = 0): ?\pocketmine\core\resource\ContainerStore {
+        if ($worldId !== 0) {
+            $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getContainerStore($worldId) : null;
+        }
+        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\ContainerStore::class);
+        return $store instanceof \pocketmine\core\resource\ContainerStore ? $store : null;
+    }
+
+    private function getBrewingStore(int $worldId = 0): ?\pocketmine\core\resource\BrewingStore {
+        if ($worldId !== 0) {
+            $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getBrewingStore($worldId) : null;
+        }
+        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\BrewingStore::class);
+        return $store instanceof \pocketmine\core\resource\BrewingStore ? $store : null;
     }
 
     private function getTileEntityStore(int $worldId = 0): ?\pocketmine\core\resource\TileEntityStore {

@@ -296,6 +296,8 @@ final class Kernel {
             // worlds get their own stores when registered.
             $chestStore = $this->resourceRegistry->get(\pocketmine\core\resource\ChestStore::class);
             $furnaceStore = $this->resourceRegistry->get(\pocketmine\core\resource\FurnaceStore::class);
+            $containerStore = $this->resourceRegistry->get(\pocketmine\core\resource\ContainerStore::class);
+            $brewingStore = $this->resourceRegistry->get(\pocketmine\core\resource\BrewingStore::class);
             $tileEntityStore = $this->resourceRegistry->get(\pocketmine\core\resource\TileEntityStore::class);
             $worldRegistry->registerDefaultWorld(
                 $defaultWorld,
@@ -306,6 +308,8 @@ final class Kernel {
                 $storagePort,
                 $chestStore instanceof \pocketmine\core\resource\ChestStore ? $chestStore : new \pocketmine\core\resource\ChestStore(),
                 $furnaceStore instanceof \pocketmine\core\resource\FurnaceStore ? $furnaceStore : new \pocketmine\core\resource\FurnaceStore(),
+                $containerStore instanceof \pocketmine\core\resource\ContainerStore ? $containerStore : new \pocketmine\core\resource\ContainerStore(),
+                $brewingStore instanceof \pocketmine\core\resource\BrewingStore ? $brewingStore : new \pocketmine\core\resource\BrewingStore(),
                 $tileEntityStore instanceof \pocketmine\core\resource\TileEntityStore ? $tileEntityStore : new \pocketmine\core\resource\TileEntityStore(),
             );
         }
@@ -1906,6 +1910,9 @@ function registerBuiltinResources(ResourceRegistry $registry): void {
     $registry->set(new \pocketmine\core\resource\RecipeRegistry());
     $registry->set(new \pocketmine\core\resource\SmeltingRegistry());
     $registry->set(new \pocketmine\core\resource\FurnaceStore());
+    $registry->set(new \pocketmine\core\resource\ContainerStore());
+    $registry->set(new \pocketmine\core\resource\BrewingStore());
+    $registry->set(new \pocketmine\core\resource\BrewingRegistry());
     $registry->set(new \pocketmine\core\resource\ProjectileRegistry());
     $registry->set(new \pocketmine\core\resource\PotionRegistry());
     $registry->set(new \pocketmine\core\resource\TileEntityStore());
@@ -2153,6 +2160,13 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // are not part of the region pipeline). Runs after crafting so the
     // smelting registry is available; no ordering constraint on gameplay.
     $scheduler->register(new \pocketmine\core\system\FurnaceSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // 14.27: hoppers - pull one item from the container above and push one
+    // into the container below every 8 ticks. After furnaces so a hopper
+    // feeding a furnace sees the previous tick's burn state.
+    $scheduler->register(new \pocketmine\core\system\HopperSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // 14.27: brewing stands - count down the brew timer while an ingredient
+    // and matching potion bottles are present, then convert them.
+    $scheduler->register(new \pocketmine\core\system\BrewingSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     // 14.17: arrow projectiles - drag, block stick, entity hits, age despawn.
     // After AI so targets' positions are current; before chunk work.
     $scheduler->register(new \pocketmine\core\system\ArrowSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
