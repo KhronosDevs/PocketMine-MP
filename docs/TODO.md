@@ -23,10 +23,7 @@ in rough priority order, so anyone picking up a task knows the seams to build on
 
 ### 1. ⭐ Ores (highest gameplay impact — mining has no reward yet)
 
-Every mine is pure stone. The **survival loop has no progression** until ores exist.
-
-- **Already in place:** `BlockRegistry` covers coal/iron/gold/diamond/redstone/lapis/emerald/quartz ore with tool tier, drops and XP; `SmeltingRegistry` has ore→ingot recipes; `BlockBreakService` respects tool tiers and drops.
-- **Missing:** vein generation in the terrain generator. `generateChunkPure`/`populateChunkPure` (`ParallelGeneratorAdapter`) places no ore veins — add deterministic per-chunk ore passes (seed-anchored, like the existing tree/vegetation pass) at the right Y-ranges (coal any depth, iron ≤64, gold ≤32, diamond ≤16…), never in air, respecting chunk boundaries.
+**✅ DONE (PROGRESS #70)** — `populateChunkPure` places deterministic legacy-0.15 veins (coal any depth, iron ≤64, gold/lapis ≤32, redstone/diamond ≤16, emerald in extreme hills), stone-only, chunk-local, RNG-safe vs the tree pass. `tests/39` covers it.
 
 ### 2. Caves
 
