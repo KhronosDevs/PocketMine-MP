@@ -51,8 +51,27 @@ function throws(callable $fn, string $class, string $msg = ''): void {
 }
 
 function runTests(): int {
+    // Optional --filter=substring (or --filter substring): run only the test
+    // cases whose name contains it. Lets a dev iterate on one test in a big
+    // file (e.g. tests/17) instead of running all of its cases.
+    $filter = null;
+    $argv = $_SERVER['argv'] ?? [];
+    for ($i = 0; $i < count($argv); $i++) {
+        if (str_starts_with($argv[$i], '--filter=')) {
+            $filter = substr($argv[$i], strlen('--filter='));
+        } elseif ($argv[$i] === '--filter' && isset($argv[$i + 1])) {
+            $filter = $argv[$i + 1];
+            $i++;
+        }
+    }
+
     $failures = 0;
+    $run = 0;
     foreach ($GLOBALS['__tests'] as $t) {
+        if ($filter !== null && !str_contains($t['name'], $filter)) {
+            continue;
+        }
+        $run++;
         try {
             ($t['fn'])();
             fwrite(STDOUT, "  ok - {$t['name']}\n");
@@ -61,7 +80,11 @@ function runTests(): int {
             fwrite(STDOUT, "  FAIL - {$t['name']}\n         " . $e->getMessage() . "\n         at " . $e->getFile() . ':' . $e->getLine() . "\n");
         }
     }
-    $count = count($GLOBALS['__tests']);
-    fwrite(STDOUT, "\n{$count} test(s), {$GLOBALS['__assertions']} assertion(s), {$failures} failure(s)\n");
+    if ($filter !== null) {
+        fwrite(STDOUT, "\n{$run} test(s) matched --filter=$filter, {$GLOBALS['__assertions']} assertion(s), {$failures} failure(s)\n");
+    } else {
+        $count = count($GLOBALS['__tests']);
+        fwrite(STDOUT, "\n{$count} test(s), {$GLOBALS['__assertions']} assertion(s), {$failures} failure(s)\n");
+    }
     return $failures === 0 ? 0 : 1;
 }

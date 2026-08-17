@@ -367,7 +367,10 @@ function sedFields(string $buf): array {
 // Boot against a pristine world: region files persist in worlds/ across runs,
 // and a stale chunk (from an older generator/seed) would fail the terrain
 // consistency assertions below. Remove them so every run regenerates.
-$worldsDir = dirname(__DIR__) . '/worlds';
+// The kernel's dataPath is the process cwd (the repo in standalone runs, a
+// per-file temp dir under tests/run.php -j), so clean the worlds dir next to
+// the cwd - not the repo's tests dir.
+$worldsDir = getcwd() . '/worlds';
 if (is_dir($worldsDir)) {
     exec('rm -rf ' . escapeshellarg($worldsDir));
 }
@@ -3264,7 +3267,7 @@ test('a disconnecting player is saved and a reconnect restores the inventory', f
         usleep(20000);
     }
     ok($gone, 'Rita disconnected (session closed)');
-    ok($ritaSavedId !== null && file_exists(dirname(__DIR__) . '/worlds/world/players/' . $ritaSavedId . '.dat'), 'Rita data file written on disconnect');
+    ok($ritaSavedId !== null && file_exists($kernel->getDataPath() . 'worlds/world/players/' . $ritaSavedId . '.dat'), 'Rita data file written on disconnect');
 
     // Reconnect with the same UUID: the login burst must carry her saved
     // inventory (slot 5 = 3 iron ingots), not the starter kit.

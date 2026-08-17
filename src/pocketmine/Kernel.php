@@ -82,6 +82,14 @@ final class Kernel {
      * with a non-TTY stdin are unaffected.
      */
     private bool $consoleEnabled = true;
+    /**
+     * When true (KHRONOS_FAST_TICKS=1, set by tests/run.php), run() skips
+     * the 20 TPS pacing sleep so ticks execute back-to-back. Tests pump the
+     * kernel with run(1) hundreds of times; the ~50ms pacing per tick was
+     * the dominant cost of the suite, and nothing in a test needs real-time
+     * pacing.
+     */
+    private bool $fastTicks = false;
     private array $tickDurations = [];
     /** Per-phase timing accumulation (mirror / world tick / drain / balance),
      *  enabled via setPhaseProfiling() for benchmarking the pipeline. */
@@ -323,7 +331,25 @@ final class Kernel {
         }
 
         $this->dataPath = getcwd() . DIRECTORY_SEPARATOR;
+        $this->fastTicks = getenv('KHRONOS_FAST_TICKS') !== false && getenv('KHRONOS_FAST_TICKS') !== '0';
         $this->startTime = time();
+
+        // Worker threads only stop when told to, so a process that exit()s
+        // without an explicit shutdown() leaves them running and pmmpthread's
+        // shutdown joins them forever (the main thread parks in futex_do_wait
+        // -> the hang seen when --filter skips a test file's shutdown test).
+        // Registering the idempotent shutdown() as a shutdown function makes
+        // exit() deterministic everywhere; the real server is unaffected (it
+        // already shut down via console, so shutdownComplete short-circuits).
+        register_shutdown_function(function (): void {
+            if (!$this->shutdownComplete) {
+                try {
+                    $this->shutdown();
+                } catch (\Throwable $e) {
+                    // The process is exiting anyway; never let teardown throw.
+                }
+            }
+        });
         self::$instance = $this;
 
         // Plugins are created before the kernel exists; wire them now.
@@ -561,12 +587,18 @@ final class Kernel {
                 $this->phaseTimes['rest'][] = ($end - $phaseStart) / 1_000_000;
             }
             $this->recordTickDuration($elapsedMs);
-            $targetMs = 50.0;
 
-            if ($elapsedMs < $targetMs) {
-                $sleepUs = (int)(($targetMs - $elapsedMs) * 1000);
-                if ($sleepUs > 0) {
-                    usleep($sleepUs);
+            // 20 TPS pacing: keep the real server at ~50ms per tick. Tests
+            // (KHRONOS_FAST_TICKS=1) skip this sleep entirely - they only
+            // need ticks to execute, not to be paced, and this usleep was the
+            // dominant cost of the whole suite (~50ms per run(1) call).
+            if (!$this->fastTicks) {
+                $targetMs = 50.0;
+                if ($elapsedMs < $targetMs) {
+                    $sleepUs = (int)(($targetMs - $elapsedMs) * 1000);
+                    if ($sleepUs > 0) {
+                        usleep($sleepUs);
+                    }
                 }
             }
 

@@ -27,7 +27,7 @@ use pocketmine\core\system\MobSpawnerSystem;
  */
 
 // Fresh world: a stale seed/terrain must not leak into the assertions.
-$worldsDir = dirname(__DIR__) . '/worlds';
+$worldsDir = getcwd() . '/worlds';
 if (is_dir($worldsDir)) {
     exec('rm -rf ' . escapeshellarg($worldsDir));
 }
