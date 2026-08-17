@@ -183,6 +183,18 @@ final class WorldRegistry {
         return $world !== null ? $world['seed'] : 0;
     }
 
+    /**
+     * Whether a world has a sky (overworld dimensions). The nether generator
+     * produces zero sky light; everything else has a sky.
+     */
+    public function hasSkyLight(int $id): bool {
+        $world = $this->worlds[$id] ?? null;
+        if ($world === null) {
+            return true;
+        }
+        return !($world['config']->generator === \pocketmine\core\enum\GeneratorType::Nether);
+    }
+
     /** @return array<int, array{id: int, name: string, folderName: string, seed: int}> */
     public function getWorlds(): array {
         $out = [];

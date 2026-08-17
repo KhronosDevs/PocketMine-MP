@@ -33,7 +33,12 @@ final class LightCalculator {
      * @param string $blocks 65536-byte flat block grid (Y-major).
      * @return array{0: string, 1: string} [skyLight, blockLight] packed nibble strings.
      */
-    public static function calculate(string $blocks, BlockRegistry $registry): array {
+    /**
+     * @param bool $hasSky whether this world has a sky (false = nether: sky
+     * light is always 0, only block light BFS runs).
+     * @return array{0: string, 1: string} [skyLight, blockLight]
+     */
+    public static function calculate(string $blocks, BlockRegistry $registry, bool $hasSky = true): array {
         // Precompute the per-block-id tables ONCE: the registry's get() does
         // an array_merge per call, and we touch every one of the 65K blocks
         // several times (sky falloff + BFS neighbourhood), so resolving each
@@ -61,15 +66,20 @@ final class LightCalculator {
         $block = array_fill(0, 65536, 0);
 
         // --- Sky light: per-column falloff from the top. ---
-        for ($x = 0; $x < 16; $x++) {
-            for ($z = 0; $z < 16; $z++) {
-                $level = 15;
-                for ($y = 255; $y >= 0; $y--) {
-                    $idx = ($y << 8) | ($z << 4) | $x;
-                    $sky[$idx] = $level;
-                    $level -= $opacity[$ids[$idx]];
-                    if ($level < 0) {
-                        $level = 0;
+        // Worlds without a sky (the nether) get no sky light at all: the
+        // column is dark from bedrock to ceiling and only block emitters
+        // (lava, glowstone, torches) light it.
+        if ($hasSky) {
+            for ($x = 0; $x < 16; $x++) {
+                for ($z = 0; $z < 16; $z++) {
+                    $level = 15;
+                    for ($y = 255; $y >= 0; $y--) {
+                        $idx = ($y << 8) | ($z << 4) | $x;
+                        $sky[$idx] = $level;
+                        $level -= $opacity[$ids[$idx]];
+                        if ($level < 0) {
+                            $level = 0;
+                        }
                     }
                 }
             }

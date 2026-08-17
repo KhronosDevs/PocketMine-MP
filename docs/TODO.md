@@ -55,10 +55,8 @@ No circuit engine at all.
 
 ### 7. Nether / End dimensions
 
-Single overworld generator only.
-
-- **Already in place:** multi-world infrastructure (14.20) — `WorldComponent`, `WorldRegistry`, `/world` command, per-world `WorldConfig`/`ChunkStore`/`StoragePort` — so a second dimension is mostly a new generator + nether-specific blocks/portals.
-- **Missing:** a nether generator (netherrack/caves/lava lakes, glowstone, nether quartz already in the registry), nether portal block + travel, bedrock ceiling/floor. The End (end stone island, obsidian pillars, dragon) can be a later separate task.
+- **Done (PR #91):** the nether is a real second dimension. `GeneratorType::Nether` + a deterministic 128-high `ParallelGeneratorAdapter::generateNetherChunk` (bedrock floor AND ceiling, netherrack mass with 3D cave noise, lava sea below y=32, `hasSky=false` so sky light stays 0 and the serializer sends dark nibbles — the nether is genuinely dark except lava/glowstone). Population pass: quartz veins, soul-sand/gravel patches, ceiling glowstone clusters, ground fire, occasional surface lava lakes. Portals: flint & steel lights a complete 4-23 x 5-23 obsidian frame (legacy detector, both orientations); standing inside a portal charges 80 ticks (survival) / instant (creative) and crosses via `ChangeDimensionPacket` (0x36) with the legacy wire format — the client shows the building-terrain screen and streams the nether's chunks. The nether world (`nether.enabled` / `nether.world` in khronos.json, default `nether`) auto-creates on first use; returning through a nether portal lands back at the saved overworld spot. Nether worlds get no mob spawns yet (spawner is overworld-only), and MCPE 0.15.10 has no End dimension.
+- **Remaining (deferred):** nether mobs (zombie pigmen, ghasts, blazes — the entity types and AI hooks exist), nether fortresses, `nether.allow-nether=false` server property parity (khronos.json `nether.enabled=false` covers it), the End (does not exist in 0.15.10).
 
 ### 8. LevelDB storage provider
 

@@ -30,9 +30,18 @@ final class BlockIds {
     public const DANDELION = 37;
     public const POPPY = 38;
     public const TORCH = 50;
+    public const FIRE = 51;
     public const SNOW_LAYER = 78;
     public const ICE = 79;
     public const CACTUS = 81;
+
+    /** Nether blocks (legacy protocol-84 ids). */
+    public const OBSIDIAN = 49;
+    public const NETHERRACK = 87;
+    public const SOUL_SAND = 88;
+    public const GLOWSTONE = 89;
+    public const PORTAL = 90;
+    public const NETHER_QUARTZ_ORE = 153;
 
     /** Liquid blocks (water/lava, both flowing and still) - a mob cannot spawn in these. */
     public const LIQUIDS = [self::WATER, self::STILL_WATER, self::LAVA, self::STILL_LAVA];

@@ -4683,6 +4683,208 @@ test('anti-cheat can be disabled via khronos.json config', function () use ($ker
     }
 });
 
+// --- Nether (14.32) ----------------------------------------------------------
+
+/** Build a 4-wide x 5-tall obsidian portal frame in the default world. */
+function buildPortalFrame(\pocketmine\Kernel $kernel, int $ox, int $oy, int $oz): ?\pocketmine\core\resource\ChunkStore {
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+    if ($store === null) {
+        return null;
+    }
+    for ($i = 0; $i < 4; $i++) {
+        $store->setBlock($ox + $i, $oy, $oz, 49, 0); // bottom row
+        $store->setBlock($ox + $i, $oy + 4, $oz, 49, 0); // top row
+    }
+    for ($i = 1; $i < 4; $i++) {
+        $store->setBlock($ox, $oy + $i, $oz, 49, 0);
+        $store->setBlock($ox + 3, $oy + $i, $oz, 49, 0);
+    }
+    return $store;
+}
+
+/**
+ * Late-suite clients (Alice) idle past the RakNet 10s transport timeout
+ * during the long disconnect tests, so the portal tests join their own
+ * fresh client like every other late test (joinFreshClient).
+ */
+
+test('flint & steel lights a complete obsidian portal frame', function () use ($kernel, $port): void {
+    [$pc, $peteId] = joinFreshClient($kernel, $port, 'Pete', 'e0000000-0000-0000-0000-0000000000e1');
+    try {
+        [$bx, $by, $bz] = findSurfaceBlockNearSpawn($kernel);
+        $ox = $bx + 8;
+        $oy = $by + 2;
+        $oz = $bz;
+        $store = buildPortalFrame($kernel, $ox, $oy, $oz);
+        ok($store !== null, 'portal frame built');
+        if ($store === null) {
+            return;
+        }
+        $inv = $kernel->getWorld()->getEntity($peteId)?->get(\pocketmine\core\component\InventoryComponent::class);
+        ok($inv !== null, 'Pete inventory present');
+        if ($inv === null) {
+            return;
+        }
+        $inv->set(0, new \pocketmine\core\component\ItemStack(259, 0, 1)); // flint & steel
+        $inv->setHeldSlot(0);
+
+        // Click the bottom obsidian of the frame with the flint & steel.
+        $use = new UseItemPacket();
+        $use->x = $ox + 1;
+        $use->y = $oy;
+        $use->z = $oz;
+        $use->face = 1;
+        $use->fx = 0.5;
+        $use->fy = 1.0;
+        $use->fz = 0.5;
+        $use->posX = $ox + 1.5;
+        $use->posY = $oy + 1.0;
+        $use->posZ = $oz + 0.5;
+        $use->slot = 0;
+        $use->item = [259, 1, 0, null];
+        $pc->sendGamePacket($use);
+        $kernel->run(2);
+
+        ok($store->getBlock($ox + 1, $oy + 1, $oz) === 90, 'portal lit inside the frame (90)');
+        ok($store->getBlock($ox + 2, $oy + 3, $oz) === 90, 'portal interior fully filled');
+        ok($store->getBlock($ox + 1, $oy + 4, $oz) === 49, 'frame top row intact (49)');
+
+        // Clean up the frame so later tests see an unchanged world.
+        for ($i = 0; $i < 4; $i++) {
+            for ($y = $oy; $y <= $oy + 4; $y++) {
+                $store->setBlock($ox + $i, $y, $oz, 0, 0);
+            }
+        }
+    } finally {
+        $pc->close();
+    }
+});
+
+test('standing in a portal crosses to the nether and back via ChangeDimensionPacket', function () use ($kernel, $port): void {
+    // A distinct name: the previous test's Pete session lingers until the
+    // RakNet timeout, so reusing the name would suffix it to 'Pete1'.
+    [$pc, $peteId] = joinFreshClient($kernel, $port, 'Pete2', 'e0000000-0000-0000-0000-0000000000e2');
+    try {
+        $nether = $kernel->getWorldRegistry()->getWorldIdByName('nether');
+        ok($nether === null, 'nether world does not exist before first use');
+
+        [$bx, $by, $bz] = findSurfaceBlockNearSpawn($kernel);
+        $ox = $bx + 8;
+        $oy = $by + 2;
+        $oz = $bz;
+        $store = buildPortalFrame($kernel, $ox, $oy, $oz);
+        ok($store !== null, 'portal frame built');
+        if ($store === null) {
+            return;
+        }
+        $inv = $kernel->getWorld()->getEntity($peteId)?->get(\pocketmine\core\component\InventoryComponent::class);
+        ok($inv !== null, 'Pete inventory present');
+        if ($inv === null) {
+            return;
+        }
+        $inv->set(0, new \pocketmine\core\component\ItemStack(259, 0, 1));
+        $inv->setHeldSlot(0);
+        $use = new UseItemPacket();
+        $use->x = $ox + 1;
+        $use->y = $oy;
+        $use->z = $oz;
+        $use->face = 1;
+        $use->fx = 0.5;
+        $use->fy = 1.0;
+        $use->fz = 0.5;
+        $use->posX = $ox + 1.5;
+        $use->posY = $oy + 1.0;
+        $use->posZ = $oz + 0.5;
+        $use->slot = 0;
+        $use->item = [259, 1, 0, null];
+        $pc->sendGamePacket($use);
+        $kernel->run(2);
+        ok($store->getBlock($ox + 1, $oy + 1, $oz) === 90, 'portal lit');
+
+        // Park Pete inside the portal cell (server-side; the charge builds
+        // over 80 survival ticks, then the dimension change fires).
+        $entity = $kernel->getWorld()->getEntity($peteId);
+        $pos = $entity?->get(\pocketmine\core\component\PositionComponent::class);
+        ok($pos !== null, 'Pete position present');
+        if ($pos === null) {
+            return;
+        }
+        $pos->x = $ox + 1.5;
+        $pos->y = $oy + 1.5;
+        $pos->z = $oz + 0.5;
+
+        // Creative crosses instantly (the survival 80-tick charge would need
+        // ~20s of pumped ticks here, since each run(1) does real worldgen).
+        $entity->get(\pocketmine\core\component\MetadataComponent::class)?->set('gamemode', 1);
+
+        // Pump ticks until the dimension change lands (charge + world create
+        // + nether spawn-chunk generation + stream).
+        $deadline = microtime(true) + 15.0;
+        $sawDim1 = false;
+        while (microtime(true) < $deadline && !$sawDim1) {
+            foreach ($pc->readGamePackets() as [$id, $buffer]) {
+                if ($id === Info::CHANGE_DIMENSION_PACKET) {
+                    $dim = new BinaryStream($buffer, 1);
+                    if ($dim->getByte() === 1) {
+                        $sawDim1 = true;
+                    }
+                }
+            }
+            $kernel->run(1);
+        }
+        ok($sawDim1, 'ChangeDimensionPacket (nether=1) sent when crossing');
+
+        $netherId = $kernel->getWorldRegistry()->getWorldIdByName('nether');
+        ok($netherId !== null, 'nether world auto-created on first portal use');
+        $wc = $entity->get(\pocketmine\core\component\WorldComponent::class);
+        ok($wc instanceof \pocketmine\core\component\WorldComponent && $wc->id === $netherId, 'Pete moved to the nether world');
+
+        // Pete should be standing on netherrack at the nether safe spawn.
+        $netherStore = $netherId !== null ? $kernel->getWorldRegistry()->getStore($netherId) : null;
+        if ($netherStore !== null) {
+            $under = $netherStore->getBlock((int)floor($pos->x), (int)floor($pos->y) - 1, (int)floor($pos->z));
+            ok($under === 87 || $under === 89 || $under === 88, 'nether spawn stands on a nether block');
+        } else {
+            ok(false, 'nether store present');
+        }
+
+        // --- Return trip: light a portal in the nether where Pete stands. ---
+        if ($netherStore !== null) {
+            $netherStore->setBlock((int)floor($pos->x), (int)floor($pos->y), (int)floor($pos->z), 90, 0);
+            $deadline = microtime(true) + 15.0;
+            $sawDim0 = false;
+            while (microtime(true) < $deadline && !$sawDim0) {
+                foreach ($pc->readGamePackets() as [$id, $buffer]) {
+                    if ($id === Info::CHANGE_DIMENSION_PACKET) {
+                        $dim = new BinaryStream($buffer, 1);
+                        if ($dim->getByte() === 0) {
+                            $sawDim0 = true;
+                        }
+                    }
+                }
+                $kernel->run(1);
+            }
+            ok($sawDim0, 'ChangeDimensionPacket (normal=0) sent on the return trip');
+            $wc = $entity->get(\pocketmine\core\component\WorldComponent::class);
+            ok($wc instanceof \pocketmine\core\component\WorldComponent && $wc->id === 0, 'Pete returned to the overworld');
+        }
+
+        // Clean up: drop the nether world + the overworld frame so later
+        // tests (and the autosave) see the original single-world state.
+        if ($netherId !== null) {
+            $kernel->getWorldRegistry()->removeWorld($netherId);
+        }
+        for ($i = 0; $i < 4; $i++) {
+            for ($y = $oy; $y <= $oy + 4; $y++) {
+                $store->setBlock($ox + $i, $y, $oz, 0, 0);
+            }
+        }
+    } finally {
+        $pc->close();
+    }
+});
+
 test('server shuts down cleanly with active sessions', function () use ($kernel, $client): void {
     $adapter = $kernel->getNetworkPort();
     if ($adapter instanceof Protocol84NetworkAdapter) {

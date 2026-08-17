@@ -15,6 +15,7 @@ use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\RotationComponent;
 use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\component\WorldComponent;
+use pocketmine\core\constants\BlockIds;
 use pocketmine\core\constants\ItemIds;
 use pocketmine\core\constants\MetadataKeys;
 use pocketmine\core\ecs\Entity;
@@ -43,6 +44,7 @@ use pocketmine\protocol\AddPlayerPacket;
 use pocketmine\protocol\AdventureSettingsPacket;
 use pocketmine\protocol\BatchPacket;
 use pocketmine\protocol\BlockEntityDataPacket;
+use pocketmine\protocol\ChangeDimensionPacket;
 use pocketmine\protocol\ChunkRadiusUpdatedPacket;
 use pocketmine\protocol\ChunkSerializer;
 use pocketmine\protocol\ContainerClosePacket;
@@ -97,6 +99,7 @@ use pocketmine\utils\Binary;
 use pocketmine\utils\UUID;
 use function count;
 use function floor;
+use function random_int;
 use function in_array;
 use function is_string;
 use function ord;
@@ -197,6 +200,8 @@ final class NetworkSessionService {
      *   breaking: array{x: int, y: int, z: int, startTick: int}|null,
      *   openContainer: array{x: int, y: int, z: int, type: string, pair: array{x: int, y: int, z: int}|null}|null,
      *   bowDraw: int|null,
+     *   portalTime: int,
+     *   portalFrom: array{worldId: int, x: float, y: float, z: float}|null,
      *   lastWeather: int,
      *   lastMoveTick: int,
      *   moveViolations: int,
@@ -296,6 +301,9 @@ final class NetworkSessionService {
         // recalculateLight; a full chunk re-send is the only way protocol 84
         // carries light to the client (UpdateBlockPacket has none).
         $this->flushLightUpdates();
+        // 14.32: players standing inside a portal cross dimensions once the
+        // charge completes (80 ticks survival, instant creative).
+        $this->checkPlayerPortals();
         $this->flushOutbound();
     }
 
@@ -326,7 +334,7 @@ final class NetworkSessionService {
                 $chunk->chunkX = $chunkX;
                 $chunk->chunkZ = $chunkZ;
                 $chunk->order = FullChunkDataPacket::ORDER_LAYERED;
-                $chunk->data = ChunkSerializer::serialize($chunkData);
+                $chunk->data = ChunkSerializer::serialize($chunkData, $this->worldHasSky((int)$worldId));
                 foreach ($addrKeys as $addrKey) {
                     $key = $chunkX . ',' . $chunkZ;
                     if (isset($this->sessions[$addrKey]['chunksSent'][$key])) {
@@ -470,7 +478,7 @@ final class NetworkSessionService {
      * queue. Returns false when the player is offline or the world id does
      * not exist.
      */
-    public function switchWorld(int $entityId, int $worldId): bool {
+    public function switchWorld(int $entityId, int $worldId, ?array $position = null): bool {
         $registry = $this->resourceRegistry->get(WorldRegistry::class);
         if (!$registry instanceof WorldRegistry || $registry->getWorld($worldId) === null) {
             return false;
@@ -479,6 +487,14 @@ final class NetworkSessionService {
             if ($session['playerRef']->entityId !== $entityId) {
                 continue;
             }
+            // 14.32: when the target world is a different dimension (nether),
+            // tell the client first - ChangeDimensionPacket makes it show the
+            // "building terrain" screen and switch its sky/fog before the new
+            // world's chunks stream in.
+            $oldWorldId = $session['worldId'];
+            $oldDimension = $this->worldDimension($oldWorldId);
+            $newDimension = $this->worldDimension($worldId);
+
             // Flip the entity's world membership.
             $entity = $session['entityRef']->getEntity();
             $worldComponent = $entity?->get(WorldComponent::class);
@@ -486,11 +502,12 @@ final class NetworkSessionService {
                 $worldComponent->id = $worldId;
             }
 
-            // Teleport to the target world's spawn.
+            // Teleport to the target world's spawn (or an explicit position
+            // such as the saved overworld spot a nether portal returns to).
             $config = $this->getWorldConfig($worldId);
-            $spawnX = $config?->spawnX ?? 0;
-            $spawnY = $config?->spawnY ?? 64;
-            $spawnZ = $config?->spawnZ ?? 0;
+            $spawnX = $position[0] ?? $config?->spawnX ?? 0;
+            $spawnY = $position[1] ?? $config?->spawnY ?? 64;
+            $spawnZ = $position[2] ?? $config?->spawnZ ?? 0;
             $pos = $entity?->get(PositionComponent::class);
             if ($pos !== null) {
                 $pos->x = (float)$spawnX;
@@ -501,6 +518,11 @@ final class NetworkSessionService {
             $session['chunksSent'] = [];
             $session['chunkQueue'] = [];
             $session['chunkQueueIndex'] = 0;
+            // 14.32: the portal charge never survives a world switch. The
+            // saved return spot (portalFrom) intentionally DOES: it is set
+            // before the overworld->nether switch and consumed only when the
+            // player crosses back out of the nether.
+            $session['portalTime'] = 0;
             // Un-render every entity that was visible in the old world: a
             // client keeps drawing known entities until it is told to drop
             // them, so a world switch must explicitly remove them (a real
@@ -527,14 +549,25 @@ final class NetworkSessionService {
             $this->queueChunks($addrKey);
 
             // The client needs the new world's time + spawn + a hard move.
+            // A dimension change is signalled first (the client switches its
+            // sky/fog before the chunks arrive; without it the nether would
+            // stream with an overworld sky).
+            if ($oldDimension !== $newDimension) {
+                $dim = new ChangeDimensionPacket();
+                $dim->dimension = $newDimension;
+                $dim->x = (float)$spawnX;
+                $dim->y = (float)$spawnY;
+                $dim->z = (float)$spawnZ;
+                $this->queuePacket($session['playerRef'], $dim);
+            }
             $time = new SetTimePacket();
             $time->time = $config?->time ?? 0;
             $time->started = true;
             $this->queuePacket($session['playerRef'], $time);
             $spawn = new SetSpawnPositionPacket();
-            $spawn->x = $spawnX;
-            $spawn->y = $spawnY;
-            $spawn->z = $spawnZ;
+            $spawn->x = (int)floor((float)$spawnX);
+            $spawn->y = (int)floor((float)$spawnY);
+            $spawn->z = (int)floor((float)$spawnZ);
             $this->queuePacket($session['playerRef'], $spawn);
             $move = new MovePlayerPacket();
             $move->eid = 0; // protocol 84: the player is always entity 0
@@ -810,6 +843,11 @@ final class NetworkSessionService {
             'openContainer' => null,
             // 14.17: the tick the player started charging a bow (null = not).
             'bowDraw' => null,
+            // 14.32: nether portal travel - the tick the player entered a
+            // portal (0 = not inside) and the overworld spot saved for the
+            // return trip through the nether.
+            'portalTime' => 0,
+            'portalFrom' => null,
             // 14.22: the weather state last pushed to this client. The login
             // burst sends the current state explicitly, so tracking it here
             // means only actual transitions go out afterwards.
@@ -1522,18 +1560,39 @@ final class NetworkSessionService {
         // 14.22: flint & steel on a TNT block primes it (legacy TNT::onActivate
         // runs before placement). The block becomes air and a lit PrimedTNT
         // entity spawns in its place; flint & steel loses durability.
+        // 14.32: flint & steel on an obsidian portal frame ignites it (legacy
+        // FlintSteel::onActivate) - 4-23 wide x 5-23 tall, complete top.
         if ($held->itemId === ItemIds::FLINT_STEEL) {
             $store = $this->getChunkStore($session['worldId']);
-            if ($store !== null && $store->getBlock($pk->x, $pk->y, $pk->z) === ItemIds::TNT) {
-                $store->setBlock($pk->x, $pk->y, $pk->z, 0, 0);
-                $kernel = \pocketmine\Kernel::getInstance();
-                $spawn = $kernel?->getEntitySpawnService();
-                if ($spawn !== null) {
-                    $spawn->spawnPrimedTNT((float)$pk->x, (float)$pk->y, (float)$pk->z, $session['worldId']);
+            if ($store !== null) {
+                $clicked = $store->getBlock($pk->x, $pk->y, $pk->z);
+                if ($clicked === ItemIds::TNT) {
+                    $store->setBlock($pk->x, $pk->y, $pk->z, 0, 0);
+                    $kernel = \pocketmine\Kernel::getInstance();
+                    $spawn = $kernel?->getEntitySpawnService();
+                    if ($spawn !== null) {
+                        $spawn->spawnPrimedTNT((float)$pk->x, (float)$pk->y, (float)$pk->z, $session['worldId']);
+                    }
+                    $this->broadcastBlockState($pk->x, $pk->y, $pk->z, $session['worldId']);
+                    \pocketmine\core\resource\ItemDurability::consume($session['entityRef']);
+                    return;
                 }
-                $this->broadcastBlockState($pk->x, $pk->y, $pk->z, $session['worldId']);
-                \pocketmine\core\resource\ItemDurability::consume($session['entityRef']);
-                return;
+                if ($clicked === BlockIds::OBSIDIAN && $this->tryIgnitePortal($session['worldId'], $pk->x, $pk->y, $pk->z)) {
+                    \pocketmine\core\resource\ItemDurability::consume($session['entityRef']);
+                    return;
+                }
+                // Otherwise flint & steel on a solid surface lights a fire in
+                // the adjacent cell (legacy: AIR block + Solid target).
+                [$fx, $fy, $fz] = self::FACE_OFFSETS[$pk->face] ?? self::FACE_OFFSETS[1];
+                $fireX = $pk->x + $fx;
+                $fireY = $pk->y + $fy;
+                $fireZ = $pk->z + $fz;
+                if ($store->getBlock($fireX, $fireY, $fireZ) === 0 && $clicked !== 0) {
+                    $store->setBlock($fireX, $fireY, $fireZ, BlockIds::FIRE, 0);
+                    $this->broadcastBlockState($fireX, $fireY, $fireZ, $session['worldId']);
+                    \pocketmine\core\resource\ItemDurability::consume($session['entityRef']);
+                    return;
+                }
             }
         }
         // 14.17: a bow starts charging on use (legacy Player sets startAction
@@ -1693,6 +1752,108 @@ final class NetworkSessionService {
             return;
         }
         $this->broadcastTileEntity($x, $y, $z, $session['worldId']);
+    }
+
+    /**
+     * 14.32: flint & steel on an obsidian block of a complete portal frame
+     * fills the inside with portal blocks. Mirrors the legacy
+     * FlintSteel::onActivate frame detector: 4-23 obsidian wide, 5-23 tall,
+     * a full obsidian top row. Works in both orientations (frame spanning
+     * east-west or north-south). Returns true when a portal was lit.
+     */
+    public function tryIgnitePortal(int $worldId, int $tx, int $ty, int $tz): bool {
+        $store = $this->getChunkStore($worldId);
+        if ($store === null) {
+            return false;
+        }
+        $obsidian = BlockIds::OBSIDIAN;
+        // X orientation: scan the obsidian run left/right from the clicked
+        // block, then the two columns' tops, then the top row.
+        $xMin = $tx;
+        $xMax = $tx;
+        while ($store->getBlock($xMax + 1, $ty, $tz) === $obsidian) {
+            $xMax++;
+        }
+        while ($store->getBlock($xMin - 1, $ty, $tz) === $obsidian) {
+            $xMin--;
+        }
+        $countX = $xMax - $xMin + 1;
+        if ($countX >= 4 && $countX <= 23) {
+            $topLeft = $ty;
+            $topRight = $ty;
+            while ($store->getBlock($xMin, $topLeft + 1, $tz) === $obsidian) {
+                $topLeft++;
+            }
+            while ($store->getBlock($xMax, $topRight + 1, $tz) === $obsidian) {
+                $topRight++;
+            }
+            // Legacy y_max = (first non-obsidian y) - 1 = the last obsidian y
+            // of the side columns: the top row itself. Filling goes strictly
+            // BELOW it (py < topY), so a 4x5 frame gets a 4x3 portal.
+            $topY = min($topLeft, $topRight);
+            $countY = $topY - $ty + 2;
+            if ($countY >= 5 && $countY <= 23) {
+                $fullTop = true;
+                for ($ux = $xMin; $ux <= $xMax; $ux++) {
+                    if ($store->getBlock($ux, $topY, $tz) !== $obsidian) {
+                        $fullTop = false;
+                        break;
+                    }
+                }
+                if ($fullTop) {
+                    for ($px = $xMin + 1; $px < $xMax; $px++) {
+                        for ($py = $ty + 1; $py < $topY; $py++) {
+                            $store->setBlock($px, $py, $tz, BlockIds::PORTAL, 0);
+                            $this->broadcastBlockState($px, $py, $tz, $worldId);
+                        }
+                    }
+                    return true;
+                }
+            }
+        }
+        // Z orientation (mirror of the above).
+        $zMin = $tz;
+        $zMax = $tz;
+        while ($store->getBlock($tx, $ty, $zMax + 1) === $obsidian) {
+            $zMax++;
+        }
+        while ($store->getBlock($tx, $ty, $zMin - 1) === $obsidian) {
+            $zMin--;
+        }
+        $countZ = $zMax - $zMin + 1;
+        if ($countZ >= 4 && $countZ <= 23) {
+            $topLeft = $ty;
+            $topRight = $ty;
+            while ($store->getBlock($tx, $topLeft + 1, $zMin) === $obsidian) {
+                $topLeft++;
+            }
+            while ($store->getBlock($tx, $topRight + 1, $zMax) === $obsidian) {
+                $topRight++;
+            }
+            // Legacy y_max = (first non-obsidian y) - 1 = the last obsidian y
+            // of the side columns: the top row itself.
+            $topY = min($topLeft, $topRight);
+            $countY = $topY - $ty + 2;
+            if ($countY >= 5 && $countY <= 23) {
+                $fullTop = true;
+                for ($uz = $zMin; $uz <= $zMax; $uz++) {
+                    if ($store->getBlock($tx, $topY, $uz) !== $obsidian) {
+                        $fullTop = false;
+                        break;
+                    }
+                }
+                if ($fullTop) {
+                    for ($pz = $zMin + 1; $pz < $zMax; $pz++) {
+                        for ($py = $ty + 1; $py < $topY; $py++) {
+                            $store->setBlock($tx, $py, $pz, BlockIds::PORTAL, 0);
+                            $this->broadcastBlockState($tx, $py, $pz, $worldId);
+                        }
+                    }
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -3647,6 +3808,209 @@ final class NetworkSessionService {
     }
 
     /**
+     * 14.32: a world's dimension. Only the nether generator is dimension 1;
+     * every other world (normal/flat/void) is the overworld (0). The client
+     * keys its sky/fog rendering on this value via ChangeDimensionPacket.
+     */
+    private function worldDimension(int $worldId = 0): int {
+        $config = $this->getWorldConfig($worldId);
+        if ($config !== null && $config->generator === \pocketmine\core\enum\GeneratorType::Nether) {
+            return 1; // ChangeDimensionPacket::DIMENSION_NETHER
+        }
+        return 0; // ChangeDimensionPacket::DIMENSION_NORMAL
+    }
+
+    /** Whether a world has a sky (the nether has none - dark sky light). */
+    private function worldHasSky(int $worldId = 0): bool {
+        if ($worldId === 0) {
+            return true;
+        }
+        $registry = $this->resourceRegistry->get(WorldRegistry::class);
+        return $registry instanceof WorldRegistry ? $registry->hasSkyLight($worldId) : true;
+    }
+
+    /**
+     * 14.32: per-tick portal travel. A player standing inside a portal block
+     * builds up the legacy 80-tick (survival) / instant (creative) charge;
+     * leaving resets it. When charged, the player crosses dimensions: the
+     * overworld portal opens the nether (auto-creating the world on first
+     * use), a nether portal returns to the saved overworld spot.
+     */
+    public function checkPlayerPortals(): void {
+        foreach ($this->sessions as $addrKey => $session) {
+            $entity = $session['entityRef']->getEntity();
+            $pos = $entity?->get(PositionComponent::class);
+            if ($pos === null) {
+                continue;
+            }
+            $store = $this->getChunkStore($session['worldId']);
+            $inPortal = $store !== null
+                && $store->getBlock((int)floor($pos->x), (int)floor($pos->y), (int)floor($pos->z)) === BlockIds::PORTAL;
+            $portalTime = $session['portalTime'];
+            if (!$inPortal) {
+                if ($portalTime !== 0) {
+                    $session['portalTime'] = 0;
+                    $this->sessions[$addrKey] = $session;
+                }
+                continue;
+            }
+            if ($portalTime === 0) {
+                $session['portalTime'] = $this->currentTick();
+                $this->sessions[$addrKey] = $session;
+                continue;
+            }
+            // Creative crosses instantly (legacy isCreative()); survival needs
+            // 80 ticks inside the portal.
+            $meta = $entity->get(\pocketmine\core\component\MetadataComponent::class);
+            $gameMode = (int)($meta?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE, 0) ?? 0);
+            $creative = $gameMode === 1;
+            if (!$creative && $this->currentTick() - $portalTime < 80) {
+                continue;
+            }
+            $this->travelThroughPortal($addrKey, $session);
+        }
+    }
+
+    /**
+     * 14.32: execute the dimension crossing. Overworld -> nether saves the
+     * overworld spot for the return trip and lands on the nether's safe
+     * spawn; nether -> overworld returns to the saved spot (or the default
+     * world's safe spawn when it is gone).
+     */
+    private function travelThroughPortal(string $addrKey, array $session): void {
+        $config = $this->resourceRegistry->get(\pocketmine\core\resource\KhronosConfig::class);
+        if (!$config instanceof \pocketmine\core\resource\KhronosConfig || !$config->netherEnabled) {
+            $session['portalTime'] = 0;
+            $this->sessions[$addrKey] = $session;
+            return;
+        }
+        $entity = $session['entityRef']->getEntity();
+        $pos = $entity?->get(PositionComponent::class);
+        if ($pos === null) {
+            return;
+        }
+        $currentWorld = $session['worldId'];
+        if ($this->worldDimension($currentWorld) === 0) {
+            // Overworld -> nether: remember where we came from.
+            $session['portalFrom'] = [
+                'worldId' => $currentWorld,
+                'x' => (float)$pos->x,
+                'y' => (float)$pos->y,
+                'z' => (float)$pos->z,
+            ];
+            $netherId = $this->ensureNetherWorld();
+            if ($netherId === null) {
+                $session['portalTime'] = 0;
+                $this->sessions[$addrKey] = $session;
+                return;
+            }
+            [$sx, $sy, $sz] = $this->safeSpawnFor($netherId);
+            $this->sessions[$addrKey] = $session;
+            $this->switchWorld($session['playerRef']->entityId, $netherId, [$sx, $sy, $sz]);
+            return;
+        }
+        // Nether -> overworld: return to the saved spot, else the default
+        // world's safe spawn (legacy: fromPos, falling back to default spawn).
+        $from = $session['portalFrom'] ?? null;
+        $session['portalFrom'] = null;
+        $this->sessions[$addrKey] = $session;
+        $targetWorld = 0;
+        $position = null;
+        if (is_array($from) && isset($from['worldId']) && (int)$from['worldId'] !== $currentWorld) {
+            $targetWorld = (int)$from['worldId'];
+            // The spot may now be inside terrain: validate like join does.
+            $store = $this->getChunkStore($targetWorld);
+            if ($store !== null) {
+                $bx = (int)floor((float)$from['x']);
+                $by = (int)floor((float)$from['y']);
+                $bz = (int)floor((float)$from['z']);
+                $below = $store->getBlock($bx, $by - 1, $bz);
+                if ($below !== 0) {
+                    $position = [(float)$from['x'], (float)$from['y'], (float)$from['z']];
+                }
+            }
+        }
+        if ($position === null) {
+            [$sx, $sy, $sz] = $this->safeSpawnFor($targetWorld);
+            $position = [$sx, $sy, $sz];
+        }
+        $this->switchWorld($session['playerRef']->entityId, $targetWorld, $position);
+    }
+
+    /**
+     * 14.32: make sure the nether dimension world exists (loaded from disk or
+     * freshly generated on first portal use) and return its registry id.
+     * Returns null when portals are disabled or the world cannot be created.
+     */
+    public function ensureNetherWorld(): ?int {
+        $config = $this->resourceRegistry->get(\pocketmine\core\resource\KhronosConfig::class);
+        if (!$config instanceof \pocketmine\core\resource\KhronosConfig || !$config->netherEnabled) {
+            return null;
+        }
+        $registry = $this->resourceRegistry->get(WorldRegistry::class);
+        if (!$registry instanceof WorldRegistry) {
+            return null;
+        }
+        $name = $config->netherWorld !== '' ? $config->netherWorld : 'nether';
+        $existing = $registry->getWorldIdByName($name);
+        if ($existing !== null) {
+            return $existing;
+        }
+        // Load an existing nether folder, or create a fresh one with the
+        // nether generator (mirrors Server::generateWorld, but internal and
+        // dimension-aware).
+        $folder = 'worlds/' . $name . '/';
+        $storage = \pocketmine\adapter\driven\storage\LevelProviderManager::create('worlds/', $name);
+        $meta = is_dir($folder) ? $storage->loadWorldMeta() : null;
+        $store = new \pocketmine\core\resource\ChunkStore();
+        $store->setHasSky(false);
+        $configWorld = new \pocketmine\core\resource\WorldConfig();
+        $configWorld->name = $name;
+        $configWorld->folderName = $name;
+        $configWorld->generator = \pocketmine\core\enum\GeneratorType::Nether;
+        $configWorld->seed = $meta !== null && isset($meta['seed']) && $meta['seed'] !== ''
+            ? (int)$meta['seed']
+            : random_int(1, PHP_INT_MAX);
+        if ($meta !== null) {
+            $configWorld->spawnX = (int)($meta['spawnX'] ?? 0);
+            $configWorld->spawnY = (int)($meta['spawnY'] ?? 64);
+            $configWorld->spawnZ = (int)($meta['spawnZ'] ?? 0);
+            $configWorld->time = (int)($meta['time'] ?? 0);
+        }
+        return $registry->registerWorld($name, $name, $configWorld->seed, $store, $configWorld, $storage);
+    }
+
+    /**
+     * 14.32: a safe landing spot in a world - scan down from the ceiling for
+     * the highest solid block at the world's spawn column and stand one above
+     * it. Falls back to the configured spawn when the scan finds nothing.
+     * @return array{0: float, 1: float, 2: float}
+     */
+    private function safeSpawnFor(int $worldId): array {
+        $config = $this->getWorldConfig($worldId);
+        $sx = (float)($config?->spawnX ?? 0);
+        $sy = (float)($config?->spawnY ?? 64);
+        $sz = (float)($config?->spawnZ ?? 0);
+        $store = $this->getChunkStore($worldId);
+        if ($store === null) {
+            return [$sx, $sy, $sz];
+        }
+        $bx = (int)floor($sx);
+        $bz = (int)floor($sz);
+        // The world's spawn chunk may not be resident yet (a freshly created
+        // nether has nothing loaded): load it so the scan sees real terrain.
+        $this->chunkLoadService->loadChunk(intdiv($bx, 16), intdiv($bz, 16), $worldId);
+        $topY = $this->worldDimension($worldId) === 1 ? 126 : 120;
+        for ($y = $topY; $y >= 1; $y--) {
+            $id = $store->getBlock($bx, $y, $bz);
+            if ($id !== 0 && !in_array($id, BlockIds::LIQUIDS, true)) {
+                return [(float)$bx + 0.5, (float)$y + 1, (float)$bz + 0.5];
+            }
+        }
+        return [$sx, $sy, $sz];
+    }
+
+    /**
      * A chest block was broken: spill its contents as item entities (so the
      * items are not lost), forget the store entry, and close the window of
      * every session that had it open (the chest is gone).
@@ -4503,7 +4867,7 @@ final class NetworkSessionService {
                 $chunk->chunkX = $chunkX;
                 $chunk->chunkZ = $chunkZ;
                 $chunk->order = FullChunkDataPacket::ORDER_LAYERED;
-                $chunk->data = ChunkSerializer::serialize($chunkData);
+                $chunk->data = ChunkSerializer::serialize($chunkData, $this->worldHasSky($session['worldId']));
                 $this->sendChunkBatch($addrKey, $chunk);
 
                 // 14.24: after the chunk, send tile-entity data (sign text,

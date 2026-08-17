@@ -158,7 +158,7 @@ final class ChunkLoadService {
         // Void worlds skip population entirely: a lobby platform must stay
         // exactly as generated (no trees/grass sprouting on it).
         if ($populate && $this->getWorldGenerator($worldId) !== \pocketmine\core\enum\GeneratorType::Void) {
-            $chunkData = $this->worldGenPort->populateChunk($chunkX, $chunkZ, $chunkData, $seed);
+            $chunkData = $this->worldGenPort->populateChunk($chunkX, $chunkZ, $chunkData, $seed, $this->getWorldGenerator($worldId)->value);
         }
         
         // Materialize the chunk into the in-memory store so block reads/writes
