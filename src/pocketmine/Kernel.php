@@ -573,11 +573,16 @@ final class Kernel {
 
             // 3. Storage autosave (periodic): flush resident chunks + world
             // meta (14.4) so a crash or restart loses at most the interval.
+            // Tick 0 is skipped: a fresh run() invocation has not simulated
+            // anything yet, and every bounded run(1) call (tests, benchmarks)
+            // resets $tick to 0 - saving there would write the whole world
+            // to disk once per call (~270ms with a full view distance
+            // resident). Shutdown and the periodic interval cover persistence.
             $autosaveConfig = $this->resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
             $autosaveTicks = $autosaveConfig instanceof \pocketmine\core\resource\ServerConfig
                 ? max(1, $autosaveConfig->autosaveIntervalTicks)
                 : 6000;
-            if ($tick % $autosaveTicks === 0) {
+            if ($tick > 0 && $tick % $autosaveTicks === 0) {
                 $this->saveWorld();
             }
 

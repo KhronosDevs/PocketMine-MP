@@ -6,6 +6,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/autoload.php';
 
 $kernel = \pocketmine\bootstrap();
+$kernel->setAutoShutdownOnRun(false);
 
 // Run warmup ticks
 echo "Warming up...\n";

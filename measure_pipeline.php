@@ -32,6 +32,7 @@ $regions = (int)($argv[4] ?? 1);
 $maxPerRegion = isset($argv[5]) && $argv[5] !== '' ? (int)$argv[5] : null;
 
 $kernel = \pocketmine\bootstrap($regions, $maxPerRegion);
+$kernel->setAutoShutdownOnRun(false);
 if ($mode !== 'off') {
     $kernel->setRegionPipelineEnabled(true);
     if ($mode === 'apply') {
