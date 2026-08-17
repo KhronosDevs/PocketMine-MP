@@ -34,17 +34,18 @@ Khronos is a Minecraft server written from scratch in PHP 8.2, inspired by Pocke
 
 ## Performance
 
-Measured on the benchmark scripts in the repo (`measure_baseline.php`, `measure_pipeline.php`, `measure_network.php`). The 20 TPS tick budget is **50 ms** — everything below runs well inside it.
+Measured with the **native-accel FFI library enabled** (production config: light calc, terrain noise and nibble packing run in C via `native/kh_native.so`) on the benchmark scripts in the repo (`measure_baseline.php`, `measure_pipeline.php`, `measure_network.php`, `measure_chunkgen.php`, `measure_memory.php`). The 20 TPS tick budget is **50 ms** — everything below runs well inside it.
 
 | Benchmark | Result |
 |---|---|
-| Empty tick (no entities) | **0.28 ms** |
-| 2,000 moving entities, hot tick | **2.88 ms** |
-| 10,000 moving entities, hot tick (region pipeline) | **6.15 ms** |
-| Steady-state tick with a connected client (incl. network flush) | **0.06 ms** |
-| Inbound move packet processing | **~46,000 pkts/s** (~22 µs each) |
-| Chunk streaming to a client | **42 chunks/s** — radius 8 (289 chunks) fully delivered in ~7 s |
-| Fluid simulation, 16k-cell ocean, steady state | **0.02 ms/pass** |
+| Empty tick (no entities) | **0.32 ms** |
+| 2,000 moving entities, hot tick | **1.74 ms** |
+| 10,000 moving entities, hot tick (region pipeline) | **3.60 ms** |
+| Steady-state tick with a connected client (incl. network flush) | **0.08 ms** |
+| Inbound move packet processing | **~40,000 pkts/s** (~25 µs each) |
+| Chunk streaming to a client | **189 chunks/s** — radius 8 (289 chunks) fully delivered in ~1.6 s |
+| Parallel chunk generation | **~0.41 ms/chunk** (128 chunks in 52 ms across the pool) |
+| Fluid simulation, 16k-cell ocean | **~0.01 ms/pass** active flow · ~0 steady state |
 | Memory per entity | **~1 KB** (loaded-chunk budget enforced) |
 
 ## Plugin development
@@ -62,7 +63,7 @@ Khronos has a brand-new, ECS-based plugin API — **not compatible with existing
 
 - **Tests:** `bin/php7/bin/php tests/run.php` (49 files, per-process isolation; `-j N` runs files in parallel, `--filter=substring` runs one test)
 - **Static analysis:** `bin/php7/bin/php -d memory_limit=2G vendor/bin/phpstan analyse -c phpstan.neon`
-- **Benchmarks:** `measure_baseline.php`, `measure_pipeline.php`, `measure_chunkgen.php`, `measure_memory.php`, `measure_network.php`
+- **Benchmarks:** `measure_baseline.php`, `measure_pipeline.php`, `measure_chunkgen.php`, `measure_memory.php`, `measure_network.php` — run with the same FFI flags as production (`-d extension=ffi -d ffi.enable=1`) to match the table above
 - **Architecture at a glance:** ECS core (components → archetypes → systems) · ports & adapters (network/storage/worldgen/threading) · gameplay services · API facades · region-based threading (details in [docs/PLAN.md](docs/PLAN.md))
 
 ## Credits

@@ -1,16 +1,16 @@
 {
-    "timestamp": "2026-08-07T15:30:23+00:00",
+    "timestamp": "2026-08-17T23:50:31+00:00",
     "php_version": "8.2.32",
-    "commit": "372289cf7677955d86502f4cf1250ff24c4a4668",
-    "branch": "api-ecs-rewrite",
+    "commit": "5b6bafbb1981217a76e009c616e89714224a08f8",
+    "branch": "master",
     "stats": {
         "count": 1100,
-        "mean_ms": 0.077,
-        "median_ms": 0.066,
-        "p95_ms": 0.13,
-        "p99_ms": 0.163,
-        "min_ms": 0.026,
-        "max_ms": 0.314,
-        "stddev_ms": 0.036
+        "mean_ms": 0.32,
+        "median_ms": 0.281,
+        "p95_ms": 0.612,
+        "p99_ms": 1.493,
+        "min_ms": 0.092,
+        "max_ms": 3.232,
+        "stddev_ms": 0.241
     }
 }
