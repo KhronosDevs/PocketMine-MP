@@ -59,6 +59,22 @@ final class TeleportCommand extends BuiltinCommand {
             return false;
         }
 
+        // Blocker 4 audit: cancellable EntityTeleportEvent fires before the
+        // position mutates.
+        $event = new \pocketmine\api\event\EntityTeleportEvent(
+            new \pocketmine\api\entity\Player(
+                \pocketmine\core\ecs\EntityRef::create($targetId, $kernel->getWorld()),
+                $kernel->getWorld(),
+            ),
+            [(float)$pos->x, (float)$pos->y, (float)$pos->z],
+            [$x, $y, $z],
+        );
+        $kernel->getEventPort()->emit($event);
+        if ($event->isCancelled()) {
+            $sender->sendMessage('The teleport was cancelled.');
+            return false;
+        }
+        [$x, $y, $z] = $event->getTo();
         $pos->x = $x;
         $pos->y = $y;
         $pos->z = $z;

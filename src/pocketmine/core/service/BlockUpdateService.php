@@ -11,6 +11,7 @@ final class BlockUpdateService {
     public function __construct(
         private readonly World $world,
         private readonly StoragePort $storagePort,
+        private readonly ?\pocketmine\port\driving\EventPort $eventPort = null,
     ) {}
 
     public function scheduleBlockUpdate(int $x, int $y, int $z, int $delay = 0): void {
@@ -19,6 +20,15 @@ final class BlockUpdateService {
     }
 
     public function updateBlock(int $x, int $y, int $z): void {
+        // Blocker 4 audit: BlockUpdateEvent lets plugins react to block
+        // state changes (placement, break, neighbor updates).
+        if ($this->eventPort !== null) {
+            $server = \pocketmine\api\server\Server::getInstance();
+            $apiWorld = $server->getDefaultWorld();
+            $this->eventPort->emit(new \pocketmine\api\event\BlockUpdateEvent(
+                new \pocketmine\api\block\Block($apiWorld, $x, $y, $z),
+            ));
+        }
         // Trigger block update logic (neighbor changes, redstone, etc.)
         // This would check block type and trigger appropriate updates
     }

@@ -56,9 +56,24 @@ final class WeatherSystem implements System {
         // remaining) rolls immediately, and a restored spell resumes mid-way.
         $config->weatherDuration--;
         if ($config->weatherDuration <= 0) {
-            $config->weather = $config->weather === self::CLEAR
+            $newWeather = $config->weather === self::CLEAR
                 ? self::RANDOM_WEATHER[array_rand(self::RANDOM_WEATHER)]
                 : self::CLEAR;
+            // Blocker 4 audit: cancellable WeatherChangeEvent - a plugin can
+            // keep the current weather.
+            $kernel = \pocketmine\Kernel::getInstance();
+            if ($kernel !== null) {
+                $event = new \pocketmine\api\event\WeatherChangeEvent(
+                    new \pocketmine\api\world\World($world, 'world', 'world', 0),
+                    $newWeather,
+                );
+                $kernel->getEventPort()->emit($event);
+                if (!$event->isCancelled()) {
+                    $config->weather = $event->getWeather();
+                }
+            } else {
+                $config->weather = $newWeather;
+            }
             $config->weatherDuration = mt_rand(self::DURATION_MIN, self::DURATION_MAX);
         }
 

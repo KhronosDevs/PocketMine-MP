@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command;
 
 use pocketmine\api\event\PlayerCommandPreprocessEvent;
+use pocketmine\api\event\ServerCommandEvent;
 use pocketmine\port\driving\CommandPort;
 use pocketmine\port\driving\EventPort;
 
@@ -47,6 +48,16 @@ class CommandMap implements CommandPort {
     }
 
     public function execute(CommandSender $sender, string $commandLine): bool {
+        // Blocker 4 audit: ServerCommandEvent fires for every sender (console
+        // and player) before dispatch; player commands additionally fire
+        // PlayerCommandPreprocessEvent so plugins can rewrite the line.
+        $serverEvent = new ServerCommandEvent($sender, $commandLine);
+        $this->eventPort->emit($serverEvent);
+        if ($serverEvent->isCancelled()) {
+            return false;
+        }
+        $commandLine = $serverEvent->getCommand();
+
         // Player commands are cancellable before execution.
         if ($sender->isPlayer() && $sender->getPlayer() !== null) {
             $event = new PlayerCommandPreprocessEvent($sender->getPlayer(), $commandLine);

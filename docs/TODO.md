@@ -14,8 +14,8 @@ in rough priority order, so anyone picking up a task knows the seams to build on
 
 | Item | Status | What's already in place | Scope |
 |------|--------|-------------------------|-------|
-| **Wire events into services** | ⏳ Event **classes** exist (`api/event/`), but only `EntityDamageEvent` (via `CombatService`) actually fires | `EventBus`/`EventPort` working, cancellable events proven by `tests/12` + `tests/13` | Fire `PlayerJoinEvent`/`PlayerQuitEvent` on login/disconnect, `PlayerChatEvent` (cancellable) + `PlayerCommandPreprocessEvent` (already fires, see 12.4) on chat/commands, `PlayerMoveEvent` on validated moves, `PlayerInteractEvent` on interact, `BlockBreakEvent`/`BlockPlaceEvent` (cancellable) in the services — with the service respecting cancellation |
-| **Auto-load plugins at boot** | ⏳ Not implemented — plugins load only via the test harness / manual `PluginManager` calls | `PluginManager` fully supports dir + `.phar` loading (12.4), `Kernel::getPluginManager()` exposes it | Scan `plugins/` at `bootstrap()`/`run()` start, load all `plugin.yml` dirs + `.phar` files, log load failures without crashing |
+| **Wire events into services** | ✅ DONE (PROGRESS #77) — 33 event classes wired across the services | First wave (join/leave/respawn, break/place, spawn, interact/attack, chat, move, damage, death) + second wave (login, kick, drop, consume, gamemode, sneak/sprint, regen, shoot bow, teleport, despawn, container open/close, pickup, craft, weather, plugin enable/disable, server command, block update) | — |
+| **Auto-load plugins at boot** | ✅ DONE — `Kernel::run()` scans `<dataPath>/plugins/` on first run (creates it when missing), loads every `plugin.yml` dir + `.phar`, skips `.jar` (12.4 + PROGRESS #77) | — | — |
 
 ---
 
