@@ -401,6 +401,18 @@ if ($worldCfg instanceof \pocketmine\core\resource\ServerConfig) {
     $worldCfg->spawnMobs = false;
 }
 
+// The command wire tests below send back-to-back chat commands; the default
+// anti-cheat chat (0.4s) and command (0.1s) rate limits silently drop a
+// second command that arrives sooner. The loops here are fast (run(1) no
+// longer pays a per-call autosave), so commands can process within those
+// windows - disable the intervals for this harness (the limits themselves
+// have their own coverage; see the anti-cheat test further down).
+$khronosCfg = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\KhronosConfig::class);
+if ($khronosCfg instanceof \pocketmine\core\resource\KhronosConfig) {
+    $khronosCfg->chatMinIntervalSeconds = 0.0;
+    $khronosCfg->commandMinIntervalSeconds = 0.0;
+}
+
 // Blocker 1: admin commands are gated behind op, so grant Alice op before she
 // joins - the command wire tests below (/gamemode /give /tp /time /weather
 // /kill) exercise the happy path (the gating itself has its own test in
@@ -838,35 +850,48 @@ test('repeated overspeed moves end in a kick', function () use ($kernel, $port):
 });
 
 test('a spam flood of chat is throttled to one message', function () use ($client, $kernel): void {
-    // Send 10 messages instantly - only the first (within the 400ms window)
-    // should be echoed; the rest are dropped as spam.
-    for ($i = 0; $i < 10; $i++) {
-        $chat = new TextPacket();
-        $chat->type = TextPacket::TYPE_CHAT;
-        $chat->source = 'Alice';
-        $chat->message = "spam message $i";
-        $client->sendGamePacket($chat);
+    // This test NEEDS the rate limit, so it sets its own interval (the
+    // harness elsewhere disables it for the back-to-back command tests).
+    $khronosCfg = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\KhronosConfig::class);
+    $prev = $khronosCfg instanceof \pocketmine\core\resource\KhronosConfig ? $khronosCfg->chatMinIntervalSeconds : 0.4;
+    if ($khronosCfg instanceof \pocketmine\core\resource\KhronosConfig) {
+        $khronosCfg->chatMinIntervalSeconds = 0.4;
     }
-    $kernel->run(3);
+    try {
+        // Send 10 messages instantly - only the first (within the 400ms window)
+        // should be echoed; the rest are dropped as spam.
+        for ($i = 0; $i < 10; $i++) {
+            $chat = new TextPacket();
+            $chat->type = TextPacket::TYPE_CHAT;
+            $chat->source = 'Alice';
+            $chat->message = "spam message $i";
+            $client->sendGamePacket($chat);
+        }
+        $kernel->run(3);
 
-    $deadline = microtime(true) + 3.0;
-    $echoes = 0;
-    while (microtime(true) < $deadline) {
-        foreach ($client->readGamePackets() as [$id, $buffer]) {
-            if ($id === Info::TEXT_PACKET) {
-                $tp = textPacket($buffer);
-                if ($tp['type'] === TextPacket::TYPE_RAW && str_starts_with($tp['message'], 'Alice: spam message')) {
-                    $echoes++;
+        $deadline = microtime(true) + 3.0;
+        $echoes = 0;
+        while (microtime(true) < $deadline) {
+            foreach ($client->readGamePackets() as [$id, $buffer]) {
+                if ($id === Info::TEXT_PACKET) {
+                    $tp = textPacket($buffer);
+                    if ($tp['type'] === TextPacket::TYPE_RAW && str_starts_with($tp['message'], 'Alice: spam message')) {
+                        $echoes++;
+                    }
                 }
             }
+            $kernel->run(1);
+            if ($echoes >= 2) {
+                break; // over the limit - fail fast
+            }
+            usleep(10000);
         }
-        $kernel->run(1);
-        if ($echoes >= 2) {
-            break; // over the limit - fail fast
+        ok($echoes === 1, "spam throttled: 1 echo for 10 messages (got $echoes)");
+    } finally {
+        if ($khronosCfg instanceof \pocketmine\core\resource\KhronosConfig) {
+            $khronosCfg->chatMinIntervalSeconds = $prev;
         }
-        usleep(10000);
     }
-    ok($echoes === 1, "spam throttled: 1 echo for 10 messages (got $echoes)");
 });
 
 // --- Block interaction (14.1) ----------------------------------------------
@@ -3119,6 +3144,19 @@ test('a /time command sets the world clock', function () use ($client, $kernel):
 });
 
 test('a /weather command changes the world weather over the wire', function () use ($client, $kernel): void {
+    // Pin clear first: the world may have naturally rolled into rain by this
+    // point (the weather system re-rolls when a spell expires), which would
+    // make /weather rain a no-op - no START_RAIN would go out and this test
+    // would fail on a timing coin flip.
+    $wc = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
+    if ($wc instanceof \pocketmine\core\resource\WorldConfig) {
+        $wc->weather = \pocketmine\core\system\WeatherSystem::CLEAR;
+        $wc->weatherDuration = 600000;
+        $wc->lightningTick = 0;
+    }
+    $kernel->run(3);
+    $client->readGamePackets(); // drain the STOP_RAIN the clear pin produced
+
     $cmd = new TextPacket();
     $cmd->type = TextPacket::TYPE_CHAT;
     $cmd->source = 'Alice';

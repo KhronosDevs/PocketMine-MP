@@ -286,6 +286,17 @@ final class ChunkStore {
     }
 
     /**
+     * Forget that a chunk's light changed without sending it. Used when the
+     * chunk was JUST streamed to a viewer with its current light arrays: the
+     * freshly generated chunk is marked dirty during load (recalculateLight),
+     * but the serialized payload already carries that light, so the per-tick
+     * light-dirty flush must not re-serialize and re-send the same chunk.
+     */
+    public function clearLightDirty(int $chunkX, int $chunkZ): void {
+        unset($this->lightDirty[$this->key($chunkX, $chunkZ)]);
+    }
+
+    /**
      * Sky light level (0-15) at a world position, read from the chunk's
      * packed nibble arrays (matches the LightCalculator output layout).
      */

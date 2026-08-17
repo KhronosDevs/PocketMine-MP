@@ -203,6 +203,7 @@ final class NetworkSessionService {
      *   bowDraw: int|null,
      *   portalTime: int,
      *   portalFrom: array{worldId: int, x: float, y: float, z: float}|null,
+     *   portalExited: bool,
      *   lastWeather: int,
      *   lastMoveTick: int,
      *   moveViolations: int,
@@ -520,6 +521,9 @@ final class NetworkSessionService {
             if ($worldComponent !== null) {
                 $worldComponent->id = $worldId;
             }
+            // The player arrived somewhere new: they must leave the portal
+            // they landed in (if any) before a crossing can trigger again.
+            $session['portalExited'] = false;
 
             // Teleport to the target world's spawn (or an explicit position
             // such as the saved overworld spot a nether portal returns to).
@@ -919,9 +923,14 @@ final class NetworkSessionService {
             'bowDraw' => null,
             // 14.32: nether portal travel - the tick the player entered a
             // portal (0 = not inside) and the overworld spot saved for the
-            // return trip through the nether.
+            // return trip through the nether. portalExited is false right
+            // after a dimension switch: the player must LEAVE the portal
+            // they arrived in before a crossing can trigger again (a return
+            // through a portal drops you inside the same portal - without
+            // this gate a creative player would ping-pong across instantly).
             'portalTime' => 0,
             'portalFrom' => null,
+            'portalExited' => true,
             // 14.22: the weather state last pushed to this client. The login
             // burst sends the current state explicitly, so tracking it here
             // means only actual transitions go out afterwards.
@@ -4093,10 +4102,20 @@ final class NetworkSessionService {
                 && $store->getBlock((int)floor($pos->x), (int)floor($pos->y), (int)floor($pos->z)) === BlockIds::PORTAL;
             $portalTime = $session['portalTime'];
             if (!$inPortal) {
+                // Outside any portal: a crossing is allowed again (the player
+                // left the portal they arrived in, or never was in one).
+                $session['portalExited'] = true;
                 if ($portalTime !== 0) {
                     $session['portalTime'] = 0;
-                    $this->sessions[$addrKey] = $session;
                 }
+                $this->sessions[$addrKey] = $session;
+                continue;
+            }
+            // Inside a portal but a dimension switch dropped the player here:
+            // they must walk out and back in before crossing again, otherwise
+            // a return trip through a portal instantly crosses back (creative
+            // mode especially - the instant cross would ping-pong forever).
+            if (!$session['portalExited']) {
                 continue;
             }
             if ($portalTime === 0) {
@@ -5098,6 +5117,11 @@ final class NetworkSessionService {
     private function streamChunks(): void {
         foreach (array_keys($this->sessions) as $addrKey) {
             $session = $this->sessions[$addrKey];
+            // Gather the next CHUNKS_PER_TICK unsent queue entries, then load
+            // them in ONE loadChunks() call: the parallel WorldGenPort batch
+            // is far cheaper per chunk than a per-chunk loadChunk() (each of
+            // which pays a pool round-trip + light recalc alone).
+            $pending = [];
             $sent = 0;
             while ($sent < self::CHUNKS_PER_TICK && $session['chunkQueueIndex'] < count($session['chunkQueue'])) {
                 [$chunkX, $chunkZ] = $session['chunkQueue'][$session['chunkQueueIndex']];
@@ -5106,8 +5130,28 @@ final class NetworkSessionService {
                 if (isset($session['chunksSent'][$key])) {
                     continue;
                 }
-                $chunkData = $this->chunkLoadService->loadChunk($chunkX, $chunkZ, $session['worldId']);
-
+                $pending[] = [[$chunkX, $chunkZ], $key];
+                $sent++;
+            }
+            if ($pending === []) {
+                if (!$session['spawned'] && !empty($session['chunksSent'])) {
+                    $status = new PlayStatusPacket();
+                    $status->status = PlayStatusPacket::PLAYER_SPAWN;
+                    $this->queuePacket($session['playerRef'], $status);
+                    $session['spawned'] = true;
+                }
+                $this->sessions[$addrKey] = $session;
+                continue;
+            }
+            $coords = array_column($pending, 0);
+            $chunkDatas = $this->chunkLoadService->loadChunks($coords, $session['worldId']);
+            $store = $this->getChunkStore($session['worldId']);
+            foreach ($pending as $i => [$coord, $key]) {
+                [$chunkX, $chunkZ] = $coord;
+                $chunkData = $chunkDatas[$i] ?? null;
+                if ($chunkData === null) {
+                    continue;
+                }
                 $chunk = new FullChunkDataPacket();
                 $chunk->chunkX = $chunkX;
                 $chunk->chunkZ = $chunkZ;
@@ -5121,7 +5165,16 @@ final class NetworkSessionService {
                 $this->sendChunkTiles($session['playerRef'], $chunkX, $chunkZ, $session['worldId']);
 
                 $session['chunksSent'][$key] = true;
-                $sent++;
+                // The freshly generated chunk was marked light-dirty during
+                // load (recalculateLight), but the payload we just serialized
+                // ALREADY carries that light - so the per-tick light-dirty
+                // flush must not re-serialize and re-send the same chunk.
+                // Without this, every streamed chunk went out twice (the
+                // benchmark: ~16ms/tick of pure duplicate sends while
+                // streaming, ~30% of the whole network flush).
+                if ($store !== null) {
+                    $store->clearLightDirty($chunkX, $chunkZ);
+                }
             }
             if (!$session['spawned'] && !empty($session['chunksSent'])) {
                 $status = new PlayStatusPacket();

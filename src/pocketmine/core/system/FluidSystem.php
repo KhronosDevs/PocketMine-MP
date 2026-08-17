@@ -65,8 +65,15 @@ final class FluidSystem implements System {
     private ?\pocketmine\core\service\NetworkSessionService $sessions = null;
     /** @var array<string, true> seeded chunk keys (world-scoped by the store) */
     private array $seededChunks = [];
-    /** @var array<string, true> active liquid cells "x:y:z" => true */
+    /** @var array<string, true> all liquid cells "x:y:z" => true */
     private array $liquidCells = [];
+    /**
+     * @var array<string, true> liquid cells that still need a flow pass
+     * A cell leaves this set once a pass makes no write from it (it has
+     * settled). A block write near a settled cell re-activates it, so steady-
+     * state oceans cost ~nothing per pass instead of re-walking every cell.
+     */
+    private array $activeCells = [];
     /** @var array<int, true> stores (by spl_object_id) that got a block listener */
     private array $listenedStores = [];
 
@@ -77,11 +84,23 @@ final class FluidSystem implements System {
 
     /**
      * Register a liquid cell from outside the system (block place, bucket,
-     * explosion) so the next pass flows it. No-op for non-liquid ids.
+     * explosion) so the next pass flows it. Any block write can also disturb
+     * a settled neighbour (a wall redirects flow, a placed block displaces
+     * water, a broken block opens a flow path), so the six neighbours of a
+     * written cell are re-activated too. No-op for non-liquid ids, but the
+     * neighbour re-activation still applies (non-liquid writes open paths).
      */
     public function registerLiquidCell(int $x, int $y, int $z, int $id): void {
         if (self::isLiquid($id)) {
-            $this->liquidCells[$x . ':' . $y . ':' . $z] = true;
+            $key = $x . ':' . $y . ':' . $z;
+            $this->liquidCells[$key] = true;
+            $this->activeCells[$key] = true;
+        }
+        foreach ([[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] as [$dx, $dy, $dz]) {
+            $nkey = ($x + $dx) . ':' . ($y + $dy) . ':' . ($z + $dz);
+            if (isset($this->liquidCells[$nkey]) && !isset($this->activeCells[$nkey])) {
+                $this->activeCells[$nkey] = true;
+            }
         }
     }
 
@@ -107,11 +126,20 @@ final class FluidSystem implements System {
 
         $this->seedNewChunks($store);
 
+        if (empty($this->activeCells)) {
+            return; // no unsettled liquid - steady state costs ~nothing
+        }
+
         $updates = [];
         // Iterate a snapshot so newly spread cells can be processed next pass
         // (avoid mutating the array while walking it).
-        foreach (array_keys($this->liquidCells) as $key) {
-            $this->flowCell($store, $blocks, $key, $updates);
+        foreach (array_keys($this->activeCells) as $key) {
+            if (!$this->flowCell($store, $blocks, $key, $updates)) {
+                // No write came from this cell: it has settled (solid below,
+                // every neighbour already the same liquid). Drop it from the
+                // active set; a block write near it re-activates it.
+                unset($this->activeCells[$key]);
+            }
         }
         if (empty($updates)) {
             return;
@@ -174,31 +202,36 @@ final class FluidSystem implements System {
                     $rem = $pos & 0xFF;
                     $localZ = $rem >> 4;
                     $localX = $rem & 0x0F;
-                    $this->liquidCells[($baseX + $localX) . ':' . $y . ':' . ($baseZ + $localZ)] = true;
+                    $cellKey = ($baseX + $localX) . ':' . $y . ':' . ($baseZ + $localZ);
+                    $this->liquidCells[$cellKey] = true;
+                    $this->activeCells[$cellKey] = true;
                     $offset = $pos + 1;
                 }
             }
         }
     }
 
-    /** Process one liquid cell. */
-    private function flowCell(ChunkStore $store, BlockRegistry $blocks, string $key, array &$updates): void {
+    /**
+     * Process one liquid cell. Returns true when the cell wrote a block this
+     * pass (still dynamic), false when it settled (no write possible).
+     */
+    private function flowCell(ChunkStore $store, BlockRegistry $blocks, string $key, array &$updates): bool {
         $parts = explode(':', $key);
         if (count($parts) !== 3) {
-            unset($this->liquidCells[$key]);
-            return;
+            unset($this->liquidCells[$key], $this->activeCells[$key]);
+            return false;
         }
         $x = (int)$parts[0];
         $y = (int)$parts[1];
         $z = (int)$parts[2];
         $id = $store->getBlock($x, $y, $z);
         if (!self::isLiquid($id)) {
-            unset($this->liquidCells[$key]);
-            return;
+            unset($this->liquidCells[$key], $this->activeCells[$key]);
+            return false;
         }
         $meta = $store->getBlockMeta($x, $y, $z);
         $isLava = $id === 10 || $id === 11;
-        $this->flowAt($store, $blocks, $x, $y, $z, $id, $meta, $isLava, $updates);
+        return $this->flowAt($store, $blocks, $x, $y, $z, $id, $meta, $isLava, $updates);
     }
 
     /**
@@ -216,15 +249,14 @@ final class FluidSystem implements System {
         int $meta,
         bool $isLava,
         array &$updates
-    ): void {
+    ): bool {
         $falling = ($meta & 0x08) !== 0;
         $decay = $meta & 0x07;
 
         // Lava touching water hardens INTO stone at the lava cell (legacy
         // checkForHarden): source lava -> obsidian (49), flowing -> cobble (4).
         if ($isLava && $this->touchesWater($store, $blocks, $x, $y, $z)) {
-            $this->setBlock($store, $blocks, $x, $y, $z, $decay === 0 ? 49 : 4, 0, $updates);
-            return;
+            return $this->setBlock($store, $blocks, $x, $y, $z, $decay === 0 ? 49 : 4, 0, $updates);
         }
 
         $below = $store->getBlock($x, $y - 1, $z);
@@ -238,27 +270,24 @@ final class FluidSystem implements System {
             if ($decay > 0) {
                 $newMeta = 0x08 | $decay;
             }
-            $this->setLiquid($store, $blocks, $x, $y - 1, $z, $id, $newMeta, $updates);
-            return;
+            return $this->setLiquid($store, $blocks, $x, $y - 1, $z, $id, $newMeta, $updates);
         }
         // The cell below is the same liquid: keep descending so the column
         // reaches the floor (a source keeps falling; a falling stream keeps
         // its falling flag). Only the bottom cell, above solid ground, then
         // spreads sideways.
         if (!$belowSolid && $below === $id) {
-            $this->setLiquid($store, $blocks, $x, $y - 1, $z, $id, 0x08, $updates);
-            return;
+            return $this->setLiquid($store, $blocks, $x, $y - 1, $z, $id, 0x08, $updates);
         }
 
         // 2) Falling liquid that landed: spread sideways at decay 0, then stop.
         if ($falling) {
-            $this->spreadSideways($store, $blocks, $x, $y, $z, $id, $isLava, 0, $updates);
-            return;
+            return $this->spreadSideways($store, $blocks, $x, $y, $z, $id, $isLava, 0, $updates);
         }
 
         // 3) Solid below: source spreads sideways; flowing blocks may also
         //    advance. A water source stays a source forever.
-        $this->spreadSideways($store, $blocks, $x, $y, $z, $id, $isLava, $decay, $updates);
+        return $this->spreadSideways($store, $blocks, $x, $y, $z, $id, $isLava, $decay, $updates);
     }
 
     private function spreadSideways(
@@ -271,11 +300,12 @@ final class FluidSystem implements System {
         bool $isLava,
         int $decay,
         array &$updates
-    ): void {
+    ): bool {
         $maxDecay = $isLava ? self::LAVA_MAX_DECAY : self::WATER_MAX_DECAY;
         if ($decay >= $maxDecay) {
-            return; // spread limit reached
+            return false; // spread limit reached - settled
         }
+        $changed = false;
         $nextDecay = $decay + 1;
         $offsets = [[-1, 0], [1, 0], [0, -1], [0, 1]];
         foreach ($offsets as [$dx, $dz]) {
@@ -288,8 +318,11 @@ final class FluidSystem implements System {
             if (!$blocks->isReplaceable($target) && $target !== 0) {
                 continue; // not flowable
             }
-            $this->setLiquid($store, $blocks, $nx, $y, $nz, $id, $nextDecay, $updates);
+            if ($this->setLiquid($store, $blocks, $nx, $y, $nz, $id, $nextDecay, $updates)) {
+                $changed = true;
+            }
         }
+        return $changed;
     }
 
     /** True when any of the 6 neighbours of (x, y, z) is water. */
@@ -304,32 +337,34 @@ final class FluidSystem implements System {
         return false;
     }
 
-    private function setLiquid(ChunkStore $store, BlockRegistry $blocks, int $x, int $y, int $z, int $id, int $meta, array &$updates): void {
-        $this->setBlock($store, $blocks, $x, $y, $z, $id, $meta & 0x0F, $updates);
+    private function setLiquid(ChunkStore $store, BlockRegistry $blocks, int $x, int $y, int $z, int $id, int $meta, array &$updates): bool {
+        return $this->setBlock($store, $blocks, $x, $y, $z, $id, $meta & 0x0F, $updates);
     }
 
-    private function setBlock(ChunkStore $store, BlockRegistry $blocks, int $x, int $y, int $z, int $id, int $meta, array &$updates): void {
+    private function setBlock(ChunkStore $store, BlockRegistry $blocks, int $x, int $y, int $z, int $id, int $meta, array &$updates): bool {
         if ($y < 0 || $y > 255) {
-            return;
+            return false;
         }
         $key = "$x:$y:$z";
         if (array_key_exists($key, $updates)) {
-            return; // already set this pass
+            return false; // already set this pass
         }
         $old = $store->getBlock($x, $y, $z);
         if ($old === $id && $store->getBlockMeta($x, $y, $z) === $meta) {
-            return;
+            return false; // no-op - the caller settles
         }
         if (!$store->setBlock($x, $y, $z, $id, $meta)) {
-            return;
+            return false;
         }
         $updates[$key] = [$id, $meta];
         // Keep the liquid registry in sync with the world.
         if (self::isLiquid($id)) {
             $this->liquidCells[$key] = true;
+            $this->activeCells[$key] = true;
         } else {
-            unset($this->liquidCells[$key]);
+            unset($this->liquidCells[$key], $this->activeCells[$key]);
         }
+        return true;
     }
 
     private function broadcastUpdates(World $world, array $updates): void {
