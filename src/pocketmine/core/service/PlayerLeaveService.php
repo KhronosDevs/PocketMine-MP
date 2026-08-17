@@ -35,6 +35,12 @@ final class PlayerLeaveService {
         
         // Broadcast player removal to nearby players
         $this->broadcastPlayerLeave($entityRef);
+
+        // Blocker 4 audit: EntityDespawnEvent fires as the entity leaves the
+        // world (the leave path does not route through EntityDespawnService).
+        $this->eventPort->emit(new \pocketmine\api\event\EntityDespawnEvent(
+            $this->wrapApiPlayer($entityRef),
+        ));
         
         // Despawn entity
         $this->world->despawn($entity);

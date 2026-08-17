@@ -32,10 +32,21 @@ final class PlayerJoinService {
         private readonly EventPort $eventPort,
     ) {}
 
-    public function handleJoin(PlayerRef $playerRef, string $username): EntityRef {
+    public function handleJoin(PlayerRef $playerRef, string $username): ?EntityRef {
         // Create or load player entity (returning players are restored from
         // their persisted snapshot inside createOrLoadPlayer).
         $entityRef = $this->createOrLoadPlayer($playerRef, $username);
+
+        // Blocker 4 audit: cancellable PlayerLoginEvent fires right after the
+        // entity exists, BEFORE PlayerJoinEvent (legacy ordering). A plugin
+        // can veto the join; the caller (NetworkSessionService::handleLogin)
+        // gets null back and disconnects with the kick message.
+        $loginEvent = new \pocketmine\api\event\PlayerLoginEvent($this->wrapApiPlayer($entityRef));
+        $this->eventPort->emit($loginEvent);
+        if ($loginEvent->isCancelled()) {
+            $this->world->despawn($entityRef->getEntity());
+            return null;
+        }
 
         // Blocker 1: the server-default gamemode (server.properties gamemode=)
         // applies to new players, and to returning players when force-gamemode

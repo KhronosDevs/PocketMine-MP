@@ -53,8 +53,22 @@ final class GamemodeCommand extends BuiltinCommand {
             return false;
         }
 
-        $metadata->set(MetadataKeys::GAMEMODE, $mode->value);
-        $kernel->getNetworkSessionService()->sendGamemodeTo($targetId, $mode);
+        // Blocker 4 audit: cancellable PlayerGameModeChangeEvent fires before
+        // the metadata mutates - a plugin can keep the old gamemode.
+        $event = new \pocketmine\api\event\PlayerGameModeChangeEvent(
+            new \pocketmine\api\entity\Player(
+                \pocketmine\core\ecs\EntityRef::create($targetId, $kernel->getWorld()),
+                $kernel->getWorld(),
+            ),
+            $mode,
+        );
+        $kernel->getEventPort()->emit($event);
+        if ($event->isCancelled()) {
+            $sender->sendMessage('The gamemode change was cancelled.');
+            return false;
+        }
+        $metadata->set(MetadataKeys::GAMEMODE, $event->getNewGameMode()->value);
+        $kernel->getNetworkSessionService()->sendGamemodeTo($targetId, $event->getNewGameMode());
 
         $name = $this->playerName($targetId);
         $sender->sendMessage($mode === GameMode::Creative ? "$name is now in creative mode." : "$name is now in survival mode.");

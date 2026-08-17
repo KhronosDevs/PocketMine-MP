@@ -14,6 +14,7 @@ use pocketmine\core\resource\RecipeRegistry;
 final class CraftingService {
     public function __construct(
         private readonly World $world,
+        private readonly ?\pocketmine\port\driving\EventPort $eventPort = null,
     ) {}
 
     /**
@@ -56,6 +57,27 @@ final class CraftingService {
         $required = $this->countGridIngredients($grid);
         if (!$this->inventoryHas($inventory, $required)) {
             return null;
+        }
+
+        // Blocker 4 audit: cancellable CraftItemEvent fires before anything
+        // is consumed - a plugin can veto the craft.
+        if ($this->eventPort !== null) {
+            $result = $recipe['result'];
+            $gridCells = [];
+            foreach ($grid as $cell) {
+                $gridCells[] = $cell instanceof ItemStack ? [$cell->itemId, $cell->meta] : [0, 0];
+            }
+            $event = new \pocketmine\api\event\CraftItemEvent(
+                \pocketmine\api\entity\Entity::wrap($playerRef, $this->world) instanceof \pocketmine\api\entity\Player
+                    ? \pocketmine\api\entity\Entity::wrap($playerRef, $this->world)
+                    : new \pocketmine\api\entity\Player($playerRef, $this->world),
+                \pocketmine\api\inventory\ItemStack::fromCore($result),
+                $gridCells,
+            );
+            $this->eventPort->emit($event);
+            if ($event->isCancelled()) {
+                return null;
+            }
         }
 
         // Clone the registered result: add() mutates the stack's count on the

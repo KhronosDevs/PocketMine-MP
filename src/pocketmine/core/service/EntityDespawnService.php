@@ -14,12 +14,21 @@ final class EntityDespawnService {
     public function __construct(
         private readonly World $world,
         private readonly StoragePort $storagePort,
+        private readonly ?\pocketmine\port\driving\EventPort $eventPort = null,
     ) {}
 
     public function despawn(EntityRef $entityRef, bool $save = true): void {
         $entity = $entityRef->getEntity();
         if (!$entity) return;
         
+        // Blocker 4 audit: EntityDespawnEvent fires before the entity leaves
+        // the world so plugins see it as still valid.
+        if ($this->eventPort !== null) {
+            $this->eventPort->emit(new \pocketmine\api\event\EntityDespawnEvent(
+                \pocketmine\api\entity\Entity::wrap($entityRef, $this->world),
+            ));
+        }
+
         // Save entity data if requested
         if ($save) {
             $this->saveEntity($entityRef);

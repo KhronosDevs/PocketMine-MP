@@ -403,7 +403,17 @@ final class NetworkSessionService {
         }
         foreach ($this->sessions as $session) {
             if ($session['playerRef']->entityId === $entityId) {
-                $this->adapter->disconnect($session['playerRef'], $reason !== '' ? $reason : 'Kicked');
+                // Blocker 4 audit: cancellable PlayerKickEvent - a plugin can
+                // change the reason or stop the kick entirely.
+                $event = new \pocketmine\api\event\PlayerKickEvent(
+                    $this->wrapApiPlayer($session['entityRef']),
+                    $reason !== '' ? $reason : 'Kicked',
+                );
+                $this->eventPort->emit($event);
+                if ($event->isCancelled()) {
+                    return false;
+                }
+                $this->adapter->disconnect($session['playerRef'], $event->getReason());
                 return true;
             }
         }
@@ -423,7 +433,15 @@ final class NetworkSessionService {
             // addrKey is "ip:port" - match on the host part only.
             $host = str_contains($addrKey, ':') ? explode(':', $addrKey)[0] : $addrKey;
             if ($host === $ip) {
-                $this->adapter->disconnect($session['playerRef'], $reason !== '' ? $reason : 'IP banned');
+                $event = new \pocketmine\api\event\PlayerKickEvent(
+                    $this->wrapApiPlayer($session['entityRef']),
+                    $reason !== '' ? $reason : 'IP banned',
+                );
+                $this->eventPort->emit($event);
+                if ($event->isCancelled()) {
+                    continue;
+                }
+                $this->adapter->disconnect($session['playerRef'], $event->getReason());
                 $kicked++;
             }
         }
@@ -510,6 +528,22 @@ final class NetworkSessionService {
             $spawnZ = $position[2] ?? $config?->spawnZ ?? 0;
             $pos = $entity?->get(PositionComponent::class);
             if ($pos !== null) {
+                // Blocker 4 audit: cancellable EntityTeleportEvent fires before
+                // the position mutates - a plugin can veto the world switch.
+                $teleportEvent = new \pocketmine\api\event\EntityTeleportEvent(
+                    $this->wrapApiPlayer($session['entityRef']),
+                    [(float)$pos->x, (float)$pos->y, (float)$pos->z],
+                    [(float)$spawnX, (float)$spawnY, (float)$spawnZ],
+                );
+                $this->eventPort->emit($teleportEvent);
+                if ($teleportEvent->isCancelled()) {
+                    // The world membership flip above already happened; revert
+                    // it so the player stays fully in the old world.
+                    if ($worldComponent !== null) {
+                        $worldComponent->id = $oldWorldId;
+                    }
+                    return false;
+                }
                 $pos->x = (float)$spawnX;
                 $pos->y = (float)$spawnY;
                 $pos->z = (float)$spawnZ;
@@ -811,10 +845,16 @@ final class NetworkSessionService {
         }
 
         // Join first: the ECS entity (and its entity id) is created here.
+        // A null return means a plugin cancelled the login (PlayerLoginEvent
+        // inside handleJoin) - disconnect with the kick message.
         $entityRef = $this->playerJoinService->handleJoin(
             new PlayerRef($uuid->toString(), -1, $username),
             $username,
         );
+        if ($entityRef === null) {
+            $this->disconnectLogin($addrKey, 'Login cancelled');
+            return;
+        }
         $playerRef = new PlayerRef($uuid->toString(), $entityRef->getId(), $username);
         $this->adapter->registerPlayer($addrKey, $playerRef);
 
@@ -1096,6 +1136,32 @@ final class NetworkSessionService {
             : new \pocketmine\api\entity\Player($ref, $this->world);
     }
 
+    /** Blocker 4 audit: InventoryOpenEvent for a session's container open. */
+    private function emitContainerOpen(string $addrKey, string $type, ?array $position): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $this->eventPort->emit(new \pocketmine\api\event\InventoryOpenEvent(
+            $this->wrapApiPlayer($session['entityRef']),
+            $type,
+            $position,
+        ));
+    }
+
+    /** Blocker 4 audit: InventoryCloseEvent for a session's container close. */
+    private function emitContainerClose(string $addrKey, string $type, ?array $position): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $this->eventPort->emit(new \pocketmine\api\event\InventoryCloseEvent(
+            $this->wrapApiPlayer($session['entityRef']),
+            $type,
+            $position,
+        ));
+    }
+
     private function dispatchCommand(string $addrKey, string $commandLine): void {
         $session = $this->sessions[$addrKey] ?? null;
         if ($session === null) {
@@ -1293,6 +1359,30 @@ final class NetworkSessionService {
         }
         if ($pk->action === PlayerActionPacket::ACTION_STOP_BREAK) {
             $this->finishBreak($addrKey, $session, $pk->x, $pk->y, $pk->z);
+            return;
+        }
+        // Blocker 4 audit: sneak/sprint toggles fire cancellable events. The
+        // client is authoritative for movement; the events exist so plugins
+        // can react to (or veto) the state change.
+        $entity = $session['entityRef']->getEntity();
+        $meta = $entity?->get(MetadataComponent::class);
+        if ($pk->action === PlayerActionPacket::ACTION_START_SNEAK || $pk->action === PlayerActionPacket::ACTION_STOP_SNEAK) {
+            $sneaking = $pk->action === PlayerActionPacket::ACTION_START_SNEAK;
+            $event = new \pocketmine\api\event\PlayerToggleSneakEvent($this->wrapApiPlayer($session['entityRef']), $sneaking);
+            $this->eventPort->emit($event);
+            if (!$event->isCancelled() && $meta !== null) {
+                $meta->set(\pocketmine\core\constants\MetadataKeys::SNEAKING, $sneaking);
+            }
+            return;
+        }
+        if ($pk->action === PlayerActionPacket::ACTION_START_SPRINT || $pk->action === PlayerActionPacket::ACTION_STOP_SPRINT) {
+            $sprinting = $pk->action === PlayerActionPacket::ACTION_START_SPRINT;
+            $event = new \pocketmine\api\event\PlayerToggleSprintEvent($this->wrapApiPlayer($session['entityRef']), $sprinting);
+            $this->eventPort->emit($event);
+            if (!$event->isCancelled() && $meta !== null) {
+                $meta->set(\pocketmine\core\constants\MetadataKeys::SPRINTING, $sprinting);
+            }
+            return;
         }
     }
 
@@ -1441,6 +1531,19 @@ final class NetworkSessionService {
         $dy = -sin($pitch);
         $dz = cos($yaw) * cos($pitch);
         $speed = $f * 20; // blocks/second
+
+        // Blocker 4 audit: cancellable EntityShootBowEvent - a plugin can
+        // veto the shot before the arrow spawns (and before the arrow is
+        // consumed from the inventory).
+        $shootEvent = new \pocketmine\api\event\EntityShootBowEvent(
+            $this->wrapApiPlayer($session['entityRef']),
+            \pocketmine\api\inventory\ItemStack::fromCore($held),
+            $f,
+        );
+        $this->eventPort->emit($shootEvent);
+        if ($shootEvent->isCancelled()) {
+            return;
+        }
 
         $arrow = $this->entitySpawnService->spawnProjectile(
             EntityType::Arrow,
@@ -2185,6 +2288,7 @@ final class NetworkSessionService {
             ? ['x' => $pair[0], 'y' => $y, 'z' => $pair[1], 'type' => 'chest', 'pair' => ['x' => $pair[2], 'z' => $pair[3]]]
             : ['x' => $x, 'y' => $y, 'z' => $z, 'type' => 'chest', 'pair' => null];
         $this->sessions[$addrKey] = $session;
+        $this->emitContainerOpen($addrKey, 'chest', ['x' => $x, 'y' => $y, 'z' => $z]);
 
         // Legacy ContainerInventory::onOpen: ContainerOpenPacket (type 0 =
         // chest / 1 = double chest, block coords) then the full contents.
@@ -2258,6 +2362,7 @@ final class NetworkSessionService {
         }
         $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z, 'type' => $type, 'pair' => null];
         $this->sessions[$addrKey] = $session;
+        $this->emitContainerOpen($addrKey, $type, ['x' => $x, 'y' => $y, 'z' => $z]);
 
         [$windowId, $typeId, $size] = match ($type) {
             'dispenser' => [self::DISPENSER_WINDOW_ID, 10, \pocketmine\core\resource\ContainerStore::DISPENSER_SIZE],
@@ -2318,6 +2423,7 @@ final class NetworkSessionService {
         }
         $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z, 'type' => 'enchant', 'options' => null];
         $this->sessions[$addrKey] = $session;
+        $this->emitContainerOpen($addrKey, 'enchant', ['x' => $x, 'y' => $y, 'z' => $z]);
 
         $open = new ContainerOpenPacket();
         $open->windowid = self::ENCHANT_WINDOW_ID;
@@ -2342,6 +2448,7 @@ final class NetworkSessionService {
         }
         $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z, 'type' => 'anvil'];
         $this->sessions[$addrKey] = $session;
+        $this->emitContainerOpen($addrKey, 'anvil', ['x' => $x, 'y' => $y, 'z' => $z]);
 
         $open = new ContainerOpenPacket();
         $open->windowid = self::ANVIL_WINDOW_ID;
@@ -2944,6 +3051,7 @@ final class NetworkSessionService {
         }
         $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z, 'type' => 'furnace'];
         $this->sessions[$addrKey] = $session;
+        $this->emitContainerOpen($addrKey, 'furnace', ['x' => $x, 'y' => $y, 'z' => $z]);
 
         // Legacy FurnaceInventory::onOpen: ContainerOpenPacket (type 3 =
         // InventoryType::FURNACE, 3 slots, block coords) then full contents.
@@ -3208,8 +3316,15 @@ final class NetworkSessionService {
         if ($session === null || $session['openContainer'] === null) {
             return;
         }
+        $closed = $session['openContainer'];
         $session['openContainer'] = null;
         $this->sessions[$addrKey] = $session;
+        // Blocker 4 audit: InventoryCloseEvent for the window that was open.
+        $this->emitContainerClose(
+            $addrKey,
+            (string)$closed['type'],
+            ['x' => (int)$closed['x'], 'y' => (int)$closed['y'], 'z' => (int)$closed['z']],
+        );
         // Legacy mirrors the close to the client that sent it.
         $close = new ContainerClosePacket();
         $close->windowid = $pk->windowid;
@@ -3257,6 +3372,16 @@ final class NetworkSessionService {
         }
         if ($slot < 0) {
             return; // the player does not hold any matching item
+        }
+        // Blocker 4 audit: cancellable PlayerDropItemEvent - a plugin can
+        // veto the drop before the item leaves the inventory.
+        $dropEvent = new \pocketmine\api\event\PlayerDropItemEvent(
+            $this->wrapApiPlayer($session['entityRef']),
+            \pocketmine\api\inventory\ItemStack::fromCore($inventory->get($slot)),
+        );
+        $this->eventPort->emit($dropEvent);
+        if ($dropEvent->isCancelled()) {
+            return;
         }
         $removed = $inventory->remove($slot, 1);
         if ($removed === null) {
@@ -3596,6 +3721,16 @@ final class NetworkSessionService {
         }
         $inventory = $entity?->get(InventoryComponent::class);
         if ($inventory === null) {
+            return;
+        }
+        // Blocker 4 audit: cancellable PlayerItemConsumeEvent - a plugin can
+        // veto the consumption before the item leaves the inventory.
+        $consumeEvent = new \pocketmine\api\event\PlayerItemConsumeEvent(
+            $this->wrapApiPlayer($session['entityRef']),
+            \pocketmine\api\inventory\ItemStack::fromCore($held),
+        );
+        $this->eventPort->emit($consumeEvent);
+        if ($consumeEvent->isCancelled()) {
             return;
         }
         $removed = $inventory->remove($inventory->heldSlot, 1);

@@ -76,6 +76,21 @@ final class RegenSystem implements System {
             if ($sinceDamage < self::REGEN_DELAY_TICKS || $sinceRegen < self::REGEN_INTERVAL_TICKS) {
                 continue;
             }
+            // Blocker 4 audit: cancellable EntityRegainHealthEvent fires
+            // before the heal applies.
+            $kernel = \pocketmine\Kernel::getInstance();
+            if ($kernel !== null) {
+                $event = new \pocketmine\api\event\EntityRegainHealthEvent(
+                    \pocketmine\api\entity\Entity::wrap(\pocketmine\core\ecs\EntityRef::create($entity->id, $world), $world),
+                    1.0,
+                    \pocketmine\api\event\EntityRegainHealthEvent::REASON_REGEN,
+                );
+                $kernel->getEventPort()->emit($event);
+                if ($event->isCancelled()) {
+                    $this->lastRegenTick[$entity->id] = $this->tick;
+                    continue;
+                }
+            }
             $health->current = min($health->max, $health->current + 1.0);
             $this->lastRegenTick[$entity->id] = $this->tick;
         }

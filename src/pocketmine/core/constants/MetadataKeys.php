@@ -75,6 +75,10 @@ final class MetadataKeys {
     public const EXPLOSION_RADIUS = 'explosionRadius';
     public const EXPLOSION_SOURCE_ID = 'explosionSourceId';
 
+    // Movement state toggles (events breadth audit)
+    public const SNEAKING = 'sneaking';
+    public const SPRINTING = 'sprinting';
+
     // Vehicles / riding (14.25)
     public const VEHICLE_TYPE = 'vehicleType';
     public const VEHICLE_RIDER_ID = 'vehicleRiderId';

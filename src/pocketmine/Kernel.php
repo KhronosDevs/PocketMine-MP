@@ -234,12 +234,12 @@ final class Kernel {
         $this->entitySpawnService = new EntitySpawnService($world, $storagePort, $eventPort);
         $this->combatService = new CombatService($world, $eventPort, $this->entitySpawnService);
         $this->entityInteractionService = new EntityInteractionService($world, $this->combatService, $eventPort);
-        $this->blockUpdateService = new BlockUpdateService($world, $storagePort);
-        $this->entityDespawnService = new EntityDespawnService($world, $storagePort);
+        $this->blockUpdateService = new BlockUpdateService($world, $storagePort, $eventPort);
+        $this->entityDespawnService = new EntityDespawnService($world, $storagePort, $eventPort);
         $this->damageService = new DamageService($world, $this->combatService);
         $this->knockbackService = new KnockbackService($world);
         $this->inventoryService = new InventoryService($world);
-        $this->craftingService = new CraftingService($world);
+        $this->craftingService = new CraftingService($world, $eventPort);
         $this->containerService = new ContainerService($world);
         // 14.30: enchanting table + anvil logic (options, apply, combine).
         $enchantRegistry = $resourceRegistry->get(\pocketmine\core\resource\EnchantmentRegistry::class);

@@ -165,6 +165,10 @@ class PluginManager implements PluginPort {
 
         $plugin->onEnable();
         $plugin->setEnabled(true);
+
+        // Blocker 4 audit: PluginEnableEvent lets plugins react to (and
+        // coordinate with) other plugins coming online.
+        $this->eventPort->emit(new \pocketmine\api\event\PluginEnableEvent($plugin));
     }
 
     public function disablePlugin(Plugin $plugin): void {
@@ -196,6 +200,10 @@ class PluginManager implements PluginPort {
             $plugin->onDisable();
             $plugin->setEnabled(false);
             unset($this->plugins[$plugin->getName()]);
+
+            // Blocker 4 audit: PluginDisableEvent fires after the plugin is
+            // fully torn down (hooks, commands, autoloaders removed).
+            $this->eventPort->emit(new \pocketmine\api\event\PluginDisableEvent($plugin));
         }
     }
 

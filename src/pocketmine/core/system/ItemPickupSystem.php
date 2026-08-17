@@ -101,6 +101,23 @@ final class ItemPickupSystem implements System {
                 $dy = $pos->y - $playerPos->y;
                 $dz = $pos->z - $playerPos->z;
                 if ($dx * $dx + $dy * $dy + $dz * $dz <= $radiusSq) {
+                    // Blocker 4 audit: cancellable InventoryPickupItemEvent - a
+                    // plugin can leave the item on the ground.
+                    $kernel = \pocketmine\Kernel::getInstance();
+                    if ($kernel !== null) {
+                        $stack = $meta->get(\pocketmine\core\constants\MetadataKeys::ITEM);
+                        $event = new \pocketmine\api\event\InventoryPickupItemEvent(
+                            $this->wrapApiPlayer($playerId, $world),
+                            \pocketmine\api\entity\Entity::wrap(EntityRef::create($entity->id, $world), $world),
+                            \pocketmine\api\inventory\ItemStack::fromCore(
+                                $stack instanceof \pocketmine\core\component\ItemStack ? $stack : new \pocketmine\core\component\ItemStack(0, 0, 1)
+                            ),
+                        );
+                        $kernel->getEventPort()->emit($event);
+                        if ($event->isCancelled()) {
+                            continue; // try the next player
+                        }
+                    }
                     if ($interaction->pickup(
                         EntityRef::create($playerId, $world),
                         EntityRef::create($entity->id, $world),
@@ -149,6 +166,14 @@ final class ItemPickupSystem implements System {
             $this->interactionService = $kernel?->getEntityInteractionService();
         }
         return $this->interactionService;
+    }
+
+    private function wrapApiPlayer(int $playerId, World $world): \pocketmine\api\entity\Player {
+        $ref = EntityRef::create($playerId, $world);
+        $entity = \pocketmine\api\entity\Entity::wrap($ref, $world);
+        return $entity instanceof \pocketmine\api\entity\Player
+            ? $entity
+            : new \pocketmine\api\entity\Player($ref, $world);
     }
 
     /**
