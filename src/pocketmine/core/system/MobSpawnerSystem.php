@@ -97,10 +97,17 @@ final class MobSpawnerSystem implements System {
         $store = $world->getResourceRegistry()->get(ChunkStore::class);
         $store = $store instanceof ChunkStore ? $store : null;
 
-        // Alive players (dead players do not attract spawns).
+        // Alive players (dead players do not attract spawns). The spawner
+        // only populates the default world (spawnMob targets world 0), so
+        // players in another game world (nether, /world lobbies) must not
+        // attract spawns at their coordinates in the overworld.
         $players = [];
         foreach ($world->getEntities() as $entity) {
             if (!$entity->has(PlayerTag::class)) {
+                continue;
+            }
+            $worldComponent = $entity->get(\pocketmine\core\component\WorldComponent::class);
+            if ($worldComponent !== null && $worldComponent->id !== 0) {
                 continue;
             }
             $health = $entity->get(HealthComponent::class);

@@ -68,6 +68,13 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
     public const ICE_BLOCK = 79;
     public const CACTUS_BLOCK = 81;
 
+    /** Nether blocks (legacy protocol-84 ids). */
+    public const NETHERRACK_BLOCK = 87;
+    public const SOUL_SAND_BLOCK = 88;
+    public const GLOWSTONE_BLOCK = 89;
+    public const NETHER_QUARTZ_ORE = 153;
+    public const LAVA_BLOCK = 10; // flowing lava (legacy id; NetherLava populator)
+
     /** Ore block ids (legacy protocol-84 ids). */
     public const COAL_ORE = 16;
     public const IRON_ORE = 15;
@@ -203,7 +210,10 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
      * (chunkX, chunkZ, seed). Runs on the main thread after generation and
      * returns the populated chunk.
      */
-    public function populateChunk(int $chunkX, int $chunkZ, ChunkData $data, int $seed): ChunkData {
+    public function populateChunk(int $chunkX, int $chunkZ, ChunkData $data, int $seed, string $generatorType = ''): ChunkData {
+        if ($generatorType === 'nether') {
+            return self::populateNetherChunkPure($chunkX, $chunkZ, $data, $seed);
+        }
         return self::populateChunkPure($chunkX, $chunkZ, $data, $seed);
     }
 
@@ -218,6 +228,9 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
         }
         if ($generatorType === "void") {
             return self::generateVoidChunk($chunkX, $chunkZ);
+        }
+        if ($generatorType === "nether") {
+            return self::generateNetherChunk($chunkX, $chunkZ, $seed);
         }
 
         return self::generateTerrainChunk($chunkX, $chunkZ, $seed);
@@ -334,6 +347,244 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
         }
         $biomes = array_fill(0, 256, self::BIOME_PLAINS);
         return new ChunkData($chunkX, $chunkZ, $sections, $biomes, $heightmap, [], []);
+    }
+
+    /**
+     * Nether terrain (14.32): a 128-high hell with a bedrock floor AND
+     * ceiling, netherrack mass carved by 3D-ish cave noise, and still lava
+     * below y=32 (legacy Nether generator: waterHeight 32, emptyHeight 64).
+     * Pure and deterministic in (chunkX, chunkZ, seed); the population pass
+     * adds quartz, soul sand, gravel, glowstone clusters and ground fire.
+     */
+    private static function generateNetherChunk(int $chunkX, int $chunkZ, int $seed): ChunkData {
+        $bedrock = chr(self::BEDROCK_BLOCK);
+        $netherrack = chr(self::NETHERRACK_BLOCK);
+        $lava = chr(self::STILL_LAVA_BLOCK);
+        $air = "\x00";
+
+        // Per-column mass height: base 52 with 64-cell hills + 16-cell
+        // detail, clamped to [36, 106] so a walkable floor always exists and
+        // the bedrock ceiling leaves headroom above.
+        $heights = [];
+        for ($bz = 0; $bz < 16; $bz++) {
+            for ($bx = 0; $bx < 16; $bx++) {
+                $wx = $chunkX * 16 + $bx;
+                $wz = $chunkZ * 16 + $bz;
+                $h = 52
+                    + intdiv((self::smoothNoise($wx, $wz, $seed ^ 0x6E5C2F, 6) - 32768) * 40, 65536)
+                    + intdiv((self::smoothNoise($wx, $wz, $seed ^ 0x3D1B7A, 4) - 32768) * 16, 65536);
+                $heights[$bz * 16 + $bx] = max(36, min(106, $h));
+            }
+        }
+
+        // Nether biomes are all "hell" (legacy Biome::HELL).
+        $biomes = array_fill(0, 256, 8); // Biome::HELL = 8
+        $heightmap = array_fill(0, 256, 0);
+        $sections = [];
+        for ($sy = 0; $sy < 8; $sy++) { // y 0..127 (protocol-84 nether height)
+            $rows = [];
+            for ($r = 0; $r < 16; $r++) {
+                $y = $sy * 16 + $r;
+                $row = '';
+                for ($bz = 0; $bz < 16; $bz++) {
+                    for ($bx = 0; $bx < 16; $bx++) {
+                        if ($y === 0 || $y === 127) {
+                            $row .= $bedrock;
+                            continue;
+                        }
+                        $wx = $chunkX * 16 + $bx;
+                        $wz = $chunkZ * 16 + $bz;
+                        $h = $heights[$bz * 16 + $bx];
+                        if ($y > $h) {
+                            $row .= $air;
+                            continue;
+                        }
+                        // 3D-ish cave noise: feeding y into the seed makes each
+                        // slice differ while staying deterministic. Below the
+                        // lava line (y=32) the noise decides netherrack vs
+                        // lava lake - the floor is solid netherrack that opens
+                        // into lava pools toward the surface (legacy: lava
+                        // below waterHeight with the mass filling the bottom).
+                        $cave = self::smoothNoise($wx ^ (($y * 7919) & 0x7FFFFFFF), $wz, $seed ^ 0x5B4C2A91, 5);
+                        if ($y <= 32) {
+                            // Deeper = more netherrack (threshold falls), so
+                            // lava is a sea near y=32 with islands beneath.
+                            $row .= $cave > (40000 - (32 - $y) * 500) ? $netherrack : $lava;
+                        } elseif ($cave > 43000 && $y < $h - 2) {
+                            $row .= $air; // cavern
+                        } else {
+                            $row .= $netherrack;
+                        }
+                    }
+                }
+                $rows[] = $row;
+            }
+            $blocks = implode('', $rows);
+            if (strlen($blocks) < 4096) {
+                $blocks .= str_repeat($air, 4096 - strlen($blocks));
+            }
+            $sections[] = [
+                'y' => $sy,
+                'blocks' => $blocks,
+                'data' => str_repeat("\x00", 4096),
+                // No sky in the nether: the store recalcs block light for
+                // lava/glowstone, and the serializer sends dark sky nibbles.
+                'skyLight' => str_repeat("\x00", 2048),
+                'blockLight' => str_repeat("\x00", 2048),
+            ];
+        }
+
+        // Heightmap (top solid + 1) for the serializer / light pipeline.
+        for ($bz = 0; $bz < 16; $bz++) {
+            for ($bx = 0; $bx < 16; $bx++) {
+                $h = $heights[$bz * 16 + $bx];
+                $top = $h;
+                // Find the highest solid (non-air) block in the column; the
+                // cave carve above may have opened cells right under the top.
+                $solid = $top;
+                for ($y = $top; $y >= 0; $y--) {
+                    $sy = intdiv($y, 16);
+                    $idx = ($y & 15) * 256 + $bz * 16 + $bx;
+                    $id = ord($sections[$sy]['blocks'][$idx]);
+                    if ($id !== 0 && $id !== self::STILL_LAVA_BLOCK) {
+                        $solid = $y;
+                        break;
+                    }
+                }
+                $heightmap[$bz * 16 + $bx] = $solid + 1;
+            }
+        }
+
+        return new ChunkData($chunkX, $chunkZ, $sections, $biomes, $heightmap, [], []);
+    }
+
+    /**
+     * Nether population (legacy NetherOre/NetherGlowStone/GroundFire/NetherLava
+     * tables): quartz ore veins, soul sand + gravel patches, glowstone clusters
+     * hung from the ceiling, ground fire on netherrack tops and lava lakes.
+     * Deterministic in (chunkX, chunkZ, seed) via the same RNG stream pattern
+     * as the overworld population pass.
+     */
+    public static function populateNetherChunkPure(int $chunkX, int $chunkZ, ChunkData $data, int $seed): ChunkData {
+        $sections = $data->sections;
+        $rng = self::seedRng($chunkX, $chunkZ, $seed ^ 0x8A5F4C31);
+
+        // --- Quartz ore veins: legacy 20 clusters x 16 size, y 0..128. ---
+        for ($i = 0; $i < 20; $i++) {
+            $bx = ($rng = self::nextRng($rng)) % 16;
+            $bz = ($rng = self::nextRng($rng)) % 16;
+            $y = 4 + ($rng = self::nextRng($rng)) % 118;
+            for ($n = 0; $n < 16; $n++) {
+                $dx = (int)(($rng = self::nextRng($rng)) % 3) - 1;
+                $dy = (int)(($rng = self::nextRng($rng)) % 3) - 1;
+                $dz = (int)(($rng = self::nextRng($rng)) % 3) - 1;
+                $ox = $bx + $dx;
+                $oz = $bz + $dz;
+                $oy = $y + $dy;
+                if ($ox < 0 || $ox > 15 || $oz < 0 || $oz > 15 || $oy < 1 || $oy > 126) {
+                    continue;
+                }
+                if (self::readBlock($sections, $ox, $oy, $oz) === self::NETHERRACK_BLOCK) {
+                    $sections = self::writeBlock($sections, $ox, $oy, $oz, self::NETHER_QUARTZ_ORE, false);
+                }
+            }
+        }
+
+        // --- Soul sand + gravel patches: legacy 5 clusters x 64, y 0..128. ---
+        foreach ([
+            [self::SOUL_SAND_BLOCK, 5],
+            [self::GRAVEL_BLOCK, 5],
+        ] as [$patchBlock, $clusters]) {
+            for ($i = 0; $i < $clusters; $i++) {
+                $bx = ($rng = self::nextRng($rng)) % 16;
+                $bz = ($rng = self::nextRng($rng)) % 16;
+                $y = 4 + ($rng = self::nextRng($rng)) % 118;
+                for ($n = 0; $n < 64; $n++) {
+                    $dx = (int)(($rng = self::nextRng($rng)) % 3) - 1;
+                    $dy = (int)(($rng = self::nextRng($rng)) % 3) - 1;
+                    $dz = (int)(($rng = self::nextRng($rng)) % 3) - 1;
+                    $ox = $bx + $dx;
+                    $oz = $bz + $dz;
+                    $oy = $y + $dy;
+                    if ($ox < 0 || $ox > 15 || $oz < 0 || $oz > 15 || $oy < 1 || $oy > 126) {
+                        continue;
+                    }
+                    if (self::readBlock($sections, $ox, $oy, $oz) === self::NETHERRACK_BLOCK) {
+                        $sections = self::writeBlock($sections, $ox, $oy, $oz, $patchBlock, false);
+                    }
+                }
+            }
+        }
+
+        // --- Glowstone clusters hung from the ceiling: legacy OreType
+        // (Glowstone, 20 clusters x 10) placed at the highest solid block. ---
+        for ($i = 0; $i < 20; $i++) {
+            $bx = ($rng = self::nextRng($rng)) % 16;
+            $bz = ($rng = self::nextRng($rng)) % 16;
+            // Scan down from the bedrock ceiling for the first solid block.
+            $ceiling = -1;
+            for ($y = 126; $y >= 1; $y--) {
+                if (self::readBlock($sections, $bx, $y, $bz) !== 0) {
+                    $ceiling = $y;
+                    break;
+                }
+            }
+            if ($ceiling < 2) {
+                continue;
+            }
+            $base = $ceiling - 1;
+            for ($n = 0; $n < 10; $n++) {
+                $dx = (int)(($rng = self::nextRng($rng)) % 3) - 1;
+                $dz = (int)(($rng = self::nextRng($rng)) % 3) - 1;
+                $dy = (int)(($rng = self::nextRng($rng)) % 3) - 1;
+                $ox = $bx + $dx;
+                $oz = $bz + $dz;
+                $oy = $base + $dy;
+                if ($ox < 0 || $ox > 15 || $oz < 0 || $oz > 15 || $oy < 2 || $oy > 125) {
+                    continue;
+                }
+                if (self::readBlock($sections, $ox, $oy, $oz) === 0) {
+                    $sections = self::writeBlock($sections, $ox, $oy, $oz, self::GLOWSTONE_BLOCK, false);
+                }
+            }
+        }
+
+        // --- Ground fire on netherrack tops: legacy base 1 + random 1. ---
+        $fireCount = 1 + (($rng = self::nextRng($rng)) % 2);
+        for ($i = 0; $i < $fireCount; $i++) {
+            $bx = ($rng = self::nextRng($rng)) % 16;
+            $bz = ($rng = self::nextRng($rng)) % 16;
+            $top = -1;
+            for ($y = 126; $y >= 1; $y--) {
+                $id = self::readBlock($sections, $bx, $y, $bz);
+                if ($id === self::NETHERRACK_BLOCK || $id === self::SOUL_SAND_BLOCK) {
+                    $top = $y;
+                    break;
+                }
+            }
+            if ($top >= 1 && $top < 126 && self::readBlock($sections, $bx, $top + 1, $bz) === 0) {
+                $sections = self::writeBlock($sections, $bx, $top + 1, $bz, 51, false); // FIRE
+            }
+        }
+
+        // --- Lava lakes on the surface: legacy 5% per chunk. ---
+        if ((($rng = self::nextRng($rng)) % 100) < 5) {
+            $bx = 2 + (($rng = self::nextRng($rng)) % 12);
+            $bz = 2 + (($rng = self::nextRng($rng)) % 12);
+            $top = -1;
+            for ($y = 126; $y >= 1; $y--) {
+                $id = self::readBlock($sections, $bx, $y, $bz);
+                if ($id === self::NETHERRACK_BLOCK || $id === self::SOUL_SAND_BLOCK || $id === self::GRAVEL_BLOCK) {
+                    $top = $y;
+                    break;
+                }
+            }
+            if ($top >= 1 && $top < 126 && self::readBlock($sections, $bx, $top + 1, $bz) === 0) {
+                $sections = self::writeBlock($sections, $bx, $top + 1, $bz, self::LAVA_BLOCK, false);
+            }
+        }
+
+        return new ChunkData($data->chunkX, $data->chunkZ, $sections, $data->biomes, $data->heightmap, [], []);
     }
 
     private static function generateTerrainChunk(int $chunkX, int $chunkZ, int $seed): ChunkData {

@@ -44,7 +44,12 @@ final class ChunkSerializer {
         16 => 0xDED9A4, // beach
     ];
 
-    public static function serialize(ChunkData $data): string {
+    /**
+     * @param bool $hasSky whether this world has a sky. False (nether) sends
+     * zero sky-light nibbles everywhere - the client renders the nether as
+     * dark as the store computes it (only block light from lava/glowstone).
+     */
+    public static function serialize(ChunkData $data, bool $hasSky = true): string {
         // Collect sections by y, dropping anything >= 128 (out of protocol-84
         // height range) and filling gaps with air.
         /** @var array<int, array<string, string>> $byY */
@@ -72,7 +77,8 @@ final class ChunkSerializer {
         // Sky light is derived from the height map so exposed blocks render
         // fully lit and underground blocks stay dark (the generator does not
         // emit lighting data, and sending zeros would make the world black).
-        $skyLight = self::buildSkyLight($data->heightmap);
+        // Nether worlds have no sky: everything is dark except block light.
+        $skyLight = $hasSky ? self::buildSkyLight($data->heightmap) : str_repeat("\x00", self::SECTIONS * 2048);
 
         // Height map: clamp to byte range (0..127 for protocol-84 worlds).
         $heightMap = '';

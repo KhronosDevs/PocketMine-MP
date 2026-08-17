@@ -52,6 +52,14 @@ final class KhronosConfig {
     public ?int $spawnY = null;
     public ?int $spawnZ = null;
 
+    // --- Nether (14.32) ------------------------------------------------------
+
+    /** Whether portals work at all (legacy pocketmine.yml nether.allow-nether). */
+    public bool $netherEnabled = true;
+
+    /** Folder/name of the nether dimension world (legacy nether.level-name). */
+    public string $netherWorld = 'nether';
+
     // --- Anti-cheat (Blocker 2) --------------------------------------------
 
     /** Master switch: when false, movement validation is disabled entirely. */
@@ -92,6 +100,16 @@ final class KhronosConfig {
     public function apply(array $data): void {
         if (isset($data['default-world']) && is_string($data['default-world']) && trim($data['default-world']) !== '') {
             $this->defaultWorld = $data['default-world'];
+        }
+
+        $nether = $data['nether'] ?? null;
+        if (is_array($nether)) {
+            if (array_key_exists('enabled', $nether) && is_bool($nether['enabled'])) {
+                $this->netherEnabled = $nether['enabled'];
+            }
+            if (isset($nether['world']) && is_string($nether['world']) && trim($nether['world']) !== '') {
+                $this->netherWorld = trim($nether['world']);
+            }
         }
 
         // default-spawn: only all-three-numeric overrides apply; any null or
@@ -165,6 +183,13 @@ final class KhronosConfig {
             // Folder (and display name) of the default world. A fresh world is
             // generated under worlds/<folder>/ on first boot.
             'default-world' => 'world',
+            // Nether dimension: portals auto-create worlds/<nether.world>/ on
+            // first use and teleport through it. Set enabled=false to disable
+            // portals entirely (legacy nether.allow-nether).
+            'nether' => [
+                'enabled' => true,
+                'world' => 'nether',
+            ],
             // Explicit spawn override. null = keep the world's own saved spawn;
             // set all three to numbers to force a fixed spawn point.
             'default-spawn' => ['x' => null, 'y' => null, 'z' => null],

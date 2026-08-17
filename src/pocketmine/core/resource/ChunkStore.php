@@ -239,13 +239,29 @@ final class ChunkStore {
      * marked light-dirty so the network layer re-sends it to viewers (a
      * placed torch must actually light up on the client).
      */
+    /**
+     * Whether this world has a sky (true = overworld; false = nether). The
+     * flag is set once at world registration; it makes the light pipeline
+     * produce zero sky light (nether darkness) and the chunk serializer send
+     * dark sky-light nibbles.
+     */
+    private bool $hasSky = true;
+
+    public function setHasSky(bool $hasSky): void {
+        $this->hasSky = $hasSky;
+    }
+
+    public function hasSky(): bool {
+        return $this->hasSky;
+    }
+
     public function recalculateLight(int $chunkX, int $chunkZ, BlockRegistry $registry): void {
         $key = $this->key($chunkX, $chunkZ);
         if (!isset($this->chunks[$key])) {
             return;
         }
         $chunk = $this->chunks[$key];
-        [$skyLight, $blockLight] = LightCalculator::calculate((string)$chunk['blocks'], $registry);
+        [$skyLight, $blockLight] = LightCalculator::calculate((string)$chunk['blocks'], $registry, $this->hasSky);
         if ($chunk['skyLight'] !== $skyLight || $chunk['blockLight'] !== $blockLight) {
             $chunk['skyLight'] = $skyLight;
             $chunk['blockLight'] = $blockLight;

@@ -13,13 +13,18 @@ enum GeneratorType: string {
     case Normal = 'normal';
     case Flat = 'flat';
     case Void = 'void';
+    case Nether = 'nether';
 
     /**
      * Coerce an unknown/foreign value (e.g. from a foreign level.dat that has
      * no generator info) to a GeneratorType, defaulting to Void - a dropped-in
-     * world is never regenerated around the player's build.
+     * world is never regenerated around the player's build. Accepts the legacy
+     * 'hell' alias for the nether generator.
      */
     public static function coerce(mixed $value): self {
+        if ((string)$value === 'hell') {
+            return self::Nether;
+        }
         return self::tryFrom((string)$value) ?? self::Void;
     }
 }

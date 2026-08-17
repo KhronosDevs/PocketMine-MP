@@ -20,7 +20,9 @@ interface WorldGenPort {
     /**
      * Populate a generated chunk with structures and decoration (trees,
      * vegetation, ...). Must be deterministic in (chunkX, chunkZ, seed) and
-     * return the populated chunk (ChunkData is immutable).
+     * return the populated chunk (ChunkData is immutable). The generator type
+     * lets a generator's population pass differ per world (e.g. nether
+     * glowstone/fire vs overworld trees).
      */
-    public function populateChunk(int $chunkX, int $chunkZ, ChunkData $data, int $seed): ChunkData;
+    public function populateChunk(int $chunkX, int $chunkZ, ChunkData $data, int $seed, string $generatorType = ''): ChunkData;
 }
