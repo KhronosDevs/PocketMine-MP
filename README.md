@@ -17,7 +17,7 @@ Khronos is a Minecraft server written from scratch in PHP 8.2, inspired by Pocke
 1. **Requirements:** PHP 8.2+ (ZTS) with `pmmpthread`, `sockets`, `zlib`, `yaml`, `openssl`, `mbstring`, `ctype`, `json`. Prebuilt PHP 8.2 binaries with everything included are available at **[KhronosDevs/php-binaries](https://github.com/KhronosDevs/php-binaries)** and are bundled at `bin/php7/bin/php`.
 2. **Run the server:** `./start.sh` (Linux/macOS) or `start.cmd` / `start.ps1` (Windows). It binds UDP **19132** and gives you an interactive console (`help`, `stop`, `op`, …).
 3. **Connect** with the **MCPE 0.15.10** client to `your-server-ip:19132`.
-4. **Configure:** first boot generates `server.properties` (name, motd, max-players, gamemode, difficulty, view-distance, white-list, pvp…) — edit and restart to apply.
+4. **Configure:** first boot generates `server.properties` (name, motd, max-players, gamemode, difficulty, view-distance, white-list, pvp…) and `khronos.json` (anti-cheat thresholds, nether world, defaults) — edit and restart to apply.
 5. **Worlds** live in `worlds/` (real Anvil/McRegion, auto-detected) and save automatically.
 
 ## Features
@@ -25,12 +25,27 @@ Khronos is a Minecraft server written from scratch in PHP 8.2, inspired by Pocke
 | Area | What works |
 |---|---|
 | **Networking** | Full RakNet connected layer — real 0.15.10 clients join, login → spawn → chunk streaming → movement round-trip |
-| **World** | Infinite, streaming follows the player · multi-world · day/night cycle · weather + lightning · real Anvil `.mca` / McRegion `.mcr` persistence + autosave |
-| **Survival** | Timed mining with tools + durability · block placement · inventory + armor · crafting (2×2 + table) · furnaces/smelting · chests · hunger + health regen · XP orbs + levels · death/respawn · bows/arrows · night-gated mob spawns with chase/attack AI |
-| **Administration** | Console · `server.properties` · ops / bans / whitelist (persisted) · `/gamemode /tp /give /kill /time /weather /world /help` · `stop / save-all / list / op / ban / whitelist / plugins` |
+| **World** | Infinite, streaming follows the player · multi-world (`/world load/unload/list`, `/setspawn`) · day/night cycle · weather + lightning · **nether dimension + portals** (auto-created, travel both ways) · real Anvil `.mca` / McRegion `.mcr` persistence + autosave · foreign PocketMine-era worlds load with their original spawn |
+| **Survival** | Timed mining with tools + durability + **block drops** · block placement · inventory + armor · crafting (2×2 + table) · furnaces/smelting · chests + double chests + dispenser/hopper · **brewing** · **enchanting table + anvils** (Sharpness/Power/Efficiency/Unbreaking) · hunger + health regen · XP orbs + levels · death/respawn · bows/arrows (in-flight rendering, stick in targets) · **ores + caves** (deterministic veins, carved caverns) · **block light** (torches really light up, mobs won't spawn in lit areas) · night-gated mob spawns with chase/attack AI |
+| **Administration** | Console · `server.properties` + `khronos.json` · ops / bans / whitelist (persisted) · `/gamemode /tp /give /kill /time /weather /world /setspawn /help` · `stop / save-all / list / op / ban / whitelist / plugins` |
 | **Anti-cheat** | Movement validation (speed/fly/teleport, rubber-band + kick) · chat/command spam limits · login throttle + per-IP caps · max-players enforcement |
-| **Plugin API (2.0.0)** | `plugin.yml` + `Plugin` base (directory or `.phar`, never `.jar`) · commands · permissions · **events across the full lifecycle** (join/leave/chat/command/move/interact/block/spawn/respawn/damage/death, cancellable) · scheduler · `KernelAccessor` (18 services + 6 ports) · `Player`/`World`/`Server`/`Block`/`ItemStack` facades · ECS `QueryBuilder` + custom `System` registration · auto-loaded from `plugins/` at boot |
-| **Performance** | Parallel chunk generation · snooze-based worker threads (no busy-waiting) · ECS archetype storage · 5000-entity tick ~7 ms |
+| **Plugin API (2.0.0)** | `plugin.yml` + `Plugin` base (directory or `.phar`, never `.jar`) · commands · permissions · **47 events across the full lifecycle** (join/quit/chat/command/move/interact/block/spawn/respawn/damage/death/container/packet, cancellable) · scheduler · `KernelAccessor` (18 services + 7 ports) · `Player`/`World`/`Server`/`Block`/`ItemStack` facades · ECS `QueryBuilder` + custom `System` registration · auto-loaded from `plugins/` at boot |
+| **Performance** | Parallel chunk generation · snooze-based worker threads (no busy-waiting) · ECS archetype storage · region-pipeline entity offload — see [Performance](#performance) |
+
+## Performance
+
+Measured on the benchmark scripts in the repo (`measure_baseline.php`, `measure_pipeline.php`, `measure_network.php`). The 20 TPS tick budget is **50 ms** — everything below runs well inside it.
+
+| Benchmark | Result |
+|---|---|
+| Empty tick (no entities) | **0.28 ms** |
+| 2,000 moving entities, hot tick | **2.88 ms** |
+| 10,000 moving entities, hot tick (region pipeline) | **6.15 ms** |
+| Steady-state tick with a connected client (incl. network flush) | **0.06 ms** |
+| Inbound move packet processing | **~46,000 pkts/s** (~22 µs each) |
+| Chunk streaming to a client | **42 chunks/s** — radius 8 (289 chunks) fully delivered in ~7 s |
+| Fluid simulation, 16k-cell ocean, steady state | **0.02 ms/pass** |
+| Memory per entity | **~1 KB** (loaded-chunk budget enforced) |
 
 ## Plugin development
 
@@ -40,14 +55,14 @@ Khronos has a brand-new, ECS-based plugin API — **not compatible with existing
 
 - [docs/PLAN.md](docs/PLAN.md) — architecture & phase plan
 - [docs/PROGRESS.md](docs/PROGRESS.md) — full build history
-- [docs/TODO.md](docs/TODO.md) — what's left (ores, caves, block light, mob pathfinding, redstone, enchanting, nether/end, LevelDB…)
+- [docs/TODO.md](docs/TODO.md) — what's left (mob pathfinding, redstone, LevelDB storage, nether mobs/fortresses, minor enchantment effects, light-dependent block updates…)
 - [docs/DECISIONS.md](docs/DECISIONS.md) — design decision log
 
 ## Development
 
-- **Tests:** `bin/php7/bin/php tests/run.php` (30+ files, per-process isolation)
+- **Tests:** `bin/php7/bin/php tests/run.php` (49 files, per-process isolation; `-j N` runs files in parallel, `--filter=substring` runs one test)
 - **Static analysis:** `bin/php7/bin/php -d memory_limit=2G vendor/bin/phpstan analyse -c phpstan.neon`
-- **Benchmarks:** `measure_pipeline.php`, `measure_chunkgen.php`, `measure_memory.php`
+- **Benchmarks:** `measure_baseline.php`, `measure_pipeline.php`, `measure_chunkgen.php`, `measure_memory.php`, `measure_network.php`
 - **Architecture at a glance:** ECS core (components → archetypes → systems) · ports & adapters (network/storage/worldgen/threading) · gameplay services · API facades · region-based threading (details in [docs/PLAN.md](docs/PLAN.md))
 
 ## Credits
