@@ -57,6 +57,7 @@ use pocketmine\protocol\DataPacket;
 use pocketmine\protocol\DisconnectPacket;
 use pocketmine\protocol\DropItemPacket;
 use pocketmine\protocol\EntityEventPacket;
+use pocketmine\protocol\AnimatePacket;
 use pocketmine\protocol\FullChunkDataPacket;
 use pocketmine\protocol\HurtArmorPacket;
 use pocketmine\protocol\Info;
@@ -663,6 +664,23 @@ final class NetworkSessionService {
             fwrite(STDERR, '[game] from ' . $addrKey . ' pid=0x'
                 . str_pad(dechex($id), 2, '0', STR_PAD_LEFT) . ' len=' . strlen($buffer) . PHP_EOL);
         }
+
+        // Events breadth audit: cancellable DataPacketReceiveEvent for every
+        // inbound game packet once a session exists (the login packet itself
+        // precedes the session). Dropping a packet here prevents handling.
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session !== null && $id !== Info::LOGIN_PACKET) {
+            $recvEvent = new \pocketmine\api\event\DataPacketReceiveEvent(
+                $this->wrapApiPlayer($session['entityRef']),
+                $id,
+                $buffer,
+            );
+            $this->eventPort->emit($recvEvent);
+            if ($recvEvent->isCancelled()) {
+                return;
+            }
+        }
+
         switch ($id) {
             case Info::LOGIN_PACKET:
                 $pk = new LoginPacket();
@@ -741,6 +759,12 @@ final class NetworkSessionService {
                 $pk->setBuffer($buffer, 1);
                 $pk->decode();
                 $this->handleInteract($addrKey, $pk);
+                break;
+            case Info::ANIMATE_PACKET:
+                $pk = new AnimatePacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handleAnimate($addrKey, $pk);
                 break;
             case Info::RESPAWN_PACKET:
                 $pk = new RespawnPacket();
@@ -835,6 +859,16 @@ final class NetworkSessionService {
                 $this->disconnectLogin($addrKey, 'You are not white-listed on this server.');
                 return;
             }
+        }
+
+        // Events breadth audit: cancellable PlayerPreLoginEvent fires at the
+        // earliest point (before the ECS entity exists) - a plugin veto here
+        // disconnects with its kick message.
+        $preLogin = new \pocketmine\api\event\PlayerPreLoginEvent($username, $host);
+        $this->eventPort->emit($preLogin);
+        if ($preLogin->isCancelled()) {
+            $this->disconnectLogin($addrKey, $preLogin->getKickMessage());
+            return;
         }
 
         // Disambiguate duplicate usernames with a numeric suffix.
@@ -1555,6 +1589,20 @@ final class NetworkSessionService {
             $dz * $speed,
             $session['entityRef'],
         );
+
+        // Events breadth audit: cancellable ProjectileLaunchEvent fires after
+        // the arrow entity exists. A cancelled launch despawns the arrow and
+        // skips ammo consumption (the bow is not used).
+        $launchEvent = new \pocketmine\api\event\ProjectileLaunchEvent(
+            \pocketmine\api\entity\Entity::wrap($arrow, $this->world),
+            $this->wrapApiPlayer($session['entityRef']),
+        );
+        $this->eventPort->emit($launchEvent);
+        if ($launchEvent->isCancelled()) {
+            \pocketmine\Kernel::getInstance()?->getEntityDespawnService()?->despawn($arrow, false);
+            return;
+        }
+
         $arrowEntity = $arrow->getEntity();
         if ($arrowEntity) {
             $meta = $arrowEntity->get(MetadataComponent::class);
@@ -2064,7 +2112,25 @@ final class NetworkSessionService {
         }
         $entity = $session['entityRef']->getEntity();
         $inventory = $entity?->get(InventoryComponent::class);
-        if ($inventory === null || !$inventory->setHeldSlot($pk->selectedSlot)) {
+        if ($inventory === null) {
+            return;
+        }
+        $heldBefore = $inventory->get($inventory->heldSlot);
+
+        // Events breadth audit: cancellable PlayerItemHeldEvent - a plugin can
+        // reject a hotbar selection before it takes effect.
+        $heldEvent = new \pocketmine\api\event\PlayerItemHeldEvent(
+            $this->wrapApiPlayer($session['entityRef']),
+            $heldBefore !== null ? \pocketmine\api\inventory\ItemStack::fromCore($heldBefore) : null,
+            $pk->selectedSlot,
+            $pk->selectedSlot,
+        );
+        $this->eventPort->emit($heldEvent);
+        if ($heldEvent->isCancelled()) {
+            return;
+        }
+
+        if (!$inventory->setHeldSlot($pk->selectedSlot)) {
             return;
         }
         $held = $inventory->get($inventory->heldSlot);
@@ -2100,6 +2166,19 @@ final class NetworkSessionService {
         }
         $inventory = $session['entityRef']->getEntity()?->get(InventoryComponent::class);
         if ($inventory === null) {
+            return;
+        }
+
+        // Events breadth audit: cancellable InventoryTransactionEvent for
+        // every reported slot move (player inventory, armor, container
+        // windows). A plugin can reject the move before it is applied.
+        $txEvent = new \pocketmine\api\event\InventoryTransactionEvent(
+            $this->wrapApiPlayer($session['entityRef']),
+            $pk->windowid,
+            $pk->slot,
+        );
+        $this->eventPort->emit($txEvent);
+        if ($txEvent->isCancelled()) {
             return;
         }
 
@@ -3415,6 +3494,37 @@ final class NetworkSessionService {
      * the victim's own HUD). ACTION_RIGHT_CLICK routes through the
      * interaction service (item pickup, breeding hooks...).
      */
+    /**
+     * Events breadth audit: PlayerAnimationEvent fires for every AnimatePacket
+     * (arm swing on punch, wake-up, ...). Cancelling suppresses the animation
+     * from being echoed to other players; the actor's own client already plays
+     * it locally.
+     */
+    private function handleAnimate(string $addrKey, AnimatePacket $pk): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $event = new \pocketmine\api\event\PlayerAnimationEvent(
+            $this->wrapApiPlayer($session['entityRef']),
+            $pk->action,
+        );
+        $this->eventPort->emit($event);
+        if ($event->isCancelled()) {
+            return;
+        }
+        // Echo the animation to other players (legacy broadcastEntityEvent).
+        foreach ($this->sessions as $otherKey => $s) {
+            if ($otherKey === $addrKey) {
+                continue;
+            }
+            $echo = new AnimatePacket();
+            $echo->action = $pk->action;
+            $echo->eid = $session['playerRef']->entityId;
+            $this->queuePacket($s['playerRef'], $echo);
+        }
+    }
+
     private function handleInteract(string $addrKey, InteractPacket $pk): void {
         $session = $this->sessions[$addrKey] ?? null;
         if ($session === null) {
@@ -5114,6 +5224,21 @@ final class NetworkSessionService {
         if ($addrKey === null) {
             return;
         }
+
+        // Events breadth audit: cancellable DataPacketSendEvent for every
+        // outbound game packet. Dropping one here prevents it being sent.
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session !== null) {
+            $sendEvent = new \pocketmine\api\event\DataPacketSendEvent(
+                $this->wrapApiPlayer($session['entityRef']),
+                $packet,
+            );
+            $this->eventPort->emit($sendEvent);
+            if ($sendEvent->isCancelled()) {
+                return;
+            }
+        }
+
         $this->outbound[$addrKey][] = $packet;
     }
 

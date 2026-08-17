@@ -30,6 +30,7 @@ final class ChunkLoadService {
         private readonly WorldGenPort $worldGenPort,
         private readonly ChunkUnloadService $chunkUnloadService,
         int $maxLoadedChunks = self::DEFAULT_MAX_LOADED_CHUNKS,
+        private readonly ?\pocketmine\port\driving\EventPort $eventPort = null,
     ) {
         $this->maxLoadedChunks = max(1, $maxLoadedChunks);
     }
@@ -135,6 +136,18 @@ final class ChunkLoadService {
             // populated chunk would place a second, different set of features
             // and corrupt persistence round-trips).
             $result[$index] = $this->materializeChunk($chunkData, $config->seed, isset($generatedIndices[$index]), $worldId);
+
+            // Events breadth audit: ChunkLoadEvent fires for every chunk that
+            // was actually loaded (from disk or freshly generated) - not for
+            // re-requests of chunks that were already resident.
+            if ($this->eventPort !== null) {
+                $this->eventPort->emit(new \pocketmine\api\event\ChunkLoadEvent(
+                    $chunkCoords[$index][0],
+                    $chunkCoords[$index][1],
+                    $worldId,
+                    isset($generatedIndices[$index]),
+                ));
+            }
         }
 
         // Loaded-chunk budget (11.3): the store grew, so bring it back under

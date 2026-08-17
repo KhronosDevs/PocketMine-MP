@@ -182,6 +182,7 @@ final class ArrowSystem implements System {
                 // arrow (legacy Entity::move -> isCollided -> motion zeroed).
                 $blockId = $chunks->getBlock((int)floor($sx), (int)floor($sy), (int)floor($sz));
                 if ($blocks->isSolid($blockId)) {
+                    $this->emitProjectileHit($world, EntityRef::create($entity->id, $world), null, $sx, $sy, $sz);
                     if ($projectile['sticky'] !== true) {
                         // Non-sticky throwables (snowball/egg/potion) shatter
                         // on the first solid block: potions splash, the rest
@@ -216,6 +217,7 @@ final class ArrowSystem implements System {
                     if ($power > 0) {
                         $damage += (int)ceil(0.5 * $power);
                     }
+                    $this->emitProjectileHit($world, EntityRef::create($entity->id, $world), $target, $sx, $sy, $sz);
                     $shooter = EntityRef::create((int)$meta->get(\pocketmine\core\constants\MetadataKeys::SHOOTER_ID, -1), $world);
                     $combat->applyDamage(
                         EntityRef::create($target, $world),
@@ -316,5 +318,24 @@ final class ArrowSystem implements System {
     private function getDespawn(): ?EntityDespawnService {
         $this->despawn ??= Kernel::getInstance()?->getEntityDespawnService();
         return $this->despawn;
+    }
+
+    /**
+     * Events breadth audit: ProjectileHitEvent (informational) for both block
+     * and entity impacts - plugins hook it for hit effects / stats.
+     */
+    private function emitProjectileHit(World $world, EntityRef $projectileRef, ?int $hitEntityId, float $x, float $y, float $z): void {
+        $kernel = Kernel::getInstance();
+        if ($kernel === null) {
+            return;
+        }
+        $hitEntity = $hitEntityId !== null ? EntityRef::create($hitEntityId, $world) : null;
+        $kernel->getEventPort()->emit(new \pocketmine\api\event\ProjectileHitEvent(
+            \pocketmine\api\entity\Entity::wrap($projectileRef, $world),
+            $hitEntity !== null ? \pocketmine\api\entity\Entity::wrap($hitEntity, $world) : null,
+            $x,
+            $y,
+            $z,
+        ));
     }
 }
