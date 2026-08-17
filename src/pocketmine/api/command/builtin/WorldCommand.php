@@ -9,9 +9,11 @@ use pocketmine\core\enum\GeneratorType;
 
 /**
  * 14.20 multi-world:
- *   /world            — list loaded worlds
- *   /world <name>     — teleport the sender to that world's spawn
- *   /world create <name> [seed] — generate a brand-new world
+ *   /world                 — list loaded + unloaded worlds
+ *   /world <name>          — teleport the sender to that world's spawn
+ *   /world create <name> [seed] [generator] — generate a brand-new world
+ *   /world load <name>     — load an existing world folder from disk
+ *   /world unload <name>   — save + unload a world (default world stays)
  *
  * Switching re-points the player's session at the target world bundle: the
  * chunk stream, entity broadcast and time all switch with them.
@@ -20,8 +22,8 @@ final class WorldCommand extends BuiltinCommand {
     public function __construct() {
         parent::__construct(
             'world',
-            'List, switch, or create worlds',
-            '/world [list|create <name> [seed] [generator]] [name]',
+            'List, switch, load, unload, or create worlds',
+            '/world [list|create <name> [seed] [generator]|load <name>|unload <name>] [name]',
             ['worlds'],
             'khronos.command.world',
         );
@@ -52,6 +54,38 @@ final class WorldCommand extends BuiltinCommand {
             return true;
         }
 
+        // /world load <name> — bring an on-disk world folder back.
+        if (($args[0] ?? '') === 'load') {
+            $name = $args[1] ?? '';
+            if ($name === '') {
+                $sender->sendMessage('Usage: /world load <name>');
+                return false;
+            }
+            try {
+                $world = $server->loadWorld($name);
+            } catch (\RuntimeException $e) {
+                $sender->sendMessage('Could not load world: ' . $e->getMessage());
+                return false;
+            }
+            $sender->sendMessage("World '{$world->getName()}' loaded (spawn {$world->getSpawnLocation()['x']}, {$world->getSpawnLocation()['y']}, {$world->getSpawnLocation()['z']}).");
+            return true;
+        }
+
+        // /world unload <name> — save + drop the bundle (never the default).
+        if (($args[0] ?? '') === 'unload') {
+            $name = $args[1] ?? '';
+            if ($name === '') {
+                $sender->sendMessage('Usage: /world unload <name>');
+                return false;
+            }
+            if ($server->unloadWorld($name, true)) {
+                $sender->sendMessage("World '$name' saved and unloaded.");
+                return true;
+            }
+            $sender->sendMessage("Could not unload '$name' (not loaded, or it is the default world).");
+            return false;
+        }
+
         // /world <name> — switch the sender (must be a player).
         if (isset($args[0]) && $args[0] !== '' && $args[0] !== 'list') {
             $selfId = $this->selfId($sender);
@@ -72,20 +106,24 @@ final class WorldCommand extends BuiltinCommand {
             return false;
         }
 
-        // /world (list)
+        // /world (list): loaded worlds first, then unloaded folders on disk.
         $worlds = $server->getWorlds();
         if ($worlds === []) {
             $sender->sendMessage('No worlds loaded.');
-            return true;
+        } else {
+            $default = $server->getDefaultWorld();
+            foreach ($worlds as $world) {
+                $marker = $world->getWorldId() === $default->getWorldId() ? ' (default)' : '';
+                $sender->sendMessage(
+                    $world->getWorldId() . ': ' . $world->getName()
+                    . ' [' . $world->getFolderName() . ']'
+                    . $marker
+                );
+            }
         }
-        $default = $server->getDefaultWorld();
-        foreach ($worlds as $world) {
-            $marker = $world->getWorldId() === $default->getWorldId() ? ' (default)' : '';
-            $sender->sendMessage(
-                $world->getWorldId() . ': ' . $world->getName()
-                . ' [' . $world->getFolderName() . ']'
-                . $marker
-            );
+        $unloaded = $server->getUnloadedWorlds();
+        if ($unloaded !== []) {
+            $sender->sendMessage('Unloaded on disk (use /world load <name>): ' . implode(', ', $unloaded));
         }
         return true;
     }

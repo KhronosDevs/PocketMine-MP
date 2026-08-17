@@ -243,6 +243,68 @@ class Server {
         return $info !== null ? $this->facadeFor($worldId, $info) : null;
     }
 
+    /**
+     * Folders under worlds/ that look like saved worlds (a region/ subfolder
+     * or a level.dat) but are NOT currently loaded. Lets admins see what is
+     * on disk and /world load it. External-plugin leftovers (protector.yml,
+     * wpcfg.yml, ...) are ignored - only region data or a level.dat counts.
+     *
+     * @return list<string> folder names, sorted
+     */
+    public function getUnloadedWorlds(): array {
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel === null) {
+            return [];
+        }
+        $loaded = [];
+        foreach ($kernel->getWorldRegistry()->getWorlds() as $info) {
+            $loaded[(string)$info['folderName']] = true;
+        }
+        $base = \pocketmine\Kernel::getInstance()?->getDataPath() . 'worlds';
+        $out = [];
+        if (!is_dir($base)) {
+            return [];
+        }
+        foreach (glob($base . '/*', GLOB_ONLYDIR) as $dir) {
+            $folder = basename($dir);
+            if (isset($loaded[$folder])) {
+                continue;
+            }
+            $looksLikeWorld = is_dir($dir . '/region')
+                || file_exists($dir . '/level.dat')
+                || is_dir($dir . '/db');
+            if ($looksLikeWorld) {
+                $out[] = $folder;
+            }
+        }
+        sort($out);
+        return $out;
+    }
+
+    /** The current world a player is in, or null for a non-player / unknown. */
+    public function getWorldOfPlayer(\pocketmine\api\entity\Player $player): ?World {
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel === null) {
+            return null;
+        }
+        $registry = $kernel->getWorldRegistry();
+        foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+            if ($p['entityId'] !== $player->getId()) {
+                continue;
+            }
+            // The session's world id is authoritative (the entity's
+            // WorldComponent tracks it too - read it the same way).
+            $entity = $kernel->getWorld()->getEntity($p['entityId']);
+            $wc = $entity?->get(\pocketmine\core\component\WorldComponent::class);
+            $worldId = $wc instanceof \pocketmine\core\component\WorldComponent ? $wc->id : 0;
+            $info = $registry->getWorld($worldId);
+            if ($info !== null) {
+                return $this->facadeFor($worldId, $info);
+            }
+        }
+        return null;
+    }
+
     public function getDefaultWorld(): World {
         // The default world is always id 0 and registered at kernel boot.
         $kernel = \pocketmine\Kernel::getInstance();

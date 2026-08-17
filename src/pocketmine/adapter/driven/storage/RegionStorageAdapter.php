@@ -13,6 +13,7 @@ use pocketmine\nbt\tag\FloatTag;
 use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\LongTag;
+use pocketmine\nbt\tag\ShortTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\port\driven\ChunkData;
 use pocketmine\port\driven\EntitySnapshot;
@@ -274,6 +275,20 @@ abstract class RegionStorageAdapter implements StoragePort {
     private const WORLD_META_VERSION = 1;
 
     /**
+     * Read an integer NBT field tolerantly: accepts Byte/Short/Int/Long tags
+     * for the same field. Foreign (vanilla / old PocketMine) level.dat files
+     * are inconsistent about integer width (e.g. Time as IntTag vs LongTag),
+     * so a strict typed read would throw and discard the whole world meta.
+     */
+    private static function readIntValue(CompoundTag $data, string $name, int $default = 0): int {
+        $tag = $data->getTag($name);
+        if ($tag instanceof IntTag || $tag instanceof LongTag || $tag instanceof ByteTag || $tag instanceof ShortTag) {
+            return (int)$tag->getValue();
+        }
+        return $default;
+    }
+
+    /**
      * Read the persisted world meta (seed/spawn/difficulty/time).
      *
      * level.dat is now a real gzip-compressed NBT "Data" compound (vanilla
@@ -306,22 +321,28 @@ abstract class RegionStorageAdapter implements StoragePort {
                     return null;
                 }
                 $meta = [];
-                $meta['seed'] = (string)$data->getLong('RandomSeed', 0);
-                $meta['spawnX'] = (string)$data->getInt('SpawnX', 0);
-                $meta['spawnY'] = (string)$data->getInt('SpawnY', 64);
-                $meta['spawnZ'] = (string)$data->getInt('SpawnZ', 0);
-                $meta['time'] = (string)$data->getLong('Time', 0);
-                $meta['difficulty'] = (string)$data->getByte('Difficulty', 1);
+                // Tolerant numeric reads: legacy PocketMine / vanilla level.dat
+                // files are inconsistent about IntTag vs LongTag for the same
+                // field (funil's 0.15-era file stores Time as IntTag). Old-src
+                // used loose array access so any integer tag worked; matching
+                // that keeps foreign worlds' spawn/seed intact instead of
+                // failing the whole parse and treating the world as fresh.
+                $meta['seed'] = (string)self::readIntValue($data, 'RandomSeed', 0);
+                $meta['spawnX'] = (string)self::readIntValue($data, 'SpawnX', 0);
+                $meta['spawnY'] = (string)self::readIntValue($data, 'SpawnY', 64);
+                $meta['spawnZ'] = (string)self::readIntValue($data, 'SpawnZ', 0);
+                $meta['time'] = (string)self::readIntValue($data, 'Time', 0);
+                $meta['difficulty'] = (string)self::readIntValue($data, 'Difficulty', 1);
                 if ($data->getTag('generatorName') !== null) {
                     $meta['generator'] = $data->getString('generatorName', 'normal');
                 }
                 // 14.22: weather spell + remaining duration (custom keys -
                 // vanilla 0.15 level.dat has no weather persistence).
                 if ($data->getTag('KhronosWeather') !== null) {
-                    $meta['weather'] = (string)$data->getByte('KhronosWeather', 0);
+                    $meta['weather'] = (string)self::readIntValue($data, 'KhronosWeather', 0);
                 }
                 if ($data->getTag('KhronosWeatherDuration') !== null) {
-                    $meta['weatherDuration'] = (string)$data->getInt('KhronosWeatherDuration', 0);
+                    $meta['weatherDuration'] = (string)self::readIntValue($data, 'KhronosWeatherDuration', 0);
                 }
                 return $meta;
             } catch (\Throwable) {

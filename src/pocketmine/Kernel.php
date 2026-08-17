@@ -1885,6 +1885,7 @@ function registerBuiltinPermissions(\pocketmine\api\permission\PermissionManager
     foreach ([
         'khronos.command.gamemode' => 'Change player gamemodes',
         'khronos.command.tp' => 'Teleport players',
+        'khronos.command.setspawn' => 'Set the world spawn',
         'khronos.command.give' => 'Give items',
         'khronos.command.kill' => 'Kill players',
         'khronos.command.time' => 'Set the world clock',
