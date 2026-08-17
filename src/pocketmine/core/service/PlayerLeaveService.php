@@ -29,6 +29,12 @@ final class PlayerLeaveService {
             $this->wrapApiPlayer($entityRef),
             $reason,
         ));
+        // Events breadth audit: PlayerQuitEvent alongside the leave event
+        // (the classic legacy name for the same moment).
+        $this->eventPort->emit(new \pocketmine\api\event\PlayerQuitEvent(
+            $this->wrapApiPlayer($entityRef),
+            $reason,
+        ));
 
         // Save player data before removing
         $this->savePlayer($entityRef);

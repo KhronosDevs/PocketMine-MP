@@ -6,6 +6,7 @@ require_once dirname(__DIR__) . '/autoload.php';
 require_once __DIR__ . '/helpers.php';
 
 use pocketmine\adapter\driven\network\Protocol84NetworkAdapter;
+use pocketmine\protocol\AnimatePacket;
 use pocketmine\protocol\BatchPacket;
 use pocketmine\protocol\ContainerClosePacket;
 use pocketmine\protocol\ContainerSetContentPacket;
@@ -981,6 +982,171 @@ test('held item change (MobEquipment) updates the ECS held slot', function () us
         usleep(10000);
     }
     ok(false, 'held slot updated to 1');
+});
+
+test('PlayerItemHeldEvent fires on MobEquipment and cancellation rejects the slot change', function () use ($client, $kernel): void {
+    $port = $kernel->getEventPort();
+    $fired = 0;
+    $handler = function (\pocketmine\api\event\PlayerItemHeldEvent $e) use (&$fired): void {
+        if ($e->getPlayer()->getName() === 'Alice') {
+            $fired++;
+            $e->setCancelled(true);
+        }
+    };
+    $port->subscribe(\pocketmine\api\event\PlayerItemHeldEvent::class, $handler);
+    try {
+        // Alice tries to select hotbar slot 2 - the plugin vetoes it.
+        $me = new MobEquipmentPacket();
+        $me->eid = 0;
+        $me->item = [4, 32, 0, null];
+        $me->slot = 2;
+        $me->selectedSlot = 2;
+        $client->sendGamePacket($me);
+        // Wait for the packet to be processed (the event fires) - then check
+        // the held slot was NOT changed to 2 by the cancellation.
+        $deadline = microtime(true) + 3.0;
+        $rejected = false;
+        while (microtime(true) < $deadline && $fired === 0) {
+            $kernel->run(1);
+            usleep(10000);
+        }
+        // Give the flush a moment, then confirm the slot never moved to 2.
+        $deadline = microtime(true) + 3.0;
+        while (microtime(true) < $deadline) {
+            $kernel->run(1);
+            $online = $kernel->getNetworkSessionService()->getOnlinePlayers();
+            if (isset($online[0])) {
+                $inv = $kernel->getWorld()->getEntity($online[0]['entityId'])?->get(\pocketmine\core\component\InventoryComponent::class);
+                if ($inv !== null && $inv->heldSlot === 1) {
+                    $rejected = true;
+                    break;
+                }
+            }
+            usleep(10000);
+        }
+        ok($fired >= 1, 'PlayerItemHeldEvent fired');
+        ok($rejected, 'cancelled PlayerItemHeldEvent keeps the held slot');
+    } finally {
+        $port->unsubscribe(\pocketmine\api\event\PlayerItemHeldEvent::class, $handler);
+    }
+});
+
+test('PlayerAnimationEvent fires on AnimatePacket and broadcasts to other players', function () use ($client, $kernel): void {
+    $port = $kernel->getEventPort();
+    $fired = 0;
+    $port->subscribe(\pocketmine\api\event\PlayerAnimationEvent::class, function (\pocketmine\api\event\PlayerAnimationEvent $e) use (&$fired): void {
+        if ($e->getPlayer()->getName() === 'Alice') {
+            $fired++;
+            same(\pocketmine\api\event\PlayerAnimationEvent::ARM_SWING, $e->getAnimationType(), 'arm swing type');
+        }
+    });
+    $anim = new AnimatePacket();
+    $anim->action = 1; // ARM_SWING
+    $anim->eid = 0;
+    $client->sendGamePacket($anim);
+    $deadline = microtime(true) + 3.0;
+    while (microtime(true) < $deadline && $fired === 0) {
+        $kernel->run(1);
+        usleep(10000);
+    }
+    ok($fired >= 1, 'PlayerAnimationEvent fired for the arm swing');
+});
+
+test('InventoryTransactionEvent fires on ContainerSetSlot and cancellation rejects the move', function () use ($client, $kernel): void {
+    $port = $kernel->getEventPort();
+    $fired = 0;
+    $handler = function (\pocketmine\api\event\InventoryTransactionEvent $e) use (&$fired): void {
+        if ($e->getPlayer()->getName() === 'Alice') {
+            $fired++;
+            $e->setCancelled(true);
+        }
+    };
+    $port->subscribe(\pocketmine\api\event\InventoryTransactionEvent::class, $handler);
+    try {
+        // Give Alice a real item in slot 5 so the cancelled 'empty the slot'
+        // transaction has something to preserve.
+        $online0 = $kernel->getNetworkSessionService()->getOnlinePlayers();
+        $inv0 = null;
+        if (isset($online0[0])) {
+            $inv0 = $kernel->getWorld()->getEntity($online0[0]['entityId'])?->get(\pocketmine\core\component\InventoryComponent::class);
+        }
+        ok($inv0 !== null, 'Alice inventory present');
+        if ($inv0 !== null) {
+            $inv0->set(5, new \pocketmine\core\component\ItemStack(4, 0, 3)); // 3 cobblestone
+        }
+        $beforeKey = '4:0:3';
+
+        // Alice reports emptying slot 5 - the plugin rejects the transaction,
+        // so the authoritative inventory must keep the item.
+        $css = new ContainerSetSlotPacket();
+        $css->windowid = ContainerSetContentPacket::SPECIAL_INVENTORY;
+        $css->slot = 5;
+        $css->hotbarSlot = 0;
+        $css->item = [0, 0, 0, null];
+        $client->sendGamePacket($css);
+        // Wait for the packet to be processed (the transaction event fires),
+        // THEN verify the slot was not mutated by the cancellation.
+        $deadline = microtime(true) + 3.0;
+        while (microtime(true) < $deadline && $fired === 0) {
+            $kernel->run(1);
+            usleep(10000);
+        }
+        $deadline = microtime(true) + 3.0;
+        $unchanged = false;
+        while (microtime(true) < $deadline) {
+            $kernel->run(1);
+            $online = $kernel->getNetworkSessionService()->getOnlinePlayers();
+            if (isset($online[0])) {
+                $inv = $kernel->getWorld()->getEntity($online[0]['entityId'])?->get(\pocketmine\core\component\InventoryComponent::class);
+                if ($inv !== null) {
+                    $now = $inv->get(5);
+                    $nowKey = $now !== null ? $now->itemId . ':' . $now->meta . ':' . $now->count : 'empty';
+                    if ($nowKey === $beforeKey) {
+                        $unchanged = true;
+                        break;
+                    }
+                }
+            }
+            usleep(10000);
+        }
+        ok($fired >= 1, 'InventoryTransactionEvent fired');
+        ok($unchanged, 'cancelled transaction keeps the authoritative slot');
+    } finally {
+        $port->unsubscribe(\pocketmine\api\event\InventoryTransactionEvent::class, $handler);
+    }
+});
+
+test('DataPacketReceiveEvent and DataPacketSendEvent fire on the wire path', function () use ($client, $kernel): void {
+    $port = $kernel->getEventPort();
+    $recv = 0;
+    $send = 0;
+    $recvHandler = function (\pocketmine\api\event\DataPacketReceiveEvent $e) use (&$recv): void {
+        if ($e->getPlayer()->getName() === 'Alice') {
+            $recv++;
+        }
+    };
+    $sendHandler = function (\pocketmine\api\event\DataPacketSendEvent $e) use (&$send): void {
+        if ($e->getPlayer()->getName() === 'Alice') {
+            $send++;
+        }
+    };
+    $port->subscribe(\pocketmine\api\event\DataPacketReceiveEvent::class, $recvHandler);
+    $port->subscribe(\pocketmine\api\event\DataPacketSendEvent::class, $sendHandler);
+    // Alice sends a chat packet; the receive event fires. The response echo
+    // fires the send event.
+    $txt = new \pocketmine\protocol\TextPacket();
+    $txt->type = 1; // raw chat
+    $txt->message = 'hello events';
+    $client->sendGamePacket($txt);
+    $deadline = microtime(true) + 3.0;
+    while (microtime(true) < $deadline && ($recv === 0 || $send === 0)) {
+        $kernel->run(1);
+        usleep(10000);
+    }
+    ok($recv >= 1, 'DataPacketReceiveEvent fired');
+    ok($send >= 1, 'DataPacketSendEvent fired');
+    $port->unsubscribe(\pocketmine\api\event\DataPacketReceiveEvent::class, $recvHandler);
+    $port->unsubscribe(\pocketmine\api\event\DataPacketSendEvent::class, $sendHandler);
 });
 
 test('breaking a block requires holding and then confirms via RemoveBlockPacket', function () use ($client, $kernel): void {

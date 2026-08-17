@@ -217,8 +217,8 @@ final class Kernel {
         // load service is built before the join service: a new player's spawn
         // point must be derived from the actual terrain (safe spawn), which
         // requires loading the spawn chunk.
-        $this->chunkUnloadService = new ChunkUnloadService($world, $storagePort);
-        $this->chunkLoadService = new ChunkLoadService($world, $storagePort, $worldGenPort, $this->chunkUnloadService);
+        $this->chunkUnloadService = new ChunkUnloadService($world, $storagePort, $eventPort);
+        $this->chunkLoadService = new ChunkLoadService($world, $storagePort, $worldGenPort, $this->chunkUnloadService, ChunkLoadService::DEFAULT_MAX_LOADED_CHUNKS, $eventPort);
         $this->playerJoinService = new PlayerJoinService($world, $networkPort, $storagePort, $worldGenPort, $this->chunkLoadService, $eventPort);
         $this->playerLeaveService = new PlayerLeaveService($world, $networkPort, $storagePort, $eventPort);
         $this->playerRespawnService = new PlayerRespawnService($world, $storagePort, $eventPort);
@@ -237,7 +237,7 @@ final class Kernel {
         $this->blockUpdateService = new BlockUpdateService($world, $storagePort, $eventPort);
         $this->entityDespawnService = new EntityDespawnService($world, $storagePort, $eventPort);
         $this->damageService = new DamageService($world, $this->combatService);
-        $this->knockbackService = new KnockbackService($world);
+        $this->knockbackService = new KnockbackService($world, $eventPort);
         $this->inventoryService = new InventoryService($world);
         $this->craftingService = new CraftingService($world, $eventPort);
         $this->containerService = new ContainerService($world);

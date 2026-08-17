@@ -156,6 +156,11 @@ final class EntitySpawnService {
         $this->eventPort->emit(new \pocketmine\api\event\EntitySpawnEvent(
             \pocketmine\api\entity\Entity::wrap($entityRef, $this->world),
         ));
+        // Events breadth audit: ItemSpawnEvent alongside EntitySpawnEvent for
+        // dropped items (plugins hooking item drops specifically).
+        $this->eventPort->emit(new \pocketmine\api\event\ItemSpawnEvent(
+            \pocketmine\api\entity\Entity::wrap($entityRef, $this->world),
+        ));
 
         return $entityRef;
     }

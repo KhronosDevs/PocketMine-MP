@@ -27,6 +27,18 @@ final class EntityDespawnService {
             $this->eventPort->emit(new \pocketmine\api\event\EntityDespawnEvent(
                 \pocketmine\api\entity\Entity::wrap($entityRef, $this->world),
             ));
+
+            // Events breadth audit: cancellable ItemDespawnEvent for dropped
+            // items specifically - a plugin can keep an item in the world.
+            if ($entity->has(\pocketmine\core\constants\EntityTags::ITEM)) {
+                $itemEvent = new \pocketmine\api\event\ItemDespawnEvent(
+                    \pocketmine\api\entity\Entity::wrap($entityRef, $this->world),
+                );
+                $this->eventPort->emit($itemEvent);
+                if ($itemEvent->isCancelled()) {
+                    return;
+                }
+            }
         }
 
         // Save entity data if requested

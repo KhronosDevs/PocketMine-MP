@@ -15,9 +15,21 @@ final class ChunkUnloadService {
     public function __construct(
         private readonly World $world,
         private readonly StoragePort $storagePort,
+        private readonly ?\pocketmine\port\driving\EventPort $eventPort = null,
     ) {}
 
     public function unloadChunk(int $chunkX, int $chunkZ, int $worldId = 0): void {
+        // Events breadth audit: cancellable ChunkUnloadEvent - a plugin can
+        // keep a chunk resident (the eviction paths use persistAndUnload
+        // directly and are not blocked by this).
+        if ($this->eventPort !== null) {
+            $event = new \pocketmine\api\event\ChunkUnloadEvent($chunkX, $chunkZ, $worldId);
+            $this->eventPort->emit($event);
+            if ($event->isCancelled()) {
+                return;
+            }
+        }
+
         // Get entities in the chunk
         $entities = $this->getEntitiesInChunk($chunkX, $chunkZ, $worldId);
         
