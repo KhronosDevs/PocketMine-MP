@@ -16,6 +16,7 @@ final class BuiltinCommands {
         // Player commands.
         $port->register(new GamemodeCommand());
         $port->register(new TeleportCommand());
+        $port->register(new SetSpawnCommand());
         $port->register(new GiveCommand());
         $port->register(new KillCommand());
         $port->register(new TimeCommand());
