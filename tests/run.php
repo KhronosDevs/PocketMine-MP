@@ -58,10 +58,26 @@ $filterNoise = static function (string $out): string {
 $start = microtime(true);
 $failedFiles = 0;
 
+// Children are spawned with the RAW ELF binary (PHP_BINARY), which skips the
+// bundled `php` wrapper's `-d extension_dir=<absolute>`. The php.ini's
+// extension_dir is RELATIVE ("../lib/modules"), so from the per-file temp
+// cwd it resolves against cwd and every shared extension (ctype, pmmpthread,
+// sockets, ...) fails to load -> tests crash with "undefined function
+// ctype_digit". Pass the absolute dir explicitly, mirroring the wrapper.
+$phpDir = dirname(PHP_BINARY);
+$absExtensionDir = $phpDir . '/../lib/modules';
+
+// Run children with the same FFI flags the server start scripts use, so the
+// suite exercises the native-accel path (light/noise/serialize via the .so)
+// when the extension + library are present. Every NativeAccel path falls
+// back to pure PHP, so children on stock PHP still run (with a startup
+// warning when extension=ffi cannot be loaded).
+$ffiFlags = ' -d extension_dir=' . escapeshellarg($absExtensionDir) . ' -d extension=ffi -d ffi.enable=1';
+
 if ($jobs <= 1) {
     // Serial mode: exactly the original behavior, plus fast ticks.
     foreach ($files as $file) {
-        $cmd = 'KHRONOS_FAST_TICKS=1 ' . escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($file)
+        $cmd = 'KHRONOS_FAST_TICKS=1 ' . escapeshellarg(PHP_BINARY) . $ffiFlags . ' ' . escapeshellarg($file)
             . ($filterArg !== null ? ' ' . $filterArg : '');
         exec($cmd . ' 2>&1', $output, $code);
         echo "=== " . basename($file) . " ===\n";
@@ -99,7 +115,7 @@ if ($jobs <= 1) {
                 }
             }
             $outFile = $workDir . '/_output.txt';
-            $cmd = 'KHRONOS_FAST_TICKS=1 ' . escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($file)
+            $cmd = 'KHRONOS_FAST_TICKS=1 ' . escapeshellarg(PHP_BINARY) . $ffiFlags . ' ' . escapeshellarg($file)
                 . ($filterArg !== null ? ' ' . $filterArg : '')
                 . ' > ' . escapeshellarg($outFile) . ' 2>&1';
             $proc = proc_open($cmd, [], $pipes, $workDir);

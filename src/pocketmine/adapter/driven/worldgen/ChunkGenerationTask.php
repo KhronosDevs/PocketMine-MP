@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\adapter\driven\worldgen;
 
+use pocketmine\core\resource\NativeAccel;
 use pmmp\thread\Runnable;
 use function serialize;
 
@@ -23,6 +24,12 @@ final class ChunkGenerationTask extends Runnable {
         private string $generatorType,
         private int $seed,
         private ChunkGenResult $out,
+        /**
+         * Worker-scoped copy of the native-accel switch: workers start with
+         * their own default statics (class tables are inherited, static
+         * VALUES are not), so the task carries the main thread's setting.
+         */
+        private bool $nativeAccel = true,
     ) {}
 
     public function getChunkX(): int {
@@ -44,6 +51,7 @@ final class ChunkGenerationTask extends Runnable {
             // here is a no-op that never registers the loader). The adapter
             // force-loads every class this task constructs on the main thread
             // before creating the pool, so they are all inherited here.
+            NativeAccel::setEnabled($this->nativeAccel);
             $data = ParallelGeneratorAdapter::generateChunkPure(
                 $this->chunkX,
                 $this->chunkZ,

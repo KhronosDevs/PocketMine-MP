@@ -6,6 +6,7 @@ namespace pocketmine\core\resource;
 
 use pocketmine\core\ecs\Resource;
 use pocketmine\port\driven\ChunkData;
+use pocketmine\protocol\ChunkSerializer;
 use function array_fill;
 use function array_key_first;
 use function array_keys;
@@ -99,9 +100,34 @@ final class ChunkStore {
                 + strlen((string)$chunk['meta'])
                 + strlen((string)$chunk['skyLight'])
                 + strlen((string)$chunk['blockLight'])
-                + strlen((string)$chunk['biomes']);
+                + strlen((string)$chunk['biomes'])
+                + strlen((string)($chunk['wire'] ?? '')); // serialized wire payload
         }
         return $bytes;
+    }
+
+    /**
+     * The protocol-84 wire payload for a chunk, cached on the record and
+     * invalidated by any mutation (setBlock/setBiome/light recalc). Multiple
+     * viewers and the per-tick light-dirty flush share the cached bytes, so
+     * serialize runs once per chunk instead of once per send. The payload is
+     * world-scoped (this store IS one world) so no world key is needed.
+     */
+    public function getSerializedWire(int $chunkX, int $chunkZ): ?string {
+        $key = $this->key($chunkX, $chunkZ);
+        if (!isset($this->chunks[$key])) {
+            return null;
+        }
+        $chunk = $this->chunks[$key];
+        if (($chunk['wire'] ?? null) === null) {
+            $data = $this->toChunkData($chunkX, $chunkZ);
+            if ($data === null) {
+                return null;
+            }
+            $chunk['wire'] = ChunkSerializer::serialize($data, $this->hasSky);
+            $this->chunks[$key] = $chunk;
+        }
+        return $chunk['wire'];
     }
 
     /**
@@ -147,6 +173,9 @@ final class ChunkStore {
             'tileEntities' => $data->tileEntities,
             'generated' => true,
             'populated' => false,
+            // Wire-serialized chunk payload cache: null until first serialized,
+            // invalidated on any mutation (see getSerializedWire).
+            'wire' => null,
         ];
     }
 
@@ -200,6 +229,7 @@ final class ChunkStore {
         $idx = $this->index($y, $z & 15, $x & 15);
         $chunk['blocks'][$idx] = chr($id & 0xFF);
         $chunk['meta'][$idx] = chr($meta & 0xFF);
+        $chunk['wire'] = null; // content changed: drop the serialized cache
         $this->chunks[$key] = $chunk;
         if ($this->blockListener !== null) {
             ($this->blockListener)($x, $y, $z, $id);
@@ -222,6 +252,7 @@ final class ChunkStore {
         }
         $chunk = $this->chunks[$key];
         $chunk['biomes'][($z & 15) * 16 + ($x & 15)] = chr($biome & 0xFF);
+        $chunk['wire'] = null; // content changed: drop the serialized cache
         $this->chunks[$key] = $chunk;
     }
 
@@ -248,7 +279,16 @@ final class ChunkStore {
     private bool $hasSky = true;
 
     public function setHasSky(bool $hasSky): void {
+        if ($this->hasSky === $hasSky) {
+            return;
+        }
         $this->hasSky = $hasSky;
+        // The wire payload embeds the sky-light section, so a sky toggle
+        // invalidates every cached serialization.
+        foreach ($this->chunks as $key => $chunk) {
+            $chunk['wire'] = null;
+            $this->chunks[$key] = $chunk;
+        }
     }
 
     public function hasSky(): bool {
@@ -265,6 +305,7 @@ final class ChunkStore {
         if ($chunk['skyLight'] !== $skyLight || $chunk['blockLight'] !== $blockLight) {
             $chunk['skyLight'] = $skyLight;
             $chunk['blockLight'] = $blockLight;
+            $chunk['wire'] = null; // light changed: the serialized payload is stale
             $this->chunks[$key] = $chunk;
             $this->lightDirty[$key] = true;
         }

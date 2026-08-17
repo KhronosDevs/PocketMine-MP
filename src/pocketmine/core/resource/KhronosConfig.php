@@ -60,6 +60,16 @@ final class KhronosConfig {
     /** Folder/name of the nether dimension world (legacy nether.level-name). */
     public string $netherWorld = 'nether';
 
+    // --- Native acceleration (FFI) -----------------------------------------
+
+    /**
+     * Master switch for the FFI native library (native/kh_native.so): light
+     * calc, terrain noise, nibble pack. When false (or when FFI/the .so is
+     * unavailable) every path falls back to the pure-PHP implementation, so
+     * disabling costs speed but never correctness.
+     */
+    public bool $nativeAccelEnabled = true;
+
     // --- Anti-cheat (Blocker 2) --------------------------------------------
 
     /** Master switch: when false, movement validation is disabled entirely. */
@@ -121,6 +131,11 @@ final class KhronosConfig {
             $this->spawnX = (int)$spawn['x'];
             $this->spawnY = (int)$spawn['y'];
             $this->spawnZ = (int)$spawn['z'];
+        }
+
+        $na = $data['native-accel'] ?? null;
+        if (is_array($na) && array_key_exists('enabled', $na) && is_bool($na['enabled'])) {
+            $this->nativeAccelEnabled = $na['enabled'];
         }
 
         $ac = $data['anti-cheat'] ?? null;

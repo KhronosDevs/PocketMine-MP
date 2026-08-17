@@ -46,7 +46,6 @@ use pocketmine\protocol\BatchPacket;
 use pocketmine\protocol\BlockEntityDataPacket;
 use pocketmine\protocol\ChangeDimensionPacket;
 use pocketmine\protocol\ChunkRadiusUpdatedPacket;
-use pocketmine\protocol\ChunkSerializer;
 use pocketmine\protocol\ContainerClosePacket;
 use pocketmine\protocol\ContainerOpenPacket;
 use pocketmine\protocol\ContainerSetContentPacket;
@@ -331,12 +330,19 @@ final class NetworkSessionService {
                 continue;
             }
             foreach ($store->takeLightDirtyChunks() as [$chunkX, $chunkZ]) {
-                $chunkData = $this->chunkLoadService->loadChunk($chunkX, $chunkZ, (int)$worldId);
+                $this->chunkLoadService->loadChunk($chunkX, $chunkZ, (int)$worldId);
+                // Serialized-wire cache: the store holds the payload and only
+                // re-serializes when the chunk content actually changed, so a
+                // light change re-sends to all viewers with one serialize.
+                $wire = $store->getSerializedWire($chunkX, $chunkZ);
+                if ($wire === null) {
+                    continue;
+                }
                 $chunk = new FullChunkDataPacket();
                 $chunk->chunkX = $chunkX;
                 $chunk->chunkZ = $chunkZ;
                 $chunk->order = FullChunkDataPacket::ORDER_LAYERED;
-                $chunk->data = ChunkSerializer::serialize($chunkData, $this->worldHasSky((int)$worldId));
+                $chunk->data = $wire;
                 foreach ($addrKeys as $addrKey) {
                     $key = $chunkX . ',' . $chunkZ;
                     if (isset($this->sessions[$addrKey]['chunksSent'][$key])) {
@@ -4074,15 +4080,6 @@ final class NetworkSessionService {
         return 0; // ChangeDimensionPacket::DIMENSION_NORMAL
     }
 
-    /** Whether a world has a sky (the nether has none - dark sky light). */
-    private function worldHasSky(int $worldId = 0): bool {
-        if ($worldId === 0) {
-            return true;
-        }
-        $registry = $this->resourceRegistry->get(WorldRegistry::class);
-        return $registry instanceof WorldRegistry ? $registry->hasSkyLight($worldId) : true;
-    }
-
     /**
      * 14.32: per-tick portal travel. A player standing inside a portal block
      * builds up the legacy 80-tick (survival) / instant (creative) charge;
@@ -5152,11 +5149,18 @@ final class NetworkSessionService {
                 if ($chunkData === null) {
                     continue;
                 }
+                // Serialized-wire cache: one serialize per chunk, shared by
+                // every viewer (and the light-dirty flush), instead of once
+                // per viewer per send. The store invalidates it on mutation.
+                $wire = $store !== null ? $store->getSerializedWire($chunkX, $chunkZ) : null;
+                if ($wire === null) {
+                    continue;
+                }
                 $chunk = new FullChunkDataPacket();
                 $chunk->chunkX = $chunkX;
                 $chunk->chunkZ = $chunkZ;
                 $chunk->order = FullChunkDataPacket::ORDER_LAYERED;
-                $chunk->data = ChunkSerializer::serialize($chunkData, $this->worldHasSky($session['worldId']));
+                $chunk->data = $wire;
                 $this->sendChunkBatch($addrKey, $chunk);
 
                 // 14.24: after the chunk, send tile-entity data (sign text,

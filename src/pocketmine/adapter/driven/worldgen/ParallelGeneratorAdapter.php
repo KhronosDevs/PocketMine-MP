@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\adapter\driven\worldgen;
 
+use pocketmine\core\resource\NativeAccel;
 use pocketmine\port\driven\ChunkData;
 use pocketmine\port\driven\GeneratorConfig;
 use pocketmine\port\driven\ThreadingPort;
@@ -134,6 +135,7 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
             // always have them regardless of what the boot path happened to
             // load.
             class_exists(ChunkData::class);
+            class_exists(NativeAccel::class);
             $this->pool = new Pool(self::workerCount());
         }
 
@@ -146,7 +148,7 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
             $out = new ChunkGenResult();
             $cells[] = $out;
             $this->pool->submit(
-                new ChunkGenerationTask($chunkX, $chunkZ, $config->generatorType, $config->seed, $out)
+                new ChunkGenerationTask($chunkX, $chunkZ, $config->generatorType, $config->seed, $out, NativeAccel::isEnabled())
             );
         }
 
@@ -592,11 +594,12 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
         // the biome array, the surface profile and the vegetation agree).
         $profiles = [];
         $rawHeights = [];
+        $nativeProfiles = self::columnProfilesNative($chunkX, $chunkZ, $seed);
         for ($bz = 0; $bz < 16; $bz++) {
             for ($bx = 0; $bx < 16; $bx++) {
                 $worldX = $chunkX * 16 + $bx;
                 $worldZ = $chunkZ * 16 + $bz;
-                $p = self::columnProfile($worldX, $worldZ, $seed);
+                $p = $nativeProfiles[$bz * 16 + $bx] ?? self::columnProfile($worldX, $worldZ, $seed);
                 $profiles[] = $p;
                 $rawHeights[] = $p['h'];
             }
@@ -720,13 +723,45 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
      *
      * @return array{h: int, biome: int}
      */
-    private static function columnProfile(int $x, int $z, int $seed): array {
-        // Big feature cells: 512-block continents, 128-block hills, 32-block
-        // detail - 4x the scale of the old generator, so the world reads as
-        // large instead of patchy.
-        $continent = self::smoothNoise($x, $z, $seed, 9);              // cell 512
-        $hills = self::smoothNoise($x, $z, $seed ^ 0x27D4EB2F, 7);     // cell 128
-        $detail = self::smoothNoise($x, $z, $seed ^ 0x6D2B79F5, 5);    // cell 32
+    /**
+     * Native-accelerated columnProfile: all 256 columns in ONE FFI call (a
+     * per-column call would pay the FFI boundary 256 times and negate the
+     * ~12x win). Returns null when the native library is unavailable so the
+     * caller falls back to per-column self::columnProfile().
+     *
+     * @return array<int, array{h: int, biome: int}>|null 256 profiles, column order
+     */
+    private static function columnProfilesNative(int $chunkX, int $chunkZ, int $seed): ?array {
+        $octaves = NativeAccel::noiseOctaves(
+            $chunkX,
+            $chunkZ,
+            $seed,
+            [9, 7, 5, 8, 8],
+            [0, 0x27D4EB2F, 0x6D2B79F5, 0x4F1BBCDC, 0x11D8E2A9],
+        );
+        if ($octaves === null) {
+            return null;
+        }
+        $profiles = [];
+        for ($bz = 0; $bz < 16; $bz++) {
+            for ($bx = 0; $bx < 16; $bx++) {
+                $profiles[] = self::columnProfileFromOctaves(
+                    $chunkX * 16 + $bx,
+                    $chunkZ * 16 + $bz,
+                    $seed,
+                    $octaves[$bz * 16 + $bx],
+                );
+            }
+        }
+        return $profiles;
+    }
+
+    /**
+     * @param array<int, int> $octaves [continent(9), hills(7), detail(5), temp(8), humidity(8)]
+     * @return array{h: int, biome: int}
+     */
+    private static function columnProfileFromOctaves(int $x, int $z, int $seed, array $octaves): array {
+        [$continent, $hills, $detail, $temp, $humidity] = $octaves;
 
         // Spawn plateau: within 96 blocks of the origin, raise the continent
         // far above the ocean threshold so the spawn area is land. Beyond it
@@ -745,8 +780,6 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
 
         // Biomes from temperature + humidity (both cell-256, so biomes are
         // big regions, not per-chunk noise).
-        $temp = self::smoothNoise($x, $z, $seed ^ 0x4F1BBCDC, 8);      // cell 256
-        $humidity = self::smoothNoise($x, $z, $seed ^ 0x11D8E2A9, 8);  // cell 256
         $cold = $temp < 24576;
         $hot = $temp > 40960;
         $wet = $humidity > 36000;
@@ -772,6 +805,25 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
     }
 
     /**
+     * Per-column terrain: height + biome, both derived from the same noise
+     * so the surface profile, the biome array and the population pass always
+     * agree. The spawn plateau biases the continent noise near the origin so
+     * the configured spawn is land for ANY seed. Computes the 5 octaves then
+     * delegates to columnProfileFromOctaves (shared with the native path).
+     *
+     * @return array{h: int, biome: int}
+     */
+    private static function columnProfile(int $x, int $z, int $seed): array {
+        return self::columnProfileFromOctaves($x, $z, $seed, [
+            self::smoothNoise($x, $z, $seed, 9),              // cell 512 continents
+            self::smoothNoise($x, $z, $seed ^ 0x27D4EB2F, 7), // cell 128 hills
+            self::smoothNoise($x, $z, $seed ^ 0x6D2B79F5, 5), // cell 32 detail
+            self::smoothNoise($x, $z, $seed ^ 0x4F1BBCDC, 8), // cell 256 temperature
+            self::smoothNoise($x, $z, $seed ^ 0x11D8E2A9, 8), // cell 256 humidity
+        ]);
+    }
+
+    /**
      * Deterministic population: oak trees, tall grass, flowers, dead bushes
      * and cacti. Pure in (chunkX, chunkZ, seed); trees are placed only where
      * their whole footprint fits inside the chunk (trunk at x/z in [3..12],
@@ -783,11 +835,12 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
 
         // Per-column biome + land surface (top solid block above water).
         $surfaces = [];
+        $nativeProfiles = self::columnProfilesNative($chunkX, $chunkZ, $seed);
         for ($bz = 0; $bz < 16; $bz++) {
             for ($bx = 0; $bx < 16; $bx++) {
                 $worldX = $chunkX * 16 + $bx;
                 $worldZ = $chunkZ * 16 + $bz;
-                $p = self::columnProfile($worldX, $worldZ, $seed);
+                $p = $nativeProfiles[$bz * 16 + $bx] ?? self::columnProfile($worldX, $worldZ, $seed);
                 $surfaceY = -1;
                 $surfaceBlock = 0;
                 if ($p['biome'] !== self::BIOME_OCEAN) {

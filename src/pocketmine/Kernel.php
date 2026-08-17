@@ -1796,6 +1796,9 @@ function loadKhronosConfig(): \pocketmine\core\resource\KhronosConfig {
  * default-world folder is mirrored into the WorldConfig display name.
  */
 function applyKhronosConfig(ResourceRegistry $resourceRegistry, \pocketmine\core\resource\KhronosConfig $config): void {
+    // Native accel (FFI): khronos.json "native-accel.enabled" toggles it;
+    // it always falls back to pure PHP when FFI or the .so is unavailable.
+    \pocketmine\core\resource\NativeAccel::setEnabled($config->nativeAccelEnabled);
     if ($config->spawnX !== null && $config->spawnY !== null && $config->spawnZ !== null) {
         $serverConfig = $resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
         if ($serverConfig instanceof \pocketmine\core\resource\ServerConfig) {
