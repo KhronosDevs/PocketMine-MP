@@ -33,7 +33,11 @@ final class BlockBreakService {
         $worldId = $this->worldIdOf($playerRef);
         
         // Check if player can reach the block
-        if (!$this->canReach($playerRef, $x, $y, $z)) {
+        // Legacy canInteract: creative=13, survival=6, measured from eye height.
+        $metadata = $player->get(MetadataComponent::class);
+        $gm = \pocketmine\core\enum\GameMode::coerce($metadata?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE));
+        $maxReach = ($gm === \pocketmine\core\enum\GameMode::Creative) ? 13.0 : 6.0;
+        if (!$this->canReach($playerRef, $x, $y, $z, $maxReach)) {
             return false;
         }
         
@@ -56,46 +60,36 @@ final class BlockBreakService {
         // Get tool from player's hand
         $tool = $this->getHeldItem($playerRef);
         
-        // Calculate break speed
-        $breakSpeed = $this->calculateBreakSpeed($tool, $x, $y, $z, $worldId);
-        
-        // For instant break (creative mode), break immediately
-        $metadata = $player->get(MetadataComponent::class);
-        $gamemode = \pocketmine\core\enum\GameMode::coerce($metadata?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE));
-        
-        if ($gamemode === \pocketmine\core\enum\GameMode::Creative) {
+        // For instant break (creative mode or zero-hardness blocks)
+        if ($gm === \pocketmine\core\enum\GameMode::Creative) {
             return $this->doBreakBlock($playerRef, $x, $y, $z, $tool, $worldId);
         }
         
-        // Survival mode - would need progressive breaking
-        // For now, instant break for testing
+        // Survival mode - instant break for now (progressive breaking
+        // is handled by the timing gate in NetworkSessionService)
         return $this->doBreakBlock($playerRef, $x, $y, $z, $tool, $worldId);
     }
 
-    private function canReach(EntityRef $playerRef, int $x, int $y, int $z): bool {
+    /**
+     * Reach check matching legacy canInteract: measured from the player's
+     * eye height, with a configurable max distance (13 creative / 6 survival).
+     */
+    private function canReach(EntityRef $playerRef, int $x, int $y, int $z, float $maxReach = 6.0): bool {
         $player = $playerRef->getEntity();
         if (!$player) return false;
         
         $position = $player->get(PositionComponent::class);
         if (!$position) return false;
         
-        // Legacy reach (old-src Player::canInteract, applied in the REMOVE_BLOCK
-        // handler): 13 blocks in creative, 6 in survival, measured to the block
-        // center. The old collision-width heuristic (~3 blocks) rejected every
-        // break a real client attempts from a normal distance - creative breaks
-        // failed entirely and survival breaks 3-6 blocks away "respawned".
-        $metadata = $player->get(MetadataComponent::class);
-        $creative = \pocketmine\core\enum\GameMode::coerce(
-            $metadata?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)
-        ) === \pocketmine\core\enum\GameMode::Creative;
-        $reach = $creative ? 13 : 6;
+        // Legacy: eye height = 1.62 (position.y + eye height)
+        $eyeY = $position->y + 1.62;
         
         $dx = $x + 0.5 - $position->x;
-        $dy = $y + 0.5 - $position->y;
+        $dy = $y + 0.5 - $eyeY;
         $dz = $z + 0.5 - $position->z;
         $distanceSq = $dx * $dx + $dy * $dy + $dz * $dz;
         
-        return $distanceSq <= ($reach * $reach);
+        return $distanceSq <= ($maxReach * $maxReach);
     }
 
     private function isBreakable(int $x, int $y, int $z, int $worldId = 0): bool {

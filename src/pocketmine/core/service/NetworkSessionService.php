@@ -2282,8 +2282,8 @@ final class NetworkSessionService {
             if ($id > 0 && $pk->slot >= 0 && $pk->slot < InventoryComponent::ARMOR_OFFSET) {
                 // Fresh stack from the creative menu: no NBT. The wire slot's
                 // NBT field is raw binary, while ItemStack::nbt is an array -
-                // creative items never carry one. ItemStack is (id, meta,
-                // count) - the wire slot is [id, count, damage].
+                // creative items never carry one.
+                // Wire slot = [id, count, damage, nbt]; ItemStack($id, $meta, $count)
                 $stack = new ItemStack($id, (int)($pk->item[2] ?? 0), max(1, (int)($pk->item[1] ?? 1)));
                 $inventory->set($pk->slot, $stack);
                 $this->sendInventorySlot($session['playerRef'], $pk->slot);
@@ -4600,7 +4600,14 @@ final class NetworkSessionService {
     private function sendCreativeContents(PlayerRef $player): void {
         $pk = new ContainerSetContentPacket();
         $pk->windowid = ContainerSetContentPacket::SPECIAL_CREATIVE;
-        $pk->slots = \pocketmine\core\resource\CreativeItems::all();
+        // CreativeItems::all() returns [id, meta] pairs; putSlot expects
+        // [id, count, damage, nbt] — expand each entry to the wire format
+        // with count=1 (matching legacy Item::getCreativeItems() which
+        // returns full Item objects with count=1).
+        $pk->slots = array_map(
+            fn(array $pair): array => [$pair[0], 1, $pair[1], null],
+            \pocketmine\core\resource\CreativeItems::all()
+        );
         $this->queuePacket($player, $pk);
     }
 
