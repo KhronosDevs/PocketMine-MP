@@ -587,6 +587,20 @@ final class Kernel {
                 $this->saveWorld();
             }
 
+            // 4. Distance-based chunk unloading (periodic sweep): evict
+            // resident chunks farther than keep-radius from every player, so
+            // memory tracks what players actually need instead of waiting for
+            // the count cap to trip. Bounded per call (max 64 evictions) so
+            // it can never stall a tick; the FIFO cap stays the backstop.
+            $chunkUnloadConfig = $this->resourceRegistry->get(\pocketmine\core\resource\KhronosConfig::class);
+            if ($chunkUnloadConfig instanceof \pocketmine\core\resource\KhronosConfig
+                && $chunkUnloadConfig->chunkUnloadDistanceBased
+                && $tick > 0
+                && $tick % $chunkUnloadConfig->chunkUnloadSweepIntervalTicks === 0
+            ) {
+                $this->sweepFarChunks($chunkUnloadConfig->chunkUnloadKeepRadius);
+            }
+
             $end = hrtime(true);
             $elapsedMs = ($end - $start) / 1_000_000;
             if ($this->phaseProfiling) {
@@ -1347,6 +1361,27 @@ final class Kernel {
                     \pocketmine\core\ecs\EntityRef::create($player['entityId'], $this->world)
                 );
             }
+        }
+    }
+
+    /**
+     * Distance-based chunk unloading sweep: for every world bundle, evict
+     * resident chunks farther than $keepRadius chunks from all players in
+     * that world. Bounded per call (64 evictions per world) so a fast player
+     * leaving a large area behind can never stall a tick; whatever the sweep
+     * leaves resident is still bounded by the loaded-chunk count cap.
+     */
+    private function sweepFarChunks(int $keepRadius): void {
+        $worldRegistry = $this->resourceRegistry->get(\pocketmine\core\resource\WorldRegistry::class);
+        if ($worldRegistry instanceof \pocketmine\core\resource\WorldRegistry) {
+            foreach ($worldRegistry->getWorlds() as $worldId => $_) {
+                $this->chunkUnloadService->unloadChunksFarFromPlayers($keepRadius, (int)$worldId);
+            }
+        } else {
+            // Fallback: pre-registry path (tests) - sweep the single default
+            // store. A world with no players evicts nothing here; the FIFO
+            // cap still bounds it.
+            $this->chunkUnloadService->unloadChunksFarFromPlayers($keepRadius, 0);
         }
     }
 

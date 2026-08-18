@@ -52,7 +52,7 @@ final class KhronosConfig {
     public ?int $spawnY = null;
     public ?int $spawnZ = null;
 
-    // --- Memory (chunk budget) ------------------------------------------------
+    // --- Memory (chunk budget + distance unload) -------------------------------
 
     /**
      * Loaded-chunk budget: resident chunks are evicted (persisted + dropped)
@@ -61,6 +61,30 @@ final class KhronosConfig {
      * raise it on high-RAM hosts. See ChunkLoadService::DEFAULT_MAX_LOADED_CHUNKS.
      */
     public int $maxLoadedChunks = 1200;
+
+    /**
+     * Distance-based chunk unloading (primary eviction policy): when enabled,
+     * a periodic sweep drops every resident chunk farther than
+     * $chunkUnloadKeepRadius chunks from ALL players, so memory tracks what
+     * players actually need instead of waiting for the count cap. The FIFO
+     * cap above remains the backstop for many spread-out players.
+     */
+    public bool $chunkUnloadDistanceBased = true;
+
+    /**
+     * Keep radius for the distance sweep: chunks within this Chebyshev
+     * distance of any player stay resident. Must exceed the max view radius
+     * (12) by a margin or a moving player thrashes (unload/reload churn).
+     */
+    public int $chunkUnloadKeepRadius = 16;
+
+    /**
+     * How often (in ticks) the distance sweep runs. 100 ticks = every 5
+     * seconds at 20 TPS; the sweep is bounded per call (see
+     * ChunkUnloadService::unloadChunksFarFromPlayers) so it can never stall
+     * a tick.
+     */
+    public int $chunkUnloadSweepIntervalTicks = 100;
 
     // --- Nether (14.32) ------------------------------------------------------
 
@@ -124,6 +148,21 @@ final class KhronosConfig {
 
         if (isset($data['max-loaded-chunks']) && is_numeric($data['max-loaded-chunks'])) {
             $this->maxLoadedChunks = max(64, (int)$data['max-loaded-chunks']);
+        }
+
+        $cu = $data['chunk-unload'] ?? null;
+        if (is_array($cu)) {
+            if (array_key_exists('distance-based', $cu) && is_bool($cu['distance-based'])) {
+                $this->chunkUnloadDistanceBased = $cu['distance-based'];
+            }
+            if (isset($cu['keep-radius']) && is_numeric($cu['keep-radius'])) {
+                // Floor of 8: below the default view radius the sweep would
+                // evict chunks the client is still rendering.
+                $this->chunkUnloadKeepRadius = max(8, (int)$cu['keep-radius']);
+            }
+            if (isset($cu['sweep-interval-ticks']) && is_numeric($cu['sweep-interval-ticks'])) {
+                $this->chunkUnloadSweepIntervalTicks = max(20, (int)$cu['sweep-interval-ticks']);
+            }
         }
 
         $nether = $data['nether'] ?? null;
@@ -215,6 +254,15 @@ final class KhronosConfig {
             // Loaded-chunk budget: resident chunks are evicted FIFO above
             // this count. Sized for the 512M floor; raise on high-RAM hosts.
             'max-loaded-chunks' => 1200,
+            // Distance-based chunk unloading: a periodic sweep evicts chunks
+            // farther than keep-radius from every player, so memory tracks
+            // what players actually need. keep-radius must stay above the
+            // max view radius (12) to avoid unload/reload churn.
+            'chunk-unload' => [
+                'distance-based' => true,
+                'keep-radius' => 16,
+                'sweep-interval-ticks' => 100,
+            ],
             // Nether dimension: portals auto-create worlds/<nether.world>/ on
             // first use and teleport through it. Set enabled=false to disable
             // portals entirely (legacy nether.allow-nether).
