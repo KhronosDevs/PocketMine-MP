@@ -6,6 +6,8 @@ namespace pocketmine\core\service;
 
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\VelocityComponent;
+use pocketmine\core\component\WorldComponent;
+use pocketmine\core\component\tags\PlayerTag;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\ChunkStore;
 use pocketmine\core\resource\WorldRegistry;
@@ -42,15 +44,75 @@ final class ChunkUnloadService {
     }
 
     /**
-     * Enforce the loaded-chunk budget (11.3): while more than
+     * Distance-based eviction (the primary policy): drop every resident chunk
+     * farther than $keepRadius chunks from ALL players in $worldId. Chunks
+     * near any player stay resident so a moving player's view ring is never
+     * touched (keepRadius is view-distance + margin by design). Runs as a
+     * periodic sweep; the FIFO count cap in unloadUnusedChunks() remains the
+     * backstop for many spread-out players. Bounded per call by $maxEvictions
+     * so a fast player leaving a large area behind can never stall a tick.
+     *
+     * Returns how many chunks were evicted.
+     */
+    public function unloadChunksFarFromPlayers(int $keepRadius, int $worldId = 0, int $maxEvictions = 32): int {
+        $store = $this->getChunkStore($worldId);
+        if ($store === null) {
+            return 0;
+        }
+
+        // One query per world: all players of THIS world (the ECS world holds
+        // every entity of every world; WorldComponent is the discriminator).
+        $players = [];
+        $query = $this->world->query()
+            ->with(PositionComponent::class)
+            ->withTag(PlayerTag::class)
+            ->build();
+        foreach ($query as $entity) {
+            // Null WorldComponent = default world (id 0), matching the rest of
+            // the codebase's fallback for pre-multi-world test entities.
+            $worldComponent = $entity->get(WorldComponent::class);
+            $entityWorld = $worldComponent !== null ? $worldComponent->id : 0;
+            if ($entityWorld !== $worldId) {
+                continue;
+            }
+            $position = $entity->get(PositionComponent::class);
+            if ($position === null) {
+                continue;
+            }
+            $players[] = [(int)floor($position->x / 16), (int)floor($position->z / 16)];
+        }
+        if ($players === []) {
+            return 0; // nobody here: leave it to the count-cap backstop
+        }
+
+        $evicted = 0;
+        foreach ($store->getLoadedChunkCoordinates() as [$chunkX, $chunkZ]) {
+            if ($evicted >= $maxEvictions) {
+                break;
+            }
+            $near = false;
+            foreach ($players as [$pcx, $pcz]) {
+                // Chebyshev distance matches chunk view-radius semantics (a
+                // square ring, not a diagonal-optimistic circle).
+                if (max(abs($chunkX - $pcx), abs($chunkZ - $pcz)) <= $keepRadius) {
+                    $near = true;
+                    break;
+                }
+            }
+            if (!$near) {
+                $this->persistAndUnload($chunkX, $chunkZ, $worldId);
+                $evicted++;
+            }
+        }
+        return $evicted;
+    }
+
+    /**
+     * FIFO count-cap eviction (the backstop): while more than
      * $maxLoadedChunks chunks are resident, persist + drop the oldest ones
      * (FIFO by load order). Nothing is lost - every evicted chunk is written
      * to disk before it leaves memory, so a later loadChunk() reads it back
      * exactly as it was. Returns how many chunks were evicted.
-     *
-     * FIFO is the current eviction policy (cheap, deterministic, testable);
-     * a distance-from-players policy would need player position tracking in
-     * this service and can slot in behind the same call sites.
      */
     public function unloadUnusedChunks(int $maxLoadedChunks = 10000, int $worldId = 0): int {
         $store = $this->getChunkStore($worldId);
