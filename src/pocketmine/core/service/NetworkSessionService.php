@@ -4618,18 +4618,21 @@ final class NetworkSessionService {
         // Legacy parity: send a SetEntityDataPacket with DATA_LEAD_HOLDER = -1
         // right after the creative contents. Without this, the 0.15 client may
         // render a rope/lead on the player entity.
+        // NOTE: protocol 84 always uses eid=0 for the player on the wire,
+        // regardless of the ECS entity id.
         $leadData = new SetEntityDataPacket();
-        $leadData->eid = $playerRef->entityId;
+        $leadData->eid = 0;
         $leadData->metadata = [23 => [Binary::DATA_TYPE_LONG, -1]];
         $this->queuePacket($playerRef, $leadData);
 
         // Legacy parity: send the held-item MobEquipmentPacket so the client
         // knows which hotbar slot is selected. Without this the client may
         // render the inventory UI incorrectly when E is pressed.
+        // NOTE: protocol 84 always uses eid=0 for the player on the wire.
         $heldSlot = $entity?->get(InventoryComponent::class)?->heldSlot ?? 0;
         $held = $entity?->get(InventoryComponent::class)?->get($heldSlot);
         $mobEq = new MobEquipmentPacket();
-        $mobEq->eid = $playerRef->entityId;
+        $mobEq->eid = 0;
         $mobEq->item = $held !== null ? [$held->itemId, $held->count, $held->meta, $held->nbt] : [0, 0, 0, null];
         $mobEq->slot = $heldSlot;
         $mobEq->selectedSlot = $heldSlot;
