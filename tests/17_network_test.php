@@ -445,17 +445,21 @@ test('login produces the full protocol-84 burst', function () use ($client, $ker
     $client->sendLogin('Alice', $uuidA);
     $kernel->run(2);
 
-    // Gather packets until the burst essentials are all seen (10 distinct
-    // ids: the inventory content packet joined in 14.1, the recipe list in
-    // 14.12).
+    // Gather packets until the burst essentials are all seen (12 distinct
+    // ids: inventory content, recipe list, adventure settings from
+    // doFirstSpawn after PLAYER_SPAWN).
     $deadline = microtime(true) + 8.0;
     $seen = [];
-    while (microtime(true) < $deadline && count($seen) < 10) {
+    $sawAdventure = false;
+    while (microtime(true) < $deadline && !($sawSpawn && $sawAdventure)) {
         foreach ($client->readGamePackets() as [$id, $buffer]) {
             $seen[$id] = true;
             $loginPackets[] = [$id, $buffer];
             if ($id === Info::PLAY_STATUS_PACKET && psStatus($buffer) === PlayStatusPacket::PLAYER_SPAWN) {
                 $sawSpawn = true;
+            }
+            if ($id === Info::ADVENTURE_SETTINGS_PACKET) {
+                $sawAdventure = true;
             }
             if ($id === Info::FULL_CHUNK_DATA_PACKET) {
                 $fc = fcFields($buffer);
@@ -464,6 +468,8 @@ test('login produces the full protocol-84 burst', function () use ($client, $ker
         }
         $kernel->run(1);
     }
+
+
 
     $byId = [];
     foreach ($loginPackets as [$id, $buffer]) {
@@ -523,16 +529,25 @@ test('login produces the full protocol-84 burst', function () use ($client, $ker
     same(1, count($entries), 'player list has one entry');
     same('Alice', $entries[0]['name'], 'player list names the joiner');
 
-    // 14.1: the login burst now carries the full inventory (window 0) so the
-    // client renders the starter kit hotbar.
-    ok(isset($byId[Info::CONTAINER_SET_CONTENT_PACKET]), 'inventory content sent on login');
-    $csc = cscFields($byId[Info::CONTAINER_SET_CONTENT_PACKET]);
-    same(0, $csc['windowid'], 'inventory window id 0');
-    same(45, count($csc['slots']), '45 inventory slots (36 real + 9 dummy hotbar)');
+    // 14.1: the full inventory (window 0) is sent in doFirstSpawn (after
+    // PLAYER_SPAWN), not in the login handler. Find the window-0 packet
+    // among all ContainerSetContentPackets.
+    $inventoryContent = null;
+    foreach ($loginPackets as [$pid, $pbuf]) {
+        if ($pid === Info::CONTAINER_SET_CONTENT_PACKET) {
+            $tmp = cscFields($pbuf);
+            if ($tmp['windowid'] === 0) {
+                $inventoryContent = $tmp;
+                break;
+            }
+        }
+    }
+    ok($inventoryContent !== null, 'inventory content (window 0) sent on login');
+    same(45, count($inventoryContent['slots']), '45 inventory slots (36 real + 9 dummy hotbar)');
     // Starter kit: planks in slot 0 (held), cobblestone in slot 1.
-    same(5, $csc['slots'][0][0], 'slot 0 holds planks');
-    same(32, $csc['slots'][0][1], '32 planks in slot 0');
-    same(4, $csc['slots'][1][0], 'slot 1 holds cobblestone');
+    same(5, $inventoryContent['slots'][0][0], 'slot 0 holds planks');
+    same(32, $inventoryContent['slots'][0][1], '32 planks in slot 0');
+    same(4, $inventoryContent['slots'][1][0], 'slot 1 holds cobblestone');
 
     // 14.12: the login burst carries the recipe list so the client can
     // render the crafting UI.

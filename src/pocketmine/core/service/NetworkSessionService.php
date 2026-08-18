@@ -4629,53 +4629,41 @@ final class NetworkSessionService {
         $difficulty->difficulty = $config instanceof ServerConfig ? $config->difficulty->value : Difficulty::Easy->value;
         $this->queuePacket($playerRef, $difficulty);
 
-        $settings = new AdventureSettingsPacket();
-        $creative = GameMode::coerce($entity?->get(\pocketmine\core\component\MetadataComponent::class)?->get(MetadataKeys::GAMEMODE)) === GameMode::Creative;
-        $settings->flags = $creative ? AdventureSettingsPacket::FLAGS_CREATIVE : AdventureSettingsPacket::FLAGS_SURVIVAL;
-        $settings->userPermission = 2;
-        $settings->globalPermission = 2;
-        $this->queuePacket($playerRef, $settings);
+        // NOTE: AdventureSettings is NOT sent in the login handler in old-src.
+        // It is sent in doFirstSpawn() after PLAYER_SPAWN.
 
-        // --- initEntity parity (legacy Player::setGamemode) + doFirstSpawn --
-        // Old-src calls setGamemode() during initEntity() in the Player
-        // constructor, which sends these packets BEFORE StartGamePacket.
-        // The 0.15 client needs SetPlayerGameTypePacket and the held-item
-        // ContainerSetSlotPacket to properly initialize the inventory UI.
+        // --- Old-src login handler parity ---
+        // The old-src login handler ONLY sends:
+        //   PlayerList, LOGIN_SUCCESS, StartGame, Time, SpawnPos,
+        //   Health, Difficulty, Creative(0x79), LEAD_HOLDER metadata,
+        //   Weather.
+        // Inventory(0), armor(0x78), full entity metadata, and
+        // AdventureSettings are sent in doFirstSpawn AFTER PLAYER_SPAWN.
+        // SetPlayerGameType/MobEquipment/ContainerSetSlot were sent by
+        // setGamemode() in the Player constructor (initEntity), which
+        // runs BEFORE the login handler.
 
-        // 1) SetPlayerGameTypePacket — the client needs this to know the
-        //    gamemode before it can render the inventory screen.
-        $gmPk = new SetPlayerGameTypePacket();
-        $gmPk->gamemode = GameMode::coerce($entity?->get(\pocketmine\core\component\MetadataComponent::class)?->get(MetadataKeys::GAMEMODE))->value & 0x01;
-        $this->queuePacket($playerRef, $gmPk);
-
-        // 2) Full entity metadata (sendData) — the 0.15 client needs
-        //    DATA_FLAGS, DATA_AIR, DATA_NAMETAG, DATA_SHOW_NAMETAG,
-        //    DATA_SILENT, DATA_NO_AI, DATA_LEAD_HOLDER, DATA_LEAD
-        //    before it can render the player model in the inventory screen.
-        $entityMeta = new SetEntityDataPacket();
-        $entityMeta->eid = 0;
-        $entityMeta->metadata = $this->legacyMetadataDefaults();
-        $this->queuePacket($playerRef, $entityMeta);
-
-        // 3) Creative inventory (window 0x79): populate the client's item
-        //    picker so creative players can take any item.
+        // 1) Creative inventory (window 0x79) — old-src sends this in
+        //    the login handler.
         $this->sendCreativeContents($playerRef);
 
-        // 4) Full inventory contents (window 0, 36+9=45 slots + hotbar).
-        $this->sendInventoryContents($playerRef);
-        // 5) Armor window contents (0x78) + MobArmorEquipment broadcast.
-        $this->sendArmorContents($playerRef);
-        $this->sendMobArmorToAll($session['playerRef']->entityId);
+        // 2) LEAD_HOLDER metadata only — old-src login handler sends
+        //    only [DATA_LEAD_HOLDER => [LONG, -1]], not the full 8-property
+        //    metadata dict. Full metadata is sent in doFirstSpawn.
+        $leadMeta = new SetEntityDataPacket();
+        $leadMeta->eid = 0;
+        // Old-src login handler sends only [DATA_LEAD_HOLDER => [LONG, -1]].
+        // Key 23 = DATA_LEAD_HOLDER, type = DATA_TYPE_LONG (4).
+        $leadMeta->metadata = [23 => [\pocketmine\utils\Binary::DATA_TYPE_LONG, -1]];
+        $this->queuePacket($playerRef, $leadMeta);
 
-        // 6) XP bar, food bars, recipe list.
+        // 3) XP bar, food bars, recipe list, held item.
         $this->syncXpFor($session['playerRef']->entityId);
         $this->syncFoodFor($session['playerRef']->entityId);
         $this->sendCraftingData($playerRef);
 
-        // 7) Held-item: legacy sendHeldItem sends BOTH MobEquipmentPacket
-        //    AND ContainerSetSlotPacket. The ContainerSetSlotPacket tells
-        //    the client which inventory slot the held item occupies — the
-        //    client may need this to properly link the hotbar display.
+        // 4) Held-item: legacy setGamemode sends MobEquipmentPacket +
+        //    ContainerSetSlotPacket before the login handler.
         $heldSlot = $entity?->get(InventoryComponent::class)?->heldSlot ?? 0;
         $held = $entity?->get(InventoryComponent::class)?->get($heldSlot);
         $heldItem = $held !== null ? [$held->itemId, $held->count, $held->meta, $held->nbt] : [0, 0, 0, null];
@@ -4685,14 +4673,16 @@ final class NetworkSessionService {
         $mobEq->slot = $heldSlot;
         $mobEq->selectedSlot = $heldSlot;
         $this->queuePacket($playerRef, $mobEq);
-        // ContainerSetSlotPacket for the held item — matches legacy
-        // PlayerInventory::sendHeldItem which sends both packets.
         $slotPk = new ContainerSetSlotPacket();
         $slotPk->windowid = ContainerSetContentPacket::SPECIAL_INVENTORY;
         $slotPk->slot = $heldSlot;
-        $slotPk->hotbarSlot = 0; // legacy: hotbarSlot defaults to 0
+        $slotPk->hotbarSlot = 0;
         $slotPk->item = $heldItem;
         $this->queuePacket($playerRef, $slotPk);
+
+        // NOTE: Inventory(0), armor(0x78), full entity metadata, and
+        // AdventureSettings are sent in sendDoFirstSpawn() AFTER
+        // PLAYER_SPAWN, matching old-src doFirstSpawn() exactly.
     }
 
     /**
