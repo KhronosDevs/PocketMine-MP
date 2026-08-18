@@ -33,7 +33,7 @@ class AdventureSettingsPacket extends DataPacket{
 	/** Full AdventureSettings flag set for survival (0.15.10). */
 	const FLAGS_SURVIVAL = 0x4E;
 	/** Full AdventureSettings flag set for creative (0.15.10). */
-	const FLAGS_CREATIVE = 0x7D;
+	const FLAGS_CREATIVE = 0xCE;
 
 	public int $flags = 0;
 	public int $userPermission = 0;

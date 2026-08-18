@@ -1287,6 +1287,15 @@ final class NetworkSessionService {
             $typePk = new SetPlayerGameTypePacket();
             $typePk->gamemode = $mode->value;
             $this->queuePacket($session['playerRef'], $typePk);
+            // Legacy parity: after a gamemode flip, re-send the creative
+            // inventory list (window 0x79), the player's full inventory
+            // (window 0), and the held item so the client renders the
+            // correct UI for the new mode.
+            if ($mode === GameMode::Creative || $mode === GameMode::Survival) {
+                $this->sendCreativeContents($session['playerRef']);
+            }
+            $this->sendInventoryContents($session['playerRef']);
+            $this->sendInventorySlot($session['playerRef'], $session['entityRef']->getEntity()?->get(InventoryComponent::class)?->heldSlot ?? 0);
             return;
         }
     }
@@ -4567,7 +4576,8 @@ final class NetworkSessionService {
         $this->queuePacket($playerRef, $difficulty);
 
         $settings = new AdventureSettingsPacket();
-        $settings->flags = 0x02 | 0x04 | 0x08 | 0x40; // no pvp/pvm/pve + auto jump
+        $creative = GameMode::coerce($entity?->get(\pocketmine\core\component\MetadataComponent::class)?->get(MetadataKeys::GAMEMODE)) === GameMode::Creative;
+        $settings->flags = $creative ? AdventureSettingsPacket::FLAGS_CREATIVE : AdventureSettingsPacket::FLAGS_SURVIVAL;
         $settings->userPermission = 2;
         $settings->globalPermission = 2;
         $this->queuePacket($playerRef, $settings);

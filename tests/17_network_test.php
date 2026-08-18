@@ -3031,8 +3031,8 @@ test('a /gamemode command flips the client and the metadata', function () use ($
         $kernel->run(1);
         foreach ($client->readGamePackets() as [$id, $buffer]) {
             if ($id === Info::ADVENTURE_SETTINGS_PACKET) {
-                if ((advFields($buffer)['flags'] & 0x10) !== 0) {
-                    $sawCreative = true; // no-clip bit => creative settings
+                if ((advFields($buffer)['flags'] & 0x80) !== 0) {
+                    $sawCreative = true; // allow-fly bit (0x80) => creative settings
                 }
             }
             if ($id === Info::TEXT_PACKET) {
