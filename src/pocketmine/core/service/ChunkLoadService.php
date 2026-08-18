@@ -14,13 +14,16 @@ use pocketmine\port\driven\WorldGenPort;
 final class ChunkLoadService {
     /**
      * Default loaded-chunk budget, sized to the server's 512M memory floor
-     * (see Kernel::bootstrap): each resident chunk holds ~196KB of binary
-     * payload strings (blocks + meta + sky/block light + biomes), so ~2048
-     * chunks cost ~400MB. The old 10000 default (~2GB worst case) could
-     * outgrow the floor before eviction ever triggered with a handful of
-     * far-apart players.
+     * (see Kernel::bootstrap): each resident chunk costs ~310KB once the
+     * serialized wire cache is populated (blocks 64K + meta 64K + sky/block
+     * light 64K + biomes + ~81KB wire + PHP overhead), so ~1200 chunks land
+     * at ~372MB - the same proven ceiling as the pre-wire 2048-chunk budget
+     * (~383MB at 187KB/chunk) - with ~140MB left for the network thread,
+     * session state and the streaming backlog. The pre-wire 2048 default
+     * would now cost ~635MB and OOM before eviction ever triggered. Tune
+     * via khronos.json "max-loaded-chunks" on high-RAM hosts.
      */
-    public const DEFAULT_MAX_LOADED_CHUNKS = 2048;
+    public const DEFAULT_MAX_LOADED_CHUNKS = 1200;
 
     private int $maxLoadedChunks;
 

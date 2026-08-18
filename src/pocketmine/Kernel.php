@@ -211,6 +211,7 @@ final class Kernel {
         private readonly ResourceRegistry $resourceRegistry,
         private readonly int $regionCount = 1,
         private readonly ?int $maxEntitiesPerRegion = null,
+        private readonly ?int $maxLoadedChunks = null,
     ) {
         // The load service enforces the loaded-chunk budget by evicting via
         // the unload service, so the unload service is constructed first. The
@@ -218,7 +219,7 @@ final class Kernel {
         // point must be derived from the actual terrain (safe spawn), which
         // requires loading the spawn chunk.
         $this->chunkUnloadService = new ChunkUnloadService($world, $storagePort, $eventPort);
-        $this->chunkLoadService = new ChunkLoadService($world, $storagePort, $worldGenPort, $this->chunkUnloadService, ChunkLoadService::DEFAULT_MAX_LOADED_CHUNKS, $eventPort);
+        $this->chunkLoadService = new ChunkLoadService($world, $storagePort, $worldGenPort, $this->chunkUnloadService, $maxLoadedChunks ?? ChunkLoadService::DEFAULT_MAX_LOADED_CHUNKS, $eventPort);
         $this->playerJoinService = new PlayerJoinService($world, $networkPort, $storagePort, $worldGenPort, $this->chunkLoadService, $eventPort);
         $this->playerLeaveService = new PlayerLeaveService($world, $networkPort, $storagePort, $eventPort);
         $this->playerRespawnService = new PlayerRespawnService($world, $storagePort, $eventPort);
@@ -1749,6 +1750,7 @@ function createKernel(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): 
         $resourceRegistry,
         $regionCount,
         $maxEntitiesPerRegion,
+        $khronosConfig->maxLoadedChunks,
     );
 }
 

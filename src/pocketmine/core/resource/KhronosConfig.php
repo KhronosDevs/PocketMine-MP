@@ -52,6 +52,16 @@ final class KhronosConfig {
     public ?int $spawnY = null;
     public ?int $spawnZ = null;
 
+    // --- Memory (chunk budget) ------------------------------------------------
+
+    /**
+     * Loaded-chunk budget: resident chunks are evicted (persisted + dropped)
+     * FIFO when the count exceeds this. Sized for the 512M floor at ~310KB
+     * per chunk (binary payloads + serialized wire cache + PHP overhead);
+     * raise it on high-RAM hosts. See ChunkLoadService::DEFAULT_MAX_LOADED_CHUNKS.
+     */
+    public int $maxLoadedChunks = 1200;
+
     // --- Nether (14.32) ------------------------------------------------------
 
     /** Whether portals work at all (legacy pocketmine.yml nether.allow-nether). */
@@ -110,6 +120,10 @@ final class KhronosConfig {
     public function apply(array $data): void {
         if (isset($data['default-world']) && is_string($data['default-world']) && trim($data['default-world']) !== '') {
             $this->defaultWorld = $data['default-world'];
+        }
+
+        if (isset($data['max-loaded-chunks']) && is_numeric($data['max-loaded-chunks'])) {
+            $this->maxLoadedChunks = max(64, (int)$data['max-loaded-chunks']);
         }
 
         $nether = $data['nether'] ?? null;
@@ -198,6 +212,9 @@ final class KhronosConfig {
             // Folder (and display name) of the default world. A fresh world is
             // generated under worlds/<folder>/ on first boot.
             'default-world' => 'world',
+            // Loaded-chunk budget: resident chunks are evicted FIFO above
+            // this count. Sized for the 512M floor; raise on high-RAM hosts.
+            'max-loaded-chunks' => 1200,
             // Nether dimension: portals auto-create worlds/<nether.world>/ on
             // first use and teleport through it. Set enabled=false to disable
             // portals entirely (legacy nether.allow-nether).
