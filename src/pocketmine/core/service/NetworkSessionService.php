@@ -4596,45 +4596,63 @@ final class NetworkSessionService {
         $settings->globalPermission = 2;
         $this->queuePacket($playerRef, $settings);
 
-        // --- doFirstSpawn parity (legacy Player::doFirstSpawn) ---------
-        // Old-src sends these BEFORE the inventory so the client has the
-        // full player entity initialized before it can open the inventory UI.
+        // --- initEntity parity (legacy Player::setGamemode) + doFirstSpawn --
+        // Old-src calls setGamemode() during initEntity() in the Player
+        // constructor, which sends these packets BEFORE StartGamePacket.
+        // The 0.15 client needs SetPlayerGameTypePacket and the held-item
+        // ContainerSetSlotPacket to properly initialize the inventory UI.
 
-        // 1) Full entity metadata (sendData) — the 0.15 client needs
+        // 1) SetPlayerGameTypePacket — the client needs this to know the
+        //    gamemode before it can render the inventory screen.
+        $gmPk = new SetPlayerGameTypePacket();
+        $gmPk->gamemode = GameMode::coerce($entity?->get(\pocketmine\core\component\MetadataComponent::class)?->get(MetadataKeys::GAMEMODE))->value & 0x01;
+        $this->queuePacket($playerRef, $gmPk);
+
+        // 2) Full entity metadata (sendData) — the 0.15 client needs
         //    DATA_FLAGS, DATA_AIR, DATA_NAMETAG, DATA_SHOW_NAMETAG,
         //    DATA_SILENT, DATA_NO_AI, DATA_LEAD_HOLDER, DATA_LEAD
         //    before it can render the player model in the inventory screen.
-        //    Without this, the client may crash when E is pressed.
         $entityMeta = new SetEntityDataPacket();
         $entityMeta->eid = 0;
         $entityMeta->metadata = $this->legacyMetadataDefaults();
         $this->queuePacket($playerRef, $entityMeta);
 
-        // 2) Creative inventory (window 0x79): populate the client's item
+        // 3) Creative inventory (window 0x79): populate the client's item
         //    picker so creative players can take any item.
         $this->sendCreativeContents($playerRef);
 
-        // 3) Full inventory contents (window 0, 36+9=45 slots + hotbar).
+        // 4) Full inventory contents (window 0, 36+9=45 slots + hotbar).
         $this->sendInventoryContents($playerRef);
-        // 4) Armor window contents (0x78) + MobArmorEquipment broadcast.
+        // 5) Armor window contents (0x78) + MobArmorEquipment broadcast.
         $this->sendArmorContents($playerRef);
         $this->sendMobArmorToAll($session['playerRef']->entityId);
 
-        // 5) XP bar, food bars, recipe list.
+        // 6) XP bar, food bars, recipe list.
         $this->syncXpFor($session['playerRef']->entityId);
         $this->syncFoodFor($session['playerRef']->entityId);
         $this->sendCraftingData($playerRef);
 
-        // 6) Held-item MobEquipmentPacket so the client knows which
-        //    hotbar slot is selected.
+        // 7) Held-item: legacy sendHeldItem sends BOTH MobEquipmentPacket
+        //    AND ContainerSetSlotPacket. The ContainerSetSlotPacket tells
+        //    the client which inventory slot the held item occupies — the
+        //    client may need this to properly link the hotbar display.
         $heldSlot = $entity?->get(InventoryComponent::class)?->heldSlot ?? 0;
         $held = $entity?->get(InventoryComponent::class)?->get($heldSlot);
+        $heldItem = $held !== null ? [$held->itemId, $held->count, $held->meta, $held->nbt] : [0, 0, 0, null];
         $mobEq = new MobEquipmentPacket();
         $mobEq->eid = 0;
-        $mobEq->item = $held !== null ? [$held->itemId, $held->count, $held->meta, $held->nbt] : [0, 0, 0, null];
+        $mobEq->item = $heldItem;
         $mobEq->slot = $heldSlot;
         $mobEq->selectedSlot = $heldSlot;
         $this->queuePacket($playerRef, $mobEq);
+        // ContainerSetSlotPacket for the held item — matches legacy
+        // PlayerInventory::sendHeldItem which sends both packets.
+        $slotPk = new ContainerSetSlotPacket();
+        $slotPk->windowid = ContainerSetContentPacket::SPECIAL_INVENTORY;
+        $slotPk->slot = $heldSlot;
+        $slotPk->hotbarSlot = 0; // legacy: hotbarSlot defaults to 0
+        $slotPk->item = $heldItem;
+        $this->queuePacket($playerRef, $slotPk);
     }
 
     /**
@@ -5298,9 +5316,15 @@ final class NetworkSessionService {
             }
             $small = [];
             $large = [];
+            $pktIdx = 0;
             foreach ($packets as $packet) {
                 $packet->encode();
                 $buffer = $packet->getBuffer();
+                if ($this->wireTrace) {
+                    $pid = ord($buffer[0]);
+                    fwrite(STDERR, '[snd] ' . $addrKey . ' #' . $pktIdx . ' pid=0x' . str_pad(dechex($pid), 2, '0', STR_PAD_LEFT) . ' len=' . strlen($buffer) . ' class=' . get_class($packet) . PHP_EOL);
+                }
+                $pktIdx++;
                 if (strlen($buffer) >= self::BATCH_THRESHOLD) {
                     $large[] = $buffer;
                 } else {
