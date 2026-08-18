@@ -4596,39 +4596,37 @@ final class NetworkSessionService {
         $settings->globalPermission = 2;
         $this->queuePacket($playerRef, $settings);
 
-        // Full inventory contents (window 0) so the client renders the
-        // hotbar with the player's actual items (starter kit for new players).
+        // --- doFirstSpawn parity (legacy Player::doFirstSpawn) ---------
+        // Old-src sends these BEFORE the inventory so the client has the
+        // full player entity initialized before it can open the inventory UI.
+
+        // 1) Full entity metadata (sendData) — the 0.15 client needs
+        //    DATA_FLAGS, DATA_AIR, DATA_NAMETAG, DATA_SHOW_NAMETAG,
+        //    DATA_SILENT, DATA_NO_AI, DATA_LEAD_HOLDER, DATA_LEAD
+        //    before it can render the player model in the inventory screen.
+        //    Without this, the client may crash when E is pressed.
+        $entityMeta = new SetEntityDataPacket();
+        $entityMeta->eid = 0;
+        $entityMeta->metadata = $this->legacyMetadataDefaults();
+        $this->queuePacket($playerRef, $entityMeta);
+
+        // 2) Creative inventory (window 0x79): populate the client's item
+        //    picker so creative players can take any item.
+        $this->sendCreativeContents($playerRef);
+
+        // 3) Full inventory contents (window 0, 36+9=45 slots + hotbar).
         $this->sendInventoryContents($playerRef);
-        // 14.13: armor window contents (0x78) + the equipped gear broadcast
-        // (MobArmorEquipmentPacket) so other players see it right away.
+        // 4) Armor window contents (0x78) + MobArmorEquipment broadcast.
         $this->sendArmorContents($playerRef);
         $this->sendMobArmorToAll($session['playerRef']->entityId);
 
-        // 14.9: init the XP bar (level 0, empty progress).
+        // 5) XP bar, food bars, recipe list.
         $this->syncXpFor($session['playerRef']->entityId);
-        // 14.11: init the food bars (full hunger, default saturation).
         $this->syncFoodFor($session['playerRef']->entityId);
-        // 14.12: the client needs the recipe list to render the crafting UI
-        // (legacy sent it in Server::onPlayerLogin, right after the burst).
         $this->sendCraftingData($playerRef);
-        // Creative inventory (window 0x79): populate the client's item picker
-        // so creative players can take any item (legacy sendContents parity).
-        $this->sendCreativeContents($playerRef);
 
-        // Legacy parity: send a SetEntityDataPacket with DATA_LEAD_HOLDER = -1
-        // right after the creative contents. Without this, the 0.15 client may
-        // render a rope/lead on the player entity.
-        // NOTE: protocol 84 always uses eid=0 for the player on the wire,
-        // regardless of the ECS entity id.
-        $leadData = new SetEntityDataPacket();
-        $leadData->eid = 0;
-        $leadData->metadata = [23 => [Binary::DATA_TYPE_LONG, -1]];
-        $this->queuePacket($playerRef, $leadData);
-
-        // Legacy parity: send the held-item MobEquipmentPacket so the client
-        // knows which hotbar slot is selected. Without this the client may
-        // render the inventory UI incorrectly when E is pressed.
-        // NOTE: protocol 84 always uses eid=0 for the player on the wire.
+        // 6) Held-item MobEquipmentPacket so the client knows which
+        //    hotbar slot is selected.
         $heldSlot = $entity?->get(InventoryComponent::class)?->heldSlot ?? 0;
         $held = $entity?->get(InventoryComponent::class)?->get($heldSlot);
         $mobEq = new MobEquipmentPacket();
