@@ -4018,6 +4018,46 @@ final class NetworkSessionService {
     }
 
     /**
+     * 0.15 doFirstSpawn parity: re-send entity metadata + adventure
+     * settings + inventory + armor AFTER the client has spawned.
+     *
+     * Old-src doFirstSpawn() calls sendData($this) with full entity
+     * metadata, sendSettings() for AdventureSettings, and then
+     * inventory->sendContents() + inventory->sendArmorContents().
+     * The 0.15 client ignores inventory data sent before PLAYER_SPAWN
+     * and only processes it after the spawn status arrives.
+     */
+    private function sendDoFirstSpawn(string $addrKey): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        $playerRef = $session['playerRef'];
+        $entity = $session['entityRef']->getEntity();
+
+        // 1) Full entity metadata — matches old-src sendData($this)
+        $entityMeta = new SetEntityDataPacket();
+        $entityMeta->eid = 0; // protocol 84: player is always 0
+        $entityMeta->metadata = $this->legacyMetadataDefaults();
+        $this->queuePacket($playerRef, $entityMeta);
+
+        // 2) AdventureSettings — matches old-src sendSettings()
+        $creative = GameMode::coerce($entity?->get(\pocketmine\core\component\MetadataComponent::class)?->get(MetadataKeys::GAMEMODE)) === GameMode::Creative;
+        $settings = new AdventureSettingsPacket();
+        $settings->flags = $creative ? AdventureSettingsPacket::FLAGS_CREATIVE : AdventureSettingsPacket::FLAGS_SURVIVAL;
+        $settings->userPermission = 2;
+        $settings->globalPermission = 2;
+        $this->queuePacket($playerRef, $settings);
+
+        // 3) Inventory contents (window 0, 45 slots + hotbar) — the
+        //    critical send that the client needs AFTER spawning.
+        $this->sendInventoryContents($playerRef);
+
+        // 4) Armor contents (window 0x78)
+        $this->sendArmorContents($playerRef);
+    }
+
+    /**
      * Broadcast the authoritative block state at a position to every session.
      * Reads the state from the ChunkStore so whatever the services actually
      * set (including placement-meta resolution) is what the client receives.
@@ -5210,6 +5250,11 @@ final class NetworkSessionService {
                     $status->status = PlayStatusPacket::PLAYER_SPAWN;
                     $this->queuePacket($session['playerRef'], $status);
                     $session['spawned'] = true;
+                    // 0.15 parity: old-src doFirstSpawn() re-sends entity
+                    // metadata, adventure settings, and inventory contents
+                    // AFTER the client has spawned. The client ignores
+                    // inventory data sent before PLAYER_SPAWN.
+                    $this->sendDoFirstSpawn($addrKey);
                 }
                 $this->sessions[$addrKey] = $session;
                 continue;
@@ -5259,6 +5304,10 @@ final class NetworkSessionService {
                 $status->status = PlayStatusPacket::PLAYER_SPAWN;
                 $this->queuePacket($session['playerRef'], $status);
                 $session['spawned'] = true;
+                // 0.15 parity: old-src doFirstSpawn() re-sends entity
+                // metadata, adventure settings, and inventory contents
+                // AFTER the client has spawned.
+                $this->sendDoFirstSpawn($addrKey);
             }
             $this->sessions[$addrKey] = $session;
         }
