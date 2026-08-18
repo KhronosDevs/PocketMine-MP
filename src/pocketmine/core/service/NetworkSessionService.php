@@ -5121,11 +5121,14 @@ final class NetworkSessionService {
      */
     private function legacyMetadataDefaults(): array {
         return [
-            0 => [Binary::DATA_TYPE_BYTE, 0],       // DATA_FLAGS
-            1 => [Binary::DATA_TYPE_SHORT, 300],    // DATA_AIR
-            2 => [Binary::DATA_TYPE_STRING, ''],    // DATA_NAMETAG (overridden)
-            23 => [Binary::DATA_TYPE_LONG, -1],     // DATA_LEAD_HOLDER
-            24 => [Binary::DATA_TYPE_BYTE, 0],      // DATA_LEAD
+            0  => [Binary::DATA_TYPE_BYTE, 0],       // DATA_FLAGS
+            1  => [Binary::DATA_TYPE_SHORT, 300],    // DATA_AIR
+            2  => [Binary::DATA_TYPE_STRING, ''],    // DATA_NAMETAG
+            3  => [Binary::DATA_TYPE_BYTE, 1],       // DATA_SHOW_NAMETAG (1 = visible)
+            4  => [Binary::DATA_TYPE_BYTE, 0],       // DATA_SILENT
+            15 => [Binary::DATA_TYPE_BYTE, 0],       // DATA_NO_AI
+            23 => [Binary::DATA_TYPE_LONG, -1],      // DATA_LEAD_HOLDER
+            24 => [Binary::DATA_TYPE_BYTE, 0],       // DATA_LEAD
         ];
     }
 
