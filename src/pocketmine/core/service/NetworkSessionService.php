@@ -4437,10 +4437,13 @@ final class NetworkSessionService {
         for ($i = 0; $i < 9; $i++) {
             $pk->slots[] = [0, 0, 0, null];
         }
-        // Hotbar mapping: each hotbar slot (0-8) maps to inventory slot (0-8).
-        // The 0.15 client requires this for window 0 or the inventory renders
-        // empty/broken when E is pressed.
-        $pk->hotbar = range(0, 8);
+        // Hotbar mapping: each hotbar slot (0-8) maps to inventory slot (9-17).
+        // The 0.15 client subtracts 9 from all slot indices in window 0, so the
+        // 9 dummy air slots at positions 0-8 become invisible, and real slots
+        // 0-35 become visible as slots 9-44. The hotbar mapping must use the
+        // post-subtraction indices (range(9, 17)) so the client links each
+        // hotbar key to the correct real inventory slot.
+        $pk->hotbar = range(9, 17);
         $this->queuePacket($player, $pk);
     }
 
@@ -4611,6 +4614,26 @@ final class NetworkSessionService {
         // Creative inventory (window 0x79): populate the client's item picker
         // so creative players can take any item (legacy sendContents parity).
         $this->sendCreativeContents($playerRef);
+
+        // Legacy parity: send a SetEntityDataPacket with DATA_LEAD_HOLDER = -1
+        // right after the creative contents. Without this, the 0.15 client may
+        // render a rope/lead on the player entity.
+        $leadData = new SetEntityDataPacket();
+        $leadData->eid = $playerRef->entityId;
+        $leadData->metadata = [23 => [Binary::DATA_TYPE_LONG, -1]];
+        $this->queuePacket($playerRef, $leadData);
+
+        // Legacy parity: send the held-item MobEquipmentPacket so the client
+        // knows which hotbar slot is selected. Without this the client may
+        // render the inventory UI incorrectly when E is pressed.
+        $heldSlot = $entity?->get(InventoryComponent::class)?->heldSlot ?? 0;
+        $held = $entity?->get(InventoryComponent::class)?->get($heldSlot);
+        $mobEq = new MobEquipmentPacket();
+        $mobEq->eid = $playerRef->entityId;
+        $mobEq->item = $held !== null ? [$held->itemId, $held->count, $held->meta, $held->nbt] : [0, 0, 0, null];
+        $mobEq->slot = $heldSlot;
+        $mobEq->selectedSlot = $heldSlot;
+        $this->queuePacket($playerRef, $mobEq);
     }
 
     /**
