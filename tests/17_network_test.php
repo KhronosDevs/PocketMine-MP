@@ -528,7 +528,7 @@ test('login produces the full protocol-84 burst', function () use ($client, $ker
     ok(isset($byId[Info::CONTAINER_SET_CONTENT_PACKET]), 'inventory content sent on login');
     $csc = cscFields($byId[Info::CONTAINER_SET_CONTENT_PACKET]);
     same(0, $csc['windowid'], 'inventory window id 0');
-    same(36, count($csc['slots']), '36 inventory slots');
+    same(45, count($csc['slots']), '45 inventory slots (36 real + 9 dummy hotbar)');
     // Starter kit: planks in slot 0 (held), cobblestone in slot 1.
     same(5, $csc['slots'][0][0], 'slot 0 holds planks');
     same(32, $csc['slots'][0][1], '32 planks in slot 0');

@@ -4430,6 +4430,17 @@ final class NetworkSessionService {
             $item = $inventory->get($i);
             $pk->slots[] = $item !== null ? [$item->itemId, $item->count, $item->meta, $item->nbt] : [0, 0, 0, null];
         }
+        // Legacy parity: the 0.15 PE client "shows 9 less slots than you
+        // send it", so 9 dummy air slots are appended to make it show all
+        // 36 real slots. Without them the client renders an incomplete
+        // inventory or crashes when E is pressed.
+        for ($i = 0; $i < 9; $i++) {
+            $pk->slots[] = [0, 0, 0, null];
+        }
+        // Hotbar mapping: each hotbar slot (0-8) maps to inventory slot (0-8).
+        // The 0.15 client requires this for window 0 or the inventory renders
+        // empty/broken when E is pressed.
+        $pk->hotbar = range(0, 8);
         $this->queuePacket($player, $pk);
     }
 
