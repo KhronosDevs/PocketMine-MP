@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace pocketmine\core\system;
 
+use pocketmine\adapter\driven\threading\ArchetypeSnapshot;
+use pocketmine\adapter\driven\threading\ParallelResult;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\component\tags\OnGroundTag;
@@ -51,7 +53,6 @@ final class PhysicsSystem implements ParallelSystem {
             if ($newY <= 0) {
                 $newY = 0;
                 $newVelY = 0;
-                // OnGroundTag would be set by a separate system or here
             }
 
             // Write to pending components for parallel safety
@@ -72,5 +73,144 @@ final class PhysicsSystem implements ParallelSystem {
 
         $registry = $world->getComponentRegistry();
         return $query->archetypes($registry);
+    }
+
+    /**
+     * Snapshot archetype data for cross-thread dispatch.
+     */
+    public static function snapshotArchetype(Archetype $archetype, float $deltaTime): ArchetypeSnapshot {
+        $positions = $archetype->getComponentArray(PositionComponent::class);
+        $velocities = $archetype->getComponentArray(VelocityComponent::class);
+
+        $px = []; $py = []; $pz = [];
+        $vx = []; $vy = []; $vz = [];
+
+        $count = min(count($positions), count($velocities));
+        $n = 0;
+        for ($i = 0; $i < $count; $i++) {
+            $p = $positions[$i];
+            $v = $velocities[$i];
+            if ($p === null || $v === null) {
+                continue;
+            }
+            $px[] = $p->x;
+            $py[] = $p->y;
+            $pz[] = $p->z;
+            $vx[] = $v->x;
+            $vy[] = $v->y;
+            $vz[] = $v->z;
+            $n++;
+        }
+
+        return ArchetypeSnapshot::fromPayload([
+            'positionsX' => $px,
+            'positionsY' => $py,
+            'positionsZ' => $pz,
+            'velocitiesX' => $vx,
+            'velocitiesY' => $vy,
+            'velocitiesZ' => $vz,
+        ], $n, $deltaTime);
+    }
+
+    /**
+     * Apply worker results back to pending component buffers.
+     */
+    public static function applyResult(Archetype $archetype, ParallelResult $result): void {
+        if ($result->count <= 0) {
+            return;
+        }
+        $payload = $result->getPayload();
+        $positions = $archetype->getComponentArray(PositionComponent::class);
+        $velocities = $archetype->getComponentArray(VelocityComponent::class);
+        $count = min(count($positions), count($velocities), $result->count);
+
+        for ($i = 0; $i < $count; $i++) {
+            $p = $positions[$i];
+            $v = $velocities[$i];
+            if ($p === null || $v === null) {
+                continue;
+            }
+            $p->setPending(
+                $payload['pendingPositionsX'][$i] ?? $p->x,
+                $payload['pendingPositionsY'][$i] ?? $p->y,
+                $payload['pendingPositionsZ'][$i] ?? $p->z,
+            );
+            if ($v !== null) {
+                $v->setPending(
+                    $payload['pendingVelocitiesX'][$i] ?? $v->x,
+                    $payload['pendingVelocitiesY'][$i] ?? $v->y,
+                    $payload['pendingVelocitiesZ'][$i] ?? $v->z,
+                );
+            }
+        }
+    }
+
+    /**
+     * Compute physics (gravity + movement) on a worker thread from snapshot data.
+     * Pure function: reads flat arrays, writes flat arrays. No ECS objects touched.
+     */
+    public static function computeOnSnapshot(ArchetypeSnapshot $snap, ParallelResult $out): void {
+        $payload = $snap->getPayload();
+        $count = $snap->count;
+        if ($count <= 0) {
+            $out->count = 0;
+            return;
+        }
+
+        $dt = $snap->deltaTime;
+        $px = $payload['positionsX'];
+        $py = $payload['positionsY'];
+        $pz = $payload['positionsZ'];
+        $vx = $payload['velocitiesX'];
+        $vy = $payload['velocitiesY'];
+        $vz = $payload['velocitiesZ'];
+
+        $outPX = []; $outPY = []; $outPZ = [];
+        $outVX = []; $outVY = []; $outVZ = [];
+
+        for ($i = 0; $i < $count; $i++) {
+            // Gravity: MC parity 0.08 blocks/tick^2 = 1.6 blocks/s^2 at 20 TPS
+            $newVelY = $vy[$i] - 1.6 * $dt;
+            if ($newVelY < -78.4) {
+                $newVelY = -78.4;
+            }
+
+            $newX = $px[$i] + $vx[$i] * $dt;
+            $newY = $py[$i] + $vy[$i] * $dt;
+            $newZ = $pz[$i] + $vz[$i] * $dt;
+
+            if ($newY <= 0) {
+                $newY = 0;
+                $newVelY = 0;
+            }
+
+            $outPX[] = $newX;
+            $outPY[] = $newY;
+            $outPZ[] = $newZ;
+            $outVX[] = $vx[$i];
+            $outVY[] = $newVelY;
+            $outVZ[] = $vz[$i];
+        }
+
+        $out->setPayload([
+            'pendingPositionsX' => $outPX,
+            'pendingPositionsY' => $outPY,
+            'pendingPositionsZ' => $outPZ,
+            'pendingVelocitiesX' => $outVX,
+            'pendingVelocitiesY' => $outVY,
+            'pendingVelocitiesZ' => $outVZ,
+        ], $count);
+    }
+
+    /**
+     * Synchronous fallback for small archetypes (< 16 entities).
+     */
+    public static function applySnapshotSync(Archetype $archetype, ArchetypeSnapshot $snap): void {
+        if ($snap->count <= 0) {
+            return;
+        }
+        $result = new ParallelResult();
+        self::computeOnSnapshot($snap, $result);
+        self::applyResult($archetype, $result);
     }
 }

@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace pocketmine\core\ecs;
 
+use pocketmine\adapter\driven\threading\ArchetypeSnapshot;
+use pocketmine\adapter\driven\threading\EcsSystemTask;
+use pocketmine\adapter\driven\threading\ParallelResult;
+use pocketmine\adapter\driven\threading\PmmpThreadPool;
 use pocketmine\port\driven\ThreadingPort;
+use pocketmine\core\system\MovementSystem;
+use pocketmine\core\system\PhysicsSystem;
 
 final class SystemScheduler {
     private array $sequentialSystems = [];
@@ -21,6 +27,12 @@ final class SystemScheduler {
     /** @var array<string, bool> system class => disabled while pipeline apply mode offloads it */
     private array $disabledSystems = [];
 
+    /** Systems that support snapshot-based cross-thread dispatch. */
+    private const SNAPSHOT_SYSTEMS = [
+        MovementSystem::class => 'movement',
+        PhysicsSystem::class => 'physics',
+    ];
+
     public function __construct(
         private readonly ThreadingPort $threadingPort,
     ) {}
@@ -33,10 +45,6 @@ final class SystemScheduler {
         };
     }
 
-    /**
-     * Enable or disable a system class by name (e.g. to hand movement
-     * integration over to the region worker pipeline in apply mode).
-     */
     public function setEnabled(string $systemClass, bool $enabled): void {
         if ($enabled) {
             unset($this->disabledSystems[$systemClass]);
@@ -45,9 +53,6 @@ final class SystemScheduler {
         }
     }
 
-    /**
-     * Register the post-movement collision pass (see $collisionSystem).
-     */
     public function setCollisionSystem(System $system): void {
         $this->collisionSystem = $system;
     }
@@ -76,22 +81,108 @@ final class SystemScheduler {
             $system->run($world, $deltaTime);
         }
 
-        // Parallel systems (archetype-isolated, no cross-archetype writes)
+        // Parallel systems: snapshot-based dispatch via real pmmpthread Pool,
+        // or synchronous fallback.
         if ($this->parallelSystems) {
-            $futures = [];
-            foreach ($this->parallelSystems as $system) {
-                if (isset($this->disabledSystems[get_class($system)])) {
-                    continue;
+            $pool = ($this->threadingPort instanceof PmmpThreadPool)
+                ? $this->threadingPort
+                : null;
+
+            /**
+             * Pending task descriptors: [systemType, archetype, result]
+             * @var list<array{0: string, 1: Archetype, 2: ParallelResult}> $pending
+             */
+            $pending = [];
+            $syncSystems = [];
+
+            if ($pool !== null) {
+                foreach ($this->parallelSystems as $system) {
+                    if (isset($this->disabledSystems[get_class($system)])) {
+                        continue;
+                    }
+                    if (!$system instanceof ParallelSystem) {
+                        continue;
+                    }
+                    $className = get_class($system);
+                    $systemType = self::SNAPSHOT_SYSTEMS[$className] ?? null;
+
+                    if ($systemType === null) {
+                        $syncSystems[] = $system;
+                        continue;
+                    }
+
+                    foreach ($system->getTargetArchetypes($world) as $archetype) {
+                        $snap = match ($systemType) {
+                            'movement' => MovementSystem::snapshotArchetype($archetype, $deltaTime),
+                            'physics' => PhysicsSystem::snapshotArchetype($archetype, $deltaTime),
+                        };
+                        // Skip pool dispatch for small archetypes: the overhead
+                        // of JSON encode/decode + pool submit + collect polling
+                        // exceeds the computation for < 16 entities. Fall through
+                        // to the sync path below.
+                        if ($snap->count < 16) {
+                            match ($systemType) {
+                                'movement' => MovementSystem::applySnapshotSync($archetype, $snap),
+                                'physics' => PhysicsSystem::applySnapshotSync($archetype, $snap),
+                            };
+                            continue;
+                        }
+                        $result = new ParallelResult();
+                        $task = new EcsSystemTask($snap, $result, $systemType);
+                        $pool->submitTask($task);
+                        $pending[] = [$systemType, $archetype, $result];
+                    }
                 }
+
+                // Await all dispatched tasks by reaping finished ones.
+                // The collect() callback MUST return bool: true = reap the task, false = keep it.
+                $count = count($pending);
+                $collected = 0;
+                $deadline = microtime(true) + 5.0;
+                while ($collected < $count) {
+                    $pool->collectTasks(function (EcsSystemTask $task) use (&$collected, &$pending): bool {
+                        $result = $task->result;
+                        if (!$result->done) {
+                            return false; // not done yet, keep in pool
+                        }
+                        if ($result->error !== null) {
+                            throw new \RuntimeException("ECS parallel task failed: {$result->error}");
+                        }
+                        // Find the matching descriptor and apply the result
+                        foreach ($pending as $desc) {
+                            if ($desc[2] === $result) {
+                                match ($desc[0]) {
+                                    'movement' => MovementSystem::applyResult($desc[1], $result),
+                                    'physics' => PhysicsSystem::applyResult($desc[1], $result),
+                                };
+                                $collected++;
+                                break;
+                            }
+                        }
+                        return true; // reap the task
+                    });
+                    if ($collected < $count) {
+                        if (microtime(true) > $deadline) {
+                            throw new \RuntimeException('ECS parallel dispatch timed out');
+                        }
+                        usleep(500);
+                    }
+                }
+            } else {
+                // No real pool available — all parallel systems run synchronously
+                foreach ($this->parallelSystems as $system) {
+                    $syncSystems[] = $system;
+                }
+            }
+
+            // Synchronous fallback for systems without snapshot support
+            foreach ($syncSystems as $system) {
                 if ($system instanceof ParallelSystem) {
                     foreach ($system->getTargetArchetypes($world) as $archetype) {
-                        $futures[] = $this->threadingPort->submit(
-                            fn() => $system->runParallel($archetype, $deltaTime)
-                        );
+                        $system->runParallel($archetype, $deltaTime);
                     }
                 }
             }
-            $this->threadingPort->awaitAll($futures);
         }
 
         // Chunk-parallel systems
@@ -113,8 +204,7 @@ final class SystemScheduler {
             $this->threadingPort->awaitAll($futures);
         }
 
-        // Post-movement collision: clamp the pending positions/velocities
-        // against solid blocks before they are committed.
+        // Post-movement collision
         if ($this->collisionSystem !== null && !isset($this->disabledSystems[get_class($this->collisionSystem)])) {
             $this->collisionSystem->run($world, $deltaTime);
         }
