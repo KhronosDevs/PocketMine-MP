@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace pocketmine\core\service;
 
-use pocketmine\core\component\CollisionComponent;
 use pocketmine\core\component\InventoryComponent;
 use pocketmine\core\component\ItemStack;
 use pocketmine\core\component\MetadataComponent;
@@ -80,11 +79,16 @@ final class BlockBreakService {
         $position = $player->get(PositionComponent::class);
         if (!$position) return false;
         
-        $collision = $player->get(CollisionComponent::class);
-        $reach = $collision?->width ?? 3; // Default reach ~3 blocks
-        if ($collision) {
-            $reach = max(3, $collision->width * 2);
-        }
+        // Legacy reach (old-src Player::canInteract, applied in the REMOVE_BLOCK
+        // handler): 13 blocks in creative, 6 in survival, measured to the block
+        // center. The old collision-width heuristic (~3 blocks) rejected every
+        // break a real client attempts from a normal distance - creative breaks
+        // failed entirely and survival breaks 3-6 blocks away "respawned".
+        $metadata = $player->get(MetadataComponent::class);
+        $creative = \pocketmine\core\enum\GameMode::coerce(
+            $metadata?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)
+        ) === \pocketmine\core\enum\GameMode::Creative;
+        $reach = $creative ? 13 : 6;
         
         $dx = $x + 0.5 - $position->x;
         $dy = $y + 0.5 - $position->y;
