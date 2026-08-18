@@ -2282,8 +2282,9 @@ final class NetworkSessionService {
             if ($id > 0 && $pk->slot >= 0 && $pk->slot < InventoryComponent::ARMOR_OFFSET) {
                 // Fresh stack from the creative menu: no NBT. The wire slot's
                 // NBT field is raw binary, while ItemStack::nbt is an array -
-                // creative items never carry one.
-                $stack = new ItemStack($id, max(1, (int)($pk->item[1] ?? 1)), (int)($pk->item[2] ?? 0));
+                // creative items never carry one. ItemStack is (id, meta,
+                // count) - the wire slot is [id, count, damage].
+                $stack = new ItemStack($id, (int)($pk->item[2] ?? 0), max(1, (int)($pk->item[1] ?? 1)));
                 $inventory->set($pk->slot, $stack);
                 $this->sendInventorySlot($session['playerRef'], $pk->slot);
             }
@@ -3824,7 +3825,7 @@ final class NetworkSessionService {
             $inventory = $entity->get(InventoryComponent::class);
             if ($inventory !== null) {
                 $inventory->remove($inventory->heldSlot, 1);
-                $inventory->add(new ItemStack(ItemIds::GLASS_BOTTLE, 1, 0));
+                $inventory->add(new ItemStack(ItemIds::GLASS_BOTTLE, 0, 1));
                 $this->sendInventorySlot($session['playerRef'], $inventory->heldSlot);
             }
         }

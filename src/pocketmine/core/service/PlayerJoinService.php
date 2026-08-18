@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\core\service;
 
+use pocketmine\core\component\CollisionComponent;
 use pocketmine\core\component\HealthComponent;
 use pocketmine\core\component\InventoryComponent;
 use pocketmine\core\component\MetadataComponent;
@@ -97,6 +98,7 @@ final class PlayerJoinService {
                     ->with(new PositionComponent($savedData->x, $savedData->y, $savedData->z))
                     ->with(new RotationComponent($savedData->yaw, $savedData->pitch))
                     ->with(new VelocityComponent())
+                    ->with(new CollisionComponent(width: 0.6, height: 1.8))
                     ->with(new HealthComponent())
                     ->with(new InventoryComponent())
                     ->with(new MetadataComponent())
@@ -145,6 +147,7 @@ final class PlayerJoinService {
                 ->with(new PositionComponent($spawn->x, $spawn->y, $spawn->z))
                 ->with(new RotationComponent(0, 0))
                 ->with(new VelocityComponent())
+                ->with(new CollisionComponent(width: 0.6, height: 1.8))
                 ->with(new HealthComponent(20, 20))
                 ->with(new InventoryComponent(36))
                 ->with(new MetadataComponent())

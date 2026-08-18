@@ -1306,6 +1306,59 @@ test('creative mode breaks instantly on REMOVE_BLOCK alone (no crack, no START_B
     }
 });
 
+test('block reach follows legacy (6 survival / 13 creative), not a 3-block default', function () use ($client, $kernel): void {
+    // Regression: players were spawned without a CollisionComponent, so
+    // canReach() fell back to 3 blocks while legacy allows 6 (survival) /
+    // 13 (creative). A real client breaks from those distances, so every
+    // break 3-6 blocks away silently failed ("block respawns") and creative
+    // breaks failed entirely. Reach must follow the gamemode, not the box.
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+            break;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice online');
+        return;
+    }
+    $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+    $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
+    if ($store === null) {
+        ok(false, 'chunk store present');
+        return;
+    }
+    $entity = $kernel->getWorld()->getEntity($alice['entityId']);
+    $meta = $entity?->get(\pocketmine\core\component\MetadataComponent::class);
+    if ($meta === null) {
+        ok(false, 'Alice metadata present');
+        return;
+    }
+
+    $aliceRef = \pocketmine\core\ecs\EntityRef::create($alice['entityId'], $kernel->getWorld());
+    $ay = (int)floor($alice['y']);
+    $az = (int)floor($alice['z']);
+
+    // Survival: 5 blocks east breaks (within legacy 6), 8 blocks east does not.
+    $meta->set('gamemode', 0);
+    $tx5 = (int)floor($alice['x']) + 5;
+    $store->setBlock($tx5, $ay, $az, 3, 0); // dirt
+    ok($kernel->getBlockBreakService()->breakBlock($aliceRef, $tx5, $ay, $az, 1), 'survival breaks a block 5 blocks away (reach 6)');
+    $tx8 = (int)floor($alice['x']) + 8;
+    $store->setBlock($tx8, $ay, $az, 3, 0); // dirt
+    ok(!$kernel->getBlockBreakService()->breakBlock($aliceRef, $tx8, $ay, $az, 1), 'survival rejects a block 8 blocks away (beyond reach 6)');
+    ok($store->getBlock($tx8, $ay, $az) === 3, 'the far survival block survived');
+
+    // Creative: the same 8-block block now breaks (reach 13).
+    $meta->set('gamemode', 1);
+    ok($kernel->getBlockBreakService()->breakBlock($aliceRef, $tx8, $ay, $az, 1), 'creative breaks a block 8 blocks away (reach 13)');
+    ok($store->getBlock($tx8, $ay, $az) === 0, 'the creative far block is gone');
+
+    // Back to survival for the rest of the suite.
+    $meta->set('gamemode', 0);
+});
+
 test('survival break drops the item with visible metadata (grass drops dirt)', function () use ($client, $kernel): void {
     [$bx, $by, $bz] = findSurfaceBlockNearSpawn($kernel);
     teleportAliceOnto($kernel, $client, $bx, $by, $bz);
