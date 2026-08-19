@@ -1695,11 +1695,13 @@ final class Kernel {
                 fwrite(STDERR, '[net] poll error: ' . $e->getMessage()
                     . ' @ ' . $e->getFile() . ':' . $e->getLine() . PHP_EOL);
             }
-            // Surface ALL RakLib thread log lines during investigation
-            // (normally only critical lines are shown).
-            $traceOn = true; // TEMP: show all RakNet logs for disconnect investigation
+            // Surface RakLib thread logs: critical lines always (a thread
+            // crash would otherwise be silent), everything when tracing.
+            $traceOn = getenv('KHRONOS_WIRE_TRACE') === '1';
             foreach ($this->networkPort->drainLogLines() as $line) {
-                fwrite(STDERR, '[raknet] ' . $line . PHP_EOL);
+                if ($traceOn || str_starts_with($line, 'critical')) {
+                    fwrite(STDERR, '[raknet] ' . $line . PHP_EOL);
+                }
             }
         }
     }
