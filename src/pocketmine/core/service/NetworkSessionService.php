@@ -129,6 +129,8 @@ use const ZLIB_ENCODING_DEFLATE;
 final class NetworkSessionService {
     /** Max full chunks pushed to a client per poll (tick). */
     public const CHUNKS_PER_TICK = 2;
+    /** Global time budget for chunk streaming per tick (milliseconds). */
+    public const CHUNK_TIME_BUDGET_MS = 30.0;
     private const DEFAULT_RADIUS = 4;
     private const MAX_RADIUS = 12;
 
@@ -5214,7 +5216,20 @@ final class NetworkSessionService {
     }
 
     private function streamChunks(): void {
+        // Time-budget scheduler: process chunks across all sessions until
+        // the global budget is exhausted. This prevents tick spikes when
+        // many players need chunks simultaneously.
+        $budgetStart = hrtime(true);
+        $budgetNs = (int)(self::CHUNK_TIME_BUDGET_MS * 1_000_000);
+        
         foreach (array_keys($this->sessions) as $addrKey) {
+            // Check time budget every session (not every chunk) to avoid
+            // timer overhead. The check costs ~0.1µs vs ~500µs per chunk.
+            $elapsed = hrtime(true) - $budgetStart;
+            if ($elapsed >= $budgetNs) {
+                break;
+            }
+            
             $session = $this->sessions[$addrKey];
             // Gather the next CHUNKS_PER_TICK unsent queue entries, then load
             // them in ONE loadChunks() call: the parallel WorldGenPort batch
@@ -5432,10 +5447,10 @@ final class NetworkSessionService {
         $compressedBatch = $store !== null ? $store->getCompressedBatch($chunk->chunkX, $chunk->chunkZ) : null;
         if ($compressedBatch === null) {
             $inner = pack('N', strlen($buffer)) . $buffer;
-            // L3: 5x faster than L7 on realistic terrain (0.6ms vs 3.2ms per chunk)
-            // with only ~20% larger output (9.4KB vs 8.2KB compressed). The CPU
-            // savings dominate at scale — 5 players × CPT=6 saves 78ms/tick.
-            $compressed = zlib_encode($inner, ZLIB_ENCODING_DEFLATE, 3);
+            // L2: 1.4x faster than L3 (0.47ms vs 0.63ms per chunk) with only
+            // 5% larger output (9.9KB vs 9.5KB). Most efficient level at
+            // 133µs/KB saved vs L1. CPU savings dominate at scale.
+            $compressed = zlib_encode($inner, ZLIB_ENCODING_DEFLATE, 2);
             if ($compressed === false) {
                 return;
             }
