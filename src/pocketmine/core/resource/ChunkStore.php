@@ -388,6 +388,17 @@ final class ChunkStore {
     }
 
     /**
+     * Fire the blockListener callback if registered.
+     * Used by ChunkTransaction::commit() to notify the fluid system
+     * about individual block changes without calling setBlock() per position.
+     */
+    public function fireBlockListener(int $x, int $y, int $z, int $id): void {
+        if ($this->blockListener !== null) {
+            ($this->blockListener)($x, $y, $z, $id);
+        }
+    }
+
+    /**
      * Read one nibble from a packed per-chunk light string. Block index is
      * (y << 8) | (z << 4) | x; byte = index >> 1; even index = low nibble,
      * odd index = high nibble (LightCalculator::pack layout).
@@ -495,6 +506,74 @@ final class ChunkStore {
             $chunk['entities'],
             $chunk['tileEntities'],
         );
+    }
+
+    /**
+     * Direct reference to a loaded chunk's record for bulk mutation.
+     * Returns null when the chunk is not loaded — the caller must check.
+     * Used by ChunkTransaction to apply buffered changes without per-block
+     * setBlock overhead (wire/compressedBatch invalidation deferred to commit).
+     */
+    public function getChunkRef(int $chunkX, int $chunkZ): ?array {
+        $key = $this->key($chunkX, $chunkZ);
+        return $this->chunks[$key] ?? null;
+    }
+
+    /**
+     * Bulk-write into a chunk's block and meta strings in-place.
+     * Does NOT invalidate caches or call blockListener — the caller
+     * (ChunkTransaction::commit) handles that.
+     *
+     * @param array<int, array{0: int, 1: int}> $changes index => [blockId, meta]
+     */
+    public function writeBlockBatch(int $chunkX, int $chunkZ, array $changes): void {
+        $key = $this->key($chunkX, $chunkZ);
+        if (!isset($this->chunks[$key])) {
+            return;
+        }
+        $chunk = &$this->chunks[$key];
+        foreach ($changes as $idx => [$id, $m]) {
+            $chunk['blocks'][$idx] = chr($id & 0xFF);
+            $chunk['meta'][$idx] = chr($m & 0xFF);
+        }
+    }
+
+    /**
+     * Bulk-write into a chunk's biome string in-place.
+     *
+     * @param array<int, int> $changes biomeIndex => biomeId
+     */
+    public function writeBiomeBatch(int $chunkX, int $chunkZ, array $changes): void {
+        $key = $this->key($chunkX, $chunkZ);
+        if (!isset($this->chunks[$key])) {
+            return;
+        }
+        $chunk = &$this->chunks[$key];
+        foreach ($changes as $idx => $biome) {
+            $chunk['biomes'][$idx] = chr($biome & 0xFF);
+        }
+    }
+
+    /**
+     * Invalidate wire + compressedBatch caches for a chunk.
+     * Called by ChunkTransaction::commit after bulk block writes.
+     */
+    public function touchChunkCaches(int $chunkX, int $chunkZ): void {
+        $key = $this->key($chunkX, $chunkZ);
+        if (!isset($this->chunks[$key])) {
+            return;
+        }
+        $chunk = &$this->chunks[$key];
+        $chunk['wire'] = null;
+        $chunk['compressedBatch'] = null;
+    }
+
+    /**
+     * Mark a chunk as needing light re-send to viewers.
+     * Called by ChunkTransaction::commit after recalculateLight.
+     */
+    public function markLightDirty(int $chunkX, int $chunkZ): void {
+        $this->lightDirty[$this->key($chunkX, $chunkZ)] = true;
     }
 
     private function chunkAt(int $x, int $y, int $z): ?array {
