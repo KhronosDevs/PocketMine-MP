@@ -278,3 +278,112 @@ too, and then nothing would be off the main thread.
   temporary instrumentation; the raw JSON-encode call cost is inflated by CPU
   contention with the pool workers, which the isolation numbers (idle pool) do
   not capture — both are reported so the reader can see the real envelope.
+
+---
+
+# RakNet exploration (explore/ffi-raknet) — initial profiling
+
+Branch: `explore/ffi-raknet` (branched from master after exploration #2 merge).
+
+## 1. RakNet layer structure
+
+Source: `src/raklib/` (server thread) + `src/raklib/protocol/` (packet codec).
+
+Hot path per inbound UDP datagram:
+
+1. `SessionManager::receivePacket()` — reads from UDP socket, dispatches to session
+2. `Session::handlePacket()` — decodes the datagram (`DataPacket::decode()`),
+   iterates encapsulated packets
+3. `Session::handleEncapsulatedPacket()` — reliability window management
+4. `Session::handleEncapsulatedPacketRoute()` — routes to game layer
+
+Outbound: `Session::addEncapsulatedToQueue()` → `EncapsulatedPacket::toBinary()`
+→ `DataPacket::encode()` → UDP socket.
+
+The core codec primitives are in `Binary.php` (`readLTriad`, `writeLTriad`,
+`readInt`, `readShort`, etc.) — all static methods using PHP `pack`/`unpack`.
+
+## 2. Profile results (`bench/07_raknet_profile.php`)
+
+Median of 30 rounds × 1000 ops (100k for primitives), opcache + JIT on.
+
+### EncapsulatedPacket::fromBinary()
+
+| reliability/split | time |
+|---|---|
+| unreliable (1-byte header) | 0.2 µs |
+| reliable (4-byte header) | 0.3 µs |
+| reliable ordered (7-byte header) | 0.4 µs |
+| reliable ordered + split (17-byte header) | 0.6–0.7 µs |
+
+Payload size (64 B vs 1024 B) has no measurable effect — the cost is the
+header parsing, not the payload copy.
+
+### EncapsulatedPacket::toBinary()
+
+| type | time |
+|---|---|
+| unreliable | 0.2 µs |
+| reliable | 0.3 µs |
+| reliable ordered | 0.4 µs |
+
+### Binary primitives
+
+| function | time |
+|---|---|
+| `readLTriad` | 65 ns |
+| `writeLTriad` | 57 ns |
+| `readInt` | 51 ns |
+| `readShort` / `readSignedShort` | 52 ns |
+
+### Datagram-level
+
+| operation | time |
+|---|---|
+| `DataPacket::decode()` — 10 encapsulated packets | 5.0 µs (500 ns/pkt) |
+| `AcknowledgePacket::decode()` — 32 seq range | 0.6 µs |
+| Full round-trip fromBinary → toBinary (internal) | 1.1 µs (med) / 2.0 µs (split) |
+
+## 3. Assessment — no FFI candidates
+
+Every RakNet operation is already sub-microsecond. The FFI per-call boundary
+cost (FFI::new + FFI::memcpy + boundary crossing) measured at 3–10 µs for
+small payloads in exploration #2 (zlib-ng candidate F). That overhead **exceeds
+the entire current PHP cost** of parsing an encapsulated packet (0.2–0.7 µs).
+
+| operation | PHP time | FFI boundary overhead | verdict |
+|---|---|---|---|
+| fromBinary (ordered) | 0.4 µs | 3–10 µs | FFI 8–25x slower |
+| toBinary (ordered) | 0.4 µs | 3–10 µs | FFI 8–25x slower |
+| full datagram (10 pkts) | 5.0 µs | 3–10 µs per call | FFI boundary alone > total |
+| readLTriad | 65 ns | 3–10 µs | FFI 50–150x slower |
+
+A batched approach (one FFI call to parse the entire datagram) could avoid
+N boundary crossings, but:
+
+1. The datagram decode is already 5.0 µs — the gain ceiling is ~2–3 µs at best.
+2. The C function would need to return structured data (reliability, hasSplit,
+   messageIndex, orderIndex, orderChannel, split fields × N packets), which
+   requires marshalling each field back through FFI::memcpy/FFI::string —
+   likely eating the bulk-parse gain.
+3. The per-tick cost at 50 players is ~250–500 encapsulated packets × 0.4 µs
+   ≈ 100–200 µs — already negligible vs the 1.08 ms tick budget.
+
+**Verdict: RakNet parsing is the classic boundary-eats-the-gain case
+(candidates D and E′ from exploration #2). No FFI migration warranted.**
+
+## 4. What could actually help RakNet
+
+If RakNet throughput becomes a bottleneck (unlikely at 50 players; possible at
+500+), the levers are:
+
+- **Reduce object allocation** — the current code creates a new `EncapsulatedPacket`
+  per inbound packet and a new `DATA_PACKET_4` per datagram. Object pooling or
+  pre-allocated buffers would reduce GC pressure, not FFI boundary cost.
+- **Reduce string copying** — `substr()` in `fromBinary()` creates a new string
+  for the payload. A zero-copy view (offset + length into the original buffer)
+  would avoid the copy, but PHP's type system makes this non-trivial.
+- **Batch the cross-thread stream** — `SessionManager::streamEncapsulated()`
+  serializes each game packet individually into the thread-to-main queue.
+  Batching multiple packets into a single `pushThreadToMainPacket()` call
+  would reduce thread synchronization overhead.
