@@ -88,6 +88,59 @@ Right-clicking a furnace, chest, brewing stand, etc. should open its container w
 
 ---
 
+## Chunk Streaming / Compression — Future Investigations
+
+Chunk streaming has been optimized with compressed payload caching, L2 compression
+level, and a global time-budget scheduler. The following are documented as future
+investigations, NOT current requirements.
+
+### Parallel/worker-based compression
+
+Compression is currently synchronous on the main thread (~368 µs/chunk at L2).
+With 81 chunks in a 30ms budget, this is the dominant cost. Moving compression
+to worker threads could free main-thread CPU for entities/plugins.
+
+**What to benchmark:** 2/4/8 worker pool, synchronization overhead, memory
+copy cost, cache invalidation race conditions.
+
+### Compression prefetching based on player movement
+
+Currently chunks are compressed on-demand when sent. If player movement is
+predictable (walking in a straight line), chunks could be pre-compressed
+before they are needed.
+
+**What to benchmark:** prediction accuracy, wasted compression work,
+memory pressure from speculative compression.
+
+### Alternative native compression libraries
+
+zlib-ng and libdeflate offer faster compression at compatible wire formats.
+The current `zlib_encode()` already calls native zlib, but alternative
+libraries may be faster.
+
+**What to benchmark:** wire compatibility, speed vs zlib, memory usage,
+deployment complexity.
+
+### Further cache optimization
+
+The compressed cache is invalidated on any chunk mutation. Section-level
+caching could reduce invalidation scope (only invalidate the modified 16×16×16
+section instead of the whole chunk).
+
+**What to benchmark:** invalidation frequency in real gameplay, section-level
+compression overhead, protocol compatibility.
+
+### Dirty-section/partial compression
+
+If only a small portion of a chunk changes, the entire ~10KB compressed
+payload is recompressed. Partial recompression or delta encoding could
+reduce this cost.
+
+**What to benchmark:** typical mutation size, delta encoding overhead,
+protocol compatibility with existing clients.
+
+---
+
 ## Known limits (tracked elsewhere, not scheduled)
 
 - **Client:** protocol 84 only — players must run the ancient MCPE 0.15.10 client (project design; caps the audience).
