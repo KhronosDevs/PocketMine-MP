@@ -9,12 +9,12 @@ use pmmp\thread\ThreadSafe;
 /**
  * Thread-safe result cell for one parallel system computation.
  *
- * The worker writes computed pending values into a JSON-encoded string;
+ * The worker writes computed pending values into a packed binary blob;
  * the main thread reads and decodes them, then applies to pending fields.
  * Follows the same pattern as ChunkGenResult used by world generation.
  */
 final class ParallelResult extends ThreadSafe {
-    /** JSON-encoded pending position + velocity writes. */
+    /** Packed binary pending position + velocity writes. */
     public string $data = '';
     public int $count = 0;
     public bool $done = false;
@@ -24,7 +24,14 @@ final class ParallelResult extends ThreadSafe {
      * @param array{pendingPositionsX: float[], pendingPositionsY: float[], pendingPositionsZ: float[], pendingVelocitiesX: float[], pendingVelocitiesY: float[], pendingVelocitiesZ: float[]} $payload
      */
     public function setPayload(array $payload, int $count): void {
-        $this->data = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $this->data = SnapshotCodec::encode([
+            $payload['pendingPositionsX'],
+            $payload['pendingPositionsY'],
+            $payload['pendingPositionsZ'],
+            $payload['pendingVelocitiesX'],
+            $payload['pendingVelocitiesY'],
+            $payload['pendingVelocitiesZ'],
+        ]);
         $this->count = $count;
     }
 
@@ -32,6 +39,14 @@ final class ParallelResult extends ThreadSafe {
      * @return array{pendingPositionsX: float[], pendingPositionsY: float[], pendingPositionsZ: float[], pendingVelocitiesX: float[], pendingVelocitiesY: float[], pendingVelocitiesZ: float[]}
      */
     public function getPayload(): array {
-        return json_decode($this->data, true, 512, JSON_THROW_ON_ERROR);
+        [$px, $py, $pz, $vx, $vy, $vz] = SnapshotCodec::decode($this->data);
+        return [
+            'pendingPositionsX' => $px,
+            'pendingPositionsY' => $py,
+            'pendingPositionsZ' => $pz,
+            'pendingVelocitiesX' => $vx,
+            'pendingVelocitiesY' => $vy,
+            'pendingVelocitiesZ' => $vz,
+        ];
     }
 }

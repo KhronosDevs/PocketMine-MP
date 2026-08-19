@@ -8,6 +8,7 @@ use pocketmine\adapter\driven\threading\ArchetypeSnapshot;
 use pocketmine\adapter\driven\threading\EcsSystemTask;
 use pocketmine\adapter\driven\threading\ParallelResult;
 use pocketmine\adapter\driven\threading\PmmpThreadPool;
+use pocketmine\adapter\driven\threading\SnapshotCodec;
 use pocketmine\port\driven\ThreadingPort;
 use pocketmine\core\system\MovementSystem;
 use pocketmine\core\system\PhysicsSystem;
@@ -35,7 +36,15 @@ final class SystemScheduler {
 
     public function __construct(
         private readonly ThreadingPort $threadingPort,
-    ) {}
+    ) {
+        // Workers inherit the main thread's class table when they start but
+        // cannot autoload, so every class a dispatched task touches must be
+        // loaded before the pool receives its first task.
+        class_exists(ArchetypeSnapshot::class);
+        class_exists(ParallelResult::class);
+        class_exists(EcsSystemTask::class);
+        class_exists(SnapshotCodec::class);
+    }
 
     public function register(System $system, SystemPhase $phase = SystemPhase::SEQUENTIAL): void {
         match ($phase) {
@@ -117,10 +126,10 @@ final class SystemScheduler {
                             'physics' => PhysicsSystem::snapshotArchetype($archetype, $deltaTime),
                         };
                         // Skip pool dispatch for small archetypes: the overhead
-                        // of JSON encode/decode + pool submit + collect polling
-                        // exceeds the computation for < 16 entities. Fall through
-                        // to the sync path below.
-                        if ($snap->count < 16) {
+                        // of encode/decode + pool submit + collect polling
+                        // exceeds the computation for < 256 entities. Fall
+                        // through to the sync path below.
+                        if ($snap->count < 256) {
                             match ($systemType) {
                                 'movement' => MovementSystem::applySnapshotSync($archetype, $snap),
                                 'physics' => PhysicsSystem::applySnapshotSync($archetype, $snap),
