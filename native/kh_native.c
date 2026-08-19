@@ -175,6 +175,25 @@ void kh_noise_octaves(int chunk_x, int chunk_z, int seed,
     }
 }
 
+/*
+ * One octave of smooth noise for every column of a chunk, with a fixed XOR
+ * applied to the world x BEFORE the noise: out[c] = smooth_noise((chunk_x*16
+ * + (c&15)) ^ xmask, chunk_z*16 + (c>>4), seed, shift).
+ *
+ * The nether cave pass feeds a per-y xor into x (the PHP loop does
+ * smoothNoise($wx ^ ($y * 7919), $wz, $seed ^ 0x5B4C2A91, 5)), so each of the
+ * 128 y-slices is one batched call here instead of 256 PHP smoothNoise calls.
+ */
+void kh_noise_columns_xor(int chunk_x, int chunk_z, int xmask, int seed,
+                          int shift, int *out)
+{
+    for (int c = 0; c < 256; c++) {
+        int wx = chunk_x * 16 + (c & 15);
+        int wz = chunk_z * 16 + (c >> 4);
+        out[c] = smooth_noise(wx ^ xmask, wz, seed, shift);
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /* Serializer helpers.                                                 */
 /* ------------------------------------------------------------------ */
@@ -192,6 +211,21 @@ int kh_pack_nibbles(const unsigned char *in, size_t len, unsigned char *out)
     }
     if (len % 2 == 1) {
         out[j++] = (unsigned char)(in[len - 1] & 0x0F);
+    }
+    return (int)j;
+}
+
+/*
+ * Expand a vanilla nibble array into full bytes (RegionStorageAdapter::
+ * unpackNibbles): even index low nibble, odd index high nibble.
+ * Returns the number of output bytes.
+ */
+int kh_unpack_nibbles(const unsigned char *in, size_t len, unsigned char *out)
+{
+    size_t j = 0;
+    for (size_t i = 0; i < len; i++) {
+        out[j++] = (unsigned char)(in[i] & 0x0F);
+        out[j++] = (unsigned char)((in[i] >> 4) & 0x0F);
     }
     return (int)j;
 }

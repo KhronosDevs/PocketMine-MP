@@ -138,6 +138,81 @@ foreach ($samples as $i => $data) {
     $check($label, $ffi !== null && $php === $ffi);
 }
 
+// ---- 3b. unpackNibbles (RegionStorageAdapter) vs pure-PHP reference ----
+$unpackPhp = function (string $nibbles): string {
+    $len = strlen($nibbles);
+    $out = str_repeat("\x00", $len * 2);
+    for ($i = 0; $i < $len; $i++) {
+        $byte = ord($nibbles[$i]);
+        $out[$i * 2] = chr($byte & 0x0F);
+        $out[$i * 2 + 1] = chr(($byte >> 4) & 0x0F);
+    }
+    return $out;
+};
+foreach ($samples as $i => $data) {
+    // pack first so the nibble layout matches a real round-trip
+    $nibbles = $pack->invoke(null, $data);
+    $php = $unpackPhp($nibbles);
+    $ffi = NativeAccel::unpackNibbles($nibbles);
+    $label = "unpackNibbles sample#$i (in=" . strlen($nibbles) . ')' . ($php === $ffi ? '' : ' [ffi=' . ($ffi === null ? 'null' : strlen($ffi)) . ']');
+    $check($label, $ffi !== null && $php === $ffi);
+}
+
+// ---- 3c. Nether heights batch (netherHeights) vs per-column smoothNoise ----
+$refGen = new ReflectionClass(ParallelGeneratorAdapter::class);
+$heights = $refGen->getMethod('netherHeights');
+$heights->setAccessible(true);
+foreach ([[10, -20, 12345], [5, 5, 999], [-30, 12, 1], [-500, 300, 0x7FFFFFFF]] as [$cx, $cz, $seed]) {
+    $got = $heights->invoke(null, $cx, $cz, $seed);
+    $ok = is_array($got) && count($got) === 256;
+    if ($ok) {
+        for ($bz = 0; $bz < 16 && $ok; $bz++) {
+            for ($bx = 0; $bx < 16 && $ok; $bx++) {
+                $wx = $cx * 16 + $bx;
+                $wz = $cz * 16 + $bz;
+                $expected = 52
+                    + intdiv(($sn->invoke(null, $wx, $wz, $seed ^ 0x6E5C2F, 6) - 32768) * 40, 65536)
+                    + intdiv(($sn->invoke(null, $wx, $wz, $seed ^ 0x3D1B7A, 4) - 32768) * 16, 65536);
+                $expected = max(36, min(106, $expected));
+                if ($got[$bz * 16 + $bx] !== $expected) {
+                    $ok = false;
+                    printf("  diff netherHeights chunk(%d,%d) col(%d,%d): php=%d ffi=%d\n", $cx, $cz, $bx, $bz, $expected, $got[$bz * 16 + $bx]);
+                    break 2;
+                }
+            }
+        }
+    }
+    $check("netherHeights chunk($cx,$cz) seed=$seed", $ok);
+}
+
+// ---- 3d. Nether cave slices (netherCaveSlices) vs per-column smoothNoise ----
+$caveSlices = $refGen->getMethod('netherCaveSlices');
+$caveSlices->setAccessible(true);
+foreach ([[10, -20, 12345], [5, 5, 999], [-30, 12, 1]] as [$cx, $cz, $seed]) {
+    $got = $caveSlices->invoke(null, $cx, $cz, $seed);
+    $ok = is_array($got) && count($got) === 128;
+    if ($ok) {
+        foreach ([0, 1, 31, 32, 64, 100, 126, 127] as $y) {
+            if (!$ok) {
+                break;
+            }
+            for ($bz = 0; $bz < 16 && $ok; $bz++) {
+                for ($bx = 0; $bx < 16 && $ok; $bx++) {
+                    $wx = $cx * 16 + $bx;
+                    $wz = $cz * 16 + $bz;
+                    $expected = $sn->invoke(null, $wx ^ (($y * 7919) & 0x7FFFFFFF), $wz, $seed ^ 0x5B4C2A91, 5);
+                    if ($got[$y][$bz * 16 + $bx] !== $expected) {
+                        $ok = false;
+                        printf("  diff netherCaveSlices chunk(%d,%d) y=%d col(%d,%d): php=%d ffi=%d\n", $cx, $cz, $y, $bx, $bz, $expected, $got[$y][$bz * 16 + $bx]);
+                        break 3;
+                    }
+                }
+            }
+        }
+    }
+    $check("netherCaveSlices chunk($cx,$cz) seed=$seed", $ok);
+}
+
 // ---- 4. buildSkyLight ----
 foreach ([[10, -20, 12345, 'normal'], [0, 0, 42, 'normal'], [-30, 12, 1, 'normal']] as [$cx, $cz, $seed, $type]) {
     $chunk = ParallelGeneratorAdapter::populateChunkPure($cx, $cz, ParallelGeneratorAdapter::generateChunkPure($cx, $cz, $type, $seed), $seed);
