@@ -387,3 +387,69 @@ If RakNet throughput becomes a bottleneck (unlikely at 50 players; possible at
   serializes each game packet individually into the thread-to-main queue.
   Batching multiple packets into a single `pushThreadToMainPacket()` call
   would reduce thread synchronization overhead.
+
+## 5. Network pipeline profile (`bench/08_network_profile.php`)
+
+Full pipeline timing for the cross-thread streaming and main-thread processing.
+
+### Cross-thread queue (ThreadSafeArray)
+
+| payload size | push | shift |
+|---|---|---|
+| 64 B | 103 ns | 96 ns |
+| 256 B | 67 ns | 86 ns |
+| 1024 B | 59 ns | 81 ns |
+| 4096 B | 55 ns | 76 ns |
+
+Thread-safe queue operations are negligible (~80 ns avg, size-independent).
+
+### Main-thread packet processing
+
+| stage | time |
+|---|---|
+| `ServerHandler::handlePacket()` (drain + fromBinary(true)) | 536 ns (0.5 µs) |
+| Double `fromBinary` (false + true) | 931 ns |
+| 5-packet batch decode (decompress + inner loop) | 2.2 µs (0.4 µs/pkt) |
+| Single frame strip (0xfe + id) | 29 ns |
+| `BatchPacket::encode()` | 174 ns |
+
+### Outbound compression
+
+| payload | zlib_encode (L7) |
+|---|---|
+| small batch 128 B | 5.4 µs |
+| medium batch 512 B | 6.4 µs |
+| chunk 80 KB | 311 µs |
+| full outbound (256B → zlib + batch wrap) | 6.3 µs |
+
+### Per-tick budget at 50 players
+
+Estimated per-tick cost (20 TPS, ~1 packet/player/tick, 5 packets/batch):
+
+| stage | packets/tick | cost |
+|---|---|---|
+| RakLib thread: datagram decode | ~50 datagrams × 10 pkts | 250 µs |
+| Cross-thread queue push+shift | ~500 | 40 µs |
+| Main thread: handlePacket drain | ~500 | 268 µs |
+| Batch decompress (inbound) | ~50 batches × 5 pkts | 110 µs |
+| **Total inbound** | | **~670 µs** |
+| Outbound: zlib (small packets) | ~50 × 6 µs | 300 µs |
+| Outbound: chunk compression | ≤2 × 311 µs | ≤622 µs |
+| **Total outbound** | | **≤922 µs** |
+
+The 80 KB chunk compression (311 µs each) is the single largest outbound cost,
+but this was already measured and rejected in candidate F (zlib-ng). The rest
+of the pipeline is sub-microsecond per operation.
+
+### Assessment
+
+No FFI candidates in the network pipeline. Every operation except chunk
+compression is sub-6 µs, and the FFI boundary cost (3–10 µs) exceeds the
+gain for all of them. The only meaningful cost is `zlib_encode` for chunk
+sized payloads, which was already explored as candidate F and rejected.
+
+The network pipeline accounts for ~0.67 ms inbound + ≤0.92 ms outbound
+per tick at 50 players, totaling ~1.6 ms — comparable to the ECS dispatch
+tick (1.08 ms) but in a separate thread. The main thread's contribution
+is ~0.27 ms (handlePacket drain) + ~0.11 ms (batch decompress) = ~0.38 ms
+of the tick budget, which is already well within the 20 ms target.
