@@ -127,12 +127,16 @@ use const ZLIB_ENCODING_DEFLATE;
  * reliability) and feeds decoded game packets here.
  */
 final class NetworkSessionService {
-    /** Max full chunks pushed to a client per poll (tick). */
-    public const CHUNKS_PER_TICK = 2;
-    /** Global time budget for chunk streaming per tick (milliseconds). */
-    public const CHUNK_TIME_BUDGET_MS = 30.0;
+    /** Max full chunks pushed to a client per poll (tick) — default, overridden by config. */
+    public const CHUNKS_PER_TICK = 10;
     private const DEFAULT_RADIUS = 4;
     private const MAX_RADIUS = 12;
+
+    /** Chunk streaming config, read from khronos.json at startup. */
+    private int $chunkCompressionLevel = 2;
+    private int $chunkPerTick = 10;
+    private float $chunkTimeBudgetMs = 30.0;
+    private bool $chunkUseTimeBudget = true;
 
     /**
      * Blocker 2 anti-cheat limits, read from khronos.json (KhronosConfig
@@ -261,9 +265,15 @@ final class NetworkSessionService {
         // keeps the reference, so mutating the resource at runtime (tests,
         // future /reload) is picked up immediately.
         $antiCheat = $resourceRegistry->get(\pocketmine\core\resource\KhronosConfig::class);
-        $this->antiCheat = $antiCheat instanceof \pocketmine\core\resource\KhronosConfig
+        $khConfig = $antiCheat instanceof \pocketmine\core\resource\KhronosConfig
             ? $antiCheat
             : new \pocketmine\core\resource\KhronosConfig();
+        $this->antiCheat = $khConfig;
+        // Chunk streaming config from khronos.json
+        $this->chunkCompressionLevel = $khConfig->chunkCompressionLevel;
+        $this->chunkPerTick = $khConfig->chunkPerTick;
+        $this->chunkTimeBudgetMs = $khConfig->chunkTimeBudgetMs;
+        $this->chunkUseTimeBudget = $khConfig->chunkUseTimeBudget;
     }
 
     /**
@@ -5219,15 +5229,17 @@ final class NetworkSessionService {
         // Time-budget scheduler: process chunks across all sessions until
         // the global budget is exhausted. This prevents tick spikes when
         // many players need chunks simultaneously.
-        $budgetStart = hrtime(true);
-        $budgetNs = (int)(self::CHUNK_TIME_BUDGET_MS * 1_000_000);
+        $budgetStart = $this->chunkUseTimeBudget ? hrtime(true) : 0;
+        $budgetNs = (int)($this->chunkTimeBudgetMs * 1_000_000);
         
         foreach (array_keys($this->sessions) as $addrKey) {
             // Check time budget every session (not every chunk) to avoid
             // timer overhead. The check costs ~0.1µs vs ~500µs per chunk.
-            $elapsed = hrtime(true) - $budgetStart;
-            if ($elapsed >= $budgetNs) {
-                break;
+            if ($this->chunkUseTimeBudget) {
+                $elapsed = hrtime(true) - $budgetStart;
+                if ($elapsed >= $budgetNs) {
+                    break;
+                }
             }
             
             $session = $this->sessions[$addrKey];
@@ -5237,7 +5249,7 @@ final class NetworkSessionService {
             // which pays a pool round-trip + light recalc alone).
             $pending = [];
             $sent = 0;
-            while ($sent < self::CHUNKS_PER_TICK && $session['chunkQueueIndex'] < count($session['chunkQueue'])) {
+            while ($sent < $this->chunkPerTick && $session['chunkQueueIndex'] < count($session['chunkQueue'])) {
                 [$chunkX, $chunkZ] = $session['chunkQueue'][$session['chunkQueueIndex']];
                 $session['chunkQueueIndex']++;
                 $key = $chunkX . ',' . $chunkZ;
@@ -5447,10 +5459,8 @@ final class NetworkSessionService {
         $compressedBatch = $store !== null ? $store->getCompressedBatch($chunk->chunkX, $chunk->chunkZ) : null;
         if ($compressedBatch === null) {
             $inner = pack('N', strlen($buffer)) . $buffer;
-            // L2: 1.4x faster than L3 (0.47ms vs 0.63ms per chunk) with only
-            // 5% larger output (9.9KB vs 9.5KB). Most efficient level at
-            // 133µs/KB saved vs L1. CPU savings dominate at scale.
-            $compressed = zlib_encode($inner, ZLIB_ENCODING_DEFLATE, 2);
+            // Compression level from khronos.json (default L2: 466µs/chunk)
+            $compressed = zlib_encode($inner, ZLIB_ENCODING_DEFLATE, $this->chunkCompressionLevel);
             if ($compressed === false) {
                 return;
             }
