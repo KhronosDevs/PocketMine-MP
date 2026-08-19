@@ -23,7 +23,6 @@ use pocketmine\core\service\PlayerLeaveService;
 use pocketmine\core\service\PlayerRespawnService;
 use pocketmine\core\service\ChunkLoadService;
 use pocketmine\core\service\ChunkUnloadService;
-use pocketmine\core\service\ChunkSendService;
 use pocketmine\core\service\BlockBreakService;
 use pocketmine\core\service\BlockPlaceService;
 use pocketmine\core\service\BlockUpdateService;
@@ -178,7 +177,6 @@ final class Kernel {
     private PlayerRespawnService $playerRespawnService;
     private ChunkLoadService $chunkLoadService;
     private ChunkUnloadService $chunkUnloadService;
-    private ChunkSendService $chunkSendService;
     private NetworkSessionService $networkSessionService;
     private BlockBreakService $blockBreakService;
     private BlockPlaceService $blockPlaceService;
@@ -223,7 +221,6 @@ final class Kernel {
         $this->playerJoinService = new PlayerJoinService($world, $networkPort, $storagePort, $worldGenPort, $this->chunkLoadService, $eventPort);
         $this->playerLeaveService = new PlayerLeaveService($world, $networkPort, $storagePort, $eventPort);
         $this->playerRespawnService = new PlayerRespawnService($world, $storagePort, $eventPort);
-        $this->chunkSendService = new ChunkSendService($world, $networkPort);
         // Block services are built before the session service: the network
         // layer must be able to translate client block actions (break/place)
         // straight into the ECS services.
@@ -1609,10 +1606,6 @@ final class Kernel {
 
     public function getChunkUnloadService(): ChunkUnloadService {
         return $this->chunkUnloadService;
-    }
-
-    public function getChunkSendService(): ChunkSendService {
-        return $this->chunkSendService;
     }
 
     public function getBlockBreakService(): BlockBreakService {

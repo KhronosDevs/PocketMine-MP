@@ -45,10 +45,6 @@ class KernelAccessor {
         return $this->kernel->getChunkUnloadService();
     }
 
-    public function getChunkSendService(): \pocketmine\core\service\ChunkSendService {
-        return $this->kernel->getChunkSendService();
-    }
-
     public function getBlockBreakService(): \pocketmine\core\service\BlockBreakService {
         return $this->kernel->getBlockBreakService();
     }

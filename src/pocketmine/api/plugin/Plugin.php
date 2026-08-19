@@ -73,10 +73,6 @@ abstract class Plugin {
         return $this->getKernel()->getChunkUnloadService();
     }
 
-    final protected function getChunkSendService(): \pocketmine\core\service\ChunkSendService {
-        return $this->getKernel()->getChunkSendService();
-    }
-
     final protected function getBlockBreakService(): \pocketmine\core\service\BlockBreakService {
         return $this->getKernel()->getBlockBreakService();
     }

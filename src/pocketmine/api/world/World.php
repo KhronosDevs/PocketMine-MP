@@ -17,7 +17,6 @@ use pocketmine\core\resource\WorldRegistry;
 use pocketmine\core\component\WorldComponent;
 use pocketmine\core\service\ChunkLoadService;
 use pocketmine\core\service\ChunkUnloadService;
-use pocketmine\core\service\ChunkSendService;
 use pocketmine\port\driven\ChunkData;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driven\WorldGenPort;
@@ -31,7 +30,6 @@ class World {
     
     private ChunkLoadService $chunkLoadService;
     private ChunkUnloadService $chunkUnloadService;
-    private ChunkSendService $chunkSendService;
 
     public function __construct(ECSWorld $world, string $name, string $folderName, int $worldId = 0) {
         $this->world = $world;
@@ -42,8 +40,6 @@ class World {
         $kernel = \pocketmine\Kernel::getInstance();
         $this->chunkLoadService = $kernel->getChunkLoadService();
         $this->chunkUnloadService = $kernel->getChunkUnloadService();
-        $this->chunkSendService = $kernel->getChunkSendService();
-
         // Keep the world-level config resource in sync with this facade.
         $config = $this->getWorldConfig();
         if ($config !== null) {
