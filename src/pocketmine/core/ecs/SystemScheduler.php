@@ -125,11 +125,12 @@ final class SystemScheduler {
                             'movement' => MovementSystem::snapshotArchetype($archetype, $deltaTime),
                             'physics' => PhysicsSystem::snapshotArchetype($archetype, $deltaTime),
                         };
-                        // Skip pool dispatch for small archetypes: the overhead
-                        // of encode/decode + pool submit + collect polling
-                        // exceeds the computation for < 256 entities. Fall
-                        // through to the sync path below.
-                        if ($snap->count < 256) {
+                        // Skip pool dispatch for tiny archetypes: encode/decode
+                        // + pool submit cost more than the compute itself. The
+                        // wait below is event-driven (notify), not a poll, so
+                        // the collect-side overhead is bounded and the parallel
+                        // path stays competitive down to small archetypes.
+                        if ($snap->count < 16) {
                             match ($systemType) {
                                 'movement' => MovementSystem::applySnapshotSync($archetype, $snap),
                                 'physics' => PhysicsSystem::applySnapshotSync($archetype, $snap),
@@ -174,7 +175,12 @@ final class SystemScheduler {
                         if (microtime(true) > $deadline) {
                             throw new \RuntimeException('ECS parallel dispatch timed out');
                         }
-                        usleep(500);
+                        // Event-driven wait instead of usleep polling:
+                        // EcsSystemTask::run() sets done=true and notify()s the
+                        // result inside synchronized(), so blocking on the
+                        // result's condvar wakes us the instant a worker
+                        // finishes instead of up to 500us later.
+                        self::awaitAnyPending($pending);
                     }
                 }
             } else {
@@ -220,5 +226,30 @@ final class SystemScheduler {
 
         // Apply pending component changes (double-buffer swap)
         $world->applyPendingComponents();
+    }
+
+    /**
+     * Block on the first pending result that has not completed yet, instead of
+     * polling. The check-and-wait is race-free: it runs inside the result's
+     * synchronized() block, so if done flipped before we got the lock the inner
+     * check skips the wait, and if it flips while we wait the worker's notify()
+     * wakes us immediately. The timeout is only a safety net for pathological
+     * cases; the caller's deadline still guards against a stuck pool.
+     *
+     * @param list<array{0: string, 1: Archetype, 2: ParallelResult}> $pending
+     */
+    private static function awaitAnyPending(array $pending): void {
+        foreach ($pending as $desc) {
+            $result = $desc[2];
+            if ($result->done) {
+                continue;
+            }
+            $result->synchronized(function () use ($result): void {
+                if (!$result->done) {
+                    $result->wait(100_000);
+                }
+            });
+            return;
+        }
     }
 }
