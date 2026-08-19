@@ -131,6 +131,24 @@ final class ChunkStore {
     }
 
     /**
+     * Cached compressed batch payload for a chunk (after BatchPacket::encode).
+     * Invalidated alongside the wire cache on any mutation. Multiple players
+     * viewing the same chunk share this single compressed blob.
+     */
+    public function getCompressedBatch(int $chunkX, int $chunkZ): ?string {
+        $key = $this->key($chunkX, $chunkZ);
+        return $this->chunks[$key]['compressedBatch'] ?? null;
+    }
+
+    /** Cache a compressed batch payload for a chunk. */
+    public function cacheCompressedBatch(int $chunkX, int $chunkZ, string $batch): void {
+        $key = $this->key($chunkX, $chunkZ);
+        if (isset($this->chunks[$key])) {
+            $this->chunks[$key]['compressedBatch'] = $batch;
+        }
+    }
+
+    /**
      * Populate (or replace) the in-memory representation from a ChunkData DTO.
      */
     public function load(ChunkData $data): void {
@@ -176,6 +194,8 @@ final class ChunkStore {
             // Wire-serialized chunk payload cache: null until first serialized,
             // invalidated on any mutation (see getSerializedWire).
             'wire' => null,
+            // Compressed batch payload cache: shared across viewers.
+            'compressedBatch' => null,
         ];
     }
 
@@ -230,6 +250,7 @@ final class ChunkStore {
         $chunk['blocks'][$idx] = chr($id & 0xFF);
         $chunk['meta'][$idx] = chr($meta & 0xFF);
         $chunk['wire'] = null; // content changed: drop the serialized cache
+        $chunk['compressedBatch'] = null; // invalidate compressed cache too
         $this->chunks[$key] = $chunk;
         if ($this->blockListener !== null) {
             ($this->blockListener)($x, $y, $z, $id);
@@ -253,6 +274,7 @@ final class ChunkStore {
         $chunk = $this->chunks[$key];
         $chunk['biomes'][($z & 15) * 16 + ($x & 15)] = chr($biome & 0xFF);
         $chunk['wire'] = null; // content changed: drop the serialized cache
+        $chunk['compressedBatch'] = null; // invalidate compressed cache too
         $this->chunks[$key] = $chunk;
     }
 
@@ -287,6 +309,7 @@ final class ChunkStore {
         // invalidates every cached serialization.
         foreach ($this->chunks as $key => $chunk) {
             $chunk['wire'] = null;
+            $chunk['compressedBatch'] = null;
             $this->chunks[$key] = $chunk;
         }
     }
@@ -306,6 +329,7 @@ final class ChunkStore {
             $chunk['skyLight'] = $skyLight;
             $chunk['blockLight'] = $blockLight;
             $chunk['wire'] = null; // light changed: the serialized payload is stale
+            $chunk['compressedBatch'] = null; // invalidate compressed cache too
             $this->chunks[$key] = $chunk;
             $this->lightDirty[$key] = true;
         }
