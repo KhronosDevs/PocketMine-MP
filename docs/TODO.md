@@ -1,6 +1,6 @@
 # TODO — What's left
 
-**Last updated:** 2026-08-14
+**Last updated:** 2026-08-19
 **Companion docs:** docs/PLAN.md (architecture & phase plan), docs/PROGRESS.md (completed work)
 
 The server is playable today for a small creative/casual-survival server (see the
@@ -71,6 +71,20 @@ Chests and furnaces were fixed (per-world stores in `WorldRegistry`, PR #80) —
 
 - **Done:** dispenser/hopper/brewing-stand containers added in PR #88 are per-world from day one (`ContainerStore` + `BrewingStore` follow the `ChestStore` pattern); double chests pair into one 54-slot window with break-spill of both halves. Remaining audit surface: any future beacon store, and any wire/container state cached on sessions that should key by `WorldComponent`.
 - **Missing:** (a) audit for other coordinate-keyed stores or ad-hoc state beyond the audited set (beacon pending), (c) any wire/container state cached on sessions or entities that should key by `WorldComponent`.
+
+### 10. Crafting (inventory 2x2 grid + crafting table)
+
+The inventory/crafting screen now **opens crash-free** (client fix: the creative-items window must carry the exact legacy 0.15 list — a curated subset made the 0.15 client SIGSEGV in `CraftingContainerManagerModel::init()`), but actually crafting items is not wired up end-to-end.
+
+- **Already in place:** `CraftingService::craft()` (grid → result), `RecipeRegistry` with shaped recipes, recipes sent at login via `CraftingDataPacket`.
+- **Missing:** the wire round-trip — server-side result from the player's grid, `CraftingEventPacket` / result-slot handling, ingredient consumption, and recipe-list parity with the client (legacy sends 336 entries incl. shapeless + furnace recipes; new-src sends 9 shaped-only). A full recipes + `CreativeItems` audit against the legacy 0.15 data (wildcard ingredient damage `7fff` vs `ffff`, `cleanRecipes` flag, shapeless/furnace entry types).
+
+### 11. Opening furnaces and other containers
+
+Right-clicking a furnace, chest, brewing stand, etc. should open its container window with the inventory linked.
+
+- **Already in place:** per-world block containers (`ChestStore`, `FurnaceStore`, `ContainerStore`, `BrewingStore`), tile-snapshot persistence, double-chest pairing (54-slot), `ContainerService::openContainer()`/`setContainerSlot()`.
+- **Missing:** the client-side open flow — right-click interact dispatch → `ContainerOpenPacket` (the service only sets player metadata; the packet send is a comment), per-container window ids + slot mapping, `ContainerSetContent`/`ContainerSetSlot` sync for the container window, furnace smelting tick + fuel consumption, `ContainerClosePacket` handling.
 
 ---
 

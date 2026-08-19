@@ -4693,14 +4693,12 @@ final class NetworkSessionService {
     private function sendCreativeContents(PlayerRef $player): void {
         $pk = new ContainerSetContentPacket();
         $pk->windowid = ContainerSetContentPacket::SPECIAL_CREATIVE;
-        // CreativeItems::all() returns [id, meta] pairs; putSlot expects
-        // [id, count, damage, nbt] — expand each entry to the wire format
-        // with count=1 (matching legacy Item::getCreativeItems() which
-        // returns full Item objects with count=1).
-        $pk->slots = array_map(
-            fn(array $pair): array => [$pair[0], 1, $pair[1], null],
-            \pocketmine\core\resource\CreativeItems::all()
-        );
+        // CreativeItems::all() returns the exact legacy 0.15 creative list
+        // (566 entries, ported from creativeitems.json) as wire-ready
+        // [id, count=1, meta, nbt]. Do NOT substitute a curated subset: the
+        // 0.15 client crashes on the crafting screen with any id/metadata it
+        // does not recognise.
+        $pk->slots = \pocketmine\core\resource\CreativeItems::all();
         $this->queuePacket($player, $pk);
     }
 
