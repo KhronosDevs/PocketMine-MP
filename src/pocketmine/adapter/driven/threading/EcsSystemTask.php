@@ -9,7 +9,7 @@ use pmmp\thread\Runnable;
 /**
  * A task that runs an ECS parallel system on a worker thread.
  *
- * Carries JSON-encoded snapshot data (flat float arrays) and a result cell.
+ * Carries packed binary snapshot data (flat float arrays) and a result cell.
  * The system's static compute method is called on the worker; the main thread
  * merges results back into pending component fields after awaitAll().
  *
