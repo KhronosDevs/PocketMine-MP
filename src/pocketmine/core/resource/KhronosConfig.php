@@ -94,6 +94,35 @@ final class KhronosConfig {
     /** Folder/name of the nether dimension world (legacy nether.level-name). */
     public string $netherWorld = 'nether';
 
+    // --- Chunk streaming ---------------------------------------------------
+
+    /**
+     * zlib compression level for chunk packets (1-9).
+     * Lower = faster CPU, larger packets. Higher = slower CPU, smaller packets.
+     * L2 is recommended based on benchmarking (133µs/KB saved vs L1).
+     */
+    public int $chunkCompressionLevel = 2;
+
+    /**
+     * Maximum chunks a single player/session can receive per tick.
+     * This is a per-session cap, not the global processing limit.
+     */
+    public int $chunkPerTick = 10;
+
+    /**
+     * Global time budget (milliseconds) for chunk streaming per tick.
+     * This is shared across ALL players, not per-player.
+     * When enabled, chunk processing stops when this budget is exhausted.
+     */
+    public float $chunkTimeBudgetMs = 30.0;
+
+    /**
+     * Enable time-budget scheduling. When true, chunk streaming is capped
+     * by the global time budget. When false, only the per-player CPT cap
+     * applies (simpler but scales poorly with many players).
+     */
+    public bool $chunkUseTimeBudget = true;
+
     // --- Native acceleration (FFI) -----------------------------------------
 
     /**
@@ -189,6 +218,22 @@ final class KhronosConfig {
         $na = $data['native-accel'] ?? null;
         if (is_array($na) && array_key_exists('enabled', $na) && is_bool($na['enabled'])) {
             $this->nativeAccelEnabled = $na['enabled'];
+        }
+
+        $cs = $data['chunk-streaming'] ?? null;
+        if (is_array($cs)) {
+            if (isset($cs['compression-level']) && is_numeric($cs['compression-level'])) {
+                $this->chunkCompressionLevel = max(1, min(9, (int)$cs['compression-level']));
+            }
+            if (isset($cs['per-tick']) && is_numeric($cs['per-tick'])) {
+                $this->chunkPerTick = max(1, (int)$cs['per-tick']);
+            }
+            if (isset($cs['time-budget-ms']) && is_numeric($cs['time-budget-ms'])) {
+                $this->chunkTimeBudgetMs = max(1.0, (float)$cs['time-budget-ms']);
+            }
+            if (array_key_exists('use-time-budget', $cs) && is_bool($cs['use-time-budget'])) {
+                $this->chunkUseTimeBudget = $cs['use-time-budget'];
+            }
         }
 
         $ac = $data['anti-cheat'] ?? null;
@@ -297,6 +342,15 @@ final class KhronosConfig {
                     'attempts-per-minute' => 30,
                     'max-sessions-per-ip' => 25,
                 ],
+            ],
+            // Chunk streaming: controls how chunks are compressed and sent
+            // to clients. L2 is recommended (fast CPU, reasonable bandwidth).
+            // Time-budget mode caps total chunk processing per tick.
+            'chunk-streaming' => [
+                'compression-level' => 2,    // 1-9: lower=faster CPU, larger packets
+                'per-tick' => 10,            // max chunks per player per tick
+                'time-budget-ms' => 30.0,    // global budget shared across all players
+                'use-time-budget' => true,   // false = fixed CPT only (scales poorly)
             ],
         ];
         file_put_contents($path, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
