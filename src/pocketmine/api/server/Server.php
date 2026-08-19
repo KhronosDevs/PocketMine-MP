@@ -659,7 +659,6 @@ class Server {
             'playerRespawn' => \pocketmine\Kernel::getInstance()->getPlayerRespawnService(),
             'chunkLoad' => \pocketmine\Kernel::getInstance()->getChunkLoadService(),
             'chunkUnload' => \pocketmine\Kernel::getInstance()->getChunkUnloadService(),
-            'chunkSend' => \pocketmine\Kernel::getInstance()->getChunkSendService(),
             'blockBreak' => \pocketmine\Kernel::getInstance()->getBlockBreakService(),
             'blockPlace' => \pocketmine\Kernel::getInstance()->getBlockPlaceService(),
             'blockUpdate' => \pocketmine\Kernel::getInstance()->getBlockUpdateService(),
