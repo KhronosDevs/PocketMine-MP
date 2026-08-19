@@ -15,6 +15,7 @@ use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\LongTag;
 use pocketmine\nbt\tag\ShortTag;
 use pocketmine\nbt\tag\StringTag;
+use pocketmine\core\resource\NativeAccel;
 use pocketmine\port\driven\ChunkData;
 use pocketmine\port\driven\EntitySnapshot;
 use pocketmine\port\driven\StoragePort;
@@ -408,6 +409,10 @@ abstract class RegionStorageAdapter implements StoragePort {
      * nibble array (2048 bytes, two blocks per byte: even index = low nibble).
      */
     protected static function packNibbles(string $fullBytes): string {
+        $native = NativeAccel::packNibbles($fullBytes);
+        if ($native !== null) {
+            return $native;
+        }
         $out = str_repeat("\x00", 2048);
         for ($i = 0; $i < 2048; $i++) {
             $low = ord($fullBytes[$i * 2]) & 0x0F;
@@ -421,6 +426,10 @@ abstract class RegionStorageAdapter implements StoragePort {
      * Expand a vanilla nibble array (2048 bytes) into full bytes (4096).
      */
     protected static function unpackNibbles(string $nibbles): string {
+        $native = NativeAccel::unpackNibbles($nibbles);
+        if ($native !== null) {
+            return $native;
+        }
         $out = str_repeat("\x00", 4096);
         for ($i = 0; $i < 2048; $i++) {
             $byte = ord($nibbles[$i]);

@@ -40,7 +40,10 @@ int kh_light_calc(const unsigned char *blocks, const unsigned char *opacity,
                   unsigned char *sky_out, unsigned char *block_out);
 void kh_noise_octaves(int chunk_x, int chunk_z, int seed,
                       const int *shifts, const int *xors, int count, int *out);
+void kh_noise_columns_xor(int chunk_x, int chunk_z, int xmask, int seed,
+                          int shift, int *out);
 int kh_pack_nibbles(const unsigned char *in, size_t len, unsigned char *out);
+int kh_unpack_nibbles(const unsigned char *in, size_t len, unsigned char *out);
 void kh_build_sky_light(const unsigned char *heightmap, unsigned char *out);
 CDEF;
 
@@ -202,6 +205,32 @@ CDEF;
         return $out;
     }
 
+    /**
+     * One octave of smooth noise for all 256 columns of a chunk, with a fixed
+     * XOR applied to world x (nether cave pass: one call per y-slice).
+     *
+     * @return array<int, int>|null column-indexed noise values
+     */
+    public static function noiseColumnsXor(int $chunkX, int $chunkZ, int $xmask, int $seed, int $shift): ?array {
+        if (!self::available()) {
+            return null;
+        }
+        try {
+            if (self::$noiseBuf === null) {
+                self::$noiseBuf = \FFI::new('int[' . (self::NOISE_COLUMNS * self::MAX_OCTAVES) . ']');
+            }
+            self::$ffi->kh_noise_columns_xor($chunkX, $chunkZ, $xmask, $seed, $shift, self::$noiseBuf);
+            $raw = \FFI::string(self::$noiseBuf, self::NOISE_COLUMNS * 4);
+        } catch (\Throwable $e) {
+            return null;
+        }
+        $vals = unpack('l*', $raw);
+        if (!is_array($vals)) {
+            return null;
+        }
+        return array_values($vals);
+    }
+
     /** Nibble-pack a byte-per-block array (ChunkSerializer::packNibbles). */
     public static function packNibbles(string $data): ?string {
         if (!self::available()) {
@@ -218,6 +247,31 @@ CDEF;
                 self::$packBuf = \FFI::new('unsigned char[' . $outLen . ']');
             }
             self::$ffi->kh_pack_nibbles($in, $len, self::$packBuf);
+            return \FFI::string(self::$packBuf, $outLen);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Expand a vanilla nibble array into full bytes
+     * (RegionStorageAdapter::unpackNibbles).
+     */
+    public static function unpackNibbles(string $data): ?string {
+        if (!self::available()) {
+            return null;
+        }
+        $len = strlen($data);
+        if ($len === 0) {
+            return '';
+        }
+        $outLen = $len * 2;
+        try {
+            $in = self::bytesToCData($data, $len);
+            if (self::$packBuf === null || (int)\FFI::sizeof(self::$packBuf) < $outLen) {
+                self::$packBuf = \FFI::new('unsigned char[' . $outLen . ']');
+            }
+            self::$ffi->kh_unpack_nibbles($in, $len, self::$packBuf);
             return \FFI::string(self::$packBuf, $outLen);
         } catch (\Throwable $e) {
             return null;

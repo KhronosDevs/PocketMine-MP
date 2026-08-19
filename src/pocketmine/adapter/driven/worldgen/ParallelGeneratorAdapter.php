@@ -367,27 +367,25 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
         // Per-column mass height: base 52 with 64-cell hills + 16-cell
         // detail, clamped to [36, 106] so a walkable floor always exists and
         // the bedrock ceiling leaves headroom above.
-        $heights = [];
-        for ($bz = 0; $bz < 16; $bz++) {
-            for ($bx = 0; $bx < 16; $bx++) {
-                $wx = $chunkX * 16 + $bx;
-                $wz = $chunkZ * 16 + $bz;
-                $h = 52
-                    + intdiv((self::smoothNoise($wx, $wz, $seed ^ 0x6E5C2F, 6) - 32768) * 40, 65536)
-                    + intdiv((self::smoothNoise($wx, $wz, $seed ^ 0x3D1B7A, 4) - 32768) * 16, 65536);
-                $heights[$bz * 16 + $bx] = max(36, min(106, $h));
-            }
-        }
+        $heights = self::netherHeights($chunkX, $chunkZ, $seed);
 
         // Nether biomes are all "hell" (legacy Biome::HELL).
         $biomes = array_fill(0, 256, 8); // Biome::HELL = 8
         $heightmap = array_fill(0, 256, 0);
+
+        // Precompute the 3D-ish cave noise per y-slice in ONE batched native
+        // call per slice (each slice XORs a per-y constant into x before the
+        // noise, so it is a full 2D field per y). Fallback recomputes lazily
+        // per block when the library is unavailable.
+        $caves = self::netherCaveSlices($chunkX, $chunkZ, $seed);
+
         $sections = [];
         for ($sy = 0; $sy < 8; $sy++) { // y 0..127 (protocol-84 nether height)
             $rows = [];
             for ($r = 0; $r < 16; $r++) {
                 $y = $sy * 16 + $r;
                 $row = '';
+                $slice = $caves[$y] ?? null;
                 for ($bz = 0; $bz < 16; $bz++) {
                     for ($bx = 0; $bx < 16; $bx++) {
                         if ($y === 0 || $y === 127) {
@@ -407,7 +405,7 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
                         // lava lake - the floor is solid netherrack that opens
                         // into lava pools toward the surface (legacy: lava
                         // below waterHeight with the mass filling the bottom).
-                        $cave = self::smoothNoise($wx ^ (($y * 7919) & 0x7FFFFFFF), $wz, $seed ^ 0x5B4C2A91, 5);
+                        $cave = $slice[$bz * 16 + $bx] ?? self::smoothNoise($wx ^ (($y * 7919) & 0x7FFFFFFF), $wz, $seed ^ 0x5B4C2A91, 5);
                         if ($y <= 32) {
                             // Deeper = more netherrack (threshold falls), so
                             // lava is a sea near y=32 with islands beneath.
@@ -1244,6 +1242,63 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
         $rng ^= $rng >> 17;
         $rng ^= ($rng << 5) & 0x7FFFFFFF;
         return $rng & 0x7FFFFFFF;
+    }
+
+    /**
+     * Precompute the nether cave noise field for all 128 y-slices: one
+     * batched native call per slice (each slice XORs a per-y constant into x,
+     * so it is a full 2D field). Returns null when the native library is
+     * unavailable; the caller then falls back to per-block smoothNoise.
+     *
+     * @return array<int, array<int, int>>|null [y => [column => noise]]
+     */
+    private static function netherCaveSlices(int $chunkX, int $chunkZ, int $seed): ?array {
+        if (!NativeAccel::available()) {
+            return null;
+        }
+        $slices = [];
+        for ($y = 0; $y < 128; $y++) {
+            $values = NativeAccel::noiseColumnsXor($chunkX, $chunkZ, $y * 7919, $seed ^ 0x5B4C2A91, 5);
+            if ($values === null) {
+                return null;
+            }
+            $slices[$y] = $values;
+        }
+        return $slices;
+    }
+
+    /**
+     * Per-column nether mass heights: base 52 with 64-cell hills (shift 6,
+     * xor 0x6E5C2F) + 16-cell detail (shift 4, xor 0x3D1B7A), clamped to
+     * [36, 106]. Uses the native batched noise path (all 256 columns in one
+     * FFI call) with a pure-PHP fallback. Returns column-indexed heights.
+     *
+     * @return array<int, int>
+     */
+    private static function netherHeights(int $chunkX, int $chunkZ, int $seed): array {
+        $octaves = NativeAccel::noiseOctaves($chunkX, $chunkZ, $seed, [6, 4], [0x6E5C2F, 0x3D1B7A]);
+        if ($octaves === null) {
+            $heights = [];
+            for ($bz = 0; $bz < 16; $bz++) {
+                for ($bx = 0; $bx < 16; $bx++) {
+                    $wx = $chunkX * 16 + $bx;
+                    $wz = $chunkZ * 16 + $bz;
+                    $h = 52
+                        + intdiv((self::smoothNoise($wx, $wz, $seed ^ 0x6E5C2F, 6) - 32768) * 40, 65536)
+                        + intdiv((self::smoothNoise($wx, $wz, $seed ^ 0x3D1B7A, 4) - 32768) * 16, 65536);
+                    $heights[$bz * 16 + $bx] = max(36, min(106, $h));
+                }
+            }
+            return $heights;
+        }
+        $heights = [];
+        for ($c = 0; $c < 256; $c++) {
+            $h = 52
+                + intdiv(($octaves[$c][0] - 32768) * 40, 65536)
+                + intdiv(($octaves[$c][1] - 32768) * 16, 65536);
+            $heights[$c] = max(36, min(106, $h));
+        }
+        return $heights;
     }
 
     /**
