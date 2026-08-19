@@ -127,8 +127,15 @@ use const ZLIB_ENCODING_DEFLATE;
  * reliability) and feeds decoded game packets here.
  */
 final class NetworkSessionService {
-    /** Max full chunks pushed to a client per poll (tick) — default, overridden by config. */
-    public const CHUNKS_PER_TICK = 10;
+    /**
+     * Max full chunks pushed to a client per poll (tick) — default, overridden
+     * by config.  DO NOT raise above ~4 without first verifying RakLib's
+     * packetToSend recovery queue (< WINDOW_SIZE=2048) can drain between
+     * ticks.  Values like 8-10 caused silent session timeouts in production
+     * because the client couldn't ACK reliable fragments fast enough,
+     * overflowing the recovery queue and dropping ALL retransmissions.
+     */
+    public const CHUNKS_PER_TICK = 2;
     private const DEFAULT_RADIUS = 4;
     private const MAX_RADIUS = 12;
 
@@ -374,12 +381,7 @@ final class NetworkSessionService {
         if ($session === null) {
             return;
         }
-        // DIAG: log every disconnect with reason and session state
-        $username = $session['username'] ?? '?';
-        $spawned = $session['spawned'] ?? false;
-        $chunksSent = count($session['chunksSent'] ?? []);
-        $queueRemaining = count($session['chunkQueue'] ?? []) - ($session['chunkQueueIndex'] ?? 0);
-        fwrite(STDERR, "[disconnect] user=$username reason=$reason spawned=" . ($spawned ? 'Y' : 'N') . " chunksSent=$chunksSent queueRemaining=$queueRemaining addr=$addrKey\n");
+
         // 14.25: a leaving rider is dismounted so the vehicle is freed for
         // the next player and never carries a dangling rider id.
         $this->dismountPlayer($addrKey);
@@ -5237,8 +5239,6 @@ final class NetworkSessionService {
         // many players need chunks simultaneously.
         $budgetStart = $this->chunkUseTimeBudget ? hrtime(true) : 0;
         $budgetNs = (int)($this->chunkTimeBudgetMs * 1_000_000);
-        $sessionsProcessed = 0;
-        $totalChunksSent = 0;
         
         foreach (array_keys($this->sessions) as $addrKey) {
             // Check time budget every session (not every chunk) to avoid
@@ -5246,7 +5246,6 @@ final class NetworkSessionService {
             if ($this->chunkUseTimeBudget) {
                 $elapsed = hrtime(true) - $budgetStart;
                 if ($elapsed >= $budgetNs) {
-                    fwrite(STDERR, "[streamChunks] budget break: processed=$sessionsProcessed chunks=$totalChunksSent remaining=" . (count($this->sessions) - $sessionsProcessed) . " elapsedMs=" . round($elapsed / 1_000_000, 2) . "\n");
                     break;
                 }
             }
@@ -5305,7 +5304,6 @@ final class NetworkSessionService {
                 $chunk->order = FullChunkDataPacket::ORDER_LAYERED;
                 $chunk->data = $wire;
                 $this->sendChunkBatch($addrKey, $chunk);
-                $totalChunksSent++;
 
                 // 14.24: after the chunk, send tile-entity data (sign text,
                 // item frame contents) so the client renders them (legacy
@@ -5335,11 +5333,6 @@ final class NetworkSessionService {
                 $this->sendDoFirstSpawn($addrKey);
             }
             $this->sessions[$addrKey] = $session;
-            $sessionsProcessed++;
-        }
-        if ($sessionsProcessed > 0) {
-            $budgetElapsed = $this->chunkUseTimeBudget ? round((hrtime(true) - $budgetStart) / 1_000_000, 2) : 0;
-            fwrite(STDERR, "[streamChunks] done: processed=$sessionsProcessed chunks=$totalChunksSent budgetMs=$budgetElapsed\n");
         }
     }
 

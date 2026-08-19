@@ -107,7 +107,7 @@ final class KhronosConfig {
      * Maximum chunks a single player/session can receive per tick.
      * This is a per-session cap, not the global processing limit.
      */
-    public int $chunkPerTick = 10;
+    public int $chunkPerTick = 2;
 
     /**
      * Global time budget (milliseconds) for chunk streaming per tick.
@@ -226,7 +226,9 @@ final class KhronosConfig {
                 $this->chunkCompressionLevel = max(1, min(9, (int)$cs['compression-level']));
             }
             if (isset($cs['per-tick']) && is_numeric($cs['per-tick'])) {
-                $this->chunkPerTick = max(1, (int)$cs['per-tick']);
+                // Clamp to 8: values above ~4 risk RakLib recovery queue overflow
+                // (WINDOW_SIZE=2048) causing silent session drops.
+                $this->chunkPerTick = max(1, min(8, (int)$cs['per-tick']));
             }
             if (isset($cs['time-budget-ms']) && is_numeric($cs['time-budget-ms'])) {
                 $this->chunkTimeBudgetMs = max(1.0, (float)$cs['time-budget-ms']);
@@ -348,7 +350,7 @@ final class KhronosConfig {
             // Time-budget mode caps total chunk processing per tick.
             'chunk-streaming' => [
                 'compression-level' => 2,    // 1-9: lower=faster CPU, larger packets
-                'per-tick' => 10,            // max chunks per player per tick
+                'per-tick' => 2,            // max chunks per player per tick (DO NOT raise above ~4)
                 'time-budget-ms' => 30.0,    // global budget shared across all players
                 'use-time-budget' => true,   // false = fixed CPT only (scales poorly)
             ],

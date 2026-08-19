@@ -200,6 +200,12 @@ class Session{
 			}
 
 			if(count($this->packetToSend) > self::$WINDOW_SIZE){
+				if($this->sessionManager !== null){
+					$this->sessionManager->getLogger()->critical(
+						'Recovery queue overflow for ' . $this->address . ':' . $this->port
+						. ' — dropped ' . count($this->packetToSend) . ' pending retransmissions'
+					);
+				}
 				$this->packetToSend = [];
 			}
 		}
