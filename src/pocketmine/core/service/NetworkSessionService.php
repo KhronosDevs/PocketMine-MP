@@ -5000,10 +5000,26 @@ final class NetworkSessionService {
             // hearts (legacy protocol-84 behaviour), following damage/heal/
             // respawn without waiting for a client re-sync.
             $selfHealth = $session['entityRef']->getEntity()?->get(HealthComponent::class)?->current ?? 20.0;
+            $wasAlive = $session['lastHealth'] > 0.0;
             if (abs($selfHealth - $session['lastHealth']) > 0.01) {
                 $hp = new SetHealthPacket();
                 $hp->health = (int)ceil($selfHealth);
                 $this->queuePacket($session['playerRef'], $hp);
+            }
+            // Death screen parity (legacy Player::kill, old-src/Player.php:4020):
+            // on the alive->dead transition the server must send a RespawnPacket
+            // carrying the spawn point or the client keeps the Respawn button
+            // greyed out. Sent right after SetHealthPacket(0) so the client is
+            // already in the death state, and only on the transition tick.
+            if ($wasAlive && $selfHealth <= 0.0) {
+                $config = $this->resourceRegistry->get(ServerConfig::class);
+                if ($config !== null) {
+                    $rp = new RespawnPacket();
+                    $rp->x = (float)$config->spawnX;
+                    $rp->y = (float)$config->spawnY;
+                    $rp->z = (float)$config->spawnZ;
+                    $this->queuePacket($session['playerRef'], $rp);
+                }
             }
             $session['lastHealth'] = $selfHealth;
 
