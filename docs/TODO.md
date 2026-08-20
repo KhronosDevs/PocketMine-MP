@@ -41,7 +41,35 @@ Hostile mobs chase players in **straight lines** and get stuck on hills and wall
 - **Already in place:** `AISystem` (sequential), `AIStateComponent` with per-mob stats, `SpatialIndex`, combat pipeline integration.
 - **Missing:** navigation. Pragmatic scope: a lightweight jump-and-avoid — when a chase is blocked by a solid block ahead, step up a 1-block ledge or strafe around; no full A* navmesh needed for a 0.15-era feel. Add a `PathComponent`/waypoint follow so mobs can loop around obstacles.
 
-### 5. Redstone
+### 5. Pressure plates (70/72/147/148)
+
+Pressure plates need entity collision detection to activate when a player/mob
+walks over them. The old-src uses `EntityBaseTick` to check if any entity's
+bounding box overlaps the plate's block position.
+
+- **Already in place:** `BlockIds` has all pressure plate IDs. `CollisionComponent`
+  exists for entities.
+- **Missing:** per-tick entity-over-block detection system, plate activation/deactivation
+  logic, redstone signal emission (tied to redstone engine).
+
+### 6. Falling sand / falling gravel
+
+Sand and gravel should fall when the block below is removed, as a gravity entity
+that lands on the next solid block.
+
+- **Already in place:** `BlockIds::SAND = 12`, `BlockIds::GRAVEL = 13` in BlockRegistry.
+- **Missing:** gravity check on block-break (if block below is air, spawn a FallingSand
+  entity), FallingSand entity with gravity + collision, anvil fall sound on landing.
+
+### 7. Cauldron (118)
+
+Cauldrons hold water and can be filled/emptied with buckets.
+
+- **Already in place:** `BlockIds::CAULDRON = 118` in BlockIds.
+- **Missing:** cauldron state (empty/1/2/3 water levels), bucket interaction to
+  fill/empty, splash/spell sounds on water interaction.
+
+### 8. Redstone
 
 No circuit engine at all.
 
