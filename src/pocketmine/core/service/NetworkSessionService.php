@@ -2141,6 +2141,24 @@ final class NetworkSessionService {
     }
 
     /**
+     * Spawn smoke particles for a dispenser (23) or dropper (125) firing.
+     * $motion = [dx, dy, dz] direction the item is shot (normalized to
+     * unit face).  Call this from the redstone system when it triggers.
+     */
+    public function fireDispenserSmoke(int $worldId, int $x, int $y, int $z, array $motion): void {
+        $wes = \pocketmine\Kernel::getInstance()?->getWorldEventService();
+        if ($wes === null) return;
+        $chunkX = (int)floor($x / 16);
+        $chunkZ = (int)floor($z / 16);
+        for ($i = 1; $i < 10; $i++) {
+            $sx = $x + $motion[0] * $i * 0.3 + 0.5;
+            $sy = $y + ($motion[1] == 0 ? 0.5 : $motion[1] * $i * 0.3);
+            $sz = $z + $motion[2] * $i * 0.3 + 0.5;
+            $wes->spawnSmokeParticle($worldId, $chunkX, $chunkZ, $sx, $sy, $sz);
+        }
+    }
+
+    /**
      * 14.32: flint & steel on an obsidian block of a complete portal frame
      * fills the inside with portal blocks. Mirrors the legacy
      * FlintSteel::onActivate frame detector: 4-23 obsidian wide, 5-23 tall,
