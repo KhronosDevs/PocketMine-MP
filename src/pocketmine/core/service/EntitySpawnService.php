@@ -249,6 +249,15 @@ final class EntitySpawnService {
             \pocketmine\api\entity\Entity::wrap($entityRef, $this->world),
         ));
 
+        // TNT prime sound
+        $kernel = \pocketmine\Kernel::getInstance();
+        $wes = $kernel?->getWorldEventService();
+        if ($wes !== null) {
+            $chunkX = (int)floor($x / 16);
+            $chunkZ = (int)floor($z / 16);
+            $wes->playSound($worldId, $chunkX, $chunkZ, $x + 0.5, $y, $z + 0.5, \pocketmine\core\service\WorldEventService::SOUND_TNT);
+        }
+
         return $entityRef;
     }
 

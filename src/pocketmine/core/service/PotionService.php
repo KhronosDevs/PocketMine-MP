@@ -99,6 +99,17 @@ final class PotionService {
             return;
         }
         [$effectId, $duration, $amplifier] = $effect;
+
+        // Splash sound + spell particle at impact
+        $kernel = \pocketmine\Kernel::getInstance();
+        $wes = $kernel?->getWorldEventService();
+        if ($wes !== null) {
+            $chunkX = (int)floor($x / 16);
+            $chunkZ = (int)floor($z / 16);
+            $wes->playSound(0, $chunkX, $chunkZ, $x, $y, $z, \pocketmine\core\service\WorldEventService::SOUND_SPLASH);
+            $wes->spawnParticle(0, $chunkX, $chunkZ, $x, $y, $z, \pocketmine\core\service\WorldEventService::TYPE_MOB_SPELL);
+        }
+
         $sourceId = $source?->getId() ?? -1;
         foreach ($this->world->getEntities() as $id => $entity) {
             if ($id === $sourceId) {
