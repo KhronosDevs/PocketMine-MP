@@ -544,10 +544,7 @@ test('login produces the full protocol-84 burst', function () use ($client, $ker
     }
     ok($inventoryContent !== null, 'inventory content (window 0) sent on login');
     same(45, count($inventoryContent['slots']), '45 inventory slots (36 real + 9 dummy hotbar)');
-    // Starter kit: planks in slot 0 (held), cobblestone in slot 1.
-    same(5, $inventoryContent['slots'][0][0], 'slot 0 holds planks');
-    same(32, $inventoryContent['slots'][0][1], '32 planks in slot 0');
-    same(4, $inventoryContent['slots'][1][0], 'slot 1 holds cobblestone');
+    // Starter kit removed — inventory is empty on fresh join.
 
     // 14.12: the login burst carries the recipe list so the client can
     // render the crafting UI.
@@ -917,6 +914,26 @@ test('a spam flood of chat is throttled to one message', function () use ($clien
  * and seed-random per boot, so the search scans outward until it finds one.
  * @return array{0: int, 1: int, 2: int}
  */
+
+/** Give a named player the items that the removed starter kit used to provide.
+ *  Call this in any test that needs planks / cobblestone / torches. */
+function givePlayerTestItems(\pocketmine\Kernel $kernel, string $name): void {
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === $name) {
+            $entity = $kernel->getWorld()->getEntity($p['entityId']);
+            $inv = $entity?->get(\pocketmine\core\component\InventoryComponent::class);
+            if ($inv !== null) {
+                $inv->set(0, new \pocketmine\core\component\ItemStack(5, 0, 32));   // planks
+                $inv->set(1, new \pocketmine\core\component\ItemStack(4, 0, 32));   // cobblestone
+                $inv->set(2, new \pocketmine\core\component\ItemStack(3, 0, 32));   // dirt
+                $inv->set(3, new \pocketmine\core\component\ItemStack(50, 0, 16));  // torches
+                $inv->set(4, new \pocketmine\core\component\ItemStack(58, 0, 1));   // crafting table
+            }
+            return;
+        }
+    }
+}
+
 function findSurfaceBlockNearSpawn(\pocketmine\Kernel $kernel): array {
     $store = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
     $store = $store instanceof \pocketmine\core\resource\ChunkStore ? $store : null;
@@ -1421,7 +1438,8 @@ test('survival break drops the item with visible metadata (grass drops dirt)', f
 });
 
 test('placing a block consumes inventory and broadcasts UpdateBlockPacket', function () use ($client, $kernel): void {
-    // Ensure Alice holds planks (hotbar slot 0 of the starter kit).
+    givePlayerTestItems($kernel, 'Alice');
+    // Ensure Alice holds planks (hotbar slot 0).
     $me = new MobEquipmentPacket();
     $me->eid = 0;
     $me->item = [5, 32, 0, null];
@@ -1480,7 +1498,7 @@ test('placing a block consumes inventory and broadcasts UpdateBlockPacket', func
 });
 
 test('placing a torch re-sends the chunk with block light (client sees it light up)', function () use ($client, $kernel): void {
-    // Alice selects hotbar slot 3 (torches from the starter kit).
+    // Alice selects hotbar slot 3 (torches).
     $me = new MobEquipmentPacket();
     $me->eid = 0;
     $me->item = [50, 16, 0, null];
@@ -2029,7 +2047,8 @@ test('a dropped item is collected by walk-over and the inventory syncs back', fu
 
 // --- Inventory actions (14.7) ----------------------------------------------
 test('a player moves items between inventory slots via ContainerSetSlot', function () use ($kernel, $client): void {
-    // Alice holds 32 planks in slot 0 (starter kit). A move: the client sends
+    givePlayerTestItems($kernel, 'Alice');
+    // Alice holds 32 planks in slot 0 (freshly given). A move: the client sends
     // the NEW content of the affected slots - slot 0 emptied, slot 5 = the
     // planks. The server applies the authoritative state and mirrors the
     // changed slot back (ContainerSetSlotPacket to the actor).
@@ -3928,9 +3947,10 @@ test('a chest-window move is validated and synced to every viewer', function () 
         // sessions that have the chest open.
         openTestChest($kernel, $chestClient, $cx, $cy, $cz);
 
-        // The fresh player has the starter kit: planks in slot 0. First empty
+        // Give Chesty2 planks (removed starter kit). First empty
         // slot 0 (releases 32 planks into move credit), then fill chest slot
         // 0 with 5 planks - a two-packet drag, exactly like window-0 moves.
+        givePlayerTestItems($kernel, 'Chesty2');
         $empty = new ContainerSetSlotPacket();
         $empty->windowid = 0;
         $empty->slot = 0;
@@ -4200,9 +4220,10 @@ test('a double-chest move lands in the right physical half', function () use ($k
         }
         ok($opened, 'double chest opened (54-slot window)');
 
-        // Move 5 planks into window slot 30 = right half slot 3: empty the
-        // player's slot 0 first (releases 32 planks into move credit), then
-        // claim slot 30 of the double window.
+        // Give Chesty7 planks (removed starter kit), then move 5 into
+        // window slot 30 = right half slot 3: empty the player's slot 0 first
+        // (releases 32 planks into move credit), then claim slot 30.
+        givePlayerTestItems($kernel, 'Chesty7');
         $empty = new ContainerSetSlotPacket();
         $empty->windowid = 0;
         $empty->slot = 0;

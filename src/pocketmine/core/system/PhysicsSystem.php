@@ -55,9 +55,23 @@ final class PhysicsSystem implements ParallelSystem {
                 $newVelY = 0;
             }
 
+            // Air drag (old-src Item drag = 0.02, friction = 0.98/tick).
+            $drag = 0.98;
+            $newVelX = $velocity->x * $drag;
+            $newVelZ = $velocity->z * $drag;
+
+            // When all axes are nearly still, snap to zero so items
+            // stop on the ground instead of sliding forever.
+            if (abs($newVelX) < 0.05 && abs($newVelZ) < 0.05
+                && abs($newVelY) < 0.05) {
+                $newVelX = 0.0;
+                $newVelY = 0.0;
+                $newVelZ = 0.0;
+            }
+
             // Write to pending components for parallel safety
             $position->setPending($newX, $newY, $newZ);
-            $velocity->setPending($velocity->x, $newVelY, $velocity->z);
+            $velocity->setPending($newVelX, $newVelY, $newVelZ);
         }
     }
 
@@ -184,12 +198,23 @@ final class PhysicsSystem implements ParallelSystem {
                 $newVelY = 0;
             }
 
+            // Air drag + snap-to-zero when nearly still.
+            $drag = 0.98;
+            $newVelX = $vx[$i] * $drag;
+            $newVelZ = $vz[$i] * $drag;
+            if (abs($newVelX) < 0.05 && abs($newVelZ) < 0.05
+                && abs($newVelY) < 0.05) {
+                $newVelX = 0.0;
+                $newVelY = 0.0;
+                $newVelZ = 0.0;
+            }
+
             $outPX[] = $newX;
             $outPY[] = $newY;
             $outPZ[] = $newZ;
-            $outVX[] = $vx[$i];
+            $outVX[] = $newVelX;
             $outVY[] = $newVelY;
-            $outVZ[] = $vz[$i];
+            $outVZ[] = $newVelZ;
         }
 
         $out->setPayload([
