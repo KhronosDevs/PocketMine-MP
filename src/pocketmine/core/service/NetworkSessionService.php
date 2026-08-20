@@ -1755,6 +1755,47 @@ final class NetworkSessionService {
                 $this->activateItemFrame($addrKey, $session, $pk->x, $pk->y, $pk->z);
                 return;
             }
+
+            // --- Interactive block toggles (doors, buttons, levers, etc.) ---
+            // These work with or without a held item.
+
+            // Doors (64 wood, 71 iron): toggle open/closed via meta bit 0x04.
+            // If clicking the top half, toggle the bottom half instead.
+            if ($block === BlockIds::WOODEN_DOOR || $block === BlockIds::IRON_DOOR) {
+                $this->toggleDoor($session, $pk->x, $pk->y, $pk->z, $block);
+                return;
+            }
+
+            // Trapdoors (96 wood, 167 iron): toggle open/closed via meta bit 0x04.
+            if ($block === BlockIds::TRAPDOOR || $block === BlockIds::IRON_TRAPDOOR) {
+                $this->toggleTrapdoor($session, $pk->x, $pk->y, $pk->z);
+                return;
+            }
+
+            // Fence gates (107): toggle open/closed via meta bit 0x04.
+            if ($block === BlockIds::FENCE_GATE) {
+                $this->toggleFenceGate($session, $pk->x, $pk->y, $pk->z);
+                return;
+            }
+
+            // Buttons (77 stone, 143 wood): set powered (meta bit 0x08),
+            // schedule unpower after delay (1.5s stone, 1.0s wood).
+            if ($block === BlockIds::STONE_BUTTON || $block === BlockIds::WOODEN_BUTTON) {
+                $this->pressButton($session, $pk->x, $pk->y, $pk->z, $block);
+                return;
+            }
+
+            // Lever (69): toggle powered (meta bit 0x08).
+            if ($block === BlockIds::LEVER) {
+                $this->toggleLever($session, $pk->x, $pk->y, $pk->z);
+                return;
+            }
+
+            // Noteblock (25): play note on right-click.
+            if ($block === BlockIds::NOTEBLOCK) {
+                $this->playNoteblock($session, $pk->x, $pk->y, $pk->z);
+                return;
+            }
         }
         $held = $inventory->get($inventory->heldSlot);
         if ($held === null || $held->count <= 0) {
@@ -1987,6 +2028,115 @@ final class NetworkSessionService {
                 ? \pocketmine\core\service\WorldEventService::SOUND_ITEMFRAME_ROTATE
                 : \pocketmine\core\service\WorldEventService::SOUND_ITEMFRAME_ADD;
             $wes->playSound($session['worldId'], $fcX, $fcZ, $x + 0.5, $y + 0.5, $z + 0.5, $soundId);
+        }
+    }
+
+    // ── Interactive block toggles ─────────────────────────────────────
+
+    /**
+     * Toggle a door (64/71). Meta bit 0x04 = open. If the player clicks
+     * the top half, toggle the bottom half instead.
+     */
+    private function toggleDoor(array $session, int $x, int $y, int $z, int $blockId): void {
+        $store = $this->getChunkStore($session['worldId']);
+        if ($store === null) return;
+        $meta = $store->getBlockMeta($x, $y, $z);
+        // If clicking top half (bit 0x08 set), toggle the block below instead.
+        if (($meta & 0x08) !== 0) {
+            $y--;
+            $meta = $store->getBlockMeta($x, $y, $z);
+        }
+        $newMeta = $meta ^ 0x04; // flip open bit
+        $store->setBlock($x, $y, $z, $blockId, $newMeta);
+        $this->broadcastBlockState($x, $y, $z, $session['worldId']);
+        $this->playWorldSound($session['worldId'], $x, $y, $z, \pocketmine\core\service\WorldEventService::SOUND_DOOR);
+    }
+
+    /**
+     * Toggle a trapdoor (96/167). Meta bit 0x04 = open.
+     */
+    private function toggleTrapdoor(array $session, int $x, int $y, int $z): void {
+        $store = $this->getChunkStore($session['worldId']);
+        if ($store === null) return;
+        $blockId = $store->getBlock($x, $y, $z);
+        $meta = $store->getBlockMeta($x, $y, $z);
+        $newMeta = $meta ^ 0x04;
+        $store->setBlock($x, $y, $z, $blockId, $newMeta);
+        $this->broadcastBlockState($x, $y, $z, $session['worldId']);
+        $this->playWorldSound($session['worldId'], $x, $y, $z, \pocketmine\core\service\WorldEventService::SOUND_DOOR);
+    }
+
+    /**
+     * Toggle a fence gate (107). Meta bit 0x04 = open.
+     */
+    private function toggleFenceGate(array $session, int $x, int $y, int $z): void {
+        $store = $this->getChunkStore($session['worldId']);
+        if ($store === null) return;
+        $meta = $store->getBlockMeta($x, $y, $z);
+        $newMeta = $meta ^ 0x04;
+        $store->setBlock($x, $y, $z, BlockIds::FENCE_GATE, $newMeta);
+        $this->broadcastBlockState($x, $y, $z, $session['worldId']);
+        $this->playWorldSound($session['worldId'], $x, $y, $z, \pocketmine\core\service\WorldEventService::SOUND_DOOR);
+    }
+
+    /**
+     * Press a button (77/143). Set meta bit 0x08 (powered), schedule unpower.
+     */
+    private function pressButton(array $session, int $x, int $y, int $z, int $blockId): void {
+        $store = $this->getChunkStore($session['worldId']);
+        if ($store === null) return;
+        $meta = $store->getBlockMeta($x, $y, $z);
+        if (($meta & 0x08) !== 0) return; // already pressed
+        $newMeta = $meta | 0x08;
+        $store->setBlock($x, $y, $z, $blockId, $newMeta);
+        $this->broadcastBlockState($x, $y, $z, $session['worldId']);
+        $this->playWorldSound($session['worldId'], $x, $y, $z, \pocketmine\core\service\WorldEventService::SOUND_BUTTON_CLICK);
+        // Schedule unpress: 1.5s (30 ticks) for stone, 1.0s (20 ticks) for wood.
+        $delay = $blockId === BlockIds::STONE_BUTTON ? 30 : 20;
+        $kernel = \pocketmine\Kernel::getInstance();
+        $kernel?->getScheduler()?->scheduleDelayedTask(function () use ($x, $y, $z, $blockId, $session) {
+            $store = \pocketmine\Kernel::getInstance()?->getResourceRegistry()?->get(\pocketmine\core\resource\ChunkStore::class);
+            if ($store === null) return;
+            $currentMeta = $store->getBlockMeta($x, $y, $z);
+            if (($currentMeta & 0x08) === 0) return; // already unpressed
+            $store->setBlock($x, $y, $z, $blockId, $currentMeta & ~0x08);
+            $ns = \pocketmine\Kernel::getInstance()?->getNetworkSessionService();
+            $ns?->broadcastBlockState($x, $y, $z, $session['worldId']);
+        }, $delay);
+    }
+
+    /**
+     * Toggle a lever (69). Meta bit 0x08 = powered.
+     */
+    private function toggleLever(array $session, int $x, int $y, int $z): void {
+        $store = $this->getChunkStore($session['worldId']);
+        if ($store === null) return;
+        $meta = $store->getBlockMeta($x, $y, $z);
+        $newMeta = $meta ^ 0x08;
+        $store->setBlock($x, $y, $z, BlockIds::LEVER, $newMeta);
+        $this->broadcastBlockState($x, $y, $z, $session['worldId']);
+        $this->playWorldSound($session['worldId'], $x, $y, $z, \pocketmine\core\service\WorldEventService::SOUND_CLICK);
+    }
+
+    /**
+     * Play a note on a noteblock (25). Pitch cycles through 0-24.
+     */
+    private function playNoteblock(array $session, int $x, int $y, int $z): void {
+        $store = $this->getChunkStore($session['worldId']);
+        if ($store === null) return;
+        $meta = $store->getBlockMeta($x, $y, $z);
+        $newMeta = ($meta + 1) % 25;
+        $store->setBlock($x, $y, $z, BlockIds::NOTEBLOCK, $newMeta);
+        $this->broadcastBlockState($x, $y, $z, $session['worldId']);
+        // Noteblock sound: SOUND_CLICK with pitch encoded as data.
+        $this->playWorldSound($session['worldId'], $x, $y, $z, \pocketmine\core\service\WorldEventService::SOUND_CLICK, $newMeta * 1000);
+    }
+
+    /** Helper: play a world sound at a block position. */
+    private function playWorldSound(int $worldId, int $x, int $y, int $z, int $soundId, int $data = 0): void {
+        $wes = \pocketmine\Kernel::getInstance()?->getWorldEventService();
+        if ($wes !== null) {
+            $wes->playSound($worldId, (int)floor($x / 16), (int)floor($z / 16), $x + 0.5, $y + 0.5, $z + 0.5, $soundId, $data);
         }
     }
 
