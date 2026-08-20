@@ -11,8 +11,15 @@ else
 fi
 
 # The new ECS server entry point (the old PocketMine.php was removed in the
-# Phase-8 API rewrite).
-POCKETMINE_FILE="bootstrap.php"
+# Phase-8 API rewrite). Prefer the phar if it exists (portable build).
+if [ -f "PocketMine-MP.phar" ]; then
+    POCKETMINE_FILE="PocketMine-MP.phar"
+elif [ -f "bootstrap.php" ]; then
+    POCKETMINE_FILE="bootstrap.php"
+else
+    echo "No PocketMine-MP.phar or bootstrap.php found."
+    exit 1
+fi
 
 # Run the server. bootstrap.php enables networking (binds UDP :19132) and
 # enters the kernel run loop. The memory floor matches legacy PocketMine

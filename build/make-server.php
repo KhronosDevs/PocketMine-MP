@@ -11,7 +11,7 @@ require_once("{$currentWorkingDirectory}/src/pocketmine/utils/Git.php");
 require_once("{$currentWorkingDirectory}/src/pocketmine/utils/Process.php");
 require_once("{$currentWorkingDirectory}/src/pocketmine/utils/Terminal.php");
 require_once("{$currentWorkingDirectory}/src/pocketmine/utils/Utils.php");
-require_once("{$currentWorkingDirectory}/src/pocketmine/network/protocol/Info.php");
+require_once("{$currentWorkingDirectory}/src/pocketmine/protocol/Info.php");
 
 Terminal::init();
 

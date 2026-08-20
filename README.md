@@ -20,6 +20,46 @@ Khronos is a Minecraft server written from scratch in PHP 8.2, inspired by Pocke
 4. **Configure:** first boot generates `server.properties` (name, motd, max-players, gamemode, difficulty, view-distance, white-list, pvp…) and `khronos.json` (anti-cheat thresholds, nether world, defaults) — edit and restart to apply.
 5. **Worlds** live in `worlds/` (real Anvil/McRegion, auto-detected) and save automatically.
 
+## Building a phar
+
+The server can be compiled into a single portable `PocketMine-MP.phar` file for easy distribution.
+
+```bash
+# Build the phar (requires -d phar.readonly=0)
+bin/php7/bin/php -d phar.readonly=0 build/make-phar.php
+```
+
+This produces `PocketMine-MP.phar` (~1.9 MB) containing all PHP source, composer autoload, and default config. The `start.sh` wrapper automatically detects and runs the phar when present.
+
+### What's inside the phar
+
+- `src/pocketmine/` — core server (ECS, services, systems, protocol, resources)
+- `src/raklib/` — RakNet library
+- `vendor/` — composer autoload
+- `autoload.php` — PSR-4 autoloader
+- `khronos.json` — default server config
+
+### What stays outside (must be next to the phar)
+
+| File/Dir | Purpose |
+|---|---|
+| `bin/php7/` | PHP 8.2 runtime (bundled or system PHP with required extensions) |
+| `native/*.so` | FFI acceleration library — can't be loaded from inside a phar |
+| `worlds/` | World data (created on first run) |
+| `plugins/` | Plugin directory (created on first run) |
+| `server.properties` | Server config (generated on first run) |
+| `banned-*.txt`, `ops.txt`, `white-list.txt` | Admin lists |
+
+### Running the phar
+
+```bash
+# Via start.sh (auto-detects the phar)
+./start.sh
+
+# Or directly
+bin/php7/bin/php -d memory_limit=512M -d extension=ffi -d ffi.enable=1 PocketMine-MP.phar
+```
+
 ## Features
 
 | Area | What works |
