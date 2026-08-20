@@ -13,4 +13,4 @@ if [ ! -f "$PHP_BINARY" ]; then
   echo "It was not possible to find the php binary at $PHP_BINARY"
 fi
 
-"$PHP_BINARY" -c bin/php7/bin -d phar.readonly=0 "$CWD/build/make-server.php"
+"$PHP_BINARY" -d phar.readonly=0 "$CWD/build/make-phar.php"

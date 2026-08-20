@@ -18,3 +18,5 @@ white-list.txt
 PocketMine-MP.phar
 vendor/
 composer.phar
+php-cs-fixer
+.php_cs.cache

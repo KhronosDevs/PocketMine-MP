@@ -74,7 +74,7 @@ bin/php7/bin/php -d memory_limit=512M -d extension=ffi -d ffi.enable=1 PocketMin
 
 ## Performance
 
-Measured with the **native-accel FFI library enabled** (production config: light calc, terrain noise and nibble packing run in C via `native/kh_native.so`) on the benchmark scripts in the repo (`measure_baseline.php`, `measure_pipeline.php`, `measure_network.php`, `measure_chunkgen.php`, `measure_memory.php`). The 20 TPS tick budget is **50 ms** — everything below runs well inside it.
+Measured with the **native-accel FFI library enabled** (production config: light calc, terrain noise and nibble packing run in C via `native/kh_native.so`) on the benchmark scripts in `bench/` (`bench/measure_baseline.php`, `bench/measure_pipeline.php`, `bench/measure_network.php`, `bench/measure_chunkgen.php`, `bench/measure_memory.php`). The 20 TPS tick budget is **50 ms** — everything below runs well inside it.
 
 | Benchmark | Result |
 |---|---|
@@ -103,7 +103,7 @@ Khronos has a brand-new, ECS-based plugin API — **not compatible with existing
 
 - **Tests:** `bin/php7/bin/php tests/run.php` (49 files, per-process isolation; `-j N` runs files in parallel, `--filter=substring` runs one test)
 - **Static analysis:** `bin/php7/bin/php -d memory_limit=2G vendor/bin/phpstan analyse -c phpstan.neon`
-- **Benchmarks:** `measure_baseline.php`, `measure_pipeline.php`, `measure_chunkgen.php`, `measure_memory.php`, `measure_network.php` — run with the same FFI flags as production (`-d extension=ffi -d ffi.enable=1`) to match the table above
+- **Benchmarks:** `bench/measure_baseline.php`, `bench/measure_pipeline.php`, `bench/measure_chunkgen.php`, `bench/measure_memory.php`, `bench/measure_network.php` — run with the same FFI flags as production (`-d extension=ffi -d ffi.enable=1`) to match the table above
 - **Architecture at a glance:** ECS core (components → archetypes → systems) · ports & adapters (network/storage/worldgen/threading) · gameplay services · API facades · region-based threading (details in [docs/PLAN.md](docs/PLAN.md))
 
 ## Credits
