@@ -67,7 +67,8 @@ final class BlockPlaceService {
         $this->setBlock($x, $y, $z, $blockId, $placedMeta, $this->worldIdOf($playerRef));
         
         // Play place effects
-        $this->playPlaceEffects($x, $y, $z, $blockId);
+        $worldId = $this->worldIdOf($playerRef);
+        $this->playPlaceEffects($x, $y, $z, $blockId, $worldId);
         
         return true;
     }
@@ -192,7 +193,14 @@ final class BlockPlaceService {
         return new \pocketmine\api\block\Block($apiWorld, $x, $y, $z);
     }
 
-    private function playPlaceEffects(int $x, int $y, int $z, int $blockId): void {
-        // NetworkSyncSystem would send LevelEventPacket for place sound/particles
+    private function playPlaceEffects(int $x, int $y, int $z, int $blockId, int $worldId): void {
+        $kernel = \pocketmine\Kernel::getInstance();
+        $wes = $kernel?->getWorldEventService();
+        if ($wes === null) {
+            return;
+        }
+        $chunkX = (int)floor($x / 16);
+        $chunkZ = (int)floor($z / 16);
+        $wes->playBlockPlaceSound($worldId, $chunkX, $chunkZ, $x + 0.5, $y + 0.5, $z + 0.5, $blockId);
     }
 }

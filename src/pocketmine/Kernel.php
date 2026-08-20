@@ -38,6 +38,7 @@ use pocketmine\core\service\CraftingService;
 use pocketmine\core\service\EnchantmentService;
 use pocketmine\core\service\ContainerService;
 use pocketmine\core\service\NetworkSessionService;
+use pocketmine\core\service\WorldEventService;
 use pocketmine\core\system\ChunkUpdateSystem;
 use pocketmine\core\system\MovementSystem;
 use pocketmine\core\system\PhysicsSystem;
@@ -185,6 +186,7 @@ final class Kernel {
     private EntityDespawnService $entityDespawnService;
     private EntityInteractionService $entityInteractionService;
     private CombatService $combatService;
+    private WorldEventService $worldEventService;
     private PotionService $potionService;
     private DamageService $damageService;
     private KnockbackService $knockbackService;
@@ -268,6 +270,7 @@ final class Kernel {
             $this->commandPort,
             $eventPort,
         );
+        $this->worldEventService = new WorldEventService($this->networkSessionService);
 
         // Single scheduler instance: it registers a tick system that runs tasks,
         // so it must not be recreated per access.
@@ -1634,6 +1637,10 @@ final class Kernel {
 
     public function getCombatService(): CombatService {
         return $this->combatService;
+    }
+
+    public function getWorldEventService(): WorldEventService {
+        return $this->worldEventService;
     }
 
     public function getPotionService(): PotionService {

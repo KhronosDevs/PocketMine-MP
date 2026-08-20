@@ -223,7 +223,7 @@ final class BlockBreakService {
         }
         
         // Play break sound/particles
-        $this->playBreakEffects($x, $y, $z);
+        $this->playBreakEffects($x, $y, $z, $blockId, $worldId);
 
         // 14.10: tools wear out with use (survival only; the helper is a
         // no-op in creative and for bare hands / non-durable items).
@@ -300,8 +300,16 @@ final class BlockBreakService {
         }
     }
 
-    private function playBreakEffects(int $x, int $y, int $z): void {
-        // NetworkSyncSystem would send LevelEventPacket for break particles/sound
+    private function playBreakEffects(int $x, int $y, int $z, int $blockId, int $worldId): void {
+        $kernel = \pocketmine\Kernel::getInstance();
+        $wes = $kernel?->getWorldEventService();
+        if ($wes === null) {
+            return;
+        }
+        $chunkX = (int)floor($x / 16);
+        $chunkZ = (int)floor($z / 16);
+        // Destroy-block particle + sound (matches old-src BreakParticle)
+        $wes->spawnBlockBreakParticle($worldId, $chunkX, $chunkZ, $x + 0.5, $y + 0.5, $z + 0.5, $blockId);
     }
 
     private function setBlock(int $x, int $y, int $z, int $blockId, int $worldId = 0): void {
