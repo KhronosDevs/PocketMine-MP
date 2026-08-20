@@ -1462,6 +1462,19 @@ final class NetworkSessionService {
             }
             return;
         }
+        // 14.3 respawn: MCPE 0.15 sends PlayerActionPacket with
+        // ACTION_SPAWN_SAME_DIMENSION or ACTION_SPAWN_OVERWORLD when the
+        // user clicks Respawn on the death screen (old-src Player.php:2828).
+        if ($pk->action === PlayerActionPacket::ACTION_SPAWN_SAME_DIMENSION
+            || $pk->action === PlayerActionPacket::ACTION_SPAWN_OVERWORLD) {
+            $health = $session['entityRef']->getEntity()?->get(HealthComponent::class);
+            if ($health !== null && $health->current > 0) {
+                return; // alive players do not respawn
+            }
+            $this->playerRespawnService->respawn($session['entityRef']);
+            $this->sendRespawnBurst($addrKey);
+            return;
+        }
     }
 
     /**
@@ -3994,10 +4007,16 @@ final class NetworkSessionService {
         $pos = $session['entityRef']->getPosition();
         $health = $entity?->get(HealthComponent::class);
 
-        // PLAYER_SPAWN status dismisses the death screen.
-        $status = new PlayStatusPacket();
-        $status->status = PlayStatusPacket::PLAYER_SPAWN;
-        $this->queuePacket($playerRef, $status);
+        // NOTE: PLAYER_SPAWN is intentionally NOT sent here. In MCPE 0.15,
+        // sending PLAYER_SPAWN causes the client to auto-exit the death
+        // screen locally without sending RespawnPacket back to the server,
+        // leaving the server-side entity stuck in the dead state (DeadTag
+        // never removed, health never restored). The old-src respawn handler
+        // (Player.php:2852-2870) never sent PLAYER_SPAWN during respawn —
+        // it sent entity metadata + adventure settings + inventory + armor
+        // via sendData/sendSettings/sendContents, which the client treats as
+        // the respawn confirmation. sendDoFirstSpawn() (called below)
+        // provides exactly this packet sequence.
 
         // Teleport the client back to the (terrain-safe) spawn point.
         $move = new MovePlayerPacket();
@@ -4027,6 +4046,13 @@ final class NetworkSessionService {
         $spawn->z = (int)floor($pos?->z ?? 0.0);
         $this->queuePacket($playerRef, $spawn);
 
+        // 0.15 parity: old-src respawn handler (Player.php:2862-2870) calls
+        // sendData($this), sendSettings(), inventory->sendContents(), and
+        // inventory->sendArmorContents() after PLAYER_SPAWN. Without these
+        // the client's entity state is stale and subsequent kills fail to
+        // render the death screen.
+        $this->sendDoFirstSpawn($addrKey);
+
         // Everyone else sees the player revive (RESPAWN event); the teleport
         // itself is relayed by the per-tick entity state pass.
         $event = new EntityEventPacket();
@@ -4054,7 +4080,6 @@ final class NetworkSessionService {
         }
         $playerRef = $session['playerRef'];
         $entity = $session['entityRef']->getEntity();
-
         // 1) Full entity metadata — matches old-src sendData($this)
         $entityMeta = new SetEntityDataPacket();
         $entityMeta->eid = 0; // protocol 84: player is always 0
@@ -5006,11 +5031,6 @@ final class NetworkSessionService {
                 $hp->health = (int)ceil($selfHealth);
                 $this->queuePacket($session['playerRef'], $hp);
             }
-            // Death screen parity (legacy Player::kill, old-src/Player.php:4020):
-            // on the alive->dead transition the server must send a RespawnPacket
-            // carrying the spawn point or the client keeps the Respawn button
-            // greyed out. Sent right after SetHealthPacket(0) so the client is
-            // already in the death state, and only on the transition tick.
             if ($wasAlive && $selfHealth <= 0.0) {
                 $config = $this->resourceRegistry->get(ServerConfig::class);
                 if ($config !== null) {

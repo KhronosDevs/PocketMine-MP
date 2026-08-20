@@ -106,14 +106,25 @@ final class PlayerRespawnService {
     private function resetMetadata(\pocketmine\core\ecs\Entity $entity): void {
         $metadata = $entity->get(MetadataComponent::class);
         if ($metadata) {
-            // Keep persistent metadata (uniqueId, username, etc.)
-            $uniqueId = $metadata->get(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID);
-            $username = $metadata->get(\pocketmine\core\constants\MetadataKeys::USERNAME);
-            
+            // Snapshot persistent player state that must survive respawn.
+            $preserve = [];
+            foreach ([
+                \pocketmine\core\constants\MetadataKeys::UNIQUE_ID,
+                \pocketmine\core\constants\MetadataKeys::USERNAME,
+                \pocketmine\core\constants\MetadataKeys::GAMEMODE,
+                'permissions',
+            ] as $key) {
+                $val = $metadata->get($key);
+                if ($val !== null) {
+                    $preserve[$key] = $val;
+                }
+            }
+
             $metadata->data = [];
-            
-            if ($uniqueId) $metadata->set(\pocketmine\core\constants\MetadataKeys::UNIQUE_ID, $uniqueId);
-            if ($username) $metadata->set('username', $username);
+
+            foreach ($preserve as $key => $val) {
+                $metadata->set($key, $val);
+            }
         }
     }
 }

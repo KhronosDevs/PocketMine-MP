@@ -3383,15 +3383,11 @@ test('a dead player respawns via RespawnPacket (health restored, spawn burst sen
     $client->sendGamePacket($respawn);
 
     $deadline = microtime(true) + 5.0;
-    $sawSpawn = false;
     $sawHealth = false;
     $sawTeleport = false;
-    while (microtime(true) < $deadline && (!$sawSpawn || !$sawHealth || !$sawTeleport)) {
+    while (microtime(true) < $deadline && (!$sawHealth || !$sawTeleport)) {
         $kernel->run(1);
         foreach ($client->readGamePackets() as [$id, $buffer]) {
-            if ($id === Info::PLAY_STATUS_PACKET && psStatus($buffer) === PlayStatusPacket::PLAYER_SPAWN) {
-                $sawSpawn = true;
-            }
             if ($id === Info::SET_HEALTH_PACKET && shFields($buffer) === 20) {
                 $sawHealth = true;
             }
@@ -3407,7 +3403,6 @@ test('a dead player respawns via RespawnPacket (health restored, spawn burst sen
 
     $aliceHealth = $kernel->getWorld()->getEntity($alice['entityId'])?->get(\pocketmine\core\component\HealthComponent::class);
     ok($aliceHealth !== null && $aliceHealth->current >= $aliceHealth->max, 'Alice is alive at full health after respawn');
-    ok($sawSpawn, 'PLAYER_SPAWN status sent on respawn');
     ok($sawHealth, 'SetHealthPacket (20) sent on respawn');
     ok($sawTeleport, 'MovePlayerPacket teleport (MODE_RESET) sent on respawn');
 });
