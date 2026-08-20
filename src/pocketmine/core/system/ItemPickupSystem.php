@@ -25,7 +25,7 @@ use pocketmine\core\service\EntityInteractionService;
  * movement/AI so entity positions are current.
  */
 final class ItemPickupSystem implements System {
-    public const PICKUP_RADIUS = 1.5;
+    public const PICKUP_RADIUS = 2.0;
 
     private ?EntityInteractionService $interactionService = null;
 

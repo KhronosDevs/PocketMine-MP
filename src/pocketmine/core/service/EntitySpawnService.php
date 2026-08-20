@@ -126,9 +126,9 @@ final class EntitySpawnService {
                 ->with(new PositionComponent($x, $y, $z))
                 ->with(new RotationComponent(0, 0))
                 ->with(new VelocityComponent(
-                    (mt_rand(-10, 10) / 100),
-                    0.2,
-                    (mt_rand(-10, 10) / 100)
+                    (mt_rand(-10, 10) / 5),
+                    0.0,
+                    (mt_rand(-10, 10) / 5)
                 ))
                 ->with(new HealthComponent(5, 5))
                 ->with(new MetadataComponent())
@@ -146,10 +146,9 @@ final class EntitySpawnService {
             if ($meta) {
                 $meta->set(MetadataKeys::ENTITY_TYPE, 'item');
                 $meta->set(MetadataKeys::ITEM, $item);
-                // Legacy pickupDelay: a fresh drop is uncollectable for 10
-                // ticks so it cannot instantly re-enter the thrower's own
-                // inventory (the ItemPickupSystem honours this countdown).
-                $meta->set(MetadataKeys::PICKUP_DELAY, 10);
+                // Vanilla MCPE pickupDelay: 40 ticks (2 s) so the item
+                // lands before anyone can collect it.
+                $meta->set(MetadataKeys::PICKUP_DELAY, 40);
             }
         }
 

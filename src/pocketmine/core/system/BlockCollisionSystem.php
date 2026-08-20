@@ -91,6 +91,12 @@ final class BlockCollisionSystem implements System {
             $ty = $y + $vy * $deltaTime;
             if ($this->collidesAt($store, $registry, $col, $x, $ty, $z)) {
                 [$y, $vy] = $this->clampAxis($store, $registry, $col, $x, $y, $z, $ty, $vy, 'y');
+                // Item entities stop completely when they hit the ground
+                // (no sliding). Match vanilla MCPE: drops land and stay put.
+                if ($vy === 0.0 && $entity->has(\pocketmine\core\constants\EntityTags::ITEM)) {
+                    $vx = 0.0;
+                    $vz = 0.0;
+                }
             } else {
                 $y = $ty;
             }

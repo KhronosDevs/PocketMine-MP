@@ -274,13 +274,14 @@ final class BlockBreakService {
             (new \pocketmine\core\ecs\EntityBuilder())
                 ->with(new \pocketmine\core\component\PositionComponent($x, $y, $z))
                 ->with(new \pocketmine\core\component\VelocityComponent(
-                    (mt_rand(-10, 10) / 100),
-                    0.2,
-                    (mt_rand(-10, 10) / 100)
+                    (mt_rand(-10, 10) / 5),
+                    0.0,
+                    (mt_rand(-10, 10) / 5)
                 ))
                 ->with(new \pocketmine\core\component\HealthComponent(5, 5))
                 ->with(new \pocketmine\core\component\InventoryComponent(1))
                 ->with(new \pocketmine\core\component\MetadataComponent())
+                ->with(new \pocketmine\core\component\CollisionComponent(width: 0.25, height: 0.25))
                 ->with(new \pocketmine\core\component\WorldComponent($worldId))
                 ->withTag(\pocketmine\core\constants\EntityTags::ITEM)
         );
@@ -294,7 +295,7 @@ final class BlockBreakService {
             if ($meta) {
                 $meta->set(\pocketmine\core\constants\MetadataKeys::ENTITY_TYPE, 'item');
                 $meta->set(\pocketmine\core\constants\MetadataKeys::ITEM, $item);
-                $meta->set(\pocketmine\core\constants\MetadataKeys::PICKUP_DELAY, 10);
+                $meta->set(\pocketmine\core\constants\MetadataKeys::PICKUP_DELAY, 40);
             }
         }
     }

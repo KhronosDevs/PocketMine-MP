@@ -3525,19 +3525,34 @@ final class NetworkSessionService {
             return;
         }
 
-        // Spawn the dropped item entity in front of the player (eye height),
-        // thrown slightly toward the look direction. The per-tick entity
-        // broadcast will AddItemEntity it to every viewer.
+        // Spawn the dropped item entity at eye level, thrown forward in
+        // the player's look direction (old-src: $this->add(0,1.3,0) with
+        // getDirectionVector()->multiply(0.4)).
         $pos = $session['entityRef']->getPosition();
         $rot = $session['entityRef']->getRotation();
         if ($pos !== null) {
             [$dx, $dy, $dz] = $rot !== null ? $rot->getForwardVector() : [0.0, 0.0, 1.0];
-            $this->entitySpawnService->spawnItem(
-                $pos->x + $dx * 0.6,
-                $pos->y + 1.2,
-                $pos->z + $dz * 0.6,
+            $dropped = $this->entitySpawnService->spawnItem(
+                $pos->x,
+                $pos->y + 1.3,
+                $pos->z,
                 new ItemStack($removed->itemId, $removed->meta, 1, $removed->nbt),
             );
+            // Override the default scatter velocity with a forward throw
+            // matching old-src Player::dropItem() motion vector.
+            $entity = $dropped->getEntity();
+            if ($entity !== null) {
+                $vel = $entity->get(\pocketmine\core\component\VelocityComponent::class);
+                if ($vel !== null) {
+                    // old-src uses 0.4 blocks/tick; our PhysicsSystem
+                    // multiplies velocity by deltaTime (seconds), so convert:
+                    // 0.4 blocks/tick * 20 ticks/s = 8.0 blocks/s.
+                    // 25% slower throw.
+                    $vel->x = $dx * 3.9;
+                    $vel->y = $dy * 3.9;
+                    $vel->z = $dz * 3.9;
+                }
+            }
         }
         // Reflect the consumed stack in the actor's own window.
         $this->sendInventorySlot($session['playerRef'], $slot);
