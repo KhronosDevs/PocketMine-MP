@@ -43,6 +43,22 @@ final class BlockIds {
     public const PORTAL = 90;
     public const NETHER_QUARTZ_ORE = 153;
 
+    /** Interactive blocks (doors, buttons, levers, etc.). */
+    public const WOODEN_DOOR = 64;
+    public const LEVER = 69;
+    public const STONE_PRESSURE_PLATE = 70;
+    public const IRON_DOOR = 71;
+    public const WOODEN_PRESSURE_PLATE = 72;
+    public const STONE_BUTTON = 77;
+    public const TRAPDOOR = 96;
+    public const FENCE_GATE = 107;
+    public const CAULDRON = 118;
+    public const DROPPER = 125;
+    public const WOODEN_BUTTON = 143;
+    public const IRON_TRAPDOOR = 167;
+    public const NOTEBLOCK = 25;
+    public const DISPENSER = 23;
+
     /** Liquid blocks (water/lava, both flowing and still) - a mob cannot spawn in these. */
     public const LIQUIDS = [self::WATER, self::STILL_WATER, self::LAVA, self::STILL_LAVA];
 }
