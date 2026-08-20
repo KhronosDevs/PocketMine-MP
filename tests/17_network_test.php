@@ -3412,6 +3412,61 @@ test('a dead player respawns via RespawnPacket (health restored, spawn burst sen
     ok($sawTeleport, 'MovePlayerPacket teleport (MODE_RESET) sent on respawn');
 });
 
+test('DIAG: second kill after respawn re-triggers death packets', function () use ($client, $kernel): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $aliceId = $alice['entityId'];
+    $aliceRef = \pocketmine\core\ecs\EntityRef::create($aliceId, $kernel->getWorld());
+
+    // Second kill via the actual /kill chat wire.
+    $cmd = new TextPacket();
+    $cmd->type = TextPacket::TYPE_CHAT;
+    $cmd->source = 'Alice';
+    $cmd->message = '/kill';
+    $client->sendGamePacket($cmd);
+
+    $deadline = microtime(true) + 5.0;
+    $sawDead = false;
+    $dumps = [];
+    $msgs = [];
+    while (microtime(true) < $deadline && !$sawDead) {
+        $kernel->run(1);
+        $e = $kernel->getWorld()->getEntity($aliceId);
+        $h = $e?->get(\pocketmine\core\component\HealthComponent::class);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::SET_HEALTH_PACKET) {
+                $dumps[] = 'SetHealth=' . shFields($buffer);
+            } elseif ($id === Info::RESPAWN_PACKET) {
+                $dumps[] = 'RespawnPacket';
+            } elseif ($id === Info::PLAY_STATUS_PACKET) {
+                $dumps[] = 'PlayStatus=' . psStatus($buffer);
+            } elseif ($id === Info::ENTITY_EVENT_PACKET) {
+                $dumps[] = 'EntityEvent';
+            } elseif ($id === Info::MOVE_PLAYER_PACKET) {
+                $dumps[] = 'Move';
+            } elseif ($id === Info::TEXT_PACKET) {
+                $msgs[] = textPacket($buffer)['message'];
+            }
+        }
+        if ($e !== null && $e->has(\pocketmine\core\component\tags\DeadTag::class) && $h !== null && $h->current === 0.0) {
+            $sawDead = true;
+        }
+        usleep(10000);
+    }
+    printf("DIAG second kill: dead=%s health=%s entityExists=%s\n", $sawDead ? 'yes' : 'no', $h?->current ?? 'null', $kernel->getWorld()->getEntity($aliceId) !== null ? 'yes' : 'no');
+    printf("DIAG second kill msgs: %s\n", implode(', ', $msgs));
+    printf("DIAG second kill packet stream: %s\n", implode(', ', array_slice($dumps, 0, 40)));
+    ok($sawDead, 'Alice is dead after second /kill');
+});
+
 // --- Protocol rejection ----------------------------------------------------
 test('wrong protocol version is rejected with LOGIN_FAILED', function () use ($kernel, $port): void {
     $client3 = new FakeClient($port);
