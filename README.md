@@ -15,10 +15,69 @@ Khronos is a Minecraft server written from scratch in PHP 8.2, inspired by Pocke
 ## Quick start
 
 1. **Requirements:** PHP 8.2+ (ZTS) with `pmmpthread`, `sockets`, `zlib`, `yaml`, `openssl`, `mbstring`, `ctype`, `json`. Prebuilt PHP 8.2 binaries with everything included are available at **[KhronosDevs/php-binaries](https://github.com/KhronosDevs/php-binaries)** and are bundled at `bin/php7/bin/php`.
-2. **Run the server:** `./start.sh` (Linux/macOS) or `start.cmd` / `start.ps1` (Windows). It binds UDP **19132** and gives you an interactive console (`help`, `stop`, `op`, …).
+2. **Run the server:** `./start.sh` (Linux/macOS) or `start.cmd` / `start.ps1` (Windows). It binds UDP **19132** by default and gives you an interactive console (`help`, `stop`, `op`, …).
 3. **Connect** with the **MCPE 0.15.10** client to `your-server-ip:19132`.
-4. **Configure:** first boot generates `server.properties` (name, motd, max-players, gamemode, difficulty, view-distance, white-list, pvp…) and `khronos.json` (anti-cheat thresholds, nether world, defaults) — edit and restart to apply.
+4. **Configure:** first boot generates `server.properties` (name, motd, max-players, gamemode, difficulty, view-distance, white-list, pvp…) and `khronos.json` (port, memory, anti-cheat, chunk streaming, nether) — edit and restart to apply. See [Configuration](#configuration) for details.
 5. **Worlds** live in `worlds/` (real Anvil/McRegion, auto-detected) and save automatically.
+
+## Configuration
+
+The server uses two config files — edit and restart to apply:
+
+| File | Purpose |
+|---|---|
+| `server.properties` | Legacy key=value: server-name, motd, max-players, gamemode, difficulty, view-distance, server-port, white-list, pvp… |
+| `khronos.json` | Structured JSON: port, memory, anti-cheat, chunk streaming, nether, spawn override — see below |
+
+### Key khronos.json settings
+
+```json
+{
+    "port": null,
+    "memory-limit": null,
+    "default-world": "world",
+    "max-loaded-chunks": 1200,
+    "chunk-streaming": {
+        "compression-level": 2,
+        "per-tick": 2,
+        "time-budget-ms": 30,
+        "use-time-budget": true
+    },
+    "nether": { "enabled": true, "world": "nether" },
+    "anti-cheat": { "enabled": true, ... }
+}
+```
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `port` | int\|null | `null` | UDP port to bind. `null` = use `server.properties` (default 19132). Set to override. |
+| `memory-limit` | string\|null | `null` | PHP memory limit (e.g. `"512M"`, `"1G"`). `null` = use start script default (512M). |
+| `max-loaded-chunks` | int | 1200 | Resident chunk budget. Raise on high-RAM hosts. |
+| `chunk-streaming.compression-level` | 1-9 | 2 | zlib level. Lower = faster CPU, larger packets. |
+| `chunk-streaming.per-tick` | int | 2 | Max chunks per player per tick (do not raise above 8). |
+| `chunk-streaming.time-budget-ms` | float | 30 | Global chunk-streaming budget per tick (shared across all players). |
+
+### Examples
+
+**Change the port to 25565:**
+```json
+{ "port": 25565 }
+```
+
+**Give the server 2 GB of RAM:**
+```json
+{ "memory-limit": "2G" }
+```
+
+**Both at once:**
+```json
+{
+    "port": 25565,
+    "memory-limit": "2G"
+}
+```
+
+Restart the server after editing either config file.
 
 ## Building a phar
 

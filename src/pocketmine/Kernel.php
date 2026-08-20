@@ -1855,6 +1855,19 @@ function applyKhronosConfig(ResourceRegistry $resourceRegistry, \pocketmine\core
         $worldConfig->name = $config->defaultWorld;
         $worldConfig->folderName = $config->defaultWorld;
     }
+
+    // Port: khronos.json overrides server.properties when explicitly set.
+    if ($config->port !== null) {
+        $networkPort = $resourceRegistry->get(\pocketmine\port\driven\NetworkPort::class);
+        if ($networkPort instanceof \pocketmine\adapter\driven\network\Protocol84NetworkAdapter) {
+            $networkPort->setBindPort($config->port);
+        }
+    }
+
+    // Memory limit: khronos.json overrides the start-script floor.
+    if ($config->memoryLimit !== null) {
+        ini_set('memory_limit', $config->memoryLimit);
+    }
 }
 
 /**

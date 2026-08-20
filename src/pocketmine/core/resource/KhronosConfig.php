@@ -123,6 +123,21 @@ final class KhronosConfig {
      */
     public bool $chunkUseTimeBudget = true;
 
+    // --- Server -----------------------------------------------------------
+
+    /**
+     * UDP port the server binds to. null = use server.properties (legacy).
+     * When set, this overrides the server.properties server-port value.
+     */
+    public ?int $port = null;
+
+    /**
+     * PHP memory limit (e.g. "512M", "1G", "256M"). null = use the value
+     * from start.sh / the PHP CLI default. Set this to override the memory
+     * floor without editing start scripts.
+     */
+    public ?string $memoryLimit = null;
+
     // --- Native acceleration (FFI) -----------------------------------------
 
     /**
@@ -213,6 +228,16 @@ final class KhronosConfig {
             $this->spawnX = (int)$spawn['x'];
             $this->spawnY = (int)$spawn['y'];
             $this->spawnZ = (int)$spawn['z'];
+        }
+
+        if (isset($data['port']) && is_numeric($data['port'])) {
+            $port = (int)$data['port'];
+            if ($port >= 1 && $port <= 65535) {
+                $this->port = $port;
+            }
+        }
+        if (isset($data['memory-limit']) && is_string($data['memory-limit']) && trim($data['memory-limit']) !== '') {
+            $this->memoryLimit = trim($data['memory-limit']);
         }
 
         $na = $data['native-accel'] ?? null;
@@ -348,6 +373,14 @@ final class KhronosConfig {
             // Chunk streaming: controls how chunks are compressed and sent
             // to clients. L2 is recommended (fast CPU, reasonable bandwidth).
             // Time-budget mode caps total chunk processing per tick.
+            // Server settings: port and memory limit.
+            // port: null = use server.properties (default 19132).
+            //        Set to a number (1-65535) to override.
+            // memory-limit: null = use start.sh / PHP CLI default (512M).
+            //               Set to e.g. "1G" or "256M" to override.
+            'port' => null,
+            'memory-limit' => null,
+
             'chunk-streaming' => [
                 'compression-level' => 2,    // 1-9: lower=faster CPU, larger packets
                 'per-tick' => 2,            // max chunks per player per tick (DO NOT raise above ~4)
