@@ -114,6 +114,11 @@ final class CombatService {
         // Apply damage
         $health->current = max(0, $health->current - $damage);
 
+        // Play hurt sound
+        if ($damage > 0) {
+            $this->playHurtEffect($targetRef);
+        }
+
         // 14.13: a landed attack wears the target's armor (fall/void/custom
         // damage does not - legacy only damaged gear on entity attacks).
         if ($cause === EntityDamageEvent::CAUSE_ENTITY_ATTACK && $damage > 0) {
@@ -530,6 +535,19 @@ final class CombatService {
         }
 
         return true;
+    }
+
+    /** Play the generic hurt "click" sound at the target's position. */
+    private function playHurtEffect(EntityRef $targetRef): void {
+        $pos = $targetRef->getPosition();
+        if ($pos === null) return;
+        $kernel = \pocketmine\Kernel::getInstance();
+        $wes = $kernel?->getWorldEventService();
+        if ($wes === null) return;
+        $worldId = $targetRef->getEntity()?->get(\pocketmine\core\component\WorldComponent::class)?->id ?? 0;
+        $chunkX = (int)floor($pos->x / 16);
+        $chunkZ = (int)floor($pos->z / 16);
+        $wes->playSound($worldId, $chunkX, $chunkZ, $pos->x, $pos->y, $pos->z, \pocketmine\core\service\WorldEventService::SOUND_CLICK);
     }
 
     /**

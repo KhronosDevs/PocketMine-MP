@@ -3538,6 +3538,13 @@ final class NetworkSessionService {
                 $pos->z,
                 new ItemStack($removed->itemId, $removed->meta, 1, $removed->nbt),
             );
+            // Play drop sound
+            $kernel = \pocketmine\Kernel::getInstance();
+            $wes = $kernel?->getWorldEventService();
+            if ($wes !== null) {
+                $worldId = $session['entityRef']->getEntity()?->get(\pocketmine\core\component\WorldComponent::class)?->id ?? 0;
+                $wes->playDropItemSound($worldId, (int)floor($pos->x / 16), (int)floor($pos->z / 16), $pos->x, $pos->y, $pos->z);
+            }
             // Override the default scatter velocity with a forward throw
             // matching old-src Player::dropItem() motion vector.
             $entity = $dropped->getEntity();
@@ -5500,6 +5507,23 @@ final class NetworkSessionService {
         }
 
         $this->outbound[$addrKey][] = $packet;
+    }
+
+    /**
+     * Broadcast a LevelEventPacket (sound or particle) to every session
+     * in $worldId that has chunk ($chunkX, $chunkZ) loaded.
+     */
+    public function broadcastWorldEvent(int $worldId, int $chunkX, int $chunkZ, \pocketmine\protocol\DataPacket $packet): void {
+        $key = $chunkX . ',' . $chunkZ;
+        foreach ($this->sessions as $session) {
+            if ($session['worldId'] !== $worldId) {
+                continue;
+            }
+            if (!isset($session['chunksSent'][$key])) {
+                continue;
+            }
+            $this->outbound[$this->addrKeyForPlayer($session['playerRef']) ?? ''][] = $packet;
+        }
     }
 
     /**

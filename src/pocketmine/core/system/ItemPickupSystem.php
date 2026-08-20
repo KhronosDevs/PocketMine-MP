@@ -80,6 +80,7 @@ final class ItemPickupSystem implements System {
                         $this->grantXp($world, $playerId, $amount);
                         $world->despawn($entity);
                         $this->syncXpFor($playerId);
+                        $this->playXpPickupSound($playerPos);
                         break;
                     }
                 }
@@ -195,5 +196,14 @@ final class ItemPickupSystem implements System {
         if ($sessionService !== null) {
             $sessionService->syncXpFor($playerId);
         }
+    }
+
+    private function playXpPickupSound(\pocketmine\core\component\PositionComponent $playerPos): void {
+        $kernel = \pocketmine\Kernel::getInstance();
+        $wes = $kernel?->getWorldEventService();
+        if ($wes === null) return;
+        $chunkX = (int)floor($playerPos->x / 16);
+        $chunkZ = (int)floor($playerPos->z / 16);
+        $wes->playExpPickupSound(0, $chunkX, $chunkZ, $playerPos->x, $playerPos->y, $playerPos->z);
     }
 }
