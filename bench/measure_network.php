@@ -18,8 +18,8 @@ declare(strict_types=1);
  *   viewRadius  chunk radius to stream (default: 8)
  */
 
-require_once __DIR__ . '/autoload.php';
-require_once __DIR__ . '/tests/fake_client.php';
+require_once __DIR__ . '/../autoload.php';
+require_once __DIR__ . '/../tests/fake_client.php';
 
 use pocketmine\protocol\BatchPacket;
 use pocketmine\protocol\ContainerSetContentPacket;

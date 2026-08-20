@@ -25,7 +25,7 @@ declare(strict_types=1);
  * measure_chunkgen.php <chunks> [seed]
  */
 
-require_once __DIR__ . '/autoload.php';
+require_once __DIR__ . '/../autoload.php';
 
 use pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter;
 use pocketmine\port\driven\GeneratorConfig;

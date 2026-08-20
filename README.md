@@ -133,19 +133,22 @@ bin/php7/bin/php -d memory_limit=512M -d extension=ffi -d ffi.enable=1 PocketMin
 
 ## Performance
 
-Measured with the **native-accel FFI library enabled** (production config: light calc, terrain noise and nibble packing run in C via `native/kh_native.so`) on the benchmark scripts in `bench/` (`bench/measure_baseline.php`, `bench/measure_pipeline.php`, `bench/measure_network.php`, `bench/measure_chunkgen.php`, `bench/measure_memory.php`). The 20 TPS tick budget is **50 ms** — everything below runs well inside it.
+Measured with the **native-accel FFI library enabled** (production config: light calc, terrain noise and nibble packing run in C via `native/kh_native.so`) on the benchmark scripts in `bench/`. The 20 TPS tick budget is **50 ms** — everything below runs well inside it.
 
 | Benchmark | Result |
 |---|---|
-| Empty tick (no entities) | **0.32 ms** |
-| 2,000 moving entities, hot tick | **1.74 ms** |
-| 10,000 moving entities, hot tick (region pipeline) | **3.60 ms** |
-| Steady-state tick with a connected client (incl. network flush) | **0.08 ms** |
-| Inbound move packet processing | **~40,000 pkts/s** (~25 µs each) |
-| Chunk streaming to a client | **189 chunks/s** — radius 8 (289 chunks) fully delivered in ~1.6 s |
-| Parallel chunk generation | **~0.41 ms/chunk** (128 chunks in 52 ms across the pool) |
-| Fluid simulation, 16k-cell ocean | **~0.01 ms/pass** active flow · ~0 steady state |
-| Memory per entity | **~1 KB** (loaded-chunk budget enforced) |
+| Empty tick (no entities) | **0.36 ms** |
+| 1,000 moving entities, hot tick | **1.67 ms** |
+| 2,000 moving entities, hot tick | **3.42 ms** |
+| 5,000 moving entities, hot tick | **8.25 ms** |
+| 10,000 moving entities, hot tick | **16.77 ms** |
+| 10,000 entities, region pipeline apply, hot tick | **3.69 ms** |
+| Steady-state tick with a connected client (incl. network flush) | **0.42 ms** (0.39 ms net overhead) |
+| Inbound move packet processing | **~32,200 pkts/s** (~31 µs each) |
+| Chunk streaming to a client | **277 chunks/s** — radius 8 (289 chunks) fully delivered in ~1.0 s |
+| Parallel chunk generation (256 chunks) | **102 ms** (6.1× faster than sequential, 2.5× faster than pure PHP) |
+| Memory per entity | **~1.0 KB** (loaded-chunk budget enforced) |
+| Resident chunk memory | **~160 KB/chunk** (200 loaded → 64 resident at budget, 12 MB total) |
 
 ## Plugin development
 
