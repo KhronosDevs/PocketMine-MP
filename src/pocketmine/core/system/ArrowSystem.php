@@ -210,6 +210,14 @@ final class ArrowSystem implements System {
                     $critical = (bool)$meta->get(\pocketmine\core\constants\MetadataKeys::CRITICAL, false);
                     if ($critical) {
                         $damage += mt_rand(0, (int)($damage / 2) + 1);
+                        // Critical hit particles at impact point
+                        $kernel = \pocketmine\Kernel::getInstance();
+                        $wes = $kernel?->getWorldEventService();
+                        if ($wes !== null) {
+                            $chunkX = (int)floor($sx / 16);
+                            $chunkZ = (int)floor($sz / 16);
+                            $wes->spawnCriticalParticle(0, $chunkX, $chunkZ, $sx, $sy, $sz);
+                        }
                     }
                     // 14.30: Power adds 0.5 * level bonus damage (legacy
                     // Enchantment::getDamageBonus for bows).

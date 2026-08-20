@@ -363,6 +363,19 @@ final class CombatService {
         // (DeadTag + 0 health) so PlayerRespawnService can revive them. This
         // mirrors legacy: the corpse remains visible until respawn.
         if (!$isPlayer) {
+            // Death smoke particle at mob position (legacy: Entity::despawn
+            // fires DestroyBlockParticle at the entity's position)
+            $pos = $target->get(\pocketmine\core\component\PositionComponent::class);
+            if ($pos !== null) {
+                $kernel = \pocketmine\Kernel::getInstance();
+                $wes = $kernel?->getWorldEventService();
+                if ($wes !== null) {
+                    $worldId = $target->get(\pocketmine\core\component\WorldComponent::class)?->id ?? 0;
+                    $chunkX = (int)floor($pos->x / 16);
+                    $chunkZ = (int)floor($pos->z / 16);
+                    $wes->spawnSmokeParticle($worldId, $chunkX, $chunkZ, $pos->x, $pos->y + 0.5, $pos->z, 3);
+                }
+            }
             $this->world->despawn($target);
         }
     }

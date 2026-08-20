@@ -271,6 +271,23 @@ final class TNTExplosionSystem implements System {
         if (!empty($players)) {
             $network->broadcastPacket($players, $pk);
         }
+
+        // Explosion sound + huge explode particle
+        $wes = Kernel::getInstance()?->getWorldEventService();
+        if ($wes !== null) {
+            $chunkX = (int)floor($x / 16);
+            $chunkZ = (int)floor($z / 16);
+            // Find worldId from any player in the world
+            $worldId = 0;
+            foreach ($world->getEntities() as $e) {
+                if ($e->has(\pocketmine\core\component\tags\PlayerTag::class)) {
+                    $worldId = $e->get(\pocketmine\core\component\WorldComponent::class)?->id ?? 0;
+                    break;
+                }
+            }
+            $wes->playExplodeSound($worldId, $chunkX, $chunkZ, $x, $y, $z);
+            $wes->spawnHugeExplodeParticle($worldId, $chunkX, $chunkZ, $x, $y, $z);
+        }
     }
 
     private function getCombat(): ?CombatService {

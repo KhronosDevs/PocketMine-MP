@@ -1647,6 +1647,16 @@ final class NetworkSessionService {
             $session['entityRef'],
         );
 
+        // Bow launch sound
+        $kernel = \pocketmine\Kernel::getInstance();
+        $wes = $kernel?->getWorldEventService();
+        if ($wes !== null) {
+            $worldId = $session['worldId'];
+            $chunkX = (int)floor($pos->x / 16);
+            $chunkZ = (int)floor($pos->z / 16);
+            $wes->playThrowSound($worldId, $chunkX, $chunkZ, $pos->x, $pos->y + 1.62, $pos->z);
+        }
+
         // Events breadth audit: cancellable ProjectileLaunchEvent fires after
         // the arrow entity exists. A cancelled launch despawns the arrow and
         // skips ammo consumption (the bow is not used).
@@ -1799,6 +1809,13 @@ final class NetworkSessionService {
                     $store->setBlock($fireX, $fireY, $fireZ, BlockIds::FIRE, 0);
                     $this->broadcastBlockState($fireX, $fireY, $fireZ, $session['worldId']);
                     \pocketmine\core\resource\ItemDurability::consume($session['entityRef']);
+                    // Fire placement sound
+                    $wes = \pocketmine\Kernel::getInstance()?->getWorldEventService();
+                    if ($wes !== null) {
+                        $fcX = (int)floor($fireX / 16);
+                        $fcZ = (int)floor($fireZ / 16);
+                        $wes->playSound($session['worldId'], $fcX, $fcZ, $fireX + 0.5, $fireY + 0.5, $fireZ + 0.5, \pocketmine\core\service\WorldEventService::SOUND_FIZZ);
+                    }
                     return;
                 }
             }
@@ -1960,6 +1977,17 @@ final class NetworkSessionService {
             return;
         }
         $this->broadcastTileEntity($x, $y, $z, $session['worldId']);
+
+        // Item frame sound
+        $wes = \pocketmine\Kernel::getInstance()?->getWorldEventService();
+        if ($wes !== null) {
+            $fcX = (int)floor($x / 16);
+            $fcZ = (int)floor($z / 16);
+            $soundId = $hasItem
+                ? \pocketmine\core\service\WorldEventService::SOUND_ITEMFRAME_ROTATE
+                : \pocketmine\core\service\WorldEventService::SOUND_ITEMFRAME_ADD;
+            $wes->playSound($session['worldId'], $fcX, $fcZ, $x + 0.5, $y + 0.5, $z + 0.5, $soundId);
+        }
     }
 
     /**
