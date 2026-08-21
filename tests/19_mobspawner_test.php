@@ -33,6 +33,9 @@ if (is_dir($worldsDir)) {
 }
 
 $kernel = \pocketmine\bootstrap();
+// The despawn tests call loadChunk() mid-file, which drives Kernel::run()
+// internally - keep the worker threads alive across runs.
+$kernel->setAutoShutdownOnRun(false);
 $world = $kernel->getWorld();
 $config = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
 if ($config instanceof \pocketmine\core\resource\ServerConfig) {
@@ -191,8 +194,79 @@ test('mob spawning stops when ServerConfig::spawnMobs is false', function () use
     same($before, $after, 'no new entities while mob spawning is disabled');
 });
 
-// NOTE: no $kernel->shutdown() here - shutdown() persists the world (14.4),
-// and this test intentionally leaves no world data behind for whichever
-// test boots next (test isolation; each terrain-sensitive test cleans its
-// own worlds/ folder).
+// NOTE: no $kernel->shutdown() here
+
+test('hostile mobs far from ALL players are despawned before the caps run', function () use ($world, $kernel, $config, $worldConfig, $player, $playerPos, $top, $px, $pz, $store): void {
+    // The despawn sweep lives behind the night + spawnMobs gates in the
+    // spawner; earlier tests may have flipped either.
+    if ($config instanceof \pocketmine\core\resource\ServerConfig) {
+        $config->spawnMobs = true;
+    }
+    if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+        $worldConfig->time = \pocketmine\core\system\TimeSystem::TIME_MIDNIGHT;
+    }
+
+    // Deterministic terrain: everyone must stand in open air, or the
+    // suffocation system kills them mid-test and invalidates the guards.
+    $farX = $px + 200.0;
+    $load = $kernel->getChunkLoadService();
+    $load->loadChunk((int)floor($farX / 16), (int)floor($pz / 16));
+    $kernel->run(1);
+    foreach ([[$px, $pz], [$px + 12.0, $pz], [$farX, $pz]] as [$ax, $az]) {
+        for ($y = (int)floor($playerPos->y); $y <= (int)floor($playerPos->y) + 4; $y++) {
+            if ($store instanceof ChunkStore && $store->isLoaded((int)floor($ax / 16), (int)floor($az / 16))) {
+                $store->setBlock((int)floor($ax), $y, (int)floor($az), 0);
+            }
+        }
+    }
+    $health = $player->getHealth();
+    if ($health !== null) {
+        $health->current = $health->max;
+    }
+
+    $spawner = $kernel->getEntitySpawnService();
+    $near = $spawner->spawnMob(\pocketmine\core\enum\EntityType::Zombie, $px + 12.0, $playerPos->y, $pz);
+    $far = $spawner->spawnMob(\pocketmine\core\enum\EntityType::Zombie, $farX, $playerPos->y, $pz);
+    ok($near !== null && $far !== null, 'both zombies spawned');
+
+    // One spawn interval (40 ticks) plus the flush tick that applies the
+    // queued despawn. Heal the player every few ticks so environmental
+    // damage can never remove the guard before the sweep runs.
+    for ($i = 0; $i < 42; $i++) {
+        $world->tick(0.05);
+        if ($i % 5 === 0 && $health !== null) {
+            $health->current = $health->max;
+        }
+    }
+
+    ok($world->getEntity($far->getId()) === null, 'abandoned far mob was despawned');
+    ok($world->getEntity($near->getId()) !== null, 'mob near the player stays');
+});
+
+test('a mob near ANY player survives even when far from another', function () use ($world, $kernel, $playerPos, $top, $px, $pz, $store): void {
+    // Second player 300 blocks away, in carved open air; a guard mob right
+    // next to them must survive even though it is far from player 1.
+    $otherX = $px + 300.0;
+    $kernel->getChunkLoadService()->loadChunk((int)floor($otherX / 16), (int)floor($pz / 16));
+    $kernel->run(1);
+    for ($y = (int)floor($playerPos->y); $y <= (int)floor($playerPos->y) + 4; $y++) {
+        if ($store instanceof ChunkStore && $store->isLoaded((int)floor($otherX / 16), (int)floor($pz / 16))) {
+            $store->setBlock((int)floor($otherX), $y, (int)floor($pz), 0);
+        }
+    }
+    $other = $world->spawn(
+        (new EntityBuilder())
+            ->at($otherX, $playerPos->y, $pz)
+            ->with(new HealthComponent(20, 20))
+            ->with(new MetadataComponent(['username' => 'FarTester']))
+            ->withTag(PlayerTag::class)
+    );
+    $guard = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Zombie, $otherX + 5.0, $playerPos->y, $pz);
+
+    for ($i = 0; $i < 42; $i++) {
+        $world->tick(0.05);
+    }
+    ok($world->getEntity($guard->getId()) !== null, 'mob near the second player is not despawned by the first player distance');
+});
+
 exit(runTests());

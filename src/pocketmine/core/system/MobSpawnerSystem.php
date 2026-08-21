@@ -40,6 +40,8 @@ final class MobSpawnerSystem implements System {
     /** Spawn in an annulus [MIN, MAX] blocks around the player. */
     public const MIN_SPAWN_DISTANCE = 8;
     public const SPAWN_RADIUS = 24;
+    /** Hostile mobs farther than this from EVERY player are despawned. */
+    public const DESPAWN_DISTANCE = 128.0;
 
     /**
      * Hostile spawn weights - common overworld mobs dominate, rare/misc
@@ -121,7 +123,15 @@ final class MobSpawnerSystem implements System {
             return;
         }
 
-        $totalHostile = $this->countHostileMobs($world);
+        // Free capacity before checking the caps: hostile mobs farther than
+        // DESPAWN_DISTANCE from EVERY player are abandoned (nobody can reach
+        // them, but they still count against MAX_TOTAL_MOBS). Without this
+        // sweep the cap saturates after long sessions and hostile spawning
+        // dies permanently. The despawn is queued and flushed on the next
+        // world tick, so subtract it from the count to unblock this cycle.
+        $despawned = $kernel->getEntityDespawnService()->despawnFarFromAllPlayers($players, self::DESPAWN_DISTANCE);
+
+        $totalHostile = max(0, $this->countHostileMobs($world) - $despawned);
         if ($totalHostile >= self::MAX_TOTAL_MOBS) {
             return;
         }
