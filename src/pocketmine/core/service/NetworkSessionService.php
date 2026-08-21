@@ -5357,6 +5357,9 @@ final class NetworkSessionService {
                 if ($pos === null) {
                     continue;
                 }
+                // Burning state (old-src DATA_FLAG_ONFIRE): sent on change so
+                // clients render flames; tracked alongside the position cache.
+                $onFire = ($entity->get(\pocketmine\core\component\FireComponent::class)?->ticks ?? 0) > 0;
                 if (!isset($known[$entityId])) {
                     $pk = $this->buildAddPacket($entityId, $entity, $playerSessions);
                     if ($pk !== null) {
@@ -5369,8 +5372,11 @@ final class NetworkSessionService {
                         if ($pk instanceof AddItemEntityPacket) {
                             $this->queuePacket($session['playerRef'], $this->buildEntityDataPacket($entityId, $this->legacyMetadataDefaults()));
                         }
+                        if ($onFire) {
+                            $this->queuePacket($session['playerRef'], $this->buildFireFlagPacket($entityId, true));
+                        }
                     }
-                    $known[$entityId] = [$pos->x, $pos->y, $pos->z];
+                    $known[$entityId] = [$pos->x, $pos->y, $pos->z, $onFire ? 1 : 0];
                 } else {
                     $last = $known[$entityId];
                     $moved = abs($pos->x - $last[0]) > self::MOVE_EPSILON
@@ -5378,7 +5384,11 @@ final class NetworkSessionService {
                         || abs($pos->z - $last[2]) > self::MOVE_EPSILON;
                     if ($moved) {
                         $this->queuePacket($session['playerRef'], $this->buildMovePacket($entityId, $entity, $playerSessions));
-                        $known[$entityId] = [$pos->x, $pos->y, $pos->z];
+                        $known[$entityId] = [$pos->x, $pos->y, $pos->z, $last[3]];
+                    }
+                    if (($last[3] ? 1 : 0) !== ($onFire ? 1 : 0)) {
+                        $this->queuePacket($session['playerRef'], $this->buildFireFlagPacket($entityId, $onFire));
+                        $known[$entityId][3] = $onFire ? 1 : 0;
                     }
                 }
             }
@@ -5576,6 +5586,17 @@ final class NetworkSessionService {
      *
      * @return array<int, array{0: int, 1: mixed}>
      */
+    /**
+     * Burning visual (old-src DATA_FLAGS bit DATA_FLAG_ONFIRE): a
+     * SetEntityDataPacket carrying just the flags byte with the fire bit
+     * set or cleared.
+     */
+    private function buildFireFlagPacket(int $entityId, bool $onFire): SetEntityDataPacket {
+        $meta = $this->legacyMetadataDefaults();
+        $meta[0] = [Binary::DATA_TYPE_BYTE, $onFire ? 0x01 : 0x00]; // DATA_FLAG_ONFIRE
+        return $this->buildEntityDataPacket($entityId, $meta);
+    }
+
     private function legacyMetadataDefaults(): array {
         return [
             0  => [Binary::DATA_TYPE_BYTE, 0],       // DATA_FLAGS
