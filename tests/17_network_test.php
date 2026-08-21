@@ -3782,6 +3782,11 @@ function ccpFields(string $buf): array {
     return ['windowid' => $s->getByte()];
 }
 
+function beFields(string $buf): array {
+    $s = new BinaryStream($buf, 1);
+    return ['x' => $s->getInt(), 'y' => $s->getInt(), 'z' => $s->getInt(), 'case1' => $s->getInt(), 'case2' => $s->getInt()];
+}
+
 /**
  * Find a free surface cell (air above real grass/dirt terrain) near the safe
  * spawn - shared by the chest/furnace block-placement helpers. Never stack on
@@ -3996,7 +4001,8 @@ test('right-clicking a chest opens a real container window (0x2a + contents)', f
         $deadline = microtime(true) + 3.0;
         $sawOpen = null;
         $sawContent = null;
-        while (microtime(true) < $deadline && ($sawOpen === null || $sawContent === null)) {
+        $sawLidOpen = false;
+        while (microtime(true) < $deadline && ($sawOpen === null || $sawContent === null || !$sawLidOpen)) {
             $kernel->run(1);
             foreach ($chestClient->readGamePackets() as [$id, $buffer]) {
                 if ($id === Info::CONTAINER_OPEN_PACKET && $sawOpen === null) {
@@ -4004,6 +4010,12 @@ test('right-clicking a chest opens a real container window (0x2a + contents)', f
                 }
                 if ($id === Info::CONTAINER_SET_CONTENT_PACKET && $sawContent === null) {
                     $sawContent = cscFields($buffer);
+                }
+                if ($id === Info::BLOCK_EVENT_PACKET) {
+                    $be = beFields($buffer);
+                    if ($be['x'] === $cx && $be['y'] === $cy && $be['z'] === $cz && $be['case1'] === 1 && $be['case2'] === 2) {
+                        $sawLidOpen = true;
+                    }
                 }
             }
             usleep(10000);
@@ -4022,6 +4034,7 @@ test('right-clicking a chest opens a real container window (0x2a + contents)', f
             same(2, $sawContent['windowid'], 'contents ride window 2');
             same(27, count($sawContent['slots']), '27 content slots');
         }
+        ok($sawLidOpen, 'BlockEventPacket lid-open (case1=1 case2=2) broadcast');
     } finally {
         $chestClient->close();
     }
@@ -4129,7 +4142,8 @@ test('closing the chest window clears it and mirrors the close', function () use
 
         $deadline = microtime(true) + 3.0;
         $sawClose = false;
-        while (microtime(true) < $deadline && !$sawClose) {
+        $sawLidClose = false;
+        while (microtime(true) < $deadline && (!$sawClose || !$sawLidClose)) {
             foreach ($chestClient->readGamePackets() as [$id, $buffer]) {
                 if ($id === Info::CONTAINER_CLOSE_PACKET) {
                     $ccp = ccpFields($buffer);
@@ -4137,11 +4151,18 @@ test('closing the chest window clears it and mirrors the close', function () use
                         $sawClose = true;
                     }
                 }
+                if ($id === Info::BLOCK_EVENT_PACKET) {
+                    $be = beFields($buffer);
+                    if ($be['x'] === $cx && $be['y'] === $cy && $be['z'] === $cz && $be['case1'] === 1 && $be['case2'] === 0) {
+                        $sawLidClose = true;
+                    }
+                }
             }
             $kernel->run(1);
             usleep(10000);
         }
         ok($sawClose, 'server mirrors the chest close');
+        ok($sawLidClose, 'BlockEventPacket lid-close (case1=1 case2=0) broadcast');
     } finally {
         $chestClient->close();
     }
