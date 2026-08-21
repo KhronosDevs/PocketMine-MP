@@ -1970,6 +1970,7 @@ function registerBuiltinPermissions(\pocketmine\api\permission\PermissionManager
         'khronos.command.pardon-ip' => 'Unban an IP address',
         'khronos.command.whitelist' => 'Manage the whitelist',
         'khronos.command.plugins' => 'List loaded plugins',
+        'khronos.command.status' => 'Show server status',
     ] as $name => $description) {
         $manager->addPermission(new \pocketmine\api\permission\Permission($name, $description, $op));
     }
