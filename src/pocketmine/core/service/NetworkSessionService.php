@@ -42,6 +42,7 @@ use pocketmine\protocol\AddEntityPacket;
 use pocketmine\protocol\AddItemEntityPacket;
 use pocketmine\protocol\AddPlayerPacket;
 use pocketmine\protocol\AdventureSettingsPacket;
+use pocketmine\protocol\BlockEventPacket;
 use pocketmine\protocol\BatchPacket;
 use pocketmine\protocol\BlockEntityDataPacket;
 use pocketmine\protocol\ChangeDimensionPacket;
@@ -387,6 +388,12 @@ final class NetworkSessionService {
         // the next player and never carries a dangling rider id.
         $this->dismountPlayer($addrKey);
 
+        // A chest left open by a quitting player closes its lid for everyone
+        // still watching (legacy InventoryCloseEvent path).
+        if ((string)($session['openContainer']['type'] ?? '') === 'chest') {
+            $this->closeChestLids($addrKey, (int)$session['worldId'], $session['openContainer']);
+        }
+
         // 14.2: everyone else forgets the leaving player (entity + list entry).
         foreach ($this->sessions as $otherKey => $other) {
             if ($otherKey === $addrKey) {
@@ -606,6 +613,11 @@ final class NetworkSessionService {
             // switch (a half-broken block or open chest belongs to the old
             // world's coordinates).
             $session['breaking'] = null;
+            // A chest left open across a world switch closes its lid for
+            // everyone watching (legacy closed the inventory on switch).
+            if ((string)($session['openContainer']['type'] ?? '') === 'chest') {
+                $this->closeChestLids($addrKey, (int)$session['worldId'], $session['openContainer']);
+            }
             $session['openContainer'] = null;
             $session['bowDraw'] = null;
             // The new world's weather must be pushed on the next poll (the
@@ -2744,6 +2756,20 @@ final class NetworkSessionService {
         $this->sessions[$addrKey] = $session;
         $this->emitContainerOpen($addrKey, 'chest', ['x' => $x, 'y' => $y, 'z' => $z]);
 
+        // Chest lid animation + sound for everyone watching (legacy
+        // ChestInventory::onOpen BlockEventPacket case1=1 case2=2). Legacy
+        // only fired on the 0->1 viewer transition; same rule here, counted
+        // per canonical chest (a double pair shares one counter).
+        $canonical = $session['openContainer'];
+        // countChestViewers excludes this session: 0 means we are the first
+        // viewer, so the lid-open goes out exactly once (legacy 0->1 rule).
+        if ($this->countChestViewers($addrKey, $session['worldId'], (int)$canonical['x'], (int)$canonical['y'], (int)$canonical['z']) === 0) {
+            $this->broadcastChestLid($session['worldId'], $x, $y, $z, true);
+            if ($pair !== null) {
+                $this->broadcastChestLid($session['worldId'], $pair[2], $y, $pair[3], true);
+            }
+        }
+
         // Legacy ContainerInventory::onOpen: ContainerOpenPacket (type 0 =
         // chest / 1 = double chest, block coords) then the full contents.
         // Chest contents are per-world: the same coordinates in another world
@@ -3783,6 +3809,70 @@ final class NetworkSessionService {
         $close = new ContainerClosePacket();
         $close->windowid = $pk->windowid;
         $this->queuePacket($session['playerRef'], $close);
+        // Chest lid closes for everyone watching once the last viewer is out
+        // (legacy ChestInventory::onClose, BlockEventPacket case1=1 case2=0).
+        if ((string)$closed['type'] === 'chest') {
+            $this->closeChestLids($addrKey, (int)$session['worldId'], $closed);
+        }
+    }
+
+    /**
+     * Broadcast the chest lid-close animation if no viewer remains on this
+     * chest (legacy fires it only on the 1->0 transition). Shared by the
+     * explicit close packet, world switches and session teardown.
+     */
+    private function closeChestLids(string $addrKey, int $worldId, array $closed): void {
+        $cx = (int)$closed['x'];
+        $cy = (int)$closed['y'];
+        $cz = (int)$closed['z'];
+        if ($this->countChestViewers($addrKey, $worldId, $cx, $cy, $cz) > 0) {
+            return;
+        }
+        $this->broadcastChestLid($worldId, $cx, $cy, $cz, false);
+        $pair = $closed['pair'] ?? null;
+        if (is_array($pair)) {
+            $this->broadcastChestLid($worldId, (int)($pair['x'] ?? $cx), $cy, (int)($pair['z'] ?? $cz), false);
+        }
+    }
+
+    /** BlockEventPacket case1=1 (chest lid), case2=2 open / 0 close. */
+    private function broadcastChestLid(int $worldId, int $x, int $y, int $z, bool $opening): void {
+        $pk = new BlockEventPacket();
+        $pk->x = $x;
+        $pk->y = $y;
+        $pk->z = $z;
+        $pk->case1 = 1;
+        $pk->case2 = $opening ? 2 : 0;
+        $this->broadcastWorldEvent($worldId, $x >> 4, $z >> 4, $pk);
+    }
+
+    /**
+     * How many sessions currently hold this exact chest open (canonical left
+     * half coordinates; a double pair shares one counter). $excludeAddrKey is
+     * the acting player during close transitions.
+     */
+    private function countChestViewers(string $excludeAddrKey, int $worldId, int $x, int $y, int $z): int {
+        $count = 0;
+        foreach ($this->sessions as $addrKey => $session) {
+            if ($addrKey === $excludeAddrKey) {
+                continue;
+            }
+            $open = $session['openContainer'] ?? null;
+            if (!is_array($open) || (string)($open['type'] ?? '') !== 'chest') {
+                continue;
+            }
+            if ($this->containerWorldMatches($addrKey, $worldId)
+                && (int)($open['x'] ?? -1) === $x && (int)($open['y'] ?? -1) === $y && (int)($open['z'] ?? -1) === $z) {
+                $count++;
+            }
+        }
+        return $count;
+    }
+
+    /** Does this session's world match the given world id? */
+    private function containerWorldMatches(string $addrKey, int $worldId): bool {
+        $session = $this->sessions[$addrKey] ?? null;
+        return $session !== null && (int)($session['worldId'] ?? 0) === $worldId;
     }
 
     /**
