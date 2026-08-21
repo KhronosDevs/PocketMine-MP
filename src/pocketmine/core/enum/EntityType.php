@@ -52,6 +52,7 @@ enum EntityType: string {
     case ThrownPotion = 'ThrownPotion';
     case XPOrb = 'XPOrb';
     case PrimedTNT = 'PrimedTNT';
+    case FishingHook = 'FishingHook';
     // Vehicles (14.25)
     case Boat = 'Boat';
     case Minecart = 'Minecart';

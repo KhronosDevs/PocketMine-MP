@@ -8,6 +8,7 @@ use pocketmine\core\component\HealthComponent;
 use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\tags\PlayerTag;
+use pocketmine\core\ecs\Entity;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\System;
 use pocketmine\core\ecs\World;
@@ -35,7 +36,8 @@ final class ItemPickupSystem implements System {
             return;
         }
 
-        // Alive players only (dead players do not collect items).
+        // Alive players only (dead players do not collect items). Spectators
+        // pass through the world without interacting with it.
         $players = [];
         foreach ($world->getEntities() as $entity) {
             if (!$entity->has(PlayerTag::class)) {
@@ -44,6 +46,10 @@ final class ItemPickupSystem implements System {
             $health = $entity->get(HealthComponent::class);
             $pos = $entity->get(PositionComponent::class);
             if ($health === null || $health->current <= 0 || $pos === null) {
+                continue;
+            }
+            $meta = $entity->get(MetadataComponent::class);
+            if ($meta !== null && \pocketmine\core\enum\GameMode::coerce($meta->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) === \pocketmine\core\enum\GameMode::Spectator) {
                 continue;
             }
             $players[$entity->id] = $pos;
@@ -78,6 +84,9 @@ final class ItemPickupSystem implements System {
                     $dz = $pos->z - $playerPos->z;
                     if ($dx * $dx + $dy * $dy + $dz * $dz <= $radiusSq) {
                         $this->grantXp($world, $playerId, $amount);
+                        // Same take animation as item drops (legacy orbs had
+                        // it too).
+                        $this->broadcastItemTake($world, $entity, $playerId);
                         $world->despawn($entity);
                         $this->syncXpFor($playerId);
                         $this->playXpPickupSound($playerPos);
@@ -123,6 +132,10 @@ final class ItemPickupSystem implements System {
                         EntityRef::create($playerId, $world),
                         EntityRef::create($entity->id, $world),
                     )) {
+                        // Old-src TakeItemEntityPacket: everyone watching sees
+                        // the item fly into the collector (legacy
+                        // Item::onPickup broadcast to hasSpawned).
+                        $this->broadcastItemTake($world, $entity, $playerId);
                         $this->syncInventoryFor($playerId);
                         break; // collected: the despawn is queued for next flush
                     }
@@ -196,6 +209,30 @@ final class ItemPickupSystem implements System {
         if ($sessionService !== null) {
             $sessionService->syncXpFor($playerId);
         }
+    }
+
+    /**
+     * Old-src TakeItemEntityPacket: tells every viewer with the chunk loaded
+     * that the item entity flew into the collector (target = item entity,
+     * eid = collecting player). Without it the item simply vanishes for
+     * everyone else.
+     */
+    private function broadcastItemTake(World $world, Entity $itemEntity, int $collectorId): void {
+        $sessions = \pocketmine\Kernel::getInstance()?->getNetworkSessionService();
+        if ($sessions === null) {
+            return;
+        }
+        $worldComponent = $itemEntity->get(\pocketmine\core\component\WorldComponent::class);
+        $pk = new \pocketmine\protocol\TakeItemEntityPacket();
+        $pk->target = $itemEntity->id;
+        $pk->eid = $collectorId;
+        $pos = $itemEntity->get(PositionComponent::class);
+        $sessions->broadcastWorldEvent(
+            $worldComponent !== null ? $worldComponent->id : 0,
+            (int)floor(($pos?->x ?? 0) / 16),
+            (int)floor(($pos?->z ?? 0) / 16),
+            $pk,
+        );
     }
 
     private function playXpPickupSound(\pocketmine\core\component\PositionComponent $playerPos): void {

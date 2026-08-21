@@ -36,6 +36,10 @@ final class BlockBreakService {
         // Legacy canInteract: creative=13, survival=6, measured from eye height.
         $metadata = $player->get(MetadataComponent::class);
         $gm = \pocketmine\core\enum\GameMode::coerce($metadata?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE));
+        // Adventure (0x01 adventure flag) and spectator cannot break blocks.
+        if ($gm === \pocketmine\core\enum\GameMode::Adventure || $gm === \pocketmine\core\enum\GameMode::Spectator) {
+            return false;
+        }
         $maxReach = ($gm === \pocketmine\core\enum\GameMode::Creative) ? 13.0 : 6.0;
         if (!$this->canReach($playerRef, $x, $y, $z, $maxReach)) {
             return false;

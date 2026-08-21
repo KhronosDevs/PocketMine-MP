@@ -62,8 +62,40 @@ final class EntityInteractionService {
         return match ($targetType) {
             'Villager' => $this->interactWithVillager($playerRef, $targetRef),
             'Animal' => $this->interactWithAnimal($playerRef, $targetRef),
+            // Bug 8: milking a cow with an empty bucket gives a milk bucket.
+            'Cow' => $this->milkCow($playerRef, $targetRef),
             default => $this->defaultInteraction($playerRef, $targetRef),
         };
+    }
+
+    /**
+     * Right-clicking a cow with an empty bucket fills it with milk
+     * (legacy Cow::onInteract / Bucket::onActivate). Any other held item
+     * falls through to the default no-op interaction.
+     */
+    private function milkCow(EntityRef $playerRef, EntityRef $targetRef): bool {
+        $player = $playerRef->getEntity();
+        if (!$player) return false;
+        $inventory = $player->get(\pocketmine\core\component\InventoryComponent::class);
+        if (!$inventory) return false;
+
+        $slot = $inventory->heldSlot;
+        $held = $inventory->get($slot);
+        if ($held === null || $held->itemId !== \pocketmine\core\constants\ItemIds::BUCKET || $held->meta !== 0) {
+            return false; // needs an EMPTY bucket in hand
+        }
+
+        // Milk bucket: item 325 with meta 1 (legacy damage value).
+        $milk = new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::BUCKET, 1, 1);
+        if (!$inventory->canAddItem($milk)) {
+            return false;
+        }
+        $inventory->set($slot, null); // the empty bucket is consumed
+        $inventory->add($milk);
+
+        $kernel = \pocketmine\Kernel::getInstance()?->getNetworkSessionService();
+        $kernel?->syncInventorySlot($playerRef->getId(), $slot);
+        return true;
     }
 
     private function canInteract(EntityRef $playerRef, EntityRef $targetRef): bool {

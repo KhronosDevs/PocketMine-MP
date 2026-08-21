@@ -27,6 +27,13 @@ final class BlockPlaceService {
         $player = $playerRef->getEntity();
         if (!$player) return false;
 
+        // Adventure (legacy 0x01 adventure flag) and spectator cannot place.
+        $playerMeta = $player->get(MetadataComponent::class);
+        $gm = \pocketmine\core\enum\GameMode::coerce($playerMeta?->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE));
+        if ($gm === \pocketmine\core\enum\GameMode::Adventure || $gm === \pocketmine\core\enum\GameMode::Spectator) {
+            return false;
+        }
+
         $registry = $this->getBlockRegistry();
         
         // Check if player can reach the position

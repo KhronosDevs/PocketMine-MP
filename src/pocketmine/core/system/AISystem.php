@@ -306,9 +306,10 @@ final class AISystem implements System {
                 continue;
             }
             // Creative players are not valid targets (legacy: mobs ignore
-            // creative players entirely).
+            // creative players entirely). Spectators likewise.
             $candidateMeta = $candidate->get(MetadataComponent::class);
-            if ($candidateMeta !== null && \pocketmine\core\enum\GameMode::coerce($candidateMeta->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) === \pocketmine\core\enum\GameMode::Creative) {
+            $candidateMode = $candidateMeta !== null ? \pocketmine\core\enum\GameMode::coerce($candidateMeta->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) : \pocketmine\core\enum\GameMode::Survival;
+            if ($candidateMode === \pocketmine\core\enum\GameMode::Creative || $candidateMode === \pocketmine\core\enum\GameMode::Spectator) {
                 continue;
             }
             $candidatePos = $candidate->get(PositionComponent::class);

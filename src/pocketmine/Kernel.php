@@ -2046,6 +2046,9 @@ function registerBuiltinProjectiles(ResourceRegistry $registry): void {
     $projectiles->register(\pocketmine\core\enum\EntityType::Snowball->value, 81, 0.0, 0.03, 0.01, false);
     $projectiles->register(\pocketmine\core\enum\EntityType::Egg->value, 82, 0.0, 0.03, 0.01, false);
     $projectiles->register(\pocketmine\core\enum\EntityType::ThrownPotion->value, 86, 0.0, 0.05, 0.01, false);
+    // Fishing bobber (legacy FishingHook::NETWORK_ID 77). Session-managed:
+    // ArrowSystem skips it and the rod logic places/reels it directly.
+    $projectiles->register(\pocketmine\core\enum\EntityType::FishingHook->value, 77, 0.0, 0.0, 0.0, false);
 }
 
 function registerBuiltinRecipes(ResourceRegistry $registry): void {
