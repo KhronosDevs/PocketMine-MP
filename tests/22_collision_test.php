@@ -156,8 +156,10 @@ test('an entity falling through empty air is not frozen by collision', function 
 });
 
 test('players are excluded from server-side collision (client-authoritative)', function () use ($world): void {
-    // A player entity INSIDE the wall block, with a collision box: it must
-    // still move through - the client owns player positions.
+    // A player entity INSIDE the wall block, with a collision box: neither
+    // collision nor MovementSystem may touch its position - the client owns
+    // player movement entirely (server-side velocity is ignored for players,
+    // matching the PhysicsSystem exclusion).
     $player = $world->spawn(
         (new EntityBuilder())
             ->at(12, 65, 10)
@@ -174,7 +176,7 @@ test('players are excluded from server-side collision (client-authoritative)', f
     $pos = $world->getEntity($id)?->get(PositionComponent::class);
     ok($pos !== null, 'player entity still exists');
     if ($pos !== null) {
-        ok($pos->x > 12.3, 'player moved through the wall (x=' . round($pos->x, 3) . ')');
+        ok(abs($pos->x - 12.0) < 0.0001, 'player position untouched by server physics (x=' . round($pos->x, 3) . ')');
     }
 });
 

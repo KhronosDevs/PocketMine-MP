@@ -64,12 +64,33 @@ final class HungerSystem implements System {
             // 80-tick window starts when hunger first reaches zero, so a
             // player who just ran out of food gets a grace period before the
             // first damage tick.
+            // Difficulty floor (old-src Human::entityBaseTick): easy stops
+            // starving at 10 HP, normal at 1 HP, only hard can starve to
+            // death - and peaceful never starves at all.
             if ($hunger->hunger <= 0.0 && $health !== null && $health->current > 0.0) {
                 if (!isset($this->starvationTick[$entity->id])) {
                     $this->starvationTick[$entity->id] = $this->tick;
                 } elseif ($this->tick - $this->starvationTick[$entity->id] >= self::STARVATION_INTERVAL_TICKS) {
-                    $health->current = max(0.0, $health->current - 1.0);
                     $this->starvationTick[$entity->id] = $this->tick;
+                    $difficulty = \pocketmine\Kernel::getInstance()?->getResourceRegistry()?->get(\pocketmine\core\resource\ServerConfig::class)?->difficulty
+                        ?? \pocketmine\core\enum\Difficulty::Easy;
+                    $floor = match ($difficulty) {
+                        \pocketmine\core\enum\Difficulty::Peaceful => null,
+                        \pocketmine\core\enum\Difficulty::Easy => 10.0,
+                        \pocketmine\core\enum\Difficulty::Normal => 1.0,
+                        \pocketmine\core\enum\Difficulty::Hard => 0.0,
+                    };
+                    if ($floor !== null && $health->current > $floor) {
+                        // old-src parity: starvation goes through the damage
+                        // pipeline (EntityDamageEvent CAUSE_STARVATION), so
+                        // plugins observe/cancel it like any other damage.
+                        \pocketmine\Kernel::getInstance()?->getCombatService()?->applyDamage(
+                            \pocketmine\core\ecs\EntityRef::create($entity->id, $world),
+                            1.0,
+                            null,
+                            \pocketmine\api\event\EntityDamageEvent::CAUSE_STARVATION,
+                        );
+                    }
                 }
             } else {
                 unset($this->starvationTick[$entity->id]);

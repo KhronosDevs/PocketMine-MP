@@ -45,9 +45,15 @@ final class MovementSystem implements ParallelSystem {
     }
 
     public function getTargetArchetypes(World $world): iterable {
+        // Players are excluded, matching PhysicsSystem: their position is
+        // client-authoritative. Including them here meant any residual
+        // VelocityComponent (e.g. knockback that nothing resets) dragged the
+        // server-side copy of the player every tick forever - other viewers
+        // saw the victim drift away while their own client never moved.
         $query = $world->query()
             ->with(PositionComponent::class, VelocityComponent::class)
             ->without(InvisibleTag::class)
+            ->without(\pocketmine\core\component\tags\PlayerTag::class)
             ->build();
 
         $registry = $world->getComponentRegistry();

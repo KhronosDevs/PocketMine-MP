@@ -297,4 +297,67 @@ test('api Entity::kill() facade routes through the unified death pipeline', func
     flushWorld($world);
 });
 
+test('knockback follows old-src Living::knockBack semantics', function () use ($world, $combat): void {
+    // Source west of target: impulse pushes the target east (+x).
+    $source = $world->spawn(
+        (new EntityBuilder())
+            ->at(10, 65, 10)
+            ->with(new HealthComponent(20, 20))
+            ->with(new MetadataComponent(['entityType' => 'zombie']))
+            ->with(new \pocketmine\core\component\VelocityComponent())
+    );
+    $target = $world->spawn(
+        (new EntityBuilder())
+            ->at(13, 65, 10)
+            ->with(new HealthComponent(20, 20))
+            ->with(new MetadataComponent(['entityType' => 'zombie']))
+            ->with(new \pocketmine\core\component\VelocityComponent(8.0, 4.0, 0.0))
+    );
+
+    $combat->applyKnockback($source, $target, 5.0);
+
+    $vel = $world->getEntity($target->getId())?->get(\pocketmine\core\component\VelocityComponent::class);
+    ok($vel !== null, 'target still has a velocity component');
+    if ($vel !== null) {
+        // Per-tick: prior (0.4, 0.2) halved + 0.4/tick eastward impulse,
+        // vertical capped at the 0.4/tick base. Stored as blocks/s (x20).
+        ok(abs($vel->x - 12.0) < 1e-9, 'horizontal = halved prior + fixed 0.4/tick impulse (' . $vel->x . ')');
+        ok(abs($vel->y - 8.0) < 1e-9, 'vertical capped at base (0.4/tick = 8 b/s)');
+        ok(abs($vel->z) < 1e-9, 'no lateral drift on an axis-aligned hit');
+    }
+
+    // Second hit: prior motion halved again - growth is bounded, the old
+    // += accumulation that made victims drift forever is gone.
+    $combat->applyKnockback($source, $target, 5.0);
+    $vel = $world->getEntity($target->getId())?->get(\pocketmine\core\component\VelocityComponent::class);
+    if ($vel !== null) {
+        ok(abs($vel->x - 14.0) < 1e-9, 'second hit: halving keeps accumulation bounded (' . $vel->x . ')');
+    }
+});
+
+test('mobs carry drag so knockback decays instead of sliding forever', function () use ($kernel, $world): void {
+    $pig = $kernel->getEntitySpawnService()->spawnMob(\pocketmine\core\enum\EntityType::Pig, 100, 90, 100);
+    $entity = $pig->getEntity();
+    ok($entity !== null && $entity->has(\pocketmine\core\component\DragComponent::class), 'spawnMob attaches DragComponent');
+
+    // Decay proof on a non-AI drag carrier (a mob's AISystem re-writes its
+    // velocity every tick, which would mask the physics here): same
+    // DragComponent archetype path the mob's knockback residue goes through.
+    $item = $world->spawn(
+        (new EntityBuilder())
+            ->at(50, 90, 50)
+            ->with(new \pocketmine\core\component\PositionComponent(50, 90, 50))
+            ->with(new \pocketmine\core\component\VelocityComponent(16.0, 0.0, 0.0))
+            ->with(new \pocketmine\core\component\DragComponent())
+    );
+    $vel = $world->getEntity($item->getId())?->get(\pocketmine\core\component\VelocityComponent::class);
+    ok($vel !== null, 'drag entity has a velocity component');
+    if ($vel !== null) {
+        for ($i = 0; $i < 10; $i++) {
+            $world->tick(0.05);
+        }
+        ok($vel->x < 14.0 && $vel->x > 0.0, "horizontal knockback decays under drag ({$vel->x})");
+    }
+});
+
 exit(runTests());

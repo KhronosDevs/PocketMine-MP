@@ -72,7 +72,36 @@ final class EntitySpawnService {
     ) {}
 
     public function spawnEntity(EntityType $entityType, float $x, float $y, float $z, float $yaw = 0, float $pitch = 0, array $metadata = [], int $worldId = 0): EntityRef {
-        $entityRef = $this->world->spawn(
+        return $this->spawnBuilt(
+            $entityType, $x, $y, $z, $yaw, $pitch, $metadata, $worldId,
+            fn(EntityBuilder $b) => $b,
+            false,
+        );
+    }
+
+    public function spawnMob(EntityType $mobType, float $x, float $y, float $z, int $worldId = 0): EntityRef {
+        // DragComponent is attached in the BUILDER, not post-spawn: old-src
+        // Living drag = 0.02 (0.98 friction/tick), so a mob hit by knockback
+        // decelerates and stops instead of sliding forever. PhysicsSystem
+        // applies its drag path to any archetype carrying DragComponent.
+        return $this->spawnBuilt(
+            $mobType, $x, $y, $z, 0, 0, [], $worldId,
+            function (EntityBuilder $b): EntityBuilder {
+                return $b->with(new \pocketmine\core\component\DragComponent());
+            },
+            true,
+        );
+    }
+
+    /**
+     * Shared spawn pipeline: build (with caller extras), set type metadata,
+     * run type-specific initialization, fire EntitySpawnEvent. Extras are
+     * applied at build time so the entity is born into its final archetype -
+     * post-spawn component adds force an archetype migration on the next
+     * tick, which has historically been fragile.
+     */
+    private function spawnBuilt(EntityType $entityType, float $x, float $y, float $z, float $yaw, float $pitch, array $metadata, int $worldId, \Closure $extraComponents, bool $setMobType): EntityRef {
+        $builder = $extraComponents(
             (new EntityBuilder())
                 ->with(new PositionComponent($x, $y, $z))
                 ->with(new RotationComponent($yaw, $pitch))
@@ -81,6 +110,7 @@ final class EntitySpawnService {
                 ->with(new MetadataComponent())
                 ->with(new \pocketmine\core\component\WorldComponent($worldId))
         );
+        $entityRef = $this->world->spawn($builder);
 
         $entity = $entityRef->getEntity();
         if ($entity) {
@@ -88,6 +118,9 @@ final class EntitySpawnService {
             $meta = $entity->get(MetadataComponent::class);
             if ($meta) {
                 $meta->set(MetadataKeys::ENTITY_TYPE, $entityType->value);
+                if ($setMobType) {
+                    $meta->set(MetadataKeys::MOB_TYPE, $entityType->value);
+                }
                 foreach ($metadata as $key => $value) {
                     $meta->set($key, $value);
                 }
@@ -102,20 +135,6 @@ final class EntitySpawnService {
         $this->eventPort->emit(new \pocketmine\api\event\EntitySpawnEvent(
             \pocketmine\api\entity\Entity::wrap($entityRef, $this->world),
         ));
-
-        return $entityRef;
-    }
-
-    public function spawnMob(EntityType $mobType, float $x, float $y, float $z, int $worldId = 0): EntityRef {
-        $entityRef = $this->spawnEntity($mobType, $x, $y, $z, 0, 0, [], $worldId);
-
-        $entity = $entityRef->getEntity();
-        if ($entity) {
-            $meta = $entity->get(MetadataComponent::class);
-            if ($meta) {
-                $meta->set(MetadataKeys::MOB_TYPE, $mobType->value);
-            }
-        }
 
         return $entityRef;
     }
