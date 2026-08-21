@@ -89,6 +89,64 @@ final class EntityDespawnService {
         // This would track last update time in metadata
     }
 
+    /**
+     * Despawn every HOSTILE mob that is farther than $maxDistance from ALL
+     * players at once. "All" is the load-bearing word: checking one player
+     * per pass would despawn a mob standing next to player B just because it
+     * is far from player A. Without this sweep the global hostile cap
+     * eventually saturates with abandoned mobs nobody can reach, permanently
+     * disabling MobSpawnerSystem.
+     *
+     * $players are the positions of the players that keep mobs alive (the
+     * spawner passes its alive default-world set). Hostile-only by design:
+     * passive animals and dropped items are not part of the spawn budget and
+     * keep their own lifecycles.
+     *
+     * @param list<PositionComponent> $players
+     * @return int how many mobs were queued for despawn (applied on the next
+     *              world flush)
+     */
+    public function despawnFarFromAllPlayers(array $players, float $maxDistance = 128.0): int {
+        if ($players === []) {
+            return 0;
+        }
+        $maxSq = $maxDistance * $maxDistance;
+        $victims = [];
+
+        foreach ($this->world->query()
+            ->with(PositionComponent::class, MetadataComponent::class)
+            ->build() as $entity) {
+            // Players never despawn by distance.
+        
+            if ($entity->has(\pocketmine\core\component\tags\PlayerTag::class)) {
+                continue;
+            }
+            $meta = $entity->get(MetadataComponent::class);
+            if ($meta === null || !$meta->get(\pocketmine\core\constants\MetadataKeys::HOSTILE)) {
+                continue;
+            }
+            $pos = $entity->get(PositionComponent::class);
+            if ($pos === null) {
+                continue;
+            }
+            foreach ($players as $playerPos) {
+                $dx = $pos->x - $playerPos->x;
+                $dy = $pos->y - $playerPos->y;
+                $dz = $pos->z - $playerPos->z;
+                if ($dx * $dx + $dy * $dy + $dz * $dz <= $maxSq) {
+                    continue 2; // near at least one player: stays
+                }
+            }
+            $victims[] = $entity;
+        }
+        foreach ($victims as $entity) {
+            // save=false: ephemeral hostile mobs carry no persistent unique id,
+            // so there is nothing to write.
+            $this->despawn(\pocketmine\core\ecs\EntityRef::create($entity->id, $this->world), false);
+        }
+        return count($victims);
+    }
+
     private function saveEntity(EntityRef $entityRef): void {
         $entity = $entityRef->getEntity();
         if (!$entity) return;
