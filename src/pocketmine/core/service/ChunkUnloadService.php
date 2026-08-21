@@ -14,6 +14,9 @@ use pocketmine\core\resource\WorldRegistry;
 use pocketmine\port\driven\StoragePort;
 
 final class ChunkUnloadService {
+    /** Player-proximity guard radius for the FIFO backstop eviction. */
+    private const EVICT_KEEP_RADIUS = 2;
+
     public function __construct(
         private readonly World $world,
         private readonly StoragePort $storagePort,
@@ -44,24 +47,13 @@ final class ChunkUnloadService {
     }
 
     /**
-     * Distance-based eviction (the primary policy): drop every resident chunk
-     * farther than $keepRadius chunks from ALL players in $worldId. Chunks
-     * near any player stay resident so a moving player's view ring is never
-     * touched (keepRadius is view-distance + margin by design). Runs as a
-     * periodic sweep; the FIFO count cap in unloadUnusedChunks() remains the
-     * backstop for many spread-out players. Bounded per call by $maxEvictions
-     * so a fast player leaving a large area behind can never stall a tick.
+     * Chunk coordinates (floor(x/16), floor(z/16)) of every player in
+     * $worldId, shared by both eviction policies so "is anyone near this
+     * chunk?" is decided from one code path.
      *
-     * Returns how many chunks were evicted.
+     * @return list<array{0: int, 1: int}>
      */
-    public function unloadChunksFarFromPlayers(int $keepRadius, int $worldId = 0, int $maxEvictions = 32): int {
-        $store = $this->getChunkStore($worldId);
-        if ($store === null) {
-            return 0;
-        }
-
-        // One query per world: all players of THIS world (the ECS world holds
-        // every entity of every world; WorldComponent is the discriminator).
+    private function getPlayerChunkPositions(int $worldId): array {
         $players = [];
         $query = $this->world->query()
             ->with(PositionComponent::class)
@@ -81,6 +73,27 @@ final class ChunkUnloadService {
             }
             $players[] = [(int)floor($position->x / 16), (int)floor($position->z / 16)];
         }
+        return $players;
+    }
+
+    /**
+     * Distance-based eviction (the primary policy): drop every resident chunk
+     * farther than $keepRadius chunks from ALL players in $worldId. Chunks
+     * near any player stay resident so a moving player's view ring is never
+     * touched (keepRadius is view-distance + margin by design). Runs as a
+     * periodic sweep; the FIFO count cap in unloadUnusedChunks() remains the
+     * backstop for many spread-out players. Bounded per call by $maxEvictions
+     * so a fast player leaving a large area behind can never stall a tick.
+     *
+     * Returns how many chunks were evicted.
+     */
+    public function unloadChunksFarFromPlayers(int $keepRadius, int $worldId = 0, int $maxEvictions = 32): int {
+        $store = $this->getChunkStore($worldId);
+        if ($store === null) {
+            return 0;
+        }
+
+        $players = $this->getPlayerChunkPositions($worldId);
         if ($players === []) {
             return 0; // nobody here: leave it to the count-cap backstop
         }
@@ -113,19 +126,40 @@ final class ChunkUnloadService {
      * (FIFO by load order). Nothing is lost - every evicted chunk is written
      * to disk before it leaves memory, so a later loadChunk() reads it back
      * exactly as it was. Returns how many chunks were evicted.
+     *
+     * Player-proximity guard: chunks within KEEP_RADIUS of any player are
+     * never evicted, even over budget. The FIFO-oldest residents are exactly
+     * spawn/base terrain where someone is most likely standing - evicting
+     * those pulled the floor out from under players. If everything resident
+     * is player-near, this pass evicts nothing and memory may exceed the cap
+     * until the far-from-players sweep frees some; that is preferable to
+     * unloading the ground under someone.
      */
     public function unloadUnusedChunks(int $maxLoadedChunks = 10000, int $worldId = 0): int {
         $store = $this->getChunkStore($worldId);
         if ($store === null) {
             return 0;
         }
+        $players = $this->getPlayerChunkPositions($worldId);
+
+        // Coordinates come back in insertion (load) order, so this walks
+        // oldest -> newest exactly like the previous getOldestLoadedChunk()
+        // loop, while being able to skip guarded chunks.
         $evicted = 0;
-        while ($store->getCount() > $maxLoadedChunks) {
-            $oldest = $store->getOldestLoadedChunk();
-            if ($oldest === null) {
-                break; // store empty or inconsistent
+        foreach ($store->getLoadedChunkCoordinates() as [$chunkX, $chunkZ]) {
+            if ($store->getCount() <= $maxLoadedChunks) {
+                break;
             }
-            [$chunkX, $chunkZ] = $oldest;
+            $near = false;
+            foreach ($players as [$pcx, $pcz]) {
+                if (max(abs($chunkX - $pcx), abs($chunkZ - $pcz)) <= self::EVICT_KEEP_RADIUS) {
+                    $near = true;
+                    break;
+                }
+            }
+            if ($near) {
+                continue;
+            }
             $this->persistAndUnload($chunkX, $chunkZ, $worldId);
             $evicted++;
         }

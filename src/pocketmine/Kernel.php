@@ -2267,6 +2267,11 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // starvation damage, HUD sync. After regen so the hunger gate (regen
     // needs food) sees current values.
     $scheduler->register(new \pocketmine\core\system\HungerSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // Environmental damage - void, lava, fire, burning, suffocation, drowning
+    // (fall damage is tracked per-move in NetworkSessionService). After
+    // movement so positions are current; the combat no-damage window inside
+    // applyDamage throttles repeated ambient hits to legacy attackTime pace.
+    $scheduler->register(new \pocketmine\core\system\EnvironmentalDamageSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     // 14.16: furnaces - burn fuel, cook input, produce results on the main
     // thread every world tick (furnaces are blocks, not entities, so they
     // are not part of the region pipeline). Runs after crafting so the
