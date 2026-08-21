@@ -78,6 +78,7 @@ use pocketmine\protocol\RespawnPacket;
 use pocketmine\protocol\SetDifficultyPacket;
 use pocketmine\protocol\SetEntityDataPacket;
 use pocketmine\protocol\SetEntityLinkPacket;
+use pocketmine\protocol\SetEntityMotionPacket;
 use pocketmine\protocol\PlayerInputPacket;
 use pocketmine\protocol\SetPlayerGameTypePacket;
 use pocketmine\protocol\SetHealthPacket;
@@ -583,6 +584,9 @@ final class NetworkSessionService {
             $session['chunksSent'] = [];
             $session['chunkQueue'] = [];
             $session['chunkQueueIndex'] = 0;
+            // The descent into the new world must not count as a fall.
+            $session['fallDistance'] = 0.0;
+            $session['lastY'] = null;
             // 14.32: the portal charge never survives a world switch. The
             // saved return spot (portalFrom) intentionally DOES: it is set
             // before the overworld->nether switch and consumed only when the
@@ -968,6 +972,13 @@ final class NetworkSessionService {
             'teleportGraceTicks' => 0,
             'lastChatAt' => 0.0,
             'lastCommandAt' => 0.0,
+            // Fall-state tracking (old-src Entity::updateFallState): the 0.15
+            // client predicts fall damage locally, so the server must apply
+            // the same damage on landing or the client's health drifts below
+            // the server's and it dies client-side while the server sees it
+            // alive.
+            'fallDistance' => 0.0,
+            'lastY' => null,
         ];
 
         // Blocker 1: an ops.txt operator gets the op permission on their
@@ -1030,6 +1041,22 @@ final class NetworkSessionService {
         $pos = $entity->get(PositionComponent::class);
         $rot = $entity->get(RotationComponent::class);
 
+        // Vehicle-mounted riders are positioned by VehicleSystem (passenger
+        // sync follows the vehicle every tick). A mounted client still sends
+        // MovePlayerPacket with its raw camera position, which does not match
+        // the vehicle seat - applying it here would fight VehicleSystem for
+        // the position and the mismatch would trip validateMove() into
+        // rubber-banding / kicking an innocent rider. Only the view angles
+        // are client-owned while mounted (same skip as BlockCollisionSystem).
+        $riderMeta = $entity->get(MetadataComponent::class);
+        if ($riderMeta !== null && ((int)($riderMeta->get(MetadataKeys::RIDING_VEHICLE_ID) ?? 0)) > 0) {
+            if ($rot !== null) {
+                $rot->yaw = $pk->yaw;
+                $rot->pitch = $pk->pitch;
+            }
+            return;
+        }
+
         // Blocker 2 anti-cheat: validate the claimed move against the last
         // server-known position BEFORE applying it. A too-fast move (speed /
         // teleport hack) or an airborne ascent without creative/allow-flight
@@ -1076,6 +1103,75 @@ final class NetworkSessionService {
                 $this->queueChunks($addrKey);
             }
         }
+
+        // Fall-state tracking from the accepted move (old-src parity - see
+        // the session field comment for why this must live server-side).
+        // Passed by reference into the STORED session: the local $session
+        // copy above was persisted mid-method, and queueChunks() has already
+        // written fresher state - writing the copy back would clobber it.
+        $this->updateFallState($addrKey, $this->sessions[$addrKey], $pk->y, $pk->onGround);
+    }
+
+    /**
+     * old-src Entity::updateFallState(): accumulate descent while airborne,
+     * convert to damage on landing. The 0.15 client predicts its own fall
+     * damage locally; applying the same damage server-side keeps both health
+     * models in sync (the per-tick SetHealthPacket pass then confirms it).
+     */
+    private function updateFallState(string $addrKey, array &$session, float $y, bool $onGround): void {
+        $lastY = $session['lastY'] ?? $y;
+        $dy = $y - $lastY;
+        $session['lastY'] = $y;
+
+        if ($onGround) {
+            if ($session['fallDistance'] > 0.0) {
+                $this->applyFallDamage($addrKey, $session);
+                $session['fallDistance'] = 0.0;
+            }
+            return;
+        }
+        if ($dy < 0) {
+            $session['fallDistance'] -= $dy;
+        }
+    }
+
+    /**
+     * old-src Entity::fall(): floor(fallDistance - 3) damage on landing,
+     * skipped in water and for creative players.
+     */
+    private function applyFallDamage(string $addrKey, array &$session): void {
+        $damage = (float)floor($session['fallDistance'] - 3);
+        if ($damage <= 0) {
+            return;
+        }
+        $entity = $session['entityRef']->getEntity();
+        if ($entity === null) {
+            return;
+        }
+        $meta = $entity->get(MetadataComponent::class);
+        if ($meta !== null && GameMode::coerce($meta->get(MetadataKeys::GAMEMODE)) === GameMode::Creative) {
+            return;
+        }
+        // Water landing: no impact damage (old-src isInsideOfWater guard).
+        $pos = $entity->get(PositionComponent::class);
+        if ($pos !== null) {
+            $store = $this->getChunkStore($session['worldId']);
+            if ($store !== null) {
+                $feet = (int)floor($pos->y);
+                foreach ([[ (int)floor($pos->x), $feet, (int)floor($pos->z)], [(int)floor($pos->x), $feet + 1, (int)floor($pos->z)]] as [$bx, $by, $bz]) {
+                    $blockId = $store->getBlock($bx, $by, $bz);
+                    if ($blockId === BlockIds::WATER || $blockId === BlockIds::STILL_WATER) {
+                        return;
+                    }
+                }
+            }
+        }
+        $this->combatService->applyDamage(
+            $session['entityRef'],
+            $damage,
+            null,
+            \pocketmine\api\event\EntityDamageEvent::CAUSE_FALL,
+        );
     }
 
     /**
@@ -1321,6 +1417,27 @@ final class NetworkSessionService {
     }
 
     /**
+     * Push a motion vector to a player's own client (SetEntityMotionPacket).
+     * $mx/$my/$mz are in WIRE units (blocks/tick, old-src convention) - the
+     * client simulates the motion locally with its own physics and reports
+     * the resulting moves back, which keeps the server's client-authoritative
+     * position model intact. Mob entities have no session here, so callers
+     * can pass any entity id; only connected players receive a packet.
+     */
+    public function sendEntityMotionTo(int $entityId, float $mx, float $my, float $mz): void {
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId !== $entityId) {
+                continue;
+            }
+            $pk = new SetEntityMotionPacket();
+            // protocol 84: the player's own entity is always eid 0 on the wire
+            $pk->entities = [[0, $mx, $my, $mz]];
+            $this->queuePacket($session['playerRef'], $pk);
+            return;
+        }
+    }
+
+    /**
      * Teleport a player: set the ECS position (so the per-tick entity
      * broadcast moves them for every viewer) and send an immediate
      * MovePlayerPacket (MODE_RESET) to the actor.
@@ -1357,6 +1474,10 @@ final class NetworkSessionService {
             if ($grace) {
                 $session['teleportGraceTicks'] = 3;
             }
+            // old-src resetFallDistance(): the descent to the new position
+            // must not count as a fall.
+            $session['fallDistance'] = 0.0;
+            $session['lastY'] = null;
             // A far teleport must stream the new area (walking across a chunk
             // boundary re-queues in handleMove; a server teleport /tp must do
             // the same - queueChunks is idempotent, already-sent chunks are
@@ -4153,6 +4274,9 @@ final class NetworkSessionService {
             $pk->entries = [
                 [0.0, 20.0, (float)($hunger?->hunger ?? 20.0), 'player.hunger'],
                 [0.0, 20.0, (float)($hunger?->saturation ?? 5.0), 'player.saturation'],
+                // old-src Attribute::EXHAUSTION - the client simulates its own
+                // food state between syncs and needs this to stay in step.
+                [0.0, 5.0, (float)($hunger?->exhaustion ?? 0.0), 'player.exhaustion'],
             ];
             $this->queuePacket($session['playerRef'], $pk);
             return;
@@ -4251,10 +4375,13 @@ final class NetworkSessionService {
         // Blocker 2: the respawn teleport was server-side - grace the client's
         // converging moves so they are not misread as a speed/fly hack.
         $this->sessions[$addrKey]['teleportGraceTicks'] = 3;
+        // old-src resetFallDistance(): the descent to the new position must
+        // not count as a fall.
+        $this->sessions[$addrKey]['fallDistance'] = 0.0;
+        $this->sessions[$addrKey]['lastY'] = null;
 
         // Respawn chunk sync: the teleport above can land far outside the
-        // area the client currently has rendered (death spot != spawn). The
-        // chunk queue must be rebuilt around the destination NOW - waiting
+        // area the client currently has rendered (death spot != spawn). The        // chunk queue must be rebuilt around the destination NOW - waiting
         // for the first post-respawn move packet leaves the client falling
         // through void terrain that was never queued. Also drop the
         // destination radius from chunksSent: the client discards chunks
@@ -5256,12 +5383,23 @@ final class NetworkSessionService {
                 }
             }
 
-            // The player's own health bar: SetHealthPacket drives the HUD
-            // hearts (legacy protocol-84 behaviour), following damage/heal/
-            // respawn without waiting for a client re-sync.
-            $selfHealth = $session['entityRef']->getEntity()?->get(HealthComponent::class)?->current ?? 20.0;
+            // The player's own health bar: synced the old-src way - the
+            // generic.health ATTRIBUTE (Player::setHealth ->
+            // AttributeMap->setValue) drives the client's hearts mid-game;
+            // SetHealthPacket rides along for protocol-84 HUD parity. The
+            // 0.15 client keeps its own local health model and only honors
+            // attribute corrections - without this, damage taken while its
+            // prediction disagrees with ours never displays correctly.
+            $selfHealthComponent = $session['entityRef']->getEntity()?->get(HealthComponent::class);
+            $selfHealth = $selfHealthComponent?->current ?? 20.0;
             $wasAlive = $session['lastHealth'] > 0.0;
             if (abs($selfHealth - $session['lastHealth']) > 0.01) {
+                $attrs = new UpdateAttributesPacket();
+                $attrs->entityId = 0; // legacy: 0 targets the player's own HUD
+                $attrs->entries = [
+                    [0.0, (float)($selfHealthComponent?->max ?? 20.0), $selfHealth, 'generic.health'],
+                ];
+                $this->queuePacket($session['playerRef'], $attrs);
                 $hp = new SetHealthPacket();
                 $hp->health = (int)ceil($selfHealth);
                 $this->queuePacket($session['playerRef'], $hp);

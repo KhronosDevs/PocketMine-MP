@@ -73,6 +73,14 @@ final class World {
     public function tick(float $deltaTime): void {
         $this->flushEntityChanges();
         $this->systemScheduler->run($this, $deltaTime);
+        // The global gameplay tick counter advances with EVERY world tick,
+        // no matter what drives it (kernel loop, tests, plugin schedulers).
+        // Previously only Kernel::run() incremented it, so code ticking the
+        // world directly (several systems and tests) saw a frozen clock.
+        $tickCounter = $this->resourceRegistry->get(\pocketmine\core\resource\TickCounter::class);
+        if ($tickCounter instanceof \pocketmine\core\resource\TickCounter) {
+            $tickCounter->value++;
+        }
     }
 
     private function flushEntityChanges(): void {

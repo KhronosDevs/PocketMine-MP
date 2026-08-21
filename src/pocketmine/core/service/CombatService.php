@@ -73,6 +73,35 @@ final class CombatService {
         private readonly EntitySpawnService $spawnService,
     ) {}
 
+    /** @var array<int, array{tick: int, amount: float}> per-entity last-damage state (old-src noDamageTicks). */
+    private array $lastDamage = [];
+
+    /**
+     * old-src Living::attack() invulnerability: for NO_DAMAGE_TICKS after
+     * taking damage, equal-or-weaker damage is cancelled entirely. Legacy
+     * carried this not just as game feel but as robustness - retried or
+     * duplicated attack packets within the window deal nothing. Only a
+     * strictly stronger hit pierces it (and restarts the window).
+     */
+    private const NO_DAMAGE_TICKS = 10;
+
+    private function isInvulnerable(EntityRef $targetRef, float $damage): bool {
+        if ($damage <= 0.0) {
+            return false;
+        }
+        $tick = \pocketmine\Kernel::getInstance()?->getResourceRegistry()?->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0;
+        $last = $this->lastDamage[$targetRef->getId()] ?? null;
+        if ($last !== null && $tick - $last['tick'] < self::NO_DAMAGE_TICKS && $damage <= $last['amount']) {
+            return true;
+        }
+        return false;
+    }
+
+    private function recordDamage(EntityRef $targetRef, float $finalDamage): void {
+        $tick = \pocketmine\Kernel::getInstance()?->getResourceRegistry()?->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0;
+        $this->lastDamage[$targetRef->getId()] = ['tick' => $tick, 'amount' => $finalDamage];
+    }
+
     /**
      * Apply damage through the full combat pipeline: cancellable damage
      * event -> armor reduction -> knockback -> health -> death handling.
@@ -85,6 +114,12 @@ final class CombatService {
 
         $health = $target->get(HealthComponent::class);
         if (!$health) return false;
+
+        // old-src invulnerability window: equal-or-weaker damage inside the
+        // no-damage window is cancelled before anything else runs.
+        if ($this->isInvulnerable($targetRef, $damage)) {
+            return false;
+        }
 
         // Creative players are immune to attacks (legacy: no damage taken,
         // mobs never target them either). /kill goes through kill() directly,
@@ -107,6 +142,9 @@ final class CombatService {
             return false;
         }
         $damage = max(0.0, $event->getFinalDamage());
+
+        // Damage landed: open the no-damage window at this strength.
+        $this->recordDamage($targetRef, $damage);
 
         // Apply damage reduction from armor
         $damage = $this->applyArmorReduction($targetRef, $damage, $cause);
@@ -186,12 +224,36 @@ final class CombatService {
         $dz = $targetPos->z - $sourcePos->z;
         $dist = sqrt($dx * $dx + $dz * $dz);
 
-        if ($dist > 0) {
-            $knockback = $force * 0.4;
-            $targetVel->x += ($dx / $dist) * $knockback;
-            $targetVel->z += ($dz / $dist) * $knockback;
-            $targetVel->y = $force * 0.2;
+        if ($dist <= 0) {
+            return;
         }
+
+        // old-src Living::knockBack(): halve the existing motion before
+        // adding the impulse (repeated hits cannot accumulate without
+        // bound) and cap the vertical component at the base force.
+        // $base is the FIXED 0.4 blocks/tick from the old-src
+        // EntityDamageByEntityEvent default - it does not scale with damage.
+        // VelocityComponent is in blocks/second; the legacy constants are
+        // blocks/tick, so work per-tick and scale back by 20 on store.
+        $base = 0.4;
+        $vx = ($targetVel->x / 20.0) * 0.5 + ($dx / $dist) * $base;
+        $vz = ($targetVel->z / 20.0) * 0.5 + ($dz / $dist) * $base;
+        $vy = min(($targetVel->y / 20.0) * 0.5 + $base, $base);
+        $targetVel->x = $vx * 20.0;
+        $targetVel->y = $vy * 20.0;
+        $targetVel->z = $vz * 20.0;
+
+        // Tell the victim's client to simulate the knockback locally
+        // (old-src Player::setMotion sends SetEntityMotionPacket to self).
+        // The wire carries blocks/tick. Without this the client never feels
+        // the hit: server-side velocity no longer moves players at all
+        // (MovementSystem excludes them), so the packet is the whole effect.
+        Kernel::getInstance()?->getNetworkSessionService()?->sendEntityMotionTo(
+            $targetRef->getId(),
+            $vx,
+            $vy,
+            $vz,
+        );
     }
 
     private function applyArmorReduction(EntityRef $targetRef, float $damage, int $cause): float {

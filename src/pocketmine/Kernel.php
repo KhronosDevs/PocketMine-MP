@@ -536,13 +536,9 @@ final class Kernel {
             $markPhase('mirror');
 
             // 0. Tick the ECS world on the main thread (ownership model)
+            // World::tick() advances the global gameplay TickCounter (moved
+            // there so every tick path increments it exactly once).
             $this->world->tick(0.05);
-            // 14.8: the global tick counter drives gameplay timing (block
-            // breaking hold-time, future cooldowns). One increment per tick.
-            $tickCounter = $this->resourceRegistry->get(\pocketmine\core\resource\TickCounter::class);
-            if ($tickCounter instanceof \pocketmine\core\resource\TickCounter) {
-                $tickCounter->value++;
-            }
             $markPhase('tick');
 
             // 0b. Drain worker results: compare (gate) or apply.
