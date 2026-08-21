@@ -21,6 +21,7 @@ use pocketmine\core\constants\MetadataKeys;
 use pocketmine\core\ecs\Entity;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\ResourceRegistry;
+use pocketmine\core\system\TimeSystem;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\ChestStore;
 use pocketmine\core\resource\TileEntityStore;
@@ -326,6 +327,8 @@ final class NetworkSessionService {
         // 14.32: players standing inside a portal cross dimensions once the
         // charge completes (80 ticks survival, instant creative).
         $this->checkPlayerPortals();
+        // Bug 13: fishing bites (splash + catch window) per session.
+        $this->processFishing();
         $this->flushOutbound();
     }
 
@@ -1161,7 +1164,8 @@ final class NetworkSessionService {
             return;
         }
         $meta = $entity->get(MetadataComponent::class);
-        if ($meta !== null && GameMode::coerce($meta->get(MetadataKeys::GAMEMODE)) === GameMode::Creative) {
+        $mode = $meta !== null ? GameMode::coerce($meta->get(MetadataKeys::GAMEMODE)) : GameMode::Survival;
+        if ($mode === GameMode::Creative || $mode === GameMode::Spectator) {
             return;
         }
         // Water landing: no impact damage (old-src isInsideOfWater guard).
@@ -1406,9 +1410,15 @@ final class NetworkSessionService {
             }
             // 0.15 protocol: AdventureSettingsPacket + SetPlayerGameTypePacket
             // both required to fully flip the client UI (hotbar, flight toggle,
-            // block-breaking animation).
+            // block-breaking animation). Legacy flag bits: 0x01 adventure (no
+            // place/break), 0x100 spectator, 0x80 allowFlight.
             $settings = new AdventureSettingsPacket();
-            $settings->flags = $mode === GameMode::Creative ? AdventureSettingsPacket::FLAGS_CREATIVE : AdventureSettingsPacket::FLAGS_SURVIVAL;
+            $settings->flags = match ($mode) {
+                GameMode::Creative => AdventureSettingsPacket::FLAGS_CREATIVE,
+                GameMode::Adventure => AdventureSettingsPacket::FLAGS_SURVIVAL | 0x01,
+                GameMode::Spectator => AdventureSettingsPacket::FLAGS_CREATIVE | 0x100 | 0x80,
+                default => AdventureSettingsPacket::FLAGS_SURVIVAL,
+            };
             $settings->userPermission = 2;
             $settings->globalPermission = 2;
             $this->queuePacket($session['playerRef'], $settings);
@@ -1518,6 +1528,231 @@ final class NetworkSessionService {
      * rejected. ACTION_ABORT_BREAK cancels the in-progress break. Creative
      * mode and zero-hardness blocks still break instantly on START.
      */
+    /**
+     * Bug 9: right-clicking a bed. Sets the player's personal spawn point
+     * above the bed (persisted in player metadata, preferred by the respawn
+     * service over the world spawn) and, during the night, sleeps through to
+     * dawn. Legacy Bed::onActivate + PlayerBedEnterEvent semantics.
+     */
+    private function sleepInBed(string $addrKey, array $session, int $x, int $y, int $z): void {
+        $entity = $session['entityRef']->getEntity();
+        if ($entity === null) {
+            return;
+        }
+        $meta = $entity->get(MetadataComponent::class);
+        if ($meta !== null) {
+            $meta->set('spawnX', (int)$x + 0);
+            $meta->set('spawnY', $y + 1);
+            $meta->set('spawnZ', (int)$z + 0);
+        }
+        $this->sendMessageTo($session['playerRef']->entityId, 'Respawn point set.');
+
+        $worldConfig = $this->resourceRegistry->get(WorldConfig::class);
+        if ($worldConfig instanceof WorldConfig && TimeSystem::isNight((int)$worldConfig->time)) {
+            $worldConfig->time = TimeSystem::TIME_DAWN;
+            $this->broadcastTime(); // push the new time immediately
+            $this->sendMessageTo($session['playerRef']->entityId, 'You slept through the night.');
+        } else {
+            $this->sendMessageTo($session['playerRef']->entityId, 'You can only sleep at night.');
+        }
+    }
+
+    /**
+     * Bug 8: bucket use. An empty bucket scoops the clicked (or face-adjacent)
+     * water/lava block; a filled bucket pours it into the face-adjacent cell.
+     * Returns true when the use was handled.
+     */
+    private function handleBucketUse(string $addrKey, array &$session, UseItemPacket $pk, \pocketmine\core\component\ItemStack $held): bool {
+        $store = $this->getChunkStore($session['worldId']);
+        if ($store === null) {
+            return false;
+        }
+        $player = $session['entityRef']->getEntity();
+        $inventory = $player?->get(InventoryComponent::class);
+        if ($inventory === null) {
+            return false;
+        }
+        $slot = $inventory->heldSlot;
+        [$fx, $fy, $fz] = self::FACE_OFFSETS[$pk->face] ?? self::FACE_OFFSETS[1];
+        $adjX = $pk->x + $fx;
+        $adjY = $pk->y + $fy;
+        $adjZ = $pk->z + $fz;
+
+        if ($held->meta === 0) {
+            // Empty bucket: scoop the clicked liquid first, then the adjacent.
+            foreach ([[$pk->x, $pk->y, $pk->z], [$adjX, $adjY, $adjZ]] as [$bx, $by, $bz]) {
+                $block = $store->getBlock($bx, $by, $bz);
+                $fill = match (true) {
+                    $block === BlockIds::WATER || $block === BlockIds::STILL_WATER => BlockIds::WATER,
+                    $block === BlockIds::LAVA || $block === BlockIds::STILL_LAVA => BlockIds::LAVA,
+                    default => null,
+                };
+                if ($fill === null) {
+                    continue;
+                }
+                $store->setBlock($bx, $by, $bz, 0, 0); // the source is consumed
+                $this->broadcastBlockState($bx, $by, $bz, $session['worldId']);
+                $inventory->set($slot, new \pocketmine\core\component\ItemStack(ItemIds::BUCKET, $fill, 1));
+                $this->syncInventorySlot($session['playerRef']->entityId, $slot);
+                return true;
+            }
+            return false;
+        }
+
+        // Filled bucket: pour into the adjacent cell if replaceable.
+        $liquid = match ($held->meta) {
+            BlockIds::WATER => BlockIds::WATER,
+            BlockIds::LAVA => BlockIds::LAVA,
+            default => null,
+        };
+        if ($liquid === null) {
+            return false;
+        }
+        $target = $store->getBlock($adjX, $adjY, $adjZ);
+        if ($target !== 0 && !in_array($target, BlockIds::LIQUIDS, true)) {
+            return false;
+        }
+        $store->setBlock($adjX, $adjY, $adjZ, $liquid, 0);
+        $this->broadcastBlockState($adjX, $adjY, $adjZ, $session['worldId']);
+        $inventory->set($slot, new \pocketmine\core\component\ItemStack(ItemIds::BUCKET, 0, 1));
+        $this->syncInventorySlot($session['playerRef']->entityId, $slot);
+        return true;
+    }
+
+    /**
+     * Bug 13: fishing rod. First use casts the bobber toward the look point;
+     * the next use reels in - with a catch if a bite was announced (splash)
+     * and the player reacted within the window.
+     */
+    private function handleFishingRod(string $addrKey, array &$session): void {
+        $fishing = $session['fishing'] ?? null;
+        if ($fishing === null) {
+            $this->castBobber($addrKey, $session);
+            return;
+        }
+
+        // Reel in.
+        $bobberId = (int)$fishing['bobber'];
+        $bobber = \pocketmine\Kernel::getInstance()?->getWorld()->getEntity($bobberId);
+        if ($bobber !== null) {
+            \pocketmine\Kernel::getInstance()?->getEntityDespawnService()->despawn(
+                \pocketmine\core\ecs\EntityRef::create($bobberId, \pocketmine\Kernel::getInstance()->getWorld()), false,
+            );
+        }
+        if (!empty($fishing['bitten'])) {
+            // Caught something: raw fish straight into the inventory.
+            $entity = $session['entityRef']->getEntity();
+            $inventory = $entity?->get(InventoryComponent::class);
+            if ($inventory !== null && $inventory->add(new \pocketmine\core\component\ItemStack(ItemIds::RAW_FISH, 0, 1))) {
+                $this->syncInventoryContents($session['playerRef']->entityId);
+                $this->sendMessageTo($session['playerRef']->entityId, 'You caught a fish!');
+            }
+        } else {
+            $this->sendMessageTo($session['playerRef']->entityId, 'Nothing bit.');
+        }
+        $session['fishing'] = null;
+        $this->sessions[$addrKey] = $session;
+    }
+
+    private function castBobber(string $addrKey, array &$session): void {
+        $entity = $session['entityRef']->getEntity();
+        $pos = $entity?->get(PositionComponent::class);
+        $rot = $entity?->get(\pocketmine\core\component\RotationComponent::class);
+        $spawner = \pocketmine\Kernel::getInstance()?->getEntitySpawnService();
+        if ($pos === null || $rot === null || $spawner === null) {
+            return;
+        }
+        // Look direction from yaw/pitch (legacy yaw convention).
+        $yaw = deg2rad($rot->yaw);
+        $pitch = deg2rad($rot->pitch);
+        $dx = -sin($yaw) * cos($pitch);
+        $dy = -sin($pitch);
+        $dz = cos($yaw) * cos($pitch);
+
+        // Walk out up to 10 blocks looking for water; fall back to dry land.
+        $store = $this->getChunkStore($session['worldId']);
+        $landX = $pos->x + $dx * 10.0;
+        $landZ = $pos->z + $dz * 10.0;
+        $landY = $pos->y;
+        if ($store !== null) {
+            for ($t = 2.0; $t <= 10.0; $t += 0.5) {
+                $wx = (int)floor($pos->x + $dx * $t);
+                $wz = (int)floor($pos->z + $dz * $t);
+                if (!$store->isLoaded((int)floor($wx / 16), (int)floor($wz / 16))) {
+                    break;
+                }
+                for ($wy = (int)floor($pos->y) + 2; $wy >= (int)floor($pos->y) - 3; $wy--) {
+                    $b = $store->getBlock($wx, $wy, $wz);
+                    if ($b === BlockIds::WATER || $b === BlockIds::STILL_WATER) {
+                        $landX = $wx + 0.5; $landY = $wy + 0.8; $landZ = $wz + 0.5;
+                        break 2;
+                    }
+                    if ($b !== 0 && $wy < (int)floor($pos->y)) {
+                        $landX = $wx + 0.5; $landY = $wy + 1.2; $landZ = $wz + 0.5;
+                        break 2;
+                    }
+                }
+            }
+        }
+
+        $shooter = \pocketmine\core\ecs\EntityRef::create($entity->id, \pocketmine\Kernel::getInstance()->getWorld());
+        $bobber = $spawner->spawnProjectile(
+            \pocketmine\core\enum\EntityType::FishingHook,
+            $landX, $landY, $landZ, 0.0, 0.0, 0.0, $shooter,
+        );
+
+        $tick = $this->currentTick();
+        $session['fishing'] = [
+            'bobber' => $bobber->getId(),
+            'biteAt' => $tick + mt_rand(80, 300),
+            'bitten' => false,
+            'biteUntil' => 0,
+        ];
+        $this->sessions[$addrKey] = $session;
+    }
+
+    /**
+     * Per-tick fishing pass: announce bites with a splash once the wait
+     * elapses; keep re-arming until the player reels in or logs off.
+     */
+    private function processFishing(): void {
+        foreach ($this->sessions as $addrKey => $session) {
+            $fishing = $session['fishing'] ?? null;
+            if (!is_array($fishing)) {
+                continue;
+            }
+            $tick = $this->currentTick();
+            $bobber = \pocketmine\Kernel::getInstance()?->getWorld()->getEntity((int)$fishing['bobber']);
+            if ($bobber === null) {
+                $session['fishing'] = null;
+                $this->sessions[$addrKey] = $session;
+                continue;
+            }
+            if (empty($fishing['bitten']) && $tick >= (int)$fishing['biteAt']) {
+                // Mutate THROUGH the session array: $fishing is a copy, and
+                // only $session gets persisted below.
+                $session['fishing']['bitten'] = true;
+                $session['fishing']['biteUntil'] = $tick + 30;
+                $pos = $bobber->get(PositionComponent::class);
+                $wes = \pocketmine\Kernel::getInstance()?->getWorldEventService();
+                if ($wes !== null && $pos !== null) {
+                    $wes->playSound(
+                        (int)($session['worldId'] ?? 0),
+                        (int)floor($pos->x / 16), (int)floor($pos->z / 16),
+                        $pos->x, $pos->y, $pos->z,
+                        \pocketmine\core\service\WorldEventService::SOUND_SPLASH,
+                    );
+                }
+                $this->sendMessageTo($session['playerRef']->entityId, 'Something is biting...');
+            } elseif (!empty($fishing['bitten']) && $tick > (int)$fishing['biteUntil']) {
+                // The bite was missed: keep waiting for another one.
+                $session['fishing']['bitten'] = false;
+                $session['fishing']['biteAt'] = $tick + mt_rand(80, 300);
+            }
+            $this->sessions[$addrKey] = $session;
+        }
+    }
+
     private function handlePlayerAction(string $addrKey, PlayerActionPacket $pk): void {
         $session = $this->sessions[$addrKey] ?? null;
         if ($session === null) {
@@ -1888,6 +2123,12 @@ final class NetworkSessionService {
                 $this->activateItemFrame($addrKey, $session, $pk->x, $pk->y, $pk->z);
                 return;
             }
+            // Bug 9: right-clicking a bed sets the personal spawn point and,
+            // during the night, sleeps through to dawn.
+            if ($block === BlockIds::BED) {
+                $this->sleepInBed($addrKey, $session, $pk->x, $pk->y, $pk->z);
+                return;
+            }
 
             // --- Interactive block toggles (doors, buttons, levers, etc.) ---
             // These work with or without a held item.
@@ -1999,6 +2240,18 @@ final class NetworkSessionService {
         if ($held->itemId === ItemIds::BOW) {
             $session['bowDraw'] = $this->currentTick();
             $this->sessions[$addrKey] = $session;
+            return;
+        }
+        // Bug 8: buckets scoop the targeted liquid or place their own.
+        if ($held->itemId === ItemIds::BUCKET && $store !== null) {
+            if ($this->handleBucketUse($addrKey, $session, $pk, $held)) {
+                return;
+            }
+        }
+        // Bug 13: the fishing rod casts the bobber on first use and reels it
+        // (with the catch if a bite happened) on the next use.
+        if ($held->itemId === ItemIds::FISHING_ROD) {
+            $this->handleFishingRod($addrKey, $session);
             return;
         }
         // 14.23: throwables - snowball (332), egg (344) and splash potion
@@ -5447,9 +5700,15 @@ final class NetworkSessionService {
                 if ($pos === null) {
                     continue;
                 }
-                // Burning state (old-src DATA_FLAG_ONFIRE): sent on change so
-                // clients render flames; tracked alongside the position cache.
+                // Metadata flags byte (old-src DATA_FLAGS): bit 0 = on fire
+                // (FireComponent), bit 5 = invisible (spectators). Sent to
+                // viewers on change so clients render both states.
                 $onFire = ($entity->get(\pocketmine\core\component\FireComponent::class)?->ticks ?? 0) > 0;
+                // Spectator detection reads the gamemode metadata directly:
+                // only players carry GAMEMODE, so no player-tag lookup needed.
+                $pMeta = $entity->get(MetadataComponent::class);
+                $invisible = $pMeta !== null && GameMode::coerce($pMeta->get(MetadataKeys::GAMEMODE)) === GameMode::Spectator;
+                $flagsByte = ($onFire ? 0x01 : 0x00) | ($invisible ? 0x20 : 0x00);
                 if (!isset($known[$entityId])) {
                     $pk = $this->buildAddPacket($entityId, $entity, $playerSessions);
                     if ($pk !== null) {
@@ -5462,11 +5721,11 @@ final class NetworkSessionService {
                         if ($pk instanceof AddItemEntityPacket) {
                             $this->queuePacket($session['playerRef'], $this->buildEntityDataPacket($entityId, $this->legacyMetadataDefaults()));
                         }
-                        if ($onFire) {
-                            $this->queuePacket($session['playerRef'], $this->buildFireFlagPacket($entityId, true));
+                        if ($flagsByte !== 0) {
+                            $this->queuePacket($session['playerRef'], $this->buildFlagsDataPacket($entityId, $flagsByte));
                         }
                     }
-                    $known[$entityId] = [$pos->x, $pos->y, $pos->z, $onFire ? 1 : 0];
+                    $known[$entityId] = [$pos->x, $pos->y, $pos->z, $flagsByte];
                 } else {
                     $last = $known[$entityId];
                     $moved = abs($pos->x - $last[0]) > self::MOVE_EPSILON
@@ -5476,9 +5735,9 @@ final class NetworkSessionService {
                         $this->queuePacket($session['playerRef'], $this->buildMovePacket($entityId, $entity, $playerSessions));
                         $known[$entityId] = [$pos->x, $pos->y, $pos->z, $last[3]];
                     }
-                    if (($last[3] ? 1 : 0) !== ($onFire ? 1 : 0)) {
-                        $this->queuePacket($session['playerRef'], $this->buildFireFlagPacket($entityId, $onFire));
-                        $known[$entityId][3] = $onFire ? 1 : 0;
+                    if ((int)$last[3] !== $flagsByte) {
+                        $this->queuePacket($session['playerRef'], $this->buildFlagsDataPacket($entityId, $flagsByte));
+                        $known[$entityId][3] = $flagsByte;
                     }
                 }
             }
@@ -5677,13 +5936,12 @@ final class NetworkSessionService {
      * @return array<int, array{0: int, 1: mixed}>
      */
     /**
-     * Burning visual (old-src DATA_FLAGS bit DATA_FLAG_ONFIRE): a
-     * SetEntityDataPacket carrying just the flags byte with the fire bit
-     * set or cleared.
+     * Metadata flags byte (old-src DATA_FLAGS) for an entity: bit 0 on fire,
+     * bit 5 invisible (spectators).
      */
-    private function buildFireFlagPacket(int $entityId, bool $onFire): SetEntityDataPacket {
+    private function buildFlagsDataPacket(int $entityId, int $flags): SetEntityDataPacket {
         $meta = $this->legacyMetadataDefaults();
-        $meta[0] = [Binary::DATA_TYPE_BYTE, $onFire ? 0x01 : 0x00]; // DATA_FLAG_ONFIRE
+        $meta[0] = [Binary::DATA_TYPE_BYTE, $flags];
         return $this->buildEntityDataPacket($entityId, $meta);
     }
 
@@ -5984,7 +6242,10 @@ final class NetworkSessionService {
             if (!isset($session['chunksSent'][$key])) {
                 continue;
             }
-            $this->outbound[$this->addrKeyForPlayer($session['playerRef']) ?? ''][] = $packet;
+            // Routed through queuePacket (not raw outbound) so every outbound
+            // game packet fires the cancellable DataPacketSendEvent - the
+            // same invariant all other send paths follow.
+            $this->queuePacket($session['playerRef'], $packet);
         }
     }
 

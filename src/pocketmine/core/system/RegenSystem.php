@@ -92,6 +92,14 @@ final class RegenSystem implements System {
                 }
             }
             $health->current = min($health->max, $health->current + 1.0);
+            // old-src Human::entityBaseTick: every point of natural regen
+            // costs 3.0 exhaustion (PlayerExhaustEvent::CAUSE_HEALTH_REGEN) -
+            // healing consumes food, closing the survival loop. No-op for
+            // creative players (Hunger::exhaust gates internally).
+            \pocketmine\core\resource\Hunger::exhaust(
+                \pocketmine\core\ecs\EntityRef::create($entity->id, $world),
+                3.0,
+            );
             $this->lastRegenTick[$entity->id] = $this->tick;
         }
 

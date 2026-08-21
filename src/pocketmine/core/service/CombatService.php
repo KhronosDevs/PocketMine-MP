@@ -131,6 +131,13 @@ final class CombatService {
             }
         }
 
+        // Spectators take no damage from any source (legacy isSpectator
+        // semantics: untargetable, unhittable, untouchable).
+        $meta = $target->get(\pocketmine\core\component\MetadataComponent::class);
+        if ($meta !== null && GameMode::coerce($meta->get(MetadataKeys::GAMEMODE)) === GameMode::Spectator) {
+            return false;
+        }
+
         // Cancellable damage event: plugins can modify or cancel entirely.
         $event = new EntityDamageEvent(
             $this->wrapApiEntity($targetRef),

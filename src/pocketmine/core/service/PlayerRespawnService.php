@@ -85,12 +85,22 @@ final class PlayerRespawnService {
     private function teleportToSpawn(EntityRef $entityRef): void {
         $entity = $entityRef->getEntity();
         if (!$entity) return;
-        
+
+        // Personal spawn first: a player who slept in a bed respawns there
+        // (persisted in their metadata by sleepInBed). Falls back to the
+        // world spawn from the config - PlayerJoinService resolves that to a
+        // terrain-safe Y so respawn never lands inside a hill.
+        $meta = $entity->get(MetadataComponent::class);
+        $sx = $meta?->get('spawnX');
+        $sy = $meta?->get('spawnY');
+        $sz = $meta?->get('spawnZ');
+        if ($sx !== null && $sy !== null && $sz !== null) {
+            $entityRef->teleport((float)$sx, (float)$sy, (float)$sz, 0, 0);
+            return;
+        }
+
         $kernel = \pocketmine\Kernel::getInstance();
         $config = $kernel?->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
-        // PlayerJoinService::getWorldSpawn() resolves the config spawn to a
-        // terrain-safe Y (highest block + 1) on first join and persists it, so
-        // respawn lands on the same spot - never inside a hill.
         if ($config !== null) {
             $entityRef->teleport($config->spawnX, $config->spawnY, $config->spawnZ, 0, 0);
         }

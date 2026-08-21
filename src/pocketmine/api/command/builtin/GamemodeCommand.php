@@ -10,17 +10,18 @@ use pocketmine\core\constants\MetadataKeys;
 use pocketmine\core\enum\GameMode;
 
 /**
- * /gamemode <0|1|survival|creative> [player] — switches a player between
- * survival and creative. Gamemode lives on the entity's metadata (the same
- * field BlockBreakService / Hunger read for instant break and no food drain);
- * the client is flipped via an AdventureSettingsPacket.
+ * /gamemode <0|1|2|3|survival|creative|adventure|spectator> [player] —
+ * switches a player between survival, creative, adventure and spectator.
+ * Gamemode lives on the entity's metadata (the same field BlockBreakService /
+ * Hunger read for instant break and no food drain); the client is flipped via
+ * an AdventureSettingsPacket.
  */
 final class GamemodeCommand extends BuiltinCommand {
     public function __construct() {
         parent::__construct(
             'gamemode',
             'Change a player\'s gamemode',
-            '/gamemode <0|1|survival|creative> [player]',
+            '/gamemode <0|1|2|3|survival|creative|adventure|spectator> [player]',
             ['gm'],
             'khronos.command.gamemode',
         );
@@ -31,10 +32,12 @@ final class GamemodeCommand extends BuiltinCommand {
         $mode = match (strtolower($modeArg)) {
             '0', 'survival', 's' => GameMode::Survival,
             '1', 'creative', 'c' => GameMode::Creative,
+            '2', 'adventure', 'a' => GameMode::Adventure,
+            '3', 'spectator', 'sp' => GameMode::Spectator,
             default => null,
         };
         if ($mode === null) {
-            $sender->sendMessage("Unknown gamemode \"$modeArg\" - use 0/survival or 1/creative.");
+            $sender->sendMessage("Unknown gamemode \"$modeArg\" - use 0/survival, 1/creative, 2/adventure or 3/spectator.");
             return false;
         }
 
@@ -71,7 +74,13 @@ final class GamemodeCommand extends BuiltinCommand {
         $kernel->getNetworkSessionService()->sendGamemodeTo($targetId, $event->getNewGameMode());
 
         $name = $this->playerName($targetId);
-        $sender->sendMessage($mode === GameMode::Creative ? "$name is now in creative mode." : "$name is now in survival mode.");
+        $label = match ($mode) {
+            GameMode::Creative => 'creative',
+            GameMode::Adventure => 'adventure',
+            GameMode::Spectator => 'spectator',
+            default => 'survival',
+        };
+        $sender->sendMessage("$name is now in {$label} mode.");
         return true;
     }
 }

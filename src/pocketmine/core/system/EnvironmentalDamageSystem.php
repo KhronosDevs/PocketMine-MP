@@ -138,7 +138,10 @@ final class EnvironmentalDamageSystem implements System {
 
     private function isCreative(Entity $entity): bool {
         $meta = $entity->get(MetadataComponent::class);
-        return $meta !== null && GameMode::coerce($meta->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) === GameMode::Creative;
+        $mode = $meta !== null ? GameMode::coerce($meta->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) : GameMode::Survival;
+        // Spectators take no environmental damage either (legacy
+        // isSpectator semantics: fully detached from the world).
+        return $mode === GameMode::Creative || $mode === GameMode::Spectator;
     }
 
     /** Legacy setOnFire(): only ever extends the burn, never shortens it. */

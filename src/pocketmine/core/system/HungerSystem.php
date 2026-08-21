@@ -42,6 +42,12 @@ final class HungerSystem implements System {
             if (!$entity->has(PlayerTag::class)) {
                 continue;
             }
+            // Spectators neither drain food nor starve (vanilla: spectator is
+            // fully detached from the survival loop).
+            $meta = $entity->get(\pocketmine\core\component\MetadataComponent::class);
+            if ($meta !== null && \pocketmine\core\enum\GameMode::coerce($meta->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) === \pocketmine\core\enum\GameMode::Spectator) {
+                continue;
+            }
             $hunger = $entity->get(HungerComponent::class);
             $health = $entity->get(HealthComponent::class);
             if ($hunger === null) {

@@ -83,6 +83,11 @@ final class ArrowSystem implements System {
             if (!is_string($projectileType)) {
                 continue;
             }
+            // The fishing bobber is session-managed (cast/reel in
+            // NetworkSessionService) - it must float, not fly or despawn.
+            if ($projectileType === \pocketmine\core\enum\EntityType::FishingHook->value) {
+                continue;
+            }
             $projectile = $registry?->get($projectileType);
             if ($projectile === null) {
                 continue; // not a registered projectile - not ours to tick
