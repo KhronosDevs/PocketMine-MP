@@ -3426,6 +3426,95 @@ test('a dead player respawns via RespawnPacket (health restored, spawn burst sen
     ok($sawTeleport, 'MovePlayerPacket teleport (MODE_RESET) sent on respawn');
 });
 
+test('respawn re-centers the chunk stream on the destination (regression)', function () use ($kernel, $client): void {
+    $alice = null;
+    foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {
+        if ($p['username'] === 'Alice') {
+            $alice = $p;
+        }
+    }
+    if ($alice === null) {
+        ok(false, 'Alice is online');
+        return;
+    }
+    $aliceId = $alice['entityId'];
+
+    // Reach into the private session table: the bug lived entirely in the
+    // per-session chunk streaming state (lastChunkX/Z, chunkQueue,
+    // chunksSent), which no public API exposes.
+    $prop = new ReflectionProperty(\pocketmine\core\service\NetworkSessionService::class, 'sessions');
+    $prop->setAccessible(true);
+    $sessions = $prop->getValue($kernel->getNetworkSessionService());
+    $addrKey = null;
+    foreach ($sessions as $k => $s) {
+        if ($s['playerRef']->entityId === $aliceId) {
+            $addrKey = $k;
+        }
+    }
+    if ($addrKey === null) {
+        ok(false, 'Alice has a network session');
+        return;
+    }
+
+    // Simulate "died far from spawn": streaming state centered on a distant
+    // chunk column, its queue drained, and the destination area NOT in
+    // chunksSent (the client discarded those chunks while travelling).
+    $farX = 400;
+    $farZ = 400;
+    $sessions[$addrKey]['lastChunkX'] = (int)floor($farX / 16);
+    $sessions[$addrKey]['lastChunkZ'] = (int)floor($farZ / 16);
+    $sessions[$addrKey]['chunkQueue'] = [];
+    $sessions[$addrKey]['chunkQueueIndex'] = 0;
+    $prop->setValue($kernel->getNetworkSessionService(), $sessions);
+
+    // Kill + respawn through the real wire path. Alice logged in at spawn,
+    // so chunksSent already holds the spawn area - exactly the stale-mark
+    // scenario (client discarded them while away, server believes they are
+    // delivered). The respawn must resend them anyway.
+    $aliceRef = \pocketmine\core\ecs\EntityRef::create($aliceId, $kernel->getWorld());
+    $kernel->getCombatService()->kill($aliceRef);
+    $kernel->run(1);
+    $client->readGamePackets();
+    $respawn = new \pocketmine\protocol\RespawnPacket();
+    $respawn->x = 0.0;
+    $respawn->y = 0.0;
+    $respawn->z = 0.0;
+    $client->sendGamePacket($respawn);
+
+    $config = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
+    $spawnCX = (int)floor((float)$config->spawnX / 16);
+    $spawnCZ = (int)floor((float)$config->spawnZ / 16);
+
+    // Watch the wire for the spawn chunk's FullChunkDataPacket while the
+    // post-respawn stream drains.
+    $sawSpawnChunkPacket = false;
+    $deadline = microtime(true) + 10.0;
+    do {
+        $kernel->run(1);
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::FULL_CHUNK_DATA_PACKET) {
+                $s = new BinaryStream($buffer, 1);
+                if ($s->getInt() === $spawnCX && $s->getInt() === $spawnCZ) {
+                    $sawSpawnChunkPacket = true;
+                }
+            }
+        }
+        $health = $kernel->getWorld()->getEntity($aliceId)?->get(\pocketmine\core\component\HealthComponent::class);
+        usleep(10000);
+    } while (microtime(true) < $deadline && ($health === null || $health->current < $health->max || !$sawSpawnChunkPacket));
+    ok($health !== null && $health->current >= $health->max, 'Alice respawned');
+
+    $sessions = $prop->getValue($kernel->getNetworkSessionService());
+    $sess = $sessions[$addrKey];
+
+    ok($sess['lastChunkX'] === $spawnCX && $sess['lastChunkZ'] === $spawnCZ,
+        'lastChunkX/Z re-centered on the spawn chunk');
+    ok($sess['chunkQueue'] !== [] && $sess['chunkQueue'][0] === [$spawnCX, $spawnCZ],
+        'chunk queue rebuilt around the spawn chunk (closest first)');
+    ok($sawSpawnChunkPacket,
+        'spawn chunk re-sent after respawn despite being marked sent pre-respawn');
+});
+
 test('DIAG: second kill after respawn re-triggers death packets', function () use ($client, $kernel): void {
     $alice = null;
     foreach ($kernel->getNetworkSessionService()->getOnlinePlayers() as $p) {

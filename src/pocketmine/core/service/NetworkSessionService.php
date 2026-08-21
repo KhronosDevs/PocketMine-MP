@@ -4252,6 +4252,23 @@ final class NetworkSessionService {
         // converging moves so they are not misread as a speed/fly hack.
         $this->sessions[$addrKey]['teleportGraceTicks'] = 3;
 
+        // Respawn chunk sync: the teleport above can land far outside the
+        // area the client currently has rendered (death spot != spawn). The
+        // chunk queue must be rebuilt around the destination NOW - waiting
+        // for the first post-respawn move packet leaves the client falling
+        // through void terrain that was never queued. Also drop the
+        // destination radius from chunksSent: the client discards chunks
+        // beyond its view distance while travelling, so "sent at login" no
+        // means "the client still has it". Mirrors sendTeleportTo().
+        $destChunkX = (int)floor(($pos?->x ?? 0.0) / 16);
+        $destChunkZ = (int)floor(($pos?->z ?? 0.0) / 16);
+        for ($dx = -$session['radius']; $dx <= $session['radius']; $dx++) {
+            for ($dz = -$session['radius']; $dz <= $session['radius']; $dz++) {
+                unset($this->sessions[$addrKey]['chunksSent'][($destChunkX + $dx) . ',' . ($destChunkZ + $dz)]);
+            }
+        }
+        $this->queueChunks($addrKey);
+
         // Reset the HUD health bar (the per-tick pass also catches the jump).
         $hp = new SetHealthPacket();
         $hp->health = (int)($health?->current ?? 20);
