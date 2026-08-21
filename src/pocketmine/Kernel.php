@@ -1771,7 +1771,7 @@ function createKernel(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): 
     // mirrored into the WorldConfig display name.
     applyKhronosConfig($resourceRegistry, $khronosConfig);
 
-    return new Kernel(
+    $kernel = new Kernel(
         $networkPort,
         $storagePort,
         $worldGenPort,
@@ -1787,6 +1787,16 @@ function createKernel(int $regionCount = 1, ?int $maxEntitiesPerRegion = null): 
         $maxEntitiesPerRegion,
         $khronosConfig->maxLoadedChunks,
     );
+
+    // Pipeline: khronos.json toggles the experimental region pipeline.
+    if ($khronosConfig->pipelineEnabled) {
+        $kernel->setRegionPipelineEnabled(true);
+    }
+    if ($khronosConfig->pipelineApplyMode) {
+        $kernel->setRegionPipelineApplyMode(true);
+    }
+
+    return $kernel;
 }
 
 function createThreadingPort(): ThreadingPort {
@@ -1994,6 +2004,7 @@ function registerBuiltinComponents(ComponentRegistry $registry): void {
     $registry->register(\pocketmine\core\component\tags\InvisibleTag::class);
     $registry->register(\pocketmine\core\component\tags\DeadTag::class);
     $registry->register(\pocketmine\core\component\tags\SpectatorTag::class);
+    $registry->register(\pocketmine\core\component\DragComponent::class);
 }
 
 function registerBuiltinResources(ResourceRegistry $registry): void {

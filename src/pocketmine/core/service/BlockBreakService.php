@@ -284,6 +284,7 @@ final class BlockBreakService {
                 ->with(new \pocketmine\core\component\CollisionComponent(width: 0.25, height: 0.25))
                 ->with(new \pocketmine\core\component\WorldComponent($worldId))
                 ->withTag(\pocketmine\core\constants\EntityTags::ITEM)
+                ->with(new \pocketmine\core\component\DragComponent())
         );
 
         // A drop is only visible/pickup-able once its item is in the

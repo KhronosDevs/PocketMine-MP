@@ -137,6 +137,7 @@ final class EntitySpawnService {
                 ->with(new CollisionComponent(width: 0.25, height: 0.25))
                 ->with(new \pocketmine\core\component\WorldComponent($worldId))
                 ->withTag(\pocketmine\core\constants\EntityTags::ITEM)
+                ->with(new \pocketmine\core\component\DragComponent())
 
         );
 

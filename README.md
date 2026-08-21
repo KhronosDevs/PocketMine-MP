@@ -79,6 +79,42 @@ The server uses two config files — edit and restart to apply:
 
 Restart the server after editing either config file.
 
+### Region pipeline (experimental)
+
+The region pipeline offloads entity movement+gravity simulation to worker threads, dramatically improving performance with many entities:
+
+| Entities | Main thread only | Pipeline apply |
+|---:|---:|---:|
+| 1,000 | 1.67 ms | ~1 ms |
+| 5,000 | 8.25 ms | ~1.7 ms |
+| 10,000 | 16.77 ms | 3.69 ms |
+
+Enable in `khronos.json`:
+
+```json
+{
+    "pipeline": {
+        "enabled": true,
+        "apply-mode": true
+    }
+}
+```
+
+| Key | Default | Description |
+|---|---|---|
+| `pipeline.enabled` | `false` | Enable the region pipeline. Workers mirror entity snapshots each tick. |
+| `pipeline.apply-mode` | `false` | Workers are authoritative for movement+gravity. Requires `enabled: true`. |
+
+**How it works:**
+- **Gate mode** (`enabled: true, apply-mode: false`): Main thread still simulates. Workers independently simulate the same entities and results are compared for determinism. Use this to verify correctness before enabling apply mode.
+- **Apply mode** (`enabled: true, apply-mode: true`): Workers are authoritative. The main thread's `MovementSystem` and `PhysicsSystem` are disabled. Workers integrate position/velocity and the main thread applies results.
+
+**When to use:**
+- Servers with many mobs (500+): pipeline prevents entity simulation from eating into the 50ms tick budget
+- Servers with few entities: leave it off — the overhead of mirroring snapshots isn't worth it
+
+**Stability:** The pipeline passes all existing tests with 0 determinism mismatches. It is experimental — enable it and monitor for issues. If you see entity position glitches, disable it and report the issue.
+
 ## Building a phar
 
 The server can be compiled into a single portable `PocketMine-MP.phar` file for easy distribution.

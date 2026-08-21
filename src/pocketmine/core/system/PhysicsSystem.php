@@ -6,6 +6,7 @@ namespace pocketmine\core\system;
 
 use pocketmine\adapter\driven\threading\ArchetypeSnapshot;
 use pocketmine\adapter\driven\threading\ParallelResult;
+use pocketmine\core\component\DragComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\component\tags\OnGroundTag;
@@ -55,10 +56,16 @@ final class PhysicsSystem implements ParallelSystem {
                 $newVelY = 0;
             }
 
-            // Air drag (old-src Item drag = 0.02, friction = 0.98/tick).
-            $drag = 0.98;
-            $newVelX = $velocity->x * $drag;
-            $newVelZ = $velocity->z * $drag;
+            // Air drag: only applied to entities with DragComponent (items).
+            // old-src Item drag = 0.02, friction = 0.98/tick.
+            if ($archetype->hasComponentType(DragComponent::class)) {
+                $drag = 0.98;
+                $newVelX = $velocity->x * $drag;
+                $newVelZ = $velocity->z * $drag;
+            } else {
+                $newVelX = $velocity->x;
+                $newVelZ = $velocity->z;
+            }
 
             // When all axes are nearly still, snap to zero so items
             // stop on the ground instead of sliding forever.
@@ -116,7 +123,7 @@ final class PhysicsSystem implements ParallelSystem {
             $n++;
         }
 
-        return ArchetypeSnapshot::fromPayload([
+        $snap = ArchetypeSnapshot::fromPayload([
             'positionsX' => $px,
             'positionsY' => $py,
             'positionsZ' => $pz,
@@ -124,6 +131,8 @@ final class PhysicsSystem implements ParallelSystem {
             'velocitiesY' => $vy,
             'velocitiesZ' => $vz,
         ], $n, $deltaTime);
+        $snap->hasDrag = $archetype->hasComponentType(DragComponent::class);
+        return $snap;
     }
 
     /**
@@ -198,15 +207,21 @@ final class PhysicsSystem implements ParallelSystem {
                 $newVelY = 0;
             }
 
-            // Air drag + snap-to-zero when nearly still.
-            $drag = 0.98;
-            $newVelX = $vx[$i] * $drag;
-            $newVelZ = $vz[$i] * $drag;
-            if (abs($newVelX) < 0.05 && abs($newVelZ) < 0.05
-                && abs($newVelY) < 0.05) {
-                $newVelX = 0.0;
-                $newVelY = 0.0;
-                $newVelZ = 0.0;
+            // Air drag: only for entities with DragComponent (items).
+            if ($snap->hasDrag) {
+                $drag = 0.98;
+                $newVelX = $vx[$i] * $drag;
+                $newVelZ = $vz[$i] * $drag;
+                // Snap-to-zero when nearly still so items stop on the ground.
+                if (abs($newVelX) < 0.05 && abs($newVelZ) < 0.05
+                    && abs($newVelY) < 0.05) {
+                    $newVelX = 0.0;
+                    $newVelY = 0.0;
+                    $newVelZ = 0.0;
+                }
+            } else {
+                $newVelX = $vx[$i];
+                $newVelZ = $vz[$i];
             }
 
             $outPX[] = $newX;

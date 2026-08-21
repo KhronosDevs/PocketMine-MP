@@ -19,6 +19,7 @@ final class ArchetypeSnapshot extends ThreadSafe {
     public string $data = '';
     public int $count = 0;
     public float $deltaTime = 0.0;
+    public bool $hasDrag = false;
 
     /**
      * @param array{positionsX: float[], positionsY: float[], positionsZ: float[], velocitiesX: float[], velocitiesY: float[], velocitiesZ: float[]} $payload

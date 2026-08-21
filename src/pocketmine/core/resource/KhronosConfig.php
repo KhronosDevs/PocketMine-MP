@@ -148,6 +148,25 @@ final class KhronosConfig {
      */
     public bool $nativeAccelEnabled = true;
 
+    // --- Region pipeline (experimental) -----------------------------------
+
+    /**
+     * Enable the region pipeline: offload entity movement+gravity to worker
+     * threads. When false, all simulation runs on the main thread (safe,
+     * default). When true, the kernel mirrors entity snapshots to workers
+     * each tick and merges results back.
+     */
+    public bool $pipelineEnabled = false;
+
+    /**
+     * Apply mode: when true AND pipelineEnabled is true, worker threads are
+     * authoritative for movement+gravity — the main thread's MovementSystem
+     * and PhysicsSystem are disabled. When false (gate mode), the main thread
+     * still simulates and worker results are only compared for determinism.
+     * Only enable after confirming zero mismatches in gate mode.
+     */
+    public bool $pipelineApplyMode = false;
+
     // --- Anti-cheat (Blocker 2) --------------------------------------------
 
     /** Master switch: when false, movement validation is disabled entirely. */
@@ -243,6 +262,16 @@ final class KhronosConfig {
         $na = $data['native-accel'] ?? null;
         if (is_array($na) && array_key_exists('enabled', $na) && is_bool($na['enabled'])) {
             $this->nativeAccelEnabled = $na['enabled'];
+        }
+
+        $pipeline = $data['pipeline'] ?? null;
+        if (is_array($pipeline)) {
+            if (array_key_exists('enabled', $pipeline) && is_bool($pipeline['enabled'])) {
+                $this->pipelineEnabled = $pipeline['enabled'];
+            }
+            if (array_key_exists('apply-mode', $pipeline) && is_bool($pipeline['apply-mode'])) {
+                $this->pipelineApplyMode = $pipeline['apply-mode'];
+            }
         }
 
         $cs = $data['chunk-streaming'] ?? null;
@@ -380,6 +409,15 @@ final class KhronosConfig {
             //               Set to e.g. "1G" or "256M" to override.
             'port' => null,
             'memory-limit' => null,
+
+            // Region pipeline: offload entity movement+gravity to worker
+            // threads. Experimental — enable after confirming zero mismatches
+            // in gate mode. apply-mode makes workers authoritative (disables
+            // main-thread MovementSystem + PhysicsSystem).
+            'pipeline' => [
+                'enabled' => false,
+                'apply-mode' => false,
+            ],
 
             'chunk-streaming' => [
                 'compression-level' => 2,    // 1-9: lower=faster CPU, larger packets
