@@ -36,5 +36,6 @@ final class BuiltinCommands {
         $port->register(new PardonIpCommand());
         $port->register(new WhitelistCommand());
         $port->register(new PluginsCommand());
+        $port->register(new StatusCommand());
     }
 }
