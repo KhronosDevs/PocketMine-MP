@@ -221,6 +221,10 @@ final class ChunkLoadService {
             if ($tileEntityStore !== null) {
                 $tileEntityStore->restoreFromSnapshots($chunkData->tileEntities);
             }
+            // Bug 35: restore dropped items / XP orbs from entity snapshots.
+            foreach ($chunkData->entities as $snapshot) {
+                $this->restoreEntityFromSnapshot($worldId, $snapshot);
+            }
             if (!$this->isEmptyChunk($chunkData)) {
                 $store->markGenerated($chunkX, $chunkZ);
                 // Generated chunks are populated once the population pass ran
@@ -377,6 +381,41 @@ final class ChunkLoadService {
         }
         $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\BrewingStore::class);
         return $store instanceof \pocketmine\core\resource\BrewingStore ? $store : null;
+    }
+
+    /**
+     * Bug 35: recreate a dropped item or XP orb from its EntitySnapshot.
+     * Uses ComponentSerializer::deserialize for the ITEM metadata so the
+     * full ItemStack (id/meta/count/nbt incl. enchantments) is restored.
+     */
+    private function restoreEntityFromSnapshot(int $worldId, \pocketmine\port\driven\EntitySnapshot $snapshot): void {
+        if ($snapshot->type === 'item') {
+            $itemData = $snapshot->components[\pocketmine\core\component\MetadataComponent::class]['ITEM'] ?? null;
+            $stack = null;
+            if (is_array($itemData)) {
+                $itemId = (int)($itemData['itemId'] ?? 0);
+                $stackMeta = (int)($itemData['meta'] ?? 0);
+                $count = (int)($itemData['count'] ?? 1);
+                if ($itemId > 0 && $count > 0) {
+                    $nbt = $itemData['nbt'] ?? null;
+                    $stack = new \pocketmine\core\component\ItemStack($itemId, $stackMeta, $count, is_array($nbt) ? $nbt : null);
+                }
+            }
+            if ($stack === null || $stack->count <= 0) {
+                return;
+            }
+            $spawner = \pocketmine\Kernel::getInstance()?->getEntitySpawnService();
+            if ($spawner !== null) {
+                $spawner->spawnItem($snapshot->x, $snapshot->y, $snapshot->z, $stack, $worldId);
+            }
+        } elseif ($snapshot->type === 'xp_orb') {
+            $xpAmount = (int)($snapshot->components[\pocketmine\core\component\MetadataComponent::class]['xp'] ?? 0);
+            if ($xpAmount <= 0) {
+                return;
+            }
+            $spawnService = \pocketmine\Kernel::getInstance()?->getEntitySpawnService();
+            $spawnService?->spawnEntity(\pocketmine\core\enum\EntityType::from(\pocketmine\core\constants\EntityTags::XP_ORB), $snapshot->x, $snapshot->y, $snapshot->z, 0, 0, ['entityType' => 'XPOrb', 'xp' => $xpAmount], $worldId);
+        }
     }
 
     private function getTileEntityStore(int $worldId = 0): ?\pocketmine\core\resource\TileEntityStore {
