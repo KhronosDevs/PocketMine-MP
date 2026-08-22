@@ -360,4 +360,39 @@ test('mobs carry drag so knockback decays instead of sliding forever', function 
     }
 });
 
+test('destroying a vehicle by damage returns its item (never lost)', function () use ($world, $kernel, $combat): void {
+    foreach ([\pocketmine\core\enum\EntityType::Boat, \pocketmine\core\enum\EntityType::Minecart] as $type) {
+        $vehicle = $kernel->getEntitySpawnService()->spawnVehicle($type, 150.5, 65, 150.5);
+        ok($vehicle->getEntity()?->get(HealthComponent::class) !== null, "{$type->value} has health (damageable)");
+
+        same(true, $combat->applyDamage($vehicle, 100.0), "{$type->value} destroyed by damage");
+        flushWorld($world);
+        ok(!$vehicle->isValid(), "{$type->value} entity despawned after death");
+
+        // Exactly one item entity: the vehicle's own item back.
+        $found = null;
+        $extra = 0;
+        foreach ($world->getEntities() as $entity) {
+            if (isset($entity->getComponents()['item'])) {
+                $meta = $entity->get(MetadataComponent::class)?->get(\pocketmine\core\constants\MetadataKeys::ITEM);
+                $stack = $meta instanceof ItemStack ? $meta : null;
+                if ($stack !== null && in_array($stack->itemId, [\pocketmine\core\constants\ItemIds::BOAT, \pocketmine\core\constants\ItemIds::MINECART], true)) {
+                    $found = $stack;
+                } else {
+                    $extra++;
+                }
+            }
+        }
+        ok($found !== null, "{$type->value} item dropped on destruction");
+        if ($found !== null) {
+            same(1, $found->count, 'exactly one vehicle item returned');
+        }
+
+        foreach ($world->getEntities() as $entity) {
+            $world->despawn($entity);
+        }
+        flushWorld($world);
+    }
+});
+
 exit(runTests());

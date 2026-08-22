@@ -65,6 +65,11 @@ final class CombatService {
         EntityType::Wolf->value => [],
         EntityType::IronGolem->value => [[ItemIds::IRON_INGOT, 3, 5, 1.0]],
         EntityType::SnowGolem->value => [[ItemIds::SNOWBALL, 0, 15, 1.0]],
+        // Vehicles return their item when destroyed by damage (legacy: boats
+        // / minecarts drop themselves on death - the normal way to "pick
+        // them back up"). Always exactly 1, never random.
+        EntityType::Boat->value => [[ItemIds::BOAT, 1, 1, 1.0]],
+        EntityType::Minecart->value => [[ItemIds::MINECART, 1, 1, 1.0]],
     ];
 
     public function __construct(

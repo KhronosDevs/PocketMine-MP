@@ -106,6 +106,7 @@ final class ItemIds {
     // Misc
     public const BUCKET = 325;
     public const FISHING_ROD = 346;
+    public const SHEARS = 359;
     public const BLAZE_ROD = 369;
     public const SIGN = 323;
     public const ITEM_FRAME = 389;
