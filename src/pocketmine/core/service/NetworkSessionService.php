@@ -5967,6 +5967,10 @@ final class NetworkSessionService {
                 // only players carry GAMEMODE, so no player-tag lookup needed.
                 $pMeta = $entity->get(MetadataComponent::class);
                 $invisible = $pMeta !== null && GameMode::coerce($pMeta->get(MetadataKeys::GAMEMODE)) === GameMode::Spectator;
+                // Bug 30: Invisibility potion effect also sets DATA_FLAG_INVISIBLE.
+                if ($entity->get(\pocketmine\core\component\EffectComponent::class)?->get(14) !== null) {
+                    $invisible = true;
+                }
                 $flagsByte = ($onFire ? 0x01 : 0x00) | ($invisible ? 0x20 : 0x00);
                 if (!isset($known[$entityId])) {
                     $pk = $this->buildAddPacket($entityId, $entity, $playerSessions);
