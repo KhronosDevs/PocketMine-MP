@@ -5971,7 +5971,13 @@ final class NetworkSessionService {
                 if ($entity->get(\pocketmine\core\component\EffectComponent::class)?->get(14) !== null) {
                     $invisible = true;
                 }
-                $flagsByte = ($onFire ? 0x01 : 0x00) | ($invisible ? 0x20 : 0x00);
+                // Bug: sneak state and head rotation weren't broadcast to
+                // other viewers — sneak because the flags byte didn't include
+                // the sneak bit, rotation because known[] only tracked x/y/z.
+                $sneaking = $pMeta !== null && (bool)$pMeta->get(\pocketmine\core\constants\MetadataKeys::SNEAKING, false);
+                $flagsByte |= ($sneaking ? 0x02 : 0x00); // DATA_FLAG_SNEAKING
+                $yaw = $entity->get(\pocketmine\core\component\RotationComponent::class)?->yaw ?? 0.0;
+                $flagsByte = ($onFire ? 0x01 : 0x00) | ($invisible ? 0x20 : 0x00) | ($sneaking ? 0x02 : 0x00);
                 if (!isset($known[$entityId])) {
                     $pk = $this->buildAddPacket($entityId, $entity, $playerSessions);
                     if ($pk !== null) {
@@ -5988,17 +5994,25 @@ final class NetworkSessionService {
                             $this->queuePacket($session['playerRef'], $this->buildFlagsDataPacket($entityId, $flagsByte));
                         }
                     }
-                    $known[$entityId] = [$pos->x, $pos->y, $pos->z, $flagsByte];
+                    $known[$entityId] = [$pos->x, $pos->y, $pos->z, $flagsByte, $yaw];
                 } else {
                     $last = $known[$entityId];
                     $moved = abs($pos->x - $last[0]) > self::MOVE_EPSILON
                         || abs($pos->y - $last[1]) > self::MOVE_EPSILON
                         || abs($pos->z - $last[2]) > self::MOVE_EPSILON;
-                    if ($moved) {
+                    // Bug: rotation-only changes (camera/head turn) were
+                    // never broadcast because the moved check only compared
+                    // x/y/z. Track yaw so look-around is relayed too.
+                    $curRotObj = $entity->get(\pocketmine\core\component\RotationComponent::class);
+                    $rotChanged = isset($last[4]) && (
+                        abs(($curRotObj?->yaw ?? 0.0) - ($last[4] ?? 0.0)) > 1.0
+                        || abs(($curRotObj?->pitch ?? 0.0) - ($last[5] ?? 0.0)) > 1.0
+                    );
+                    if ($moved || $rotChanged) {
                         $this->queuePacket($session['playerRef'], $this->buildMovePacket($entityId, $entity, $playerSessions));
-                        $known[$entityId] = [$pos->x, $pos->y, $pos->z, $last[3]];
+                        $known[$entityId] = [$pos->x, $pos->y, $pos->z, $last[3], $curRotObj?->yaw ?? 0.0, $curRotObj?->pitch ?? 0.0];
                     }
-                    if ((int)$last[3] !== $flagsByte) {
+                    if ((int)($last[3] ?? 0) !== $flagsByte) {
                         $this->queuePacket($session['playerRef'], $this->buildFlagsDataPacket($entityId, $flagsByte));
                         $known[$entityId][3] = $flagsByte;
                     }
