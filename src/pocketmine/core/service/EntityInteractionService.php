@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\core\service;
 
+use pocketmine\core\component\InventoryComponent;
 use pocketmine\core\component\ItemStack;
 use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
@@ -64,8 +65,55 @@ final class EntityInteractionService {
             'Animal' => $this->interactWithAnimal($playerRef, $targetRef),
             // Bug 8: milking a cow with an empty bucket gives a milk bucket.
             'Cow' => $this->milkCow($playerRef, $targetRef),
+            // Bug 15: shears on a sheep drop its wool (right-click with
+            // shears); the fleece regrows after a while.
+            'Sheep' => $this->shearSheep($playerRef, $targetRef),
             default => $this->defaultInteraction($playerRef, $targetRef),
         };
+    }
+
+    /**
+     * Bug 15: shearing. Right-clicking a sheep while holding shears drops
+     * 1-3 wool at the sheep's position and marks it shorn; the fleece
+     * regrows after SHEEP_WOOL_REGROW_TICKS. Wears the shears (legacy tool
+     * durability). Returns false when the sheep is already shorn or the
+     * held item is not shears.
+     */
+    private function shearSheep(EntityRef $playerRef, EntityRef $targetRef): bool {
+        $player = $playerRef->getEntity();
+        $sheep = $targetRef->getEntity();
+        if (!$player || !$sheep) return false;
+
+        // Only shears in hand shear; anything else falls through as a no-op.
+        $inventory = $player->get(InventoryComponent::class);
+        if (!$inventory) return false;
+        $held = $inventory->get($inventory->heldSlot);
+        if ($held === null || $held->itemId !== \pocketmine\core\constants\ItemIds::SHEARS) {
+            return false;
+        }
+
+        $sheepMeta = $sheep->get(MetadataComponent::class);
+        if ($sheepMeta !== null && $sheepMeta->get('shorn')) {
+            return false; // fleece not regrown yet
+        }
+
+        // Drop 1-3 wool at the sheep.
+        $spawner = \pocketmine\Kernel::getInstance()?->getEntitySpawnService();
+        $pos = $sheep->get(PositionComponent::class);
+        if ($spawner !== null && $pos !== null) {
+            $count = mt_rand(1, 3);
+            for ($i = 0; $i < $count; $i++) {
+                $spawner->spawnItem($pos->x + (mt_rand(-5, 5) / 10), $pos->y + 0.5, $pos->z + (mt_rand(-5, 5) / 10),
+                    new ItemStack(35, 0, 1)); // white wool
+            }
+        }
+        if ($sheepMeta !== null) {
+            $tick = \pocketmine\Kernel::getInstance()?->getResourceRegistry()?->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0;
+            $sheepMeta->set('shorn', true);
+            $sheepMeta->set('shornAt', $tick);
+        }
+        ItemDurability::consume($playerRef);
+        return true;
     }
 
     /**

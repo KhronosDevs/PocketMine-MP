@@ -71,6 +71,13 @@ final class AISystem implements System {
 
             $hostile = (bool)$meta->get(\pocketmine\core\constants\MetadataKeys::HOSTILE, false);
 
+            // Shorn sheep regrow their fleece after ~60s (vanilla-lite: the
+            // original ate grass to regrow; a timer keeps it simple).
+            if ($meta->get('shorn') && ($tick = \pocketmine\Kernel::getInstance()?->getResourceRegistry()?->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0) - (int)($meta->get('shornAt', 0)) >= 1200) {
+                $meta->remove('shorn');
+                $meta->remove('shornAt');
+            }
+
             // Validate the current target: gone, dead, or out of follow range.
             if ($ai->targetEntity !== null) {
                 $target = $world->getEntity($ai->targetEntity);
