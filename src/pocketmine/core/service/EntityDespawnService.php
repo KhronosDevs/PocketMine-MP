@@ -84,9 +84,25 @@ final class EntityDespawnService {
         }
     }
 
+    /**
+     * Despawn hostile mobs that haven't had their AI state change in
+     * $maxInactiveTicks. A mob stuck against a wall or in an unreachable
+     * spot keeps the same AI state forever — this catches those so they
+     * don't permanently occupy spawn budget.
+     */
     public function despawnInactiveEntities(int $maxInactiveTicks = 600): void {
-        // Despawn entities that haven't been updated in a while
-        // This would track last update time in metadata
+        foreach ($this->world->getEntities() as $entity) {
+            if ($entity->has(\pocketmine\core\component\tags\PlayerTag::class)) {
+                continue;
+            }
+            $ai = $entity->get(\pocketmine\core\component\AIStateComponent::class);
+            if ($ai === null) {
+                continue;
+            }
+            if ($ai->updateCounter >= $maxInactiveTicks) {
+                $this->despawn(\pocketmine\core\ecs\EntityRef::create($entity->id, $this->world), false);
+            }
+        }
     }
 
     /**
