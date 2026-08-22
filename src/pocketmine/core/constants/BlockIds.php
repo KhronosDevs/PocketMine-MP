@@ -15,6 +15,7 @@ final class BlockIds {
     public const GRASS = 2;
     public const DIRT = 3;
     public const COBBLESTONE = 4;
+    public const WOOL = 35;
     public const BEDROCK = 7;
     public const BED = 26;
     public const WATER = 8;
