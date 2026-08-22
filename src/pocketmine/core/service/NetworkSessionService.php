@@ -923,11 +923,12 @@ final class NetworkSessionService {
             return;
         }
 
-        // Disambiguate duplicate usernames with a numeric suffix.
-        $base = $username;
-        $suffix = 1;
-        while ($this->usernameTaken($username)) {
-            $username = $base . $suffix++;
+        // Duplicate username check (case-insensitive): reject rather than
+        // auto-rename, matching vanilla/most servers. The joining client sees
+        // a clear kick message; the existing session is untouched.
+        if ($this->usernameTaken($username)) {
+            $this->disconnectLogin($addrKey, 'That name is already in use.');
+            return;
         }
 
         // Join first: the ECS entity (and its entity id) is created here.
@@ -6592,7 +6593,7 @@ final class NetworkSessionService {
 
     private function usernameTaken(string $username): bool {
         foreach ($this->sessions as $session) {
-            if ($session['username'] === $username) {
+            if (strcasecmp($session['username'], $username) === 0) {
                 return true;
             }
         }
