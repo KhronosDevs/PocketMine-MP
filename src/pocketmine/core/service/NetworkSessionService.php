@@ -6366,6 +6366,19 @@ final class NetworkSessionService {
             return;
         }
         foreach ($this->allTilesInChunk($tiles, $chunkX, $chunkZ) as [$x, $y, $z]) {
+            // Bug 23: paintings ride AddPaintingPacket instead of tile data.
+            $painting = $tiles->getPainting($x, $y, $z);
+            if ($painting !== null) {
+                $ppk = new AddPaintingPacket();
+                $ppk->eid = $this->nextPaintingEid();
+                $ppk->x = $x;
+                $ppk->y = $y;
+                $ppk->z = $z;
+                $ppk->direction = $painting['direction'];
+                $ppk->title = $painting['title'];
+                $this->queuePacket($player, $ppk);
+                continue;
+            }
             $payload = $this->tileEntityPayload($x, $y, $z, $worldId);
             if ($payload === null) {
                 continue;
@@ -6386,19 +6399,6 @@ final class NetworkSessionService {
         $out = [];
         foreach ($tiles->snapshotsForChunk($chunkX, $chunkZ) as $snapshot) {
             $out[] = [$snapshot->x, $snapshot->y, $snapshot->z];
-            // Bug 23: paintings re-announce themselves as their chunk streams
-            // (they are not BlockEntityData tiles on the wire - they ride
-            // AddPaintingPacket).
-            if ($snapshot->type === TileEntityStore::TILE_PAINTING) {
-                $pk = new AddPaintingPacket();
-                $pk->eid = $this->nextPaintingEid();
-                $pk->x = $snapshot->x;
-                $pk->y = $snapshot->y;
-                $pk->z = $snapshot->z;
-                $pk->direction = (int)($snapshot->data['direction'] ?? 0);
-                $pk->title = (string)($snapshot->data['title'] ?? 'Kebab');
-                $this->queuePacket($player, $pk);
-            }
         }
         return $out;
     }
