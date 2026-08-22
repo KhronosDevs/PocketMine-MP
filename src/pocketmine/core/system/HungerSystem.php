@@ -56,7 +56,13 @@ final class HungerSystem implements System {
             $alive[$entity->id] = true;
 
             // Passive drain plus whatever the action hooks added.
-            $hunger->exhaustion = min(Hunger::DRAIN_THRESHOLD, $hunger->exhaustion + self::PASSIVE_EXHAUSTION);
+            // Bug 30: Hunger effect multiplies exhaustion accumulation.
+            $hungerMult = 1.0;
+            $fx = $entity->get(\pocketmine\core\component\EffectComponent::class);
+            if ($fx !== null && $fx->get(17) !== null) { // EFFECT_HUNGER
+                $hungerMult = 1.0 + 0.5 * ($fx->get(17)->amplifier + 1);
+            }
+            $hunger->exhaustion = min(Hunger::DRAIN_THRESHOLD, $hunger->exhaustion + self::PASSIVE_EXHAUSTION * $hungerMult);
             while ($hunger->exhaustion >= Hunger::DRAIN_THRESHOLD) {
                 $hunger->exhaustion -= Hunger::DRAIN_THRESHOLD;
                 if ($hunger->saturation > 0.0) {

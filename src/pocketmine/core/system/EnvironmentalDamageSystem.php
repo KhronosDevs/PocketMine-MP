@@ -94,16 +94,18 @@ final class EnvironmentalDamageSystem implements System {
             $bodyBlock = $store->getBlock($fx, $feet + 1, $fz);
 
             // --- Lava: body or feet inside lava --------------------------
+            // Bug 30: Fire Resistance effect skips lava/fire/burning damage.
+            $fireRes = $effects?->get(12) !== null; // EFFECT_FIRE_RESISTANCE
             $fire = $entity->get(FireComponent::class);
-            if ($feetBlock === BlockIds::LAVA || $feetBlock === BlockIds::STILL_LAVA
-                || $bodyBlock === BlockIds::LAVA || $bodyBlock === BlockIds::STILL_LAVA) {
+            if (!$fireRes && ($feetBlock === BlockIds::LAVA || $feetBlock === BlockIds::STILL_LAVA
+                || $bodyBlock === BlockIds::LAVA || $bodyBlock === BlockIds::STILL_LAVA)) {
                 $combat->applyDamage($ref, 4.0, null, \pocketmine\api\event\EntityDamageEvent::CAUSE_LAVA);
                 $this->ignite($entity, (int)($fire?->ticks ?? 0), self::LAVA_IGNITE_SECONDS * 20);
-            } elseif ($feetBlock === BlockIds::FIRE) {
+            } elseif (!$fireRes && $feetBlock === BlockIds::FIRE) {
                 // --- Fire: standing in a fire block ----------------------
                 $combat->applyDamage($ref, 1.0, null, \pocketmine\api\event\EntityDamageEvent::CAUSE_FIRE);
                 $this->ignite($entity, (int)($fire?->ticks ?? 0), self::FIRE_IGNITE_SECONDS * 20);
-            } elseif (($fire?->ticks ?? 0) > 0) {
+            } elseif (!$fireRes && ($fire?->ticks ?? 0) > 0) {
                 // --- Burning after leaving the flame ---------------------
                 $fire->ticks -= 1;
                 if ($fire->ticks % self::FIRE_TICK_INTERVAL === 0) {
@@ -122,8 +124,10 @@ final class EnvironmentalDamageSystem implements System {
             }
 
             // --- Drowning: head in water drains air ---------------------
-            if ($headBlock === BlockIds::WATER || $headBlock === BlockIds::STILL_WATER
-                || $bodyBlock === BlockIds::WATER || $bodyBlock === BlockIds::STILL_WATER) {
+            // Bug 30: Water Breathing effect prevents the air drain entirely.
+            $waterBreathing = $effects?->get(13) !== null; // EFFECT_WATER_BREATHING
+            if (!$waterBreathing && ($headBlock === BlockIds::WATER || $headBlock === BlockIds::STILL_WATER
+                || $bodyBlock === BlockIds::WATER || $bodyBlock === BlockIds::STILL_WATER)) {
                 $air = ($this->airTicks[$entity->id] ?? self::AIR_MAX_TICKS) - self::AIR_DRAIN_PER_TICK;
                 if ($air <= -80) {
                     $air = 0;
