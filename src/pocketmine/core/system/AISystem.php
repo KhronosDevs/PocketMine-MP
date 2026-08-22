@@ -15,6 +15,9 @@ use pocketmine\core\component\tags\PlayerTag;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\System;
 use pocketmine\core\ecs\World;
+use pocketmine\core\component\WorldComponent;
+use pocketmine\core\resource\BlockRegistry;
+use pocketmine\core\resource\ChunkStore;
 use pocketmine\core\resource\SpatialIndex;
 use pocketmine\core\service\CombatService;
 
@@ -33,6 +36,13 @@ use pocketmine\core\service\CombatService;
 final class AISystem implements System {
     /** Ticks two paired animals wait before they can breed again. */
     public const BREED_COOLDOWN_TICKS = 1200;
+    /** Creeper fuse: ticks to detonation once player is in range. */
+    public const CREEPER_FUSE_TICKS = 30;
+    /** Distance at which a creeper starts its fuse. */
+    public const CREEPER_FUSE_START_RANGE = 3.0;
+    /** Distance at which the fuse cancels (player escaped). */
+    public const CREEPER_CANCEL_RANGE = 7.0;
+
     /** Breed foods per passive type (bug 20). */
     private const BREED_FOODS = [
         'Cow' => 337,      // wheat
@@ -138,6 +148,95 @@ final class AISystem implements System {
         }
 
         $this->processBreeding($world);
+        $this->processCreepers($world, $combat);
+    }
+
+    /**
+     * Bug 32: creeper self-detonation. When a creeper is within
+     * FUSE_START_RANGE blocks of an alive player it starts a fuse countdown;
+     * at zero it explodes using the same TNTExplosionSystem blast as the
+     * death-triggered explosion. If the player moves away beyond
+     * CANCEL_RANGE the fuse resets (legacy Creeper::onUpdate behavior).
+     */
+    private function processCreepers(World $world, ?CombatService $combat): void {
+        if ($combat === null) {
+            return;
+        }
+        $chunks = $world->getResourceRegistry()->get(\pocketmine\core\resource\ChunkStore::class);
+        $blocks = $world->getResourceRegistry()->get(\pocketmine\core\resource\BlockRegistry::class);
+        $spawn = \pocketmine\Kernel::getInstance()?->getEntitySpawnService();
+        $tnt = new \pocketmine\core\system\TNTExplosionSystem();
+        $tick = \pocketmine\Kernel::getInstance()?->getResourceRegistry()?->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0;
+
+        // Collect alive player positions for proximity checks.
+        $playerPositions = [];
+        foreach ($world->getEntities() as $entity) {
+            if (!$entity->has(PlayerTag::class)) continue;
+            $pos = $entity->get(PositionComponent::class);
+            $hp = $entity->get(HealthComponent::class);
+            if ($pos === null || ($hp !== null && $hp->current <= 0)) continue;
+            $wc = $entity->get(\pocketmine\core\component\WorldComponent::class);
+            $wid = $wc?->id ?? 0;
+            if (!isset($playerPositions[$wid])) { $playerPositions[$wid] = []; }
+            $playerPositions[$wid][] = $pos;
+        }
+
+        foreach ($world->getEntities() as $entity) {
+            $meta = $entity->get(MetadataComponent::class);
+            if ($meta === null || $meta->get(\pocketmine\core\constants\MetadataKeys::MOB_TYPE) !== 'Creeper') {
+                continue;
+            }
+            $health = $entity->get(HealthComponent::class);
+            if ($health === null || $health->current <= 0) continue;
+            $pos = $entity->get(PositionComponent::class);
+            if ($pos === null) continue;
+            $wid = $entity->get(\pocketmine\core\component\WorldComponent::class)?->id ?? 0;
+            $positions = $playerPositions[$wid] ?? [];
+            if ($positions === []) continue;
+
+            // Find nearest player distance.
+            $nearestSq = PHP_FLOAT_MAX;
+            foreach ($positions as $ppos) {
+                $dx = $pos->x - $ppos->x;
+                $dy = $pos->y - $ppos->y;
+                $dz = $pos->z - $ppos->z;
+                $dSq = $dx * $dx + $dy * $dy + $dz * $dz;
+                if ($dSq < $nearestSq) { $nearestSq = $dSq; }
+            }
+            $dist = sqrt($nearestSq);
+
+            $fuse = (int)$meta->get('creeperFuse', 0);
+
+            if ($dist <= self::CREEPER_FUSE_START_RANGE && $fuse === 0) {
+                // Start fuse: 30 ticks (~1.5s of hissing/swelling).
+                $meta->set('creeperFuse', self::CREEPER_FUSE_TICKS);
+            } elseif ($fuse > 0) {
+                $fuse--;
+                $meta->set('creeperFuse', $fuse);
+
+                if ($dist > self::CREEPER_CANCEL_RANGE) {
+                    // Player escaped: cancel fuse.
+                    $meta->set('creeperFuse', 0);
+                    continue;
+                }
+                if ($fuse <= 0) {
+                    // Detonate: remove creeper and explode at its position.
+                    $ref = EntityRef::create($entity->id, $world);
+                    $world->despawn($entity);
+                    $tnt->explode(
+                        $world,
+                        $chunks instanceof \pocketmine\core\resource\ChunkStore ? $chunks : null,
+                        $blocks instanceof BlockRegistry ? $blocks : null,
+                        $spawn instanceof \pocketmine\core\service\EntitySpawnService ? $spawn : null,
+                        $combat,
+                        $pos->x, $pos->y, $pos->z,
+                        \pocketmine\core\system\TNTExplosionSystem::CREEPER_RADIUS,
+                        null,
+                    );
+                    continue;
+                }
+            }
+        }
     }
 
     private function handleIdle(AIStateComponent $ai, PositionComponent $position): void {
