@@ -201,6 +201,16 @@ final class BlockBreakService {
         $drops = $creative ? [] : $this->getBlockDrops($x, $y, $z, $tool, $worldId);
         $blockId = $this->getChunkStore($worldId)?->getBlock($x, $y, $z) ?? 0;
 
+        // Bug 23: breaking the wall cell a painting occupies removes it.
+        $tiles = $this->getTileEntityStore($worldId);
+        if ($tiles !== null) {
+            $removedPainting = $tiles->removePainting($x, $y, $z);
+            if ($removedPainting !== null && !$creative) {
+                $this->spawnDropEntity($x + 0.5, $y + 0.5, $z + 0.5,
+                    new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::PAINTING, 0, 1), $worldId);
+            }
+        }
+
         // Set block to air
         $this->setBlock($x, $y, $z, 0, $worldId); // Air
 

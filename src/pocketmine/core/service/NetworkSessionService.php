@@ -29,6 +29,7 @@ use pocketmine\core\resource\Hunger;
 use pocketmine\core\resource\ItemRegistry;
 use pocketmine\core\resource\KhronosConfig;
 use pocketmine\core\resource\ProjectileRegistry;
+use pocketmine\core\resource\BlockRegistry;
 use pocketmine\core\resource\ChunkStore;
 use pocketmine\core\resource\ServerConfig;
 use pocketmine\core\resource\WorldConfig;
@@ -44,6 +45,7 @@ use pocketmine\protocol\AddItemEntityPacket;
 use pocketmine\protocol\AddPlayerPacket;
 use pocketmine\protocol\AdventureSettingsPacket;
 use pocketmine\protocol\BlockEventPacket;
+use pocketmine\protocol\AddPaintingPacket;
 use pocketmine\protocol\BatchPacket;
 use pocketmine\protocol\BlockEntityDataPacket;
 use pocketmine\protocol\ChangeDimensionPacket;
@@ -1533,6 +1535,132 @@ final class NetworkSessionService {
      * on farmland; carrots/potatoes plant their own crop. Consumes one seed
      * (hoes only wear durability). Returns true when handled.
      */
+    /** Legacy painting motive names (protocol 84 titles). */
+    private const PAINTING_TITLES = ['Kebab', 'Aztec', 'Alban', 'Aztec2', 'Bomb', 'Plant', 'Wasteland', 'Wanderer', 'Sea', 'SkullAndRoses'];
+
+    /** Monotonic pseudo-entity ids for paintings (not ECS entities). */
+    private int $paintingEid = 100000;
+
+    private function nextPaintingEid(): int {
+        return ++$this->paintingEid;
+    }
+
+    /**
+     * Bug 23: place a painting onto the face of a solid opaque block.
+     * The painting is persisted as a tile entity and re-sent with
+     * AddPaintingPacket when its chunk streams.
+     */
+    private function placePainting(string $addrKey, array &$session, UseItemPacket $pk): bool {
+        $store = $this->getChunkStore($session['worldId']);
+        if ($store === null) {
+            return false;
+        }
+        // Paintings hang on side faces only (0.15 had no floor/ceiling ones).
+        if (!in_array($pk->face, [2, 3, 4, 5], true)) {
+            return false;
+        }
+        [$fx, $fy, $fz] = self::FACE_OFFSETS[$pk->face] ?? self::FACE_OFFSETS[1];
+        $px = $pk->x + $fx;
+        $py = $pk->y + $fy;
+        $pz = $pk->z + $fz;
+        if ($store->getBlock($px, $py, $pz) !== 0 || !$this->isSolidOpaque($store, $pk->x, $pk->y, $pk->z)) {
+            return false;
+        }
+
+        // 0.15 direction encoding from the clicked face.
+        $direction = match ($pk->face) {
+            2 => 2, // north wall
+            3 => 0, // south wall
+            4 => 1, // west wall
+            5 => 3, // east wall
+            default => 0,
+        };
+        $title = self::PAINTING_TITLES[array_rand(self::PAINTING_TITLES)];
+        $tiles = $this->tileEntityStore($session['worldId']);
+        $tiles?->setPainting($px, $py, $pz, $title, $direction);
+
+        $pk2 = new AddPaintingPacket();
+        $pk2->eid = $this->nextPaintingEid();
+        $pk2->x = $px;
+        $pk2->y = $py;
+        $pk2->z = $pz;
+        $pk2->direction = $direction;
+        $pk2->title = $title;
+        foreach ($this->sessions as $s) {
+            if ((int)$s['worldId'] === (int)$session['worldId']) {
+                $this->queuePacket($s['playerRef'], clone $pk2);
+            }
+        }
+        return true;
+    }
+
+    /** Solid + not transparent (paintings need a real wall). */
+    private function isSolidOpaque(ChunkStore $store, int $x, int $y, int $z): bool {
+        $registry = $this->resourceRegistry->get(BlockRegistry::class);
+        if (!$registry instanceof BlockRegistry) {
+            return false;
+        }
+        $props = $registry->get($store->getBlock($x, $y, $z));
+        return ($props['solid'] ?? false) === true && ($props['transparent'] ?? true) === false;
+    }
+
+    /**
+     * Bug 26: cake item places a sliceable cake block on top of the clicked
+     * block. Returns true when handled.
+     */
+    private function placeCake(string $addrKey, array &$session, UseItemPacket $pk, ChunkStore $store): bool {
+        [$fx, $fy, $fz] = self::FACE_OFFSETS[$pk->face] ?? self::FACE_OFFSETS[1];
+        $cx = $pk->x + $fx;
+        $cy = $pk->y + $fy;
+        $cz = $pk->z + $fz;
+        if ($store->getBlock($cx, $cy, $cz) !== 0 || $store->getBlock($cx, $cy - 1, $cz) === 0) {
+            error_log("[CK] gate fail: at=" . var_export($store->getBlock($cx, $cy, $cz), true) . " below=" . var_export($store->getBlock($cx, $cy - 1, $cz), true));
+            return false; // needs air above a solid block
+        }
+        $clicked = $store->getBlock($pk->x, $pk->y, $pk->z);
+        $props = $this->resourceRegistry->get(BlockRegistry::class)->get($clicked);
+        if (($props['solid'] ?? false) !== true) {
+            error_log("[CK] clicked not solid: " . var_export($clicked, true));
+            return false;
+        }
+        $store->setBlock($cx, $cy, $cz, 92, 0); // cake, all slices left
+        $this->broadcastBlockState($cx, $cy, $cz, $session['worldId']);
+        // Survival consumes the cake item.
+        $player = $session['entityRef']->getEntity();
+        $meta = $player?->get(MetadataComponent::class);
+        if ($meta !== null && GameMode::coerce($meta->get(MetadataKeys::GAMEMODE)) !== GameMode::Creative) {
+            $inventory = $player?->get(InventoryComponent::class);
+            $slot = $inventory?->heldSlot ?? 0;
+            $stack = $inventory?->get($slot);
+            if ($stack !== null) {
+                $stack->count--;
+                if ($stack->count <= 0) { $inventory->set($slot, null); } else { $inventory->set($slot, $stack); }
+                $this->syncInventorySlot($session['playerRef']->entityId, $slot);
+            }
+        }
+        return true;
+    }
+
+    /** Bug 26: eating one slice of a placed cake (+2 food). */
+    private function eatCakeSlice(string $addrKey, array &$session, int $x, int $y, int $z, ChunkStore $store): void {
+        $entity = $session['entityRef']->getEntity();
+        $hunger = $entity?->get(HungerComponent::class);
+        error_log("[CK2] called: hunger=" . var_export($hunger?->hunger, true));
+        if ($hunger !== null && $hunger->hunger < 20.0) {
+            $hunger->hunger = min(20.0, $hunger->hunger + 2.0);
+            error_log("[CK2] eating slice, old meta=" . var_export($store->getBlockMeta($x, $y, $z), true));
+            $this->syncFoodFor($session['playerRef']->entityId);
+            $meta = $store->getBlockMeta($x, $y, $z);
+            if ($meta >= 5) {
+                $store->setBlock($x, $y, $z, 0, 0); // last slice eaten
+                $this->broadcastBlockState($x, $y, $z, $session['worldId']);
+            } else {
+                $store->setBlock($x, $y, $z, 92, $meta + 1);
+                $this->broadcastBlockState($x, $y, $z, $session['worldId']);
+            }
+        }
+    }
+
     private function handleFarmingUse(string $addrKey, array &$session, UseItemPacket $pk, \pocketmine\core\component\ItemStack $held): bool {
         $store = $this->getChunkStore($session['worldId']);
         if ($store === null) {
@@ -2203,6 +2331,28 @@ final class NetworkSessionService {
                 return;
             }
 
+            // Bug 25: right-clicking a wool block with dye recolors it
+            // (dye meta maps 1:1 to wool color in legacy).
+            $heldForDye = $inventory?->get($inventory?->heldSlot ?? 0);
+            if ($block === BlockIds::WOOL && $heldForDye !== null && $heldForDye->itemId === ItemIds::DYE && $heldForDye->meta <= 15) {
+                $store->setBlock($pk->x, $pk->y, $pk->z, BlockIds::WOOL, $heldForDye->meta);
+                $this->broadcastBlockState($pk->x, $pk->y, $pk->z, $session['worldId']);
+                if ($entity !== null) {
+                    $pMeta = $entity?->get(MetadataComponent::class);
+                    if ($pMeta === null || GameMode::coerce($pMeta?->get(MetadataKeys::GAMEMODE)) !== GameMode::Creative) {
+                        $inventory?->remove($inventory->heldSlot, 1);
+                        $this->syncInventorySlot($session['playerRef']->entityId, $inventory->heldSlot);
+                    }
+                }
+                return;
+            }
+
+            // Bug 26: right-clicking a placed cake eats one slice.
+            if ($block === 92) {
+                $this->eatCakeSlice($addrKey, $session, $pk->x, $pk->y, $pk->z, $store);
+                return;
+            }
+
             // --- Interactive block toggles (doors, buttons, levers, etc.) ---
             // These work with or without a held item.
 
@@ -2325,6 +2475,18 @@ final class NetworkSessionService {
         // farmland (carrots/potatoes plant their crop directly).
         if ($store !== null && $this->handleFarmingUse($addrKey, $session, $pk, $held)) {
             return;
+        }
+        // Bug 23: paintings place onto the face of a solid opaque block.
+        if ($held->itemId === ItemIds::PAINTING) {
+            if ($this->placePainting($addrKey, $session, $pk)) {
+                return;
+            }
+        }
+        // Bug 26: cake places as a sliceable block on top of a solid block.
+        if ($held->itemId === ItemIds::CAKE_ITEM && $store !== null) {
+            if ($this->placeCake($addrKey, $session, $pk, $store)) {
+                return;
+            }
         }
         // Bug 13: the fishing rod casts the bobber on first use and reels it
         // (with the catch if a bite happened) on the next use.
@@ -6224,6 +6386,19 @@ final class NetworkSessionService {
         $out = [];
         foreach ($tiles->snapshotsForChunk($chunkX, $chunkZ) as $snapshot) {
             $out[] = [$snapshot->x, $snapshot->y, $snapshot->z];
+            // Bug 23: paintings re-announce themselves as their chunk streams
+            // (they are not BlockEntityData tiles on the wire - they ride
+            // AddPaintingPacket).
+            if ($snapshot->type === TileEntityStore::TILE_PAINTING) {
+                $pk = new AddPaintingPacket();
+                $pk->eid = $this->nextPaintingEid();
+                $pk->x = $snapshot->x;
+                $pk->y = $snapshot->y;
+                $pk->z = $snapshot->z;
+                $pk->direction = (int)($snapshot->data['direction'] ?? 0);
+                $pk->title = (string)($snapshot->data['title'] ?? 'Kebab');
+                $this->queuePacket($player, $pk);
+            }
         }
         return $out;
     }
