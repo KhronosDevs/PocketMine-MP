@@ -1529,6 +1529,79 @@ final class NetworkSessionService {
      * mode and zero-hardness blocks still break instantly on START.
      */
     /**
+     * Bug 16: hoe tills grass/dirt into farmland; seeds plant a wheat crop
+     * on farmland; carrots/potatoes plant their own crop. Consumes one seed
+     * (hoes only wear durability). Returns true when handled.
+     */
+    private function handleFarmingUse(string $addrKey, array &$session, UseItemPacket $pk, \pocketmine\core\component\ItemStack $held): bool {
+        $store = $this->getChunkStore($session['worldId']);
+        if ($store === null) {
+            return false;
+        }
+        $player = $session['entityRef']->getEntity();
+        $inventory = $player?->get(InventoryComponent::class);
+        if ($inventory === null) {
+            return false;
+        }
+
+        // Hoes: till the clicked grass/dirt when the block above is air.
+        $hoeIds = [
+            ItemIds::WOODEN_HOE, ItemIds::STONE_HOE, ItemIds::IRON_HOE,
+            ItemIds::DIAMOND_HOE, ItemIds::GOLDEN_HOE,
+        ];
+        if (in_array($held->itemId, $hoeIds, true)) {
+            $clicked = $store->getBlock($pk->x, $pk->y, $pk->z);
+            if (($clicked === BlockIds::GRASS || $clicked === BlockIds::DIRT)
+                && $store->getBlock($pk->x, $pk->y + 1, $pk->z) === 0) {
+                $store->setBlock($pk->x, $pk->y, $pk->z, 60, 0); // farmland
+                $this->broadcastBlockState($pk->x, $pk->y, $pk->z, $session['worldId']);
+                \pocketmine\core\resource\ItemDurability::consume($session['entityRef']);
+                return true;
+            }
+            return false;
+        }
+
+        // Seeds: plant wheat on farmland (clicked directly or its top face).
+        $plantX = $pk->x; $plantY = $pk->y; $plantZ = $pk->z;
+        $isSeeds = $held->itemId === ItemIds::SEEDS;
+        $isCarrot = $held->itemId === 391;
+        $isPotato = $held->itemId === 392;
+        if (!$isSeeds && !$isCarrot && !$isPotato) {
+            return false;
+        }
+        $cropBlock = $isCarrot ? 141 : ($isPotato ? 142 : 59);
+        $target = $store->getBlock($plantX, $plantY, $plantZ);
+        if ($target !== 60) { // must click farmland itself
+            // Tolerate clicking the crop's air cell above farmland.
+            if ($store->getBlock($plantX, $plantY - 1, $plantZ) === 60 && $target === 0) {
+                $plantY -= 1;
+                $target = 60;
+            } else {
+                return false;
+            }
+        }
+        if ($store->getBlock($plantX, $plantY + 1, $plantZ) !== 0) {
+            return false; // something already growing there
+        }
+        $store->setBlock($plantX, $plantY + 1, $plantZ, $cropBlock, 0);
+        $this->broadcastBlockState($plantX, $plantY + 1, $plantZ, $session['worldId']);
+        // Survival consumes one seed/carrot/potato.
+        $meta = $player?->get(MetadataComponent::class);
+        if ($meta !== null && GameMode::coerce($meta->get(MetadataKeys::GAMEMODE)) !== GameMode::Creative) {
+            $slot = $inventory->heldSlot;
+            $stack = $inventory->get($slot);
+            if ($stack !== null) {
+                $stack->count--;
+                if ($stack->count <= 0) {
+                    $inventory->set($slot, null);
+                }
+                $this->syncInventorySlot($session['playerRef']->entityId, $slot);
+            }
+        }
+        return true;
+    }
+
+    /**
      * Bug 9: right-clicking a bed. Sets the player's personal spawn point
      * above the bed (persisted in player metadata, preferred by the respawn
      * service over the world spawn) and, during the night, sleeps through to
@@ -2247,6 +2320,11 @@ final class NetworkSessionService {
             if ($this->handleBucketUse($addrKey, $session, $pk, $held)) {
                 return;
             }
+        }
+        // Bug 16: hoes till grass/dirt into farmland; seeds plant wheat on
+        // farmland (carrots/potatoes plant their crop directly).
+        if ($store !== null && $this->handleFarmingUse($addrKey, $session, $pk, $held)) {
+            return;
         }
         // Bug 13: the fishing rod casts the bobber on first use and reels it
         // (with the catch if a bite happened) on the next use.
