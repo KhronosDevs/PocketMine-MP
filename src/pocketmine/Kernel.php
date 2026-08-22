@@ -12,6 +12,7 @@ use pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter;
 
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\VelocityComponent;
+use pocketmine\core\constants\ItemIds;
 use pocketmine\core\ecs\ComponentRegistry;
 use pocketmine\core\ecs\ResourceRegistry;
 use pocketmine\core\ecs\SystemScheduler;
@@ -2111,6 +2112,112 @@ function registerBuiltinRecipes(ResourceRegistry $registry): void {
         ['C' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::COAL), 'S' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::STICK)],
         new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::TORCH, 0, 4),
     );
+
+    // --- Bug 33: full crafting recipe set (PMMP 2.0.0 parity) ---
+
+    $recipes->registerShaped('wooden_shovel', ['P', 'S', 'S'],
+        ['P' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::PLANKS), 'S' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::STICK)],
+        new \pocketmine\core\component\ItemStack(ItemIds::WOODEN_SHOVEL, 0, 1));
+    $recipes->registerShaped('wooden_hoe', ['PP', ' S', ' S'],
+        ['P' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::PLANKS), 'S' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::STICK)],
+        new \pocketmine\core\component\ItemStack(ItemIds::WOODEN_HOE, 0, 1));
+
+    // Stone tools
+    $C = new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::COBBLESTONE);
+    $St = new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::STICK);
+    $recipes->registerShaped('stone_pickaxe', ['CCC', ' S ', ' S '], ['C' => $C, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(274, 0, 1));
+    $recipes->registerShaped('stone_axe', ['CC ', 'CS ', ' S '], ['C' => $C, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(275, 0, 1));
+    $recipes->registerShaped('stone_shovel', ['C ', 'S ', 'S '], ['C' => $C, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(273, 0, 1));
+    $recipes->registerShaped('stone_sword', ['C ', 'C ', 'S '], ['C' => $C, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(272, 0, 1));
+    $recipes->registerShaped('stone_hoe', ['CC', ' S', ' S'], ['C' => $C, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(291, 0, 1));
+
+    // Iron tools
+    $Fe = new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::IRON_INGOT);
+    $recipes->registerShaped('iron_pickaxe', ['III', ' S ', ' S '], ['I' => $Fe, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(257, 0, 1));
+    $recipes->registerShaped('iron_axe', ['II ', 'IS ', ' S '], ['I' => $Fe, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(258, 0, 1));
+    $recipes->registerShaped('iron_shovel', ['I ', 'S ', 'S '], ['I' => $Fe, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(256, 0, 1));
+    $recipes->registerShaped('iron_sword', ['I ', 'I ', 'S '], ['I' => $Fe, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(267, 0, 1));
+    $recipes->registerShaped('iron_hoe', ['II', ' S', ' S'], ['I' => $Fe, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(292, 0, 1));
+
+    // Golden tools
+    $Au = new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::GOLD_INGOT);
+    $recipes->registerShaped('golden_pickaxe', ['GGG', ' S ', ' S '], ['G' => $Au, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(285, 0, 1));
+    $recipes->registerShaped('golden_axe', ['GG ', 'GS ', ' S '], ['G' => $Au, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(286, 0, 1));
+    $recipes->registerShaped('golden_shovel', ['G ', 'S ', 'S '], ['G' => $Au, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(284, 0, 1));
+    $recipes->registerShaped('golden_sword', ['G ', 'G ', 'S '], ['G' => $Au, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(283, 0, 1));
+    $recipes->registerShaped('golden_hoe', ['GG', ' S', ' S'], ['G' => $Au, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(294, 0, 1));
+
+    // Diamond tools
+    $Di = new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::DIAMOND);
+    $recipes->registerShaped('diamond_pickaxe', ['DDD', ' S ', ' S '], ['D' => $Di, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(278, 0, 1));
+    $recipes->registerShaped('diamond_axe', ['DD ', 'DS ', ' S '], ['D' => $Di, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(279, 0, 1));
+    $recipes->registerShaped('diamond_shovel', ['D ', 'S ', 'S '], ['D' => $Di, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(277, 0, 1));
+    $recipes->registerShaped('diamond_sword', ['D ', 'D ', 'S '], ['D' => $Di, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(276, 0, 1));
+    $recipes->registerShaped('diamond_hoe', ['DD', ' S', ' S'], ['D' => $Di, 'S' => $St],
+        new \pocketmine\core\component\ItemStack(293, 0, 1));
+
+    // Armor: leather
+    $L = new \pocketmine\core\component\ItemStack(334);
+    $recipes->registerShaped('leather_cap', ['LLL', 'L L'], ['L' => $L], new \pocketmine\core\component\ItemStack(298, 0, 1));
+    $recipes->registerShaped('leather_tunic', ['L L', 'LLL', 'LLL'], ['L' => $L], new \pocketmine\core\component\ItemStack(299, 0, 1));
+    $recipes->registerShaped('leather_pants', ['LLL', 'L L', 'L L'], ['L' => $L], new \pocketmine\core\component\ItemStack(300, 0, 1));
+    $recipes->registerShaped('leather_boots', ['L L', 'L L'], ['L' => $L], new \pocketmine\core\component\ItemStack(301, 0, 1));
+
+    // Armor: iron
+    $Fe = new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::IRON_INGOT);
+    $recipes->registerShaped('iron_helmet', ['III', 'I I'], ['I' => $Fe], new \pocketmine\core\component\ItemStack(306, 0, 1));
+    $recipes->registerShaped('iron_chestplate', ['I I', 'III', 'III'], ['I' => $Fe], new \pocketmine\core\component\ItemStack(307, 0, 1));
+    $recipes->registerShaped('iron_leggings', ['III', 'I I', 'I I'], ['I' => $Fe], new \pocketmine\core\component\ItemStack(308, 0, 1));
+    $recipes->registerShaped('iron_boots', ['I I', 'I I'], ['I' => $Fe], new \pocketmine\core\component\ItemStack(309, 0, 1));
+
+    // Armor: golden
+    $Au = new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::GOLD_INGOT);
+    $recipes->registerShaped('golden_helmet', ['GGG', 'G G'], ['G' => $Au], new \pocketmine\core\component\ItemStack(314, 0, 1));
+    $recipes->registerShaped('golden_chestplate', ['G G', 'GGG', 'GGG'], ['G' => $Au], new \pocketmine\core\component\ItemStack(315, 0, 1));
+    $recipes->registerShaped('golden_leggings', ['GGG', 'G G', 'G G'], ['G' => $Au], new \pocketmine\core\component\ItemStack(316, 0, 1));
+    $recipes->registerShaped('golden_boots', ['G G', 'G G'], ['G' => $Au], new \pocketmine\core\component\ItemStack(317, 0, 1));
+
+    // Armor: diamond
+    $Di = new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::DIAMOND);
+    $recipes->registerShaped('diamond_helmet', ['DDD', 'D D'], ['D' => $Di], new \pocketmine\core\component\ItemStack(310, 0, 1));
+    $recipes->registerShaped('diamond_chestplate', ['D D', 'DDD', 'DDD'], ['D' => $Di], new \pocketmine\core\component\ItemStack(311, 0, 1));
+    $recipes->registerShaped('diamond_leggings', ['DDD', 'D D', 'D D'], ['D' => $Di], new \pocketmine\core\component\ItemStack(312, 0, 1));
+    $recipes->registerShaped('diamond_boots', ['D D', 'D D'], ['D' => $Di], new \pocketmine\core\component\ItemStack(313, 0, 1));
+
+    // Utility
+    $P = new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::PLANKS);
+    $Stk = new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::STICK);
+    $r = static fn(string $id, array $pattern, array $key, int $resultId, int $resultMeta = 0, int $resultCount = 1) =>
+        $recipes->registerShaped($id, $pattern, $key, new \pocketmine\core\component\ItemStack($resultId, $resultMeta, $resultCount));
+    $r('ladder', ['S S', 'SSS', 'S S'], ['S' => \pocketmine\core\constants\ItemIds::STICK], 65, 0, 3);
+    $r('wooden_door_item', ['PP', 'PP', 'PP'], ['P' => \pocketmine\core\constants\ItemIds::PLANKS], 324);
+    $r('bed', ['WWW', 'PPP'], ['W' => 35, 'P' => \pocketmine\core\constants\ItemIds::PLANKS], 355);
+    $r('bowl', ['P P', ' P '], ['P' => \pocketmine\core\constants\ItemIds::PLANKS], 281, 0, 4);
+    $r('sign_item', ['PPP', 'PPP', ' S '], ['P' => \pocketmine\core\constants\ItemIds::PLANKS, 'S' => \pocketmine\core\constants\ItemIds::STICK], 323, 0, 3);
+    $r('painting', ['SSS', 'SW ', 'SSS'], ['S' => \pocketmine\core\constants\ItemIds::STICK, 'W' => 35], 321);
+    $r('boat', ['P P', 'PPP'], ['P' => $P], ItemIds::BOAT);
+    $r('minecart', ['I I', 'III'], ['I' => ItemIds::IRON_INGOT], ItemIds::MINECART);
+    $r('compass', [' I ', 'IRI', ' I '], ['I' => ItemIds::IRON_INGOT, 'R' => 1], ItemIds::COMPASS);
+    $r('bread', ['WWW'], ['W' => 337], 297, 0, 1);
 
     // 14.16 furnace smelting recipes + fuel (legacy recipes.json type 2/3
     // and Fuel::$duration - authoritative for protocol 84).

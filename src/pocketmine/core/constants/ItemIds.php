@@ -117,6 +117,41 @@ final class ItemIds {
     public const BUCKET = 325;
     public const FISHING_ROD = 346;
     public const SHEARS = 359;
+
+    // Bug 33: tool and armor item ids for crafting
+    public const STONE_SWORD = 272;
+    public const STONE_SHOVEL = 273;
+    public const STONE_PICKAXE = 274;
+    public const STONE_AXE = 275;
+    public const IRON_SWORD = 267;
+    public const IRON_SHOVEL = 256;
+    public const IRON_PICKAXE = 257;
+    public const IRON_AXE = 258;
+    public const GOLDEN_SWORD = 283;
+    public const GOLDEN_SHOVEL = 284;
+    public const GOLDEN_PICKAXE = 285;
+    public const GOLDEN_AXE = 286;
+    public const DIAMOND_SWORD = 276;
+    public const DIAMOND_SHOVEL = 277;
+    public const DIAMOND_PICKAXE = 278;
+    public const DIAMOND_AXE = 279;
+    public const LEATHER_CAP = 298;
+    public const LEATHER_TUNIC = 299;
+    public const LEATHER_PANTS = 300;
+    public const LEATHER_BOOTS = 301;
+    public const IRON_HELMET = 306;
+    public const IRON_CHESTPLATE = 307;
+    public const IRON_LEGGINGS = 308;
+    public const IRON_BOOTS = 309;
+    public const GOLD_HELMET = 314;
+    public const GOLD_CHESTPLATE = 315;
+    public const GOLD_LEGGINGS = 316;
+    public const GOLD_BOOTS = 317;
+    public const BREAD = 297;
+    public const COMPASS = 345;
+    public const WOODEN_DOOR_ITEM = 324;
+    public const BED_ITEM = 355;
+
     public const BLAZE_ROD = 369;
     public const SIGN = 323;
     public const ITEM_FRAME = 389;
