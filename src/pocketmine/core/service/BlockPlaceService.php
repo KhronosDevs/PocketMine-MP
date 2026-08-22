@@ -47,7 +47,7 @@ final class BlockPlaceService {
         }
         
         // Check if placement is valid (not inside another block, etc.)
-        if (!$this->isValidPlacement($x, $y, $z, $this->worldIdOf($playerRef))) {
+        if (!$this->isValidPlacement($x, $y, $z, $this->worldIdOf($playerRef), $playerRef->getId())) {
             return false;
         }
 
@@ -133,7 +133,7 @@ final class BlockPlaceService {
         }
     }
 
-    private function isValidPlacement(int $x, int $y, int $z, int $worldId = 0): bool {
+    private function isValidPlacement(int $x, int $y, int $z, int $worldId = 0, int $excludeEntityId = 0): bool {
         $store = $this->getChunkStore($worldId);
         if ($store === null) {
             return false;
@@ -141,7 +141,37 @@ final class BlockPlaceService {
         $existing = $store->getBlock($x, $y, $z);
         // A block may be placed only into air or a replaceable block
         // (tall grass, water, snow layers, etc.).
-        return $existing === 0 || $this->getBlockRegistry()->isReplaceable($existing);
+        if ($existing !== 0 && !$this->getBlockRegistry()->isReplaceable($existing)) {
+            return false;
+        }
+
+        // Bug 31: cannot place a block inside another player or mob.
+        // Checks AABB overlap between the block cube and each entity's
+        // bounding box (CollisionComponent width × height). Excludes items,
+        // XP orbs and other non-colliding entities. The placing player is
+        // excluded too — vanilla allows self-enclosure but not trapping
+        // someone else.
+        foreach ($this->world->getEntities() as $entity) {
+            if ($entity->id === $excludeEntityId) {
+                continue; // the placing player can self-enclose (vanilla)
+            }
+            $collision = $entity->get(\pocketmine\core\component\CollisionComponent::class);
+            if ($collision === null) {
+                continue; // items, XP orbs etc. don't block placement
+            }
+            $entityPos = $entity->get(PositionComponent::class);
+            if ($entityPos === null) {
+                continue;
+            }
+            $halfWidth = $collision->width / 2;
+            if ($entityPos->x + $halfWidth > $x && $entityPos->x - $halfWidth < $x + 1
+                && $entityPos->y + $collision->height > $y && $entityPos->y < $y + 1
+                && $entityPos->z + $halfWidth > $z && $entityPos->z - $halfWidth < $z + 1) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function setBlock(int $x, int $y, int $z, int $blockId, int $meta, int $worldId = 0): void {
