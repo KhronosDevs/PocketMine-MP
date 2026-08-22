@@ -180,6 +180,20 @@ final class FakeClient {
         $this->sendEncapsulated($buffer, PacketReliability::RELIABLE_ORDERED);
     }
 
+    /**
+     * Keep the server session alive during long tick-only loops. The RakNet
+     * server disconnects sessions that send nothing for ~10 seconds; tests
+     * that run many $kernel->run() / $world->tick() iterations without
+     * calling readGamePackets() produce exactly that silence (no ACKs go
+     * out), and the resulting mid-test PlayerLeaveService removal makes
+     * every later assertion read a despawned entity. Call this every few
+     * dozen ticks in long loops.
+     */
+    public function keepAlive(): void {
+        $this->pump();       // ingest server datagrams -> queue their ACKs
+        $this->flushAcks();  // answer them: server sees activity, stays up
+    }
+
     public function sendLogin(string $username, string $uuid): void {
         $stream = new BinaryStream();
         $stream->putInt(84);
