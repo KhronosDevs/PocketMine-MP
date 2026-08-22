@@ -1,6 +1,6 @@
 # TODO — What's left
 
-**Last updated:** 2026-08-19
+**Last updated:** 2026-08-21
 **Companion docs:** docs/PLAN.md (architecture & phase plan), docs/PROGRESS.md (completed work)
 
 The server is playable today for a small creative/casual-survival server (see the
@@ -166,6 +166,29 @@ reduce this cost.
 
 **What to benchmark:** typical mutation size, delta encoding overhead,
 protocol compatibility with existing clients.
+
+### Saddle (item 329)
+
+Right-clicking a pig with a saddle should make it rideable (player mounts,
+WASD controls via PlayerInputPacket, saddle consumed). Requires extending
+`VehicleSystem` with a `tickPig()` handler (like `tickBoat`/`tickMinecart`)
+and adding the pig as a mountable entity type.
+
+- **Already in place:** `VehicleSystem` (boats/minecarts), `SetEntityLinkPacket`
+  for mounting, `PlayerInputPacket` handling, saddle item registered.
+- **Missing:** `tickPig()` in VehicleSystem, saddle consumption on interact,
+  pig-specific movement (slower than boats, no rails), unsaddle on death.
+
+### Map cartography
+
+MCPE 0.15 maps require a server-side map storage system (map id → pixel
+buffer + decorations), `ClientboundMapItemDataPacket` wire support, crafting
+recipe (compass + paper), and renderer integration. No map concept exists in
+the engine at all.
+
+- **Already in place:** nothing specific; paper/crafting infrastructure exists.
+- **Missing:** everything — map data store, wire packet, crafting recipe,
+  exploration tracking, decoration API.
 
 ---
 
