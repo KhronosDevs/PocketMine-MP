@@ -438,7 +438,19 @@ final class EntityInteractionService {
             $damage += $attributes->get(\pocketmine\core\constants\AttributeKeys::ATTACK_DAMAGE);
         }
         
-        return $damage;
+        // Bug 30: Strength adds +3 per level to melee damage; Weakness
+        // subtracts 4 (legacy EntityEffect::STRENGTH / WEAKNESS).
+        $fx = $attacker->get(\pocketmine\core\component\EffectComponent::class);
+        if ($fx !== null) {
+            if ($fx->get(5) !== null) { // STRENGTH
+                $damage += 3 * ($fx->get(5)->amplifier + 1);
+            }
+            if ($fx->get(18) !== null) { // WEAKNESS
+                $damage -= 4;
+            }
+        }
+        
+        return max(0.0, $damage);
     }
 
     private function getWeaponDamage(int $itemId): float {

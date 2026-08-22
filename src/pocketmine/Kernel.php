@@ -2279,6 +2279,8 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // grass spread, leaf decay. Samples loaded chunks near players every
     // second; sequential against the ChunkStore like EnvironmentalDamageSystem.
     $scheduler->register(new \pocketmine\core\system\RandomTickSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // Bug 30: periodic timed-effect gameplay (regen heal, poison damage).
+    $scheduler->register(new \pocketmine\core\system\EffectTickSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     // 14.16: furnaces - burn fuel, cook input, produce results on the main
     // thread every world tick (furnaces are blocks, not entities, so they
     // are not part of the region pipeline). Runs after crafting so the

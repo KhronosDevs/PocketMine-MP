@@ -10,6 +10,7 @@ use pocketmine\core\component\HealthComponent;
 use pocketmine\core\component\HungerComponent;
 use pocketmine\core\component\InventoryComponent;
 use pocketmine\core\component\ItemStack;
+use pocketmine\core\component\EffectComponent;
 use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\RotationComponent;
@@ -1238,10 +1239,28 @@ final class NetworkSessionService {
         $creative = GameMode::coerce($entity?->get(MetadataComponent::class)?->get(MetadataKeys::GAMEMODE)) === GameMode::Creative;
         $allowFlight = \pocketmine\api\server\Server::getInstance()->isAllowFlight();
 
+        // Bug 30: Speed/Slow/Jump Boost potions modify movement caps.
+        $speedMult = 1.0;
+        $ascentMult = 1.0;
+        if ($entity !== null) {
+            $fx = $entity->get(EffectComponent::class);
+            if ($fx !== null) {
+                if ($fx->get(1) !== null) { // SPEED
+                    $speedMult *= 1.0 + 0.2 * ($fx->get(1)->amplifier + 1);
+                }
+                if ($fx->get(2) !== null) { // SLOWNESS
+                    $speedMult *= max(0.1, 1.0 - 0.15 * ($fx->get(2)->amplifier + 1));
+                }
+                if ($fx->get(8) !== null) { // JUMP BOOST
+                    $ascentMult += 0.5 * ($fx->get(8)->amplifier + 1);
+                }
+            }
+        }
+
         $violation = false;
-        if ($total > $this->antiCheat->maxMoveTotalPerTick || $horizontal > $this->antiCheat->maxMoveHorizontalPerTick) {
+        if ($total > $this->antiCheat->maxMoveTotalPerTick * $speedMult || $horizontal > $this->antiCheat->maxMoveHorizontalPerTick * $speedMult) {
             $violation = true; // speed / teleport hack
-        } elseif ($dy > $this->antiCheat->maxMoveAscentPerTick * $ticks && !$creative && !$allowFlight) {
+        } elseif ($dy > $this->antiCheat->maxMoveAscentPerTick * $ticks * $ascentMult && !$creative && !$allowFlight) {
             $violation = true; // flying without permission
         }
         if (!$violation) {
