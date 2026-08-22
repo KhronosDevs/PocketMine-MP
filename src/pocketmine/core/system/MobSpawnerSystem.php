@@ -200,8 +200,14 @@ final class MobSpawnerSystem implements System {
     }
 
     private function countHostileMobs(World $world): int {
+        // Default-world only (world 0): the spawner populates that world, so
+        // hostiles in other dimensions must not consume its budget.
         $count = 0;
         foreach ($world->getEntities() as $entity) {
+            $worldComponent = $entity->get(\pocketmine\core\component\WorldComponent::class);
+            if ($worldComponent !== null && $worldComponent->id !== 0) {
+                continue;
+            }
             $meta = $entity->get(MetadataComponent::class);
             if ($meta !== null && $meta->get(MetadataKeys::HOSTILE)) {
                 $count++;
@@ -211,6 +217,8 @@ final class MobSpawnerSystem implements System {
     }
 
     private function countHostileNear(World $world, PositionComponent $center): int {
+        // Same world scoping as countHostileMobs; X/Z-only distance is fine
+        // within one dimension.
         $count = 0;
         $rangeSq = self::SPAWN_RADIUS * self::SPAWN_RADIUS;
         foreach ($world->getEntities() as $entity) {

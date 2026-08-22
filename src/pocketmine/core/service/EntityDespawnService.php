@@ -117,8 +117,13 @@ final class EntityDespawnService {
             ->with(PositionComponent::class, MetadataComponent::class)
             ->build() as $entity) {
             // Players never despawn by distance.
-        
             if ($entity->has(\pocketmine\core\component\tags\PlayerTag::class)) {
+                continue;
+            }
+            // Only default-world mobs are swept (the spawner populates that
+            // world); other dimensions manage their own populations.
+            $worldComponent = $entity->get(\pocketmine\core\component\WorldComponent::class);
+            if ($worldComponent !== null && $worldComponent->id !== 0) {
                 continue;
             }
             $meta = $entity->get(MetadataComponent::class);

@@ -234,8 +234,47 @@ final class BlockBreakService {
         ItemDurability::consume($playerRef);
         // 14.11: mining is slightly hungry work (legacy CAUSE_MINING 0.025).
         Hunger::exhaust($playerRef, 0.025);
-        
+
+        // Bug 21: attachable blocks sitting on the removed block fall with it
+        // (torches, flowers, crops, signs, sugar cane...). Chains upward so
+        // stacked attachables (cactus/sugar cane columns) come down too.
+        $this->breakAttachedBlocks($x, $y + 1, $z, $worldId);
+
         return true;
+    }
+
+    /** Blocks that cannot survive without support beneath them. */
+    private const ATTACHABLE_BLOCKS = [
+        6,   // sapling
+        37, 38, 39, 40, // flowers + mushrooms
+        50, 75, 76, // torches
+        59, 141, 142, // crops
+        63, 68, // signs
+        78, // snow layer
+        83, // sugar cane
+    ];
+
+    /**
+     * Bug 21: break any attachable block directly above a removed block (and
+     * chain upward). Drops the attachable as an item like a normal break.
+     */
+    private function breakAttachedBlocks(int $x, int $y, int $z, int $worldId): void {
+        $store = $this->getChunkStore($worldId);
+        if ($store === null) {
+            return;
+        }
+        $above = $store->getBlock($x, $y, $z);
+        if (!in_array($above, self::ATTACHABLE_BLOCKS, true)) {
+            return;
+        }
+        // setBlock routes through the store's listener so clients see it.
+        $this->setBlock($x, $y, $z, 0, $worldId);
+        foreach ($this->getBlockDrops($x, $y, $z, null, $worldId) as $drop) {
+            $this->spawnDropEntity($x + 0.5, $y + 0.5, $z + 0.5,
+                new \pocketmine\core\component\ItemStack($drop['id'], $drop['meta'], $drop['count']), $worldId);
+        }
+        // Chain upward: sugar cane / cactus columns, torch stacks...
+        $this->breakAttachedBlocks($x, $y + 1, $z, $worldId);
     }
 
     /**

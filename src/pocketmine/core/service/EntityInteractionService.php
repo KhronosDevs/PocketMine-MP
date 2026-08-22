@@ -59,17 +59,37 @@ final class EntityInteractionService {
 
         $targetType = $targetMeta->get(\pocketmine\core\constants\MetadataKeys::ENTITY_TYPE) ?? 'unknown';
         
-        // Handle interaction based on target type
+        // Handle interaction based on target type. Passive animals share one
+        // handler (bug 20: the old dispatch matched the literal 'Animal',
+        // which no spawned entity ever carries).
         return match ($targetType) {
             'Villager' => $this->interactWithVillager($playerRef, $targetRef),
-            'Animal' => $this->interactWithAnimal($playerRef, $targetRef),
-            // Bug 8: milking a cow with an empty bucket gives a milk bucket.
-            'Cow' => $this->milkCow($playerRef, $targetRef),
-            // Bug 15: shears on a sheep drop its wool (right-click with
-            // shears); the fleece regrows after a while.
-            'Sheep' => $this->shearSheep($playerRef, $targetRef),
+            'Cow', 'Sheep', 'Pig', 'Chicken', 'Mooshroom' => $this->interactWithPassive($playerRef, $targetRef, $targetType),
             default => $this->defaultInteraction($playerRef, $targetRef),
         };
+    }
+
+    /**
+     * Bug 20 + 28: passive animal interactions, in priority order:
+     *  - shears on a sheep -> shear (bug 15)
+     *  - empty bucket on a cow -> milk (bug 8)
+     *  - empty bowl on a mooshroom -> mushroom stew (bug 28)
+     *  - breed food on a feedable animal -> love mode (bug 20)
+     */
+    private function interactWithPassive(EntityRef $playerRef, EntityRef $targetRef, string $targetType): bool {
+        if ($targetType === 'Sheep') {
+            $heldForShear = $this->heldItem($playerRef);
+            if ($heldForShear !== null && $heldForShear->itemId === \pocketmine\core\constants\ItemIds::SHEARS && $this->shearSheep($playerRef, $targetRef)) {
+                return true;
+            }
+        }
+        if ($targetType === 'Cow' || $targetType === 'Mooshroom') {
+            $heldForMilk = $this->heldItem($playerRef);
+            if ($heldForMilk !== null && $heldForMilk->itemId === \pocketmine\core\constants\ItemIds::BUCKET && $this->milkOrStew($playerRef, $targetRef, $targetType)) {
+                return true;
+            }
+        }
+        return $this->feedAnimal($playerRef, $targetRef, $targetType);
     }
 
     /**
@@ -120,11 +140,14 @@ final class EntityInteractionService {
      * Right-clicking a cow with an empty bucket fills it with milk
      * (legacy Cow::onInteract / Bucket::onActivate). Any other held item
      * falls through to the default no-op interaction.
+    /**
+     * Buckets on cows / bowls on mooshrooms: cow + empty bucket -> milk
+     * bucket (item 325 meta 1); mooshroom + bowl -> mushroom stew (bug 28).
      */
-    private function milkCow(EntityRef $playerRef, EntityRef $targetRef): bool {
+    private function milkOrStew(EntityRef $playerRef, EntityRef $targetRef, string $targetType): bool {
         $player = $playerRef->getEntity();
         if (!$player) return false;
-        $inventory = $player->get(\pocketmine\core\component\InventoryComponent::class);
+        $inventory = $player->get(InventoryComponent::class);
         if (!$inventory) return false;
 
         $slot = $inventory->heldSlot;
@@ -132,17 +155,88 @@ final class EntityInteractionService {
         if ($held === null || $held->itemId !== \pocketmine\core\constants\ItemIds::BUCKET || $held->meta !== 0) {
             return false; // needs an EMPTY bucket in hand
         }
-
-        // Milk bucket: item 325 with meta 1 (legacy damage value).
-        $milk = new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::BUCKET, 1, 1);
-        if (!$inventory->canAddItem($milk)) {
+        $resultId = $targetType === 'Mooshroom' ? \pocketmine\core\constants\ItemIds::MUSHROOM_STEW : \pocketmine\core\constants\ItemIds::BUCKET;
+        $resultMeta = $targetType === 'Mooshroom' ? 0 : 1;
+        $result = new \pocketmine\core\component\ItemStack($resultId, $resultMeta, 1);
+        if (!$inventory->canAddItem($result)) {
             return false;
         }
-        $inventory->set($slot, null); // the empty bucket is consumed
-        $inventory->add($milk);
+        $inventory->set($slot, null); // the empty container is consumed
+        $inventory->add($result);
 
-        $kernel = \pocketmine\Kernel::getInstance()?->getNetworkSessionService();
-        $kernel?->syncInventorySlot($playerRef->getId(), $slot);
+        \pocketmine\Kernel::getInstance()?->getNetworkSessionService()?->syncInventorySlot($playerRef->getId(), $slot);
+        return true;
+    }
+
+    private function heldItem(EntityRef $playerRef): ?\pocketmine\core\component\ItemStack {
+        $player = $playerRef->getEntity();
+        if (!$player) return null;
+        $inv = $player->get(InventoryComponent::class);
+        return $inv?->get($inv?->heldSlot ?? 0);
+    }
+
+    /** Breed food per passive type: null = held item cannot breed this one. */
+    private function breedFoodFor(string $type, int $heldItemId): ?int {
+        return match ($type) {
+            'Cow', 'Sheep' => ($heldItemId === 337) ? 337 : null,   // wheat
+            'Pig' => ($heldItemId === 391) ? 391 : null,             // carrot
+            'Chicken' => ($heldItemId === 295) ? 295 : null,         // seeds
+            default => null,
+        };
+    }
+
+    /**
+     * Bug 20: feeding a passive animal its breed food puts it in love mode
+     * (heart particles). Pairing happens in AISystem::processBreeding().
+     */
+    private function feedAnimal(EntityRef $playerRef, EntityRef $targetRef, string $targetType): bool {
+        $player = $playerRef->getEntity();
+        if (!$player) return false;
+        $held = $this->heldItem($playerRef);
+        if ($held === null) {
+            return false;
+        }
+        if ($this->breedFoodFor($targetType, $held->itemId) === null) {
+            return false;
+        }
+        $tick = \pocketmine\Kernel::getInstance()?->getResourceRegistry()?->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0;
+        $meta = $targetRef->getEntity()?->get(MetadataComponent::class);
+        if ($meta === null) {
+            return false;
+        }
+        // Already in love or on breed cooldown: refuse (no food wasted).
+        if ((int)($meta->get('inLoveUntil', 0)) > $tick || (int)($meta->get('breedCooldownUntil', 0)) > $tick) {
+            return false;
+        }
+
+        // Consume one food item from the hand.
+        $inventory = $player->get(InventoryComponent::class);
+        if ($inventory === null) {
+            return false;
+        }
+        $slot = $inventory->heldSlot;
+        $stack = $inventory->get($slot);
+        if ($stack === null) {
+            return false;
+        }
+        $stack->count--;
+        if ($stack->count <= 0) {
+            $inventory->set($slot, null);
+        } else {
+            $inventory->set($slot, $stack);
+        }
+        \pocketmine\Kernel::getInstance()?->getNetworkSessionService()?->syncInventorySlot($playerRef->getId(), $slot);
+
+        $meta->set('inLoveUntil', $tick + 400); // 20s of love
+        $pos = $targetRef->getEntity()?->get(PositionComponent::class);
+        $wes = \pocketmine\Kernel::getInstance()?->getWorldEventService();
+        if ($wes !== null && $pos !== null) {
+            $wes->spawnHeartParticle(
+                $targetRef->getEntity()?->get(\pocketmine\core\component\WorldComponent::class)?->id ?? 0,
+                (int)floor($pos->x / 16), (int)floor($pos->z / 16),
+                $pos->x, $pos->y + 0.8, $pos->z,
+            );
+        }
         return true;
     }
 

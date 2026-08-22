@@ -2275,6 +2275,10 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // movement so positions are current; the combat no-damage window inside
     // applyDamage throttles repeated ambient hits to legacy attackTime pace.
     $scheduler->register(new \pocketmine\core\system\EnvironmentalDamageSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // Bug 16: random block ticks - crop growth (wheat/carrots/potatoes),
+    // grass spread, leaf decay. Samples loaded chunks near players every
+    // second; sequential against the ChunkStore like EnvironmentalDamageSystem.
+    $scheduler->register(new \pocketmine\core\system\RandomTickSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     // 14.16: furnaces - burn fuel, cook input, produce results on the main
     // thread every world tick (furnaces are blocks, not entities, so they
     // are not part of the region pipeline). Runs after crafting so the

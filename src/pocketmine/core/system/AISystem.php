@@ -31,6 +31,15 @@ use pocketmine\core\service\CombatService;
  * EntitySpawnService) plus Position/Velocity/Health/Metadata components.
  */
 final class AISystem implements System {
+    /** Ticks two paired animals wait before they can breed again. */
+    public const BREED_COOLDOWN_TICKS = 1200;
+    /** Breed foods per passive type (bug 20). */
+    private const BREED_FOODS = [
+        'Cow' => 337,      // wheat
+        'Sheep' => 337,    // wheat
+        'Pig' => 391,      // carrot
+        'Chicken' => 295,  // seeds
+    ];
     private ?CombatService $combatService = null;
 
     public function run(World $world, float $deltaTime): void {
@@ -127,6 +136,8 @@ final class AISystem implements System {
                     break;
             }
         }
+
+        $this->processBreeding($world);
     }
 
     private function handleIdle(AIStateComponent $ai, PositionComponent $position): void {
@@ -349,5 +360,72 @@ final class AISystem implements System {
             $this->combatService = $kernel?->getCombatService();
         }
         return $this->combatService;
+    }
+
+    /**
+     * Bug 20: pairs two same-type animals that are both in love mode and
+     * within range, spawning a baby between them and starting each parent's
+     * breed cooldown. Runs once per tick after the main AI loop.
+     */
+    private function processBreeding(World $world): void {
+        $tick = \pocketmine\Kernel::getInstance()?->getResourceRegistry()?->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0;
+
+        // Collect love-mode passive animals grouped by type.
+        $byType = [];
+        foreach ($world->getEntities() as $entity) {
+            $meta = $entity->get(MetadataComponent::class);
+            if ($meta === null) {
+                continue;
+            }
+            if ((int)($meta->get('inLoveUntil', 0)) <= $tick) {
+                continue;
+            }
+            $type = (string)$meta->get(\pocketmine\core\constants\MetadataKeys::MOB_TYPE, '');
+            if (!isset(self::BREED_FOODS[$type])) {
+                continue; // only feedable passives breed
+            }
+            $pos = $entity->get(PositionComponent::class);
+            if ($pos === null) {
+                continue;
+            }
+            $byType[$type][] = ['entity' => $entity, 'meta' => $meta, 'pos' => $pos];
+        }
+        static $dbgN = 0;
+        if ($dbgN++ < 6) {
+            error_log("[BR] types=" . json_encode(array_map(fn($a) => count($a), $byType)) . " tick=$tick");
+        }
+
+        $spawner = \pocketmine\Kernel::getInstance()?->getEntitySpawnService();
+        $wes = \pocketmine\Kernel::getInstance()?->getWorldEventService();
+        foreach ($byType as $type => $animals) {
+            while (count($animals) >= 2) {
+                [$a, $b] = [$array_a = array_shift($animals), array_shift($animals)];
+                $dx = $a['pos']->x - $b['pos']->x;
+                $dz = $a['pos']->z - $b['pos']->z;
+                if ($dx * $dx + $dz * $dz > 100) {
+                    // Too far apart to pair this tick; both go back in.
+                    $animals[] = $a;
+                    array_unshift($animals, $b);
+                    sort($animals);
+                    break;
+                }
+                // Baby spawns midway; parents start their cooldown.
+                $mx = ($a['pos']->x + $b['pos']->x) / 2;
+                $mz = ($a['pos']->z + $b['pos']->z) / 2;
+                $my = max($a['pos']->y, $b['pos']->y);
+                \pocketmine\Kernel::getInstance()?->getEntitySpawnService()?->spawnMob(\pocketmine\core\enum\EntityType::from($type), $mx, $my + 0.2, $mz);
+                if ($wes !== null) {
+                    $wes->spawnHeartParticle(
+                        $a['entity']->get(\pocketmine\core\component\WorldComponent::class)?->id ?? 0,
+                        (int)floor($mx / 16), (int)floor($mz / 16),
+                        $mx, $my + 1.2, $mz,
+                    );
+                }
+                foreach ([$a, $b] as $parent) {
+                    $parent['meta']->remove('inLoveUntil');
+                    $parent['meta']->set('breedCooldownUntil', $tick + self::BREED_COOLDOWN_TICKS);
+                }
+            }
+        }
     }
 }

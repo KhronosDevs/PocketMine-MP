@@ -100,6 +100,14 @@ final class ItemIds {
     public const WOODEN_PICKAXE = 270;
     public const WOODEN_AXE = 271;
     public const WOODEN_HOE = 290;
+    public const STONE_HOE = 291;
+    public const IRON_HOE = 292;
+    public const DIAMOND_HOE = 293;
+    public const GOLDEN_HOE = 294;
+    public const SEEDS = 295;
+    public const BOWL = 281;
+    public const MUSHROOM_STEW = 282;
+    public const WHEAT_ITEM = 337;
     public const BOW = 261;
     public const ARROW = 262;
 
