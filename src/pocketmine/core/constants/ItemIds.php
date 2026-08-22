@@ -107,6 +107,8 @@ final class ItemIds {
     public const SEEDS = 295;
     public const BOWL = 281;
     public const MUSHROOM_STEW = 282;
+    public const CAKE_ITEM = 354;
+    public const PAINTING = 321;
     public const WHEAT_ITEM = 337;
     public const BOW = 261;
     public const ARROW = 262;

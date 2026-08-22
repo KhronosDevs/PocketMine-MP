@@ -21,11 +21,14 @@ use pocketmine\port\driven\TileEntitySnapshot;
 final class TileEntityStore {
     public const TILE_SIGN = 'Sign';
     public const TILE_ITEM_FRAME = 'ItemFrame';
+    public const TILE_PAINTING = 'Painting';
 
     /** @var array<string, array{text: string[], creator: string}> x:y:z => sign state */
     private array $signs = [];
     /** @var array<string, array{item: ?array{id: int, meta: int, count: int}, rotation: int}> x:y:z => frame state */
     private array $frames = [];
+    /** @var array<string, array{title: string, direction: int}> x:y:z => painting state (bug 23) */
+    private array $paintings = [];
 
     private function key(int $x, int $y, int $z): string {
         return $x . ':' . $y . ':' . $z;
@@ -125,6 +128,21 @@ final class TileEntityStore {
                 ['item' => $frame['item'], 'rotation' => $frame['rotation']],
             );
         }
+        foreach ($this->paintings as $key => $painting) {
+            [$x, $y, $z] = array_map('intval', explode(':', $key));
+            if ($x < $chunkX * 16 || $x >= $chunkX * 16 + 16
+                || $z < $chunkZ * 16 || $z >= $chunkZ * 16 + 16) {
+                continue;
+            }
+            $out[] = new TileEntitySnapshot(
+                'painting:' . $key,
+                self::TILE_PAINTING,
+                $x,
+                $y,
+                $z,
+                ['title' => $painting['title'], 'direction' => $painting['direction']],
+            );
+        }
         return $out;
     }
 
@@ -150,7 +168,29 @@ final class TileEntityStore {
                         : null,
                     'rotation' => (int)($snapshot->data['rotation'] ?? 0),
                 ];
+            } elseif ($snapshot->type === self::TILE_PAINTING) {
+                $this->paintings[$key] = [
+                    'title' => (string)($snapshot->data['title'] ?? 'Kebab'),
+                    'direction' => (int)($snapshot->data['direction'] ?? 0),
+                ];
             }
         }
+    }
+
+    // --- Paintings (bug 23) -------------------------------------------------
+
+    public function getPainting(int $x, int $y, int $z): ?array {
+        return $this->paintings[$this->key($x, $y, $z)] ?? null;
+    }
+
+    public function setPainting(int $x, int $y, int $z, string $title, int $direction): void {
+        $this->paintings[$this->key($x, $y, $z)] = ['title' => $title, 'direction' => $direction];
+    }
+
+    /** @return array{title: string, direction: int}|null Removed painting. */
+    public function removePainting(int $x, int $y, int $z): ?array {
+        $p = $this->paintings[$this->key($x, $y, $z)] ?? null;
+        unset($this->paintings[$this->key($x, $y, $z)]);
+        return $p;
     }
 }
