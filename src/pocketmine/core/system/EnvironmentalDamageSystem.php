@@ -16,6 +16,8 @@ use pocketmine\core\ecs\World;
 use pocketmine\core\enum\GameMode;
 use pocketmine\core\resource\BlockRegistry;
 use pocketmine\core\resource\ChunkStore;
+use pocketmine\core\resource\WorldConfig;
+use pocketmine\core\system\TimeSystem;
 
 /**
  * Environmental damage (old-src Entity::entityBaseTick / Living::
@@ -58,6 +60,7 @@ final class EnvironmentalDamageSystem implements System {
             return;
         }
         $combat = \pocketmine\Kernel::getInstance()?->getCombatService();
+        $worldConfig = $world->getResourceRegistry()->get(WorldConfig::class);
         if ($combat === null) {
             return;
         }
@@ -92,6 +95,20 @@ final class EnvironmentalDamageSystem implements System {
             $feet = (int)floor($pos->y);
             $feetBlock = $store->getBlock($fx, $feet, $fz);
             $bodyBlock = $store->getBlock($fx, $feet + 1, $fz);
+
+            // --- Sunlight burning: undead mobs in direct sky light during
+            // daytime catch fire (legacy EntityEffects + vanilla behavior).
+            // Without this, night-spawned zombies/skeletons accumulate on
+            // the surface indefinitely.
+            $mobType = $meta?->get(MetadataKeys::MOB_TYPE) ?? '';
+            if (($mobType === 'Zombie' || $mobType === 'Skeleton' || $mobType === 'ZombieVillager')
+                && !TimeSystem::isNight($worldConfig?->time ?? 0)) {
+                $skyLight = $store->getSkyLightLevel((int)floor($pos->x), (int)floor($pos->y + 1), (int)floor($pos->z));
+                if ($skyLight >= 14) {
+                    $combat->applyDamage($ref, 1.0, null,
+                        \pocketmine\api\event\EntityDamageEvent::CAUSE_FIRE_TICK);
+                }
+            }
 
             // --- Lava: body or feet inside lava --------------------------
             // Bug 30: Fire Resistance effect skips lava/fire/burning damage.
