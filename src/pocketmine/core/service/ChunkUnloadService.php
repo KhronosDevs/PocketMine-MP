@@ -11,6 +11,7 @@ use pocketmine\core\component\tags\PlayerTag;
 use pocketmine\core\ecs\World;
 use pocketmine\core\resource\ChunkStore;
 use pocketmine\core\resource\WorldRegistry;
+use pocketmine\core\service\ChunkEntityPersistence;
 use pocketmine\port\driven\StoragePort;
 
 final class ChunkUnloadService {
@@ -183,6 +184,23 @@ final class ChunkUnloadService {
                     $chunkZ,
                     $worldId,
                 );
+                // Bug 35: capture dropped items / XP orbs in this chunk as
+                // EntitySnapshots so they survive eviction. Without this,
+                // items silently vanish when the chunk unloads.
+                $entitySnapshots = \pocketmine\core\service\ChunkEntityPersistence::captureEntitiesForChunk(
+                    $this->world, $chunkX, $chunkZ,
+                );
+                if ($entitySnapshots !== []) {
+                    $chunkData = new \pocketmine\port\driven\ChunkData(
+                        $chunkData->chunkX,
+                        $chunkData->chunkZ,
+                        $chunkData->sections,
+                        $chunkData->biomes,
+                        $chunkData->heightmap,
+                        array_merge($chunkData->entities, $entitySnapshots),
+                        $chunkData->tileEntities,
+                    );
+                }
                 $this->getStorage($worldId)->saveChunk($chunkX, $chunkZ, $chunkData);
             }
             $store->unload($chunkX, $chunkZ);
