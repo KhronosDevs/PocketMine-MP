@@ -110,22 +110,6 @@ final class CoordinationThread extends Thread {
         return $this->regionQueues[$slot] ?? null;
     }
 
-    public function findRegionForPosition(float $x, float $z, ThreadSafeArray $regionBounds): ?int {
-        $chunkX = (int)floor($x / 16);
-        $chunkZ = (int)floor($z / 16);
-        foreach ($regionBounds as $regionId => $boundsJson) {
-            $bounds = json_decode($boundsJson, true);
-            if (!is_array($bounds)) {
-                continue;
-            }
-            if ($chunkX >= $bounds['minX'] && $chunkX <= $bounds['maxX']
-                && $chunkZ >= $bounds['minZ'] && $chunkZ <= $bounds['maxZ']) {
-                return (int)$regionId;
-            }
-        }
-        return null;
-    }
-
     public function shutdown(): void {
         $this->state->running = false;
     }

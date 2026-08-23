@@ -99,48 +99,85 @@ final class MobSpawnerSystem implements System {
         $store = $world->getResourceRegistry()->get(ChunkStore::class);
         $store = $store instanceof ChunkStore ? $store : null;
 
-        // Alive players (dead players do not attract spawns). The spawner
-        // only populates the default world (spawnMob targets world 0), so
-        // players in another game world (nether, /world lobbies) must not
-        // attract spawns at their coordinates in the overworld.
+        // Single entity pass: classify all entities into players (alive,
+        // world 0) and hostiles (world 0) in one scan. Previous code ran
+        // 3-4 separate full-entity scans (build players, despawn sweep,
+        // countHostileMobs, countHostileNear × players). This replaces
+        // all of them with one pass.
         $players = [];
+        $hostiles = []; // list of PositionComponent for near-count
+        $allHostiles = []; // for despawn check
         foreach ($world->getEntities() as $entity) {
-            if (!$entity->has(PlayerTag::class)) {
-                continue;
-            }
             $worldComponent = $entity->get(\pocketmine\core\component\WorldComponent::class);
             if ($worldComponent !== null && $worldComponent->id !== 0) {
                 continue;
             }
-            $health = $entity->get(HealthComponent::class);
-            $pos = $entity->get(PositionComponent::class);
-            if ($health === null || $health->current <= 0 || $pos === null) {
-                continue;
+            if ($entity->has(PlayerTag::class)) {
+                $health = $entity->get(HealthComponent::class);
+                $pos = $entity->get(PositionComponent::class);
+                if ($health !== null && $health->current > 0 && $pos !== null) {
+                    $players[] = $pos;
+                }
+            } else {
+                $meta = $entity->get(MetadataComponent::class);
+                if ($meta !== null && $meta->get(MetadataKeys::HOSTILE)) {
+                    $pos = $entity->get(PositionComponent::class);
+                    if ($pos !== null) {
+                        $hostiles[] = $pos;
+                        $allHostiles[] = $entity;
+                    }
+                }
             }
-            $players[] = $pos;
         }
         if (empty($players)) {
             return;
         }
 
-        // Free capacity before checking the caps: hostile mobs farther than
-        // DESPAWN_DISTANCE from EVERY player are abandoned (nobody can reach
-        // them, but they still count against MAX_TOTAL_MOBS). Without this
-        // sweep the cap saturates after long sessions and hostile spawning
-        // dies permanently. The despawn is queued and flushed on the next
-        // world tick, so subtract it from the count to unblock this cycle.
-        $despawned = $kernel->getEntityDespawnService()->despawnFarFromAllPlayers($players, self::DESPAWN_DISTANCE);
+        // Despawn hostiles far from all players (inlined — no separate scan).
+        $maxDespawnSq = self::DESPAWN_DISTANCE * self::DESPAWN_DISTANCE;
+        $despawned = 0;
+        foreach ($allHostiles as $entity) {
+            $pos = $entity->get(PositionComponent::class);
+            if ($pos === null) {
+                continue;
+            }
+            $near = false;
+            foreach ($players as $playerPos) {
+                $dx = $pos->x - $playerPos->x;
+                $dy = $pos->y - $playerPos->y;
+                $dz = $pos->z - $playerPos->z;
+                if ($dx * $dx + $dy * $dy + $dz * $dz <= $maxDespawnSq) {
+                    $near = true;
+                    break;
+                }
+            }
+            if (!$near) {
+                $ref = \pocketmine\core\ecs\EntityRef::create($entity->id, $world);
+                $kernel->getEntityDespawnService()->despawn($ref, false);
+                $despawned++;
+            }
+        }
 
-        $totalHostile = max(0, $this->countHostileMobs($world) - $despawned);
+        $totalHostile = max(0, count($hostiles) - $despawned);
         if ($totalHostile >= self::MAX_TOTAL_MOBS) {
             return;
         }
 
+        $spawnRadiusSq = self::SPAWN_RADIUS * self::SPAWN_RADIUS;
         foreach ($players as $playerPos) {
             if ($totalHostile >= self::MAX_TOTAL_MOBS) {
                 break;
             }
-            if ($this->countHostileNear($world, $playerPos) >= self::MAX_MOBS_PER_PLAYER) {
+            // Count nearby hostiles (inlined — no separate scan).
+            $nearCount = 0;
+            foreach ($hostiles as $hPos) {
+                $dx = $hPos->x - $playerPos->x;
+                $dz = $hPos->z - $playerPos->z;
+                if ($dx * $dx + $dz * $dz <= $spawnRadiusSq) {
+                    $nearCount++;
+                }
+            }
+            if ($nearCount >= self::MAX_MOBS_PER_PLAYER) {
                 continue;
             }
 
@@ -199,43 +236,4 @@ final class MobSpawnerSystem implements System {
         return EntityType::Zombie; // unreachable, but keeps static analysis happy
     }
 
-    private function countHostileMobs(World $world): int {
-        // Default-world only (world 0): the spawner populates that world, so
-        // hostiles in other dimensions must not consume its budget.
-        $count = 0;
-        foreach ($world->getEntities() as $entity) {
-            $worldComponent = $entity->get(\pocketmine\core\component\WorldComponent::class);
-            if ($worldComponent !== null && $worldComponent->id !== 0) {
-                continue;
-            }
-            $meta = $entity->get(MetadataComponent::class);
-            if ($meta !== null && $meta->get(MetadataKeys::HOSTILE)) {
-                $count++;
-            }
-        }
-        return $count;
-    }
-
-    private function countHostileNear(World $world, PositionComponent $center): int {
-        // Same world scoping as countHostileMobs; X/Z-only distance is fine
-        // within one dimension.
-        $count = 0;
-        $rangeSq = self::SPAWN_RADIUS * self::SPAWN_RADIUS;
-        foreach ($world->getEntities() as $entity) {
-            $meta = $entity->get(MetadataComponent::class);
-            if ($meta === null || !$meta->get(MetadataKeys::HOSTILE)) {
-                continue;
-            }
-            $pos = $entity->get(PositionComponent::class);
-            if ($pos === null) {
-                continue;
-            }
-            $dx = $pos->x - $center->x;
-            $dz = $pos->z - $center->z;
-            if ($dx * $dx + $dz * $dz <= $rangeSq) {
-                $count++;
-            }
-        }
-        return $count;
-    }
 }
