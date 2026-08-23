@@ -248,6 +248,99 @@ public function onEnable(): void {
 }
 ```
 
+### Async plugin tasks (real worker threads)
+
+The `scheduleAsyncTask(callable)` method runs a closure **on the main thread** — it exists for backward compat only. For real off-thread work, use the async plugin task system:
+
+| Method | Returns |
+|---|---|
+| `scheduleAsyncPluginTask(Runnable $task)` | `PluginFuture` with `then()` callbacks |
+| `getThreadingPort()->submitPluginTask(Runnable $task)` | Same, but skips the Scheduler |
+
+**How it works:**
+
+1. You extend `PluginTask` (which extends pmmpthread's `Runnable`).
+2. Set input properties on the task object.
+3. Submit it — it runs on a **real worker thread**, not the main thread.
+4. Register a `then()` callback — it fires on the main thread the next tick after the worker finishes.
+5. The server continues without blocking.
+
+```php
+use pocketmine\adapter\driven\threading\PluginTask;
+
+class HashTask extends PluginTask {
+    public string $input = '';
+    public string $hash = '';
+
+    public function run(): void {
+        // This runs on a WORKER THREAD — do not touch game state.
+        $this->hash = hash('sha256', $this->input);
+        $this->complete($this->hash); // resolve the future
+    }
+}
+```
+
+```php
+public function onEnable(): void {
+    $task = new HashTask();
+    $task->input = 'some large data';
+
+    $future = $this->getScheduler()->scheduleAsyncPluginTask($task);
+    $future->then(
+        fn(string $hash) => $this->getLogger()->info("Hash: $hash"),
+        fn(\Throwable $e) => $this->getLogger()->error("Failed: {$e->getMessage()}")
+    );
+    // Returns immediately — the server does not freeze.
+}
+```
+
+#### `PluginTask` base class
+
+| Method | Meaning |
+|---|---|
+| `complete(mixed $result = null)` | Resolve the future with a value (call from `run()`) |
+| `fail(\Throwable $e)` | Reject the future with an error (call from `run()`) |
+
+If `run()` completes without calling `complete()` or `fail()`, the future is auto-resolved with `null`. If `run()` throws, the future is auto-rejected.
+
+#### `PluginFuture` callbacks
+
+| Method | Meaning |
+|---|---|
+| `then(callable $onSuccess, ?callable $onError = null)` | Register a callback. `$onSuccess` receives the result; `$onError` receives the `\Throwable`. Both run on the main thread. |
+| `isDone()` | Whether the worker has finished (check without blocking) |
+| `cancel()` | Prevent callbacks from firing |
+
+Multiple `then()` calls stack — all registered callbacks fire.
+
+#### Important constraints
+
+- **Task properties must be scalars or thread-safe.** The task object crosses thread boundaries. Strings, integers, floats, and booleans are safe. Closures, resources, and main-thread objects (entities, players, world) are **not** — they will crash or corrupt.
+- **Task classes must be pre-loaded.** pmmpthread workers cannot autoload. Call `class_exists(MyTask::class)` in your `onEnable()` before the first submission:
+
+```php
+public function onEnable(): void {
+    // Pre-load so workers can instantiate it.
+    class_exists(HashTask::class);
+
+    // Now safe to submit.
+    $future = $this->getScheduler()->scheduleAsyncPluginTask(new HashTask());
+    // ...
+}
+```
+
+- **Do not touch game state from `run()`.** The worker thread has no access to the ECS, entities, players, or the world. Compute pure data only. Use `complete($result)` to send the result back; handle it in the `then()` callback on the main thread.
+
+#### When to use async tasks
+
+| Use case | Approach |
+|---|---|
+| Hashing, encoding, compression, heavy math | `PluginTask` → worker thread |
+| HTTP requests, file I/O (large) | `PluginTask` → worker thread |
+| Modifying entities/blocks/inventory | Main-thread scheduled task |
+| Sending packets to players | Main-thread scheduled task |
+| Anything touching ECS state | Main-thread scheduled task |
+
 ---
 
 ## 7. Events
