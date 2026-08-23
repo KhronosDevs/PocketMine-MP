@@ -29,4 +29,4 @@ fi
 # calc, terrain noise and nibble pack run in C when available, falling back
 # to pure PHP otherwise (khronos.json "native-accel.enabled"). The bundled
 # php-binaries ship ffi.so; stock PHP warns and keeps running.
-"$PHP_BINARY" -d memory_limit=512M -d extension=ffi -d ffi.enable=1 "$POCKETMINE_FILE" "$@"
+"$PHP_BINARY" "$POCKETMINE_FILE" "$@"
