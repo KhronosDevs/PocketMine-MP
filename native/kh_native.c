@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <math.h>
 
 /* ------------------------------------------------------------------ */
 /* Light: byte-identical to LightCalculator::calculate().              */
@@ -254,5 +255,171 @@ void kh_build_sky_light(const unsigned char *heightmap, unsigned char *out)
             unsigned char odd = (worldY >= (int)surface[colOdd] - 1) ? 0x0F : 0x00;
             out[sy * 2048 + i] = (unsigned char)((odd << 4) | even);
         }
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* Nukkit terrain: simplex noise column profiles (256 columns in ONE call).
+ * Computes height + biome for every column using the Nukkit Normal
+ * generator's multi-noise terrain math. Replaces ~1280 PHP noise calls.
+ * ------------------------------------------------------------------ */
+
+#define SIMP_F2 0.3660254037844386
+#define SIMP_G2 0.21132486540518713
+
+static const float GRAD2[8][2] = {
+    {1,1},{-1,1},{1,-1},{-1,-1},{1,0},{-1,0},{0,1},{0,-1}
+};
+
+static float simplex_noise2d(float x, float y, const int *perm)
+{
+    float s = (float)((x + y) * SIMP_F2);
+    int i = (int)floor(x + s);
+    int j = (int)floor(y + s);
+    float t = (float)((i + j) * SIMP_G2);
+    float x0 = x - (i - t);
+    float y0 = y - (j - t);
+    int i1, j1;
+    if (x0 > y0) { i1 = 1; j1 = 0; } else { i1 = 0; j1 = 1; }
+    float x1 = x0 - i1 + (float)SIMP_G2;
+    float y1 = y0 - j1 + (float)SIMP_G2;
+    float x2 = x0 - 1.0f + 2.0f * (float)SIMP_G2;
+    float y2 = y0 - 1.0f + 2.0f * (float)SIMP_G2;
+    int ii = i & 255, jj = j & 255;
+    int gi0 = perm[ii + perm[jj]] % 8;
+    int gi1 = perm[ii + i1 + perm[jj + j1]] % 8;
+    int gi2 = perm[ii + 1 + perm[jj + 1]] % 8;
+    float n0, n1, n2;
+    float t0 = 0.5f - x0*x0 - y0*y0;
+    n0 = t0 < 0 ? 0 : t0*t0*t0*t0 * (GRAD2[gi0][0]*x0 + GRAD2[gi0][1]*y0);
+    float t1 = 0.5f - x1*x1 - y1*y1;
+    n1 = t1 < 0 ? 0 : t1*t1*t1*t1 * (GRAD2[gi1][0]*x1 + GRAD2[gi1][1]*y1);
+    float t2 = 0.5f - x2*x2 - y2*y2;
+    n2 = t2 < 0 ? 0 : t2*t2*t2*t2 * (GRAD2[gi2][0]*x2 + GRAD2[gi2][1]*y2);
+    return 70.0f * (n0 + n1 + n2);
+}
+
+static void build_perm(int seed, int *perm)
+{
+    int base[256];
+    for (int i = 0; i < 256; i++) base[i] = i;
+    unsigned int state = (unsigned int)seed;
+    for (int i = 255; i > 0; i--) {
+        state = state * 1103515245 + 12345;
+        int j = (int)(state % ((unsigned int)(i + 1)));
+        int tmp = base[i]; base[i] = base[j]; base[j] = tmp;
+    }
+    for (int i = 0; i < 256; i++) {
+        perm[i] = base[i];
+        perm[i + 256] = base[i];
+    }
+}
+
+static void sample_simplex_grid(int chunk_x, int chunk_z, float freq,
+                                const int *perm, float *out)
+{
+    for (int c = 0; c < 256; c++) {
+        float wx = (float)(chunk_x * 16 + (c & 15)) / 4.0f * freq;
+        float wz = (float)(chunk_z * 16 + (c >> 4)) / 4.0f * freq;
+        out[c] = simplex_noise2d(wx, wz, perm);
+    }
+}
+
+static int nukkit_pick_biome(int wx, int wz, int seed)
+{
+    long long hash = (long long)wx * 2345803LL ^ (long long)wz * 9236449LL ^ (long long)seed;
+    hash *= hash + 223;
+    int temp = (int)((unsigned int)(hash ^ (hash >> 17)) & 0xFFFF);
+    int humidity = (int)((unsigned int)(hash * 31 ^ (hash >> 11)) & 0xFFFF);
+    int cold = temp < 24576;
+    int hot = temp > 40960;
+    int wet = humidity > 36000;
+    int dry = humidity < 26214;
+    if (cold) return wet ? 5 : 12;
+    if (hot && dry) return 2;
+    if (wet) return 4;
+    return 1;
+}
+
+void kh_nukkit_profiles(int chunk_x, int chunk_z, int seed,
+                        int *out_heights, int *out_biomes)
+{
+    int permSF[512], permL[512], permM[512], permB[512], permR[512];
+    int rng = (chunk_x * 374761393) ^ (chunk_z * 668265263) ^ (seed * 1103515245);
+    rng &= 0x7FFFFFFF;
+    build_perm(rng, permSF);
+    build_perm(rng, permL);
+    build_perm(rng, permM);
+    build_perm(rng, permB);
+    build_perm(rng, permR);
+
+    float sf[256], land[256], mtn[256], base_n[256], riv[256];
+    sample_simplex_grid(chunk_x, chunk_z, 0.125f, permSF, sf);
+    sample_simplex_grid(chunk_x, chunk_z, 0.25f, permL, land);
+    sample_simplex_grid(chunk_x, chunk_z, 4.0f, permM, mtn);
+    sample_simplex_grid(chunk_x, chunk_z, 1.0f, permB, base_n);
+    sample_simplex_grid(chunk_x, chunk_z, 2.0f, permR, riv);
+
+    for (int c = 0; c < 256; c++) {
+        int wx = chunk_x * 16 + (c & 15);
+        int wz = chunk_z * 16 + (c >> 4);
+        int canBaseGround = 0, canRiver = 1;
+
+        float lhn = land[c] + 1.0f;
+        lhn *= 2.956f;
+        lhn = lhn * lhn - 0.6f;
+        if (lhn < 0) lhn = 0;
+
+        float mhg = mtn[c] - 0.2f;
+        if (mhg < 0) mhg = 0;
+        int mountainGen = (int)(13.0f * mhg);
+
+        int landGen = (int)(18.0f * lhn);
+        if (landGen > 18) { canBaseGround = 1; landGen = 18; }
+
+        int h = 48 + landGen + mountainGen;
+        int biome = 1;
+
+        if (h < 60) {
+            if (h < 55) h += (int)(5.0f * sf[c]);
+            biome = 0;
+            if (h < 43) h = 48;
+            canRiver = 0;
+        } else if (h >= 60 && h <= 64) {
+            biome = 16;
+        } else {
+            biome = nukkit_pick_biome(wx, wz, seed);
+            if (canBaseGround) {
+                int bg1 = (int)(18.0f * lhn) - 18;
+                int bg2 = (int)(3.0f * (base_n[c] + 1.0f));
+                if (bg2 > bg1) bg2 = bg1;
+                if (bg2 > mountainGen) bg2 -= mountainGen; else bg2 = 0;
+                h += bg2;
+            }
+        }
+
+        if (canRiver && h <= 57) canRiver = 0;
+
+        if (canRiver) {
+            float rv = riv[c];
+            if (rv > -0.25f && rv < 0.25f) {
+                rv = rv > 0 ? rv : -rv;
+                rv = 0.25f - rv;
+                rv = rv * rv * 4.0f - 0.0000001f;
+                if (rv < 0) rv = 0;
+                h -= (int)(rv * 64);
+                if (h < 62) {
+                    biome = 7;
+                    if (h <= 54) {
+                        int g1 = 53 + (int)(3.0f * (base_n[c] + 1.0f));
+                        int g2 = h < 55 ? 55 : h;
+                        h = g1 > g2 ? g1 : g2;
+                    }
+                }
+            }
+        }
+
+        out_heights[c] = h;
+        out_biomes[c] = biome;
     }
 }

@@ -45,6 +45,8 @@ void kh_noise_columns_xor(int chunk_x, int chunk_z, int xmask, int seed,
 int kh_pack_nibbles(const unsigned char *in, size_t len, unsigned char *out);
 int kh_unpack_nibbles(const unsigned char *in, size_t len, unsigned char *out);
 void kh_build_sky_light(const unsigned char *heightmap, unsigned char *out);
+void kh_nukkit_profiles(int chunk_x, int chunk_z, int seed,
+                        int *out_heights, int *out_biomes);
 CDEF;
 
     private static ?\FFI $ffi = null;
@@ -301,5 +303,32 @@ CDEF;
         } catch (\Throwable $e) {
             return null;
         }
+    }
+
+    /**
+     * Nukkit terrain: compute 256 column profiles (height + biome) in one
+     * FFI call using simplex noise. Replaces ~1280 PHP noise2D calls.
+     *
+     * @return array{heights: array<int, int>, biomes: array<int, int>}|null
+     */
+    public static function nukkitProfiles(int $chunkX, int $chunkZ, int $seed): ?array {
+        if (!self::available()) {
+            return null;
+        }
+        try {
+            $heights = \FFI::new('int[256]');
+            $biomes = \FFI::new('int[256]');
+            self::$ffi->kh_nukkit_profiles($chunkX, $chunkZ, $seed, $heights, $biomes);
+            $hRaw = \FFI::string($heights, 256 * 4);
+            $bRaw = \FFI::string($biomes, 256 * 4);
+        } catch (\Throwable $e) {
+            return null;
+        }
+        $hVals = unpack('l*', $hRaw);
+        $bVals = unpack('l*', $bRaw);
+        if (!is_array($hVals) || !is_array($bVals)) {
+            return null;
+        }
+        return ['heights' => array_values($hVals), 'biomes' => array_values($bVals)];
     }
 }
