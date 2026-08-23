@@ -44,12 +44,10 @@ final class MobSpawnerSystem implements System {
     public const DESPAWN_DISTANCE = 128.0;
 
     /**
-     * Hostile spawn weights - common overworld mobs dominate, rare/misc
-     * (Ghast, Blaze, Silverfish, ...) only appear occasionally. Keys are
-     * EntityType values (enums can't be array keys), values are relative
-     * weights for the night spawner.
+     * Overworld hostile spawn weights. Nether mobs are excluded from this
+     * pool so they never spawn in the overworld.
      */
-    private const HOSTILE_WEIGHTS = [
+    private const OVERWORLD_WEIGHTS = [
         EntityType::Zombie->value => 32,
         EntityType::Skeleton->value => 26,
         EntityType::Spider->value => 22,
@@ -59,13 +57,23 @@ final class MobSpawnerSystem implements System {
         EntityType::CaveSpider->value => 4,
         EntityType::Husk->value => 3,
         EntityType::Stray->value => 3,
-        EntityType::PigZombie->value => 2,
         EntityType::Witch->value => 2,
         EntityType::ZombieVillager->value => 2,
-        EntityType::LavaSlime->value => 1,
         EntityType::Silverfish->value => 1,
-        EntityType::Ghast->value => 1,
-        EntityType::Blaze->value => 1,
+    ];
+
+    /**
+     * Nether hostile spawn weights. Overworld mobs are excluded so they
+     * never spawn in the nether.
+     */
+    private const NETHER_WEIGHTS = [
+        EntityType::PigZombie->value => 20,
+        EntityType::Ghast->value => 4,
+        EntityType::Blaze->value => 4,
+        EntityType::LavaSlime->value => 3,
+        EntityType::Skeleton->value => 2,  // wither skeleton variant
+        EntityType::Slime->value => 2,
+        EntityType::Enderman->value => 1,
     ];
 
     private int $tickCounter = 0;
@@ -227,17 +235,20 @@ final class MobSpawnerSystem implements System {
                 continue; // never found loaded terrain: skip this player
             }
 
-            $spawnService->spawnMob(self::pickHostileType(), $x, $y, $z);
+            $isNether = $worldConfig instanceof WorldConfig
+                && $worldConfig->generator === \pocketmine\core\enum\GeneratorType::Nether;
+            $spawnService->spawnMob(self::pickHostileType($isNether), $x, $y, $z);
             $totalHostile++;
         }
     }
 
-    /** Weighted random pick from HOSTILE_WEIGHTS. */
-    private function pickHostileType(): EntityType {
-        $total = array_sum(self::HOSTILE_WEIGHTS);
+    /** Weighted random pick from the appropriate world pool. */
+    private function pickHostileType(bool $isNether): EntityType {
+        $pool = $isNether ? self::NETHER_WEIGHTS : self::OVERWORLD_WEIGHTS;
+        $total = array_sum($pool);
         $roll = mt_rand(1, $total);
         $cumulative = 0;
-        foreach (self::HOSTILE_WEIGHTS as $type => $weight) {
+        foreach ($pool as $type => $weight) {
             $cumulative += $weight;
             if ($roll <= $cumulative) {
                 return EntityType::from($type);
