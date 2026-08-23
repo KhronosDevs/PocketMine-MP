@@ -6275,20 +6275,52 @@ final class NetworkSessionService {
         }
         $centerX = (int)floor($pos->x / 16);
         $centerZ = (int)floor($pos->z / 16);
-        $session['lastChunkX'] = $centerX;
-        $session['lastChunkZ'] = $centerZ;
         $radius = $session['radius'];
 
-        $list = [];
+        // Bug 41: incremental re-queue — when the player crosses a chunk
+        // column, instead of throwing away the entire pending queue and
+        // rebuilding 450-625 entries, keep the unprocessed remainder that
+        // is still within render radius and only add the genuinely new
+        // edge chunks.  This prevents the delivery pipeline from resetting
+        // progress every time the player takes a step.
+        $pending = [];
+        if (!empty($session['chunkQueue'])) {
+            $remaining = [];
+            for ($i = $session['chunkQueueIndex']; $i < count($session['chunkQueue']); $i++) {
+                [$x, $z] = $session['chunkQueue'][$i];
+                // Chebyshev distance — same metric as the render radius.
+                if (max(abs($x - $centerX), abs($z - $centerZ)) <= $radius) {
+                    $remaining[$x . ',' . $z] = [$x, $z];
+                }
+            }
+            $pending = $remaining;
+        }
+
+        // Build the full radius and collect only chunks that are neither
+        // still pending nor already delivered — i.e. the genuinely new edge.
+        $newEdge = [];
         for ($dx = -$radius; $dx <= $radius; $dx++) {
             for ($dz = -$radius; $dz <= $radius; $dz++) {
-                $list[] = ['x' => $centerX + $dx, 'z' => $centerZ + $dz, 'd' => $dx * $dx + $dz * $dz];
+                $x = $centerX + $dx;
+                $z = $centerZ + $dz;
+                $key = $x . ',' . $z;
+                if (isset($pending[$key]) || isset($session['chunksSent'][$key])) {
+                    continue;
+                }
+                $newEdge[] = ['x' => $x, 'z' => $z, 'd' => $dx * $dx + $dz * $dz];
             }
         }
-        usort($list, static fn(array $a, array $b): int => $a['d'] <=> $b['d']);
+        usort($newEdge, static fn(array $a, array $b): int => $a['d'] <=> $b['d']);
 
-        $session['chunkQueue'] = array_map(static fn(array $c): array => [$c['x'], $c['z']], $list);
+        // Merge: remaining pending first (still valid, order preserved),
+        // then new edge sorted by proximity to current center.
+        $session['chunkQueue'] = array_merge(
+            array_values($pending),
+            array_map(static fn(array $c): array => [$c['x'], $c['z']], $newEdge)
+        );
         $session['chunkQueueIndex'] = 0;
+        $session['lastChunkX'] = $centerX;
+        $session['lastChunkZ'] = $centerZ;
         $this->sessions[$addrKey] = $session;
     }
 
