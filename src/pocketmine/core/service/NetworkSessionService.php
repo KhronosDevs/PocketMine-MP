@@ -1488,6 +1488,19 @@ final class NetworkSessionService {
      * position model intact. Mob entities have no session here, so callers
      * can pass any entity id; only connected players receive a packet.
      */
+    /** Broadcast an EntityEventPacket (hurt, death, eat, etc.) to all
+     *  viewers of the given entity. */
+    public function broadcastEntityEvent(int $entityId, int $event): void {
+        $pk = new \pocketmine\protocol\EntityEventPacket();
+        $pk->eid = $entityId;
+        $pk->event = $event;
+        foreach ($this->sessions as $session) {
+            if (isset($session['knownEntities'][$entityId])) {
+                $this->queuePacket($session['playerRef'], clone $pk);
+            }
+        }
+    }
+
     public function sendEntityMotionTo(int $entityId, float $mx, float $my, float $mz): void {
         foreach ($this->sessions as $session) {
             if ($session['playerRef']->entityId !== $entityId) {

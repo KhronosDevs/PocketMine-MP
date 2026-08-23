@@ -624,17 +624,15 @@ final class CombatService {
         return true;
     }
 
-    /** Play the generic hurt "click" sound at the target's position. */
+    /** Send the hurt animation to all viewers of the target entity.
+     *  EntityEventPacket::HURT_ANIMATION triggers the red flash + hurt
+     *  sound on the client (legacy Living::animateHit()). */
     private function playHurtEffect(EntityRef $targetRef): void {
-        $pos = $targetRef->getPosition();
-        if ($pos === null) return;
-        $kernel = \pocketmine\Kernel::getInstance();
-        $wes = $kernel?->getWorldEventService();
-        if ($wes === null) return;
-        $worldId = $targetRef->getEntity()?->get(\pocketmine\core\component\WorldComponent::class)?->id ?? 0;
-        $chunkX = (int)floor($pos->x / 16);
-        $chunkZ = (int)floor($pos->z / 16);
-        $wes->playSound($worldId, $chunkX, $chunkZ, $pos->x, $pos->y, $pos->z, \pocketmine\core\service\WorldEventService::SOUND_CLICK);
+        $id = $targetRef->getEntity()?->id ?? 0;
+        if ($id === 0) return;
+        \pocketmine\Kernel::getInstance()?->getNetworkSessionService()?->broadcastEntityEvent(
+            $id, \pocketmine\protocol\EntityEventPacket::HURT_ANIMATION
+        );
     }
 
     /**
