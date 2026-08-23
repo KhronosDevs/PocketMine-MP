@@ -99,6 +99,29 @@ class Scheduler {
         $this->threadingPort->submit(fn() => $callback());
     }
 
+    /**
+     * Submit a PluginTask to a real worker thread and return a non-blocking
+     * future with callback support.
+     *
+     * The task's run() executes off the main thread. Register callbacks
+     * with ->then() to handle results asynchronously.
+     *
+     * The task class and all its ancestors MUST be loaded before the pool
+     * was created (pmmpthread workers cannot autoload). Call
+     * class_exists(MyTask::class) in your plugin's onEnable().
+     *
+     * @return \pocketmine\adapter\driven\threading\PluginFuture
+     */
+    public function scheduleAsyncPluginTask(\pmmp\thread\Runnable $task): \pocketmine\adapter\driven\threading\PluginFuture {
+        $future = $this->threadingPort->submitPluginTask($task);
+        // Track the future so the Kernel drains callbacks each tick.
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel !== null) {
+            $kernel->trackPluginFuture($future);
+        }
+        return $future;
+    }
+
     public function cancelTask(int $taskId): void {
         if (isset($this->tasks[$taskId])) {
             $this->tasks[$taskId]->cancel();

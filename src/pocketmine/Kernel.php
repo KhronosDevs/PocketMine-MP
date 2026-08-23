@@ -174,6 +174,9 @@ final class Kernel {
         'merges' => 0,
     ];
 
+    /** @var list<\pocketmine\adapter\driven\threading\PluginFuture> pending plugin async futures */
+    private array $pendingPluginFutures = [];
+
     private PlayerJoinService $playerJoinService;
     private PlayerLeaveService $playerLeaveService;
     private PlayerRespawnService $playerRespawnService;
@@ -542,7 +545,13 @@ final class Kernel {
             $this->world->tick(0.05);
             $markPhase('tick');
 
-            // 0b. Drain worker results: compare (gate) or apply.
+            // 0b. Drain completed plugin async futures: fire then() callbacks
+            // on the main thread for tasks that finished on workers.
+            if ($this->pendingPluginFutures !== []) {
+                $this->drainPluginFutures();
+            }
+
+            // 0b2. Drain worker results: compare (gate) or apply.
             if ($this->regionPipelineEnabled && $this->threadsStarted) {
                 $this->drainRegionResults();
             }
@@ -1531,12 +1540,37 @@ final class Kernel {
     /**
      * The stable, server-wide plugin manager (the same instance exposed as
      * the plugin port).
-     */
-    public function getPluginManager(): \pocketmine\api\plugin\PluginManager {
+     */    public function getPluginManager(): \pocketmine\api\plugin\PluginManager {
         if (!$this->pluginPort instanceof \pocketmine\api\plugin\PluginManager) {
             throw new \LogicException('Plugin port is not backed by the api PluginManager');
         }
         return $this->pluginPort;
+    }
+
+    // --- Async plugin tasks -----------------------------------------------
+
+    /**
+     * Register a PluginFuture for per-tick callback draining.
+     * Called by PmmpThreadPool::submitPluginTask() or the Scheduler.
+     */
+    public function trackPluginFuture(\pocketmine\adapter\driven\threading\PluginFuture $future): void {
+        $this->pendingPluginFutures[] = $future;
+    }
+
+    /**
+     * Drain completed plugin async futures and fire their then() callbacks
+     * on the main thread. Called once per tick in the main loop.
+     */
+    private function drainPluginFutures(): void {
+        $remaining = [];
+        foreach ($this->pendingPluginFutures as $future) {
+            if (!$future->isDone()) {
+                $remaining[] = $future;
+                continue;
+            }
+            $future->fireCallbacks();
+        }
+        $this->pendingPluginFutures = $remaining;
     }
 
     /**

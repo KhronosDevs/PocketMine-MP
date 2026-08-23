@@ -8,6 +8,9 @@ use pocketmine\port\driven\Future;
 use pocketmine\port\driven\ThreadingPort;
 use pmmp\thread\Pool;
 use pmmp\thread\Runnable;
+use pocketmine\adapter\driven\threading\PluginFuture;
+use pocketmine\adapter\driven\threading\PluginRunnable;
+use pocketmine\adapter\driven\threading\PluginTask;
 
 /**
  * Threading port backed by pmmpthread's real Worker Pool.
@@ -62,6 +65,30 @@ final class PmmpThreadPool implements ThreadingPort {
         foreach ($futures as $future) {
             $future->await();
         }
+    }
+
+    /**
+     * Submit a Runnable to a real worker thread and return a non-blocking
+     * future with callback support.
+     *
+     * If the task is a PluginTask, its future is injected so it can call
+     * complete() or fail() from within run(). For plain Runnables, the
+     * future is auto-resolved when run() returns (or rejected on throw).
+     */
+    public function submitPluginTask(Runnable $task): PluginFuture {
+        $future = new FutureImpl();
+        if ($task instanceof PluginTask) {
+            $task->setFuture($future);
+        }
+        $wrapper = new PluginRunnable($task, $future);
+        $this->pool->submit($wrapper);
+        $pluginFuture = new PluginFuture($future);
+        // Auto-track so the Kernel drains callbacks each tick.
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel !== null) {
+            $kernel->trackPluginFuture($pluginFuture);
+        }
+        return $pluginFuture;
     }
 
     public function shutdown(): void {
