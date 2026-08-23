@@ -168,7 +168,7 @@ final class NukkitNormalGenerator {
 
                 $biomes[$genz * 16 + $genx] = $biome;
 
-                // Build column blocks: bedrock at bottom, stone core, water above surface
+                // Build column blocks: bedrock, stone core, surface layers, water
                 $generateHeight = max($genyHeight, self::SEA_HEIGHT);
                 $col = '';
                 for ($geny = 0; $geny <= $generateHeight; $geny++) {
@@ -179,6 +179,22 @@ final class NukkitNormalGenerator {
                             $col .= chr(self::ICE);
                         } else {
                             $col .= chr(self::STILL_WATER);
+                        }
+                    } elseif ($geny === $genyHeight) {
+                        // Surface layer: grass on land, sand on beaches/desert/ocean
+                        if ($biome === self::BIOME_BEACH || $biome === self::BIOME_DESERT || $biome === self::BIOME_OCEAN) {
+                            $col .= chr(12); // sand
+                        } elseif ($genyHeight >= 96 && ($biome === self::BIOME_MOUNTAINS || $biome === self::BIOME_ICE_PLAINS)) {
+                            $col .= chr(12); // sand/gravel on high mountains
+                        } else {
+                            $col .= chr(2); // grass
+                        }
+                    } elseif ($geny >= $genyHeight - 3 && $geny < $genyHeight) {
+                        // Dirt layer (3 blocks below surface)
+                        if ($biome === self::BIOME_BEACH || $biome === self::BIOME_DESERT) {
+                            $col .= chr(24); // sandstone below sand
+                        } else {
+                            $col .= chr(3); // dirt
                         }
                     } else {
                         $col .= chr(self::STONE);
@@ -353,7 +369,130 @@ final class NukkitNormalGenerator {
             }
         }
 
+        // --- Trees ---
+        // Biome-specific tree placement. Each biome has a density and tree type.
+        // Trees are placed on solid ground (grass/dirt), within chunk bounds
+        // [3..12] so the canopy fits without cross-chunk writes.
+        $treeBiomes = [
+            self::BIOME_FOREST => ['type' => 'oak', 'count' => 5],
+            self::BIOME_PLAINS => ['type' => 'oak', 'count' => 1],
+            self::BIOME_TAIGA => ['type' => 'spruce', 'count' => 3],
+            self::BIOME_ICE_PLAINS => ['type' => 'spruce', 'count' => 2],
+            self::BIOME_BIRCH_FOREST => ['type' => 'birch', 'count' => 4],
+            self::BIOME_SWAMP => ['type' => 'oak', 'count' => 2],
+            self::BIOME_MOUNTAINS => ['type' => 'oak', 'count' => 1],
+            self::BIOME_SMALL_MOUNTAINS => ['type' => 'oak', 'count' => 1],
+        ];
+
+        for ($t = 0; $t < 8; $t++) {
+            $tx = 3 + self::nextRngInt($rng, 10);
+            $tz = 3 + self::nextRngInt($rng, 10);
+            $biome = $data->biomes[$tz * 16 + $tx] ?? self::BIOME_PLAINS;
+            $treeConf = $treeBiomes[$biome] ?? null;
+            if ($treeConf === null) {
+                continue;
+            }
+            // Density check: not every candidate becomes a tree
+            if (self::nextRngInt($rng, 10) >= $treeConf['count']) {
+                continue;
+            }
+            $top = ($data->heightmap[$tz * 16 + $tx] ?? 0) - 1;
+            if ($top < 2 || $top > 118) {
+                continue;
+            }
+            $surfaceBlock = self::readBlock($sections, $tx, $top, $tz);
+            if ($surfaceBlock !== 2 && $surfaceBlock !== 3) { // grass or dirt only
+                continue;
+            }
+            // Space check: air above the surface
+            if (self::readBlock($sections, $tx, $top + 1, $tz) !== 0) {
+                continue;
+            }
+            self::placeTree($sections, $tx, $top, $tz, $treeConf['type'], $rng);
+        }
+
         return new ChunkData($data->chunkX, $data->chunkZ, $sections, $data->biomes, $data->heightmap, [], []);
+    }
+
+    /**
+     * Place a single tree at (x, baseY, z). Types:
+     *  - oak: trunk 4-6, 2x 5x5 canopy layers + 3x3 cap
+     *  - birch: trunk 5-7, 2x 5x5 canopy layers + 3x3 cap
+     *  - spruce: trunk 6-8, conical 3x3 then 1x1 leaf layers
+     */
+    private static function placeTree(array &$sections, int $x, int $baseY, int $z, string $type, int &$rng): void {
+        $logBlock = 17; // oak log
+        $leafBlock = 18; // oak leaves
+        $trunkHeight = 4 + self::nextRngInt($rng, 3); // 4-6
+
+        switch ($type) {
+            case 'birch':
+                $logBlock = 17; // same block, different meta (birch = meta 2)
+                $leafBlock = 18; // birch leaves = meta 2
+                $trunkHeight = 5 + self::nextRngInt($rng, 3); // 5-7
+                break;
+            case 'spruce':
+                $logBlock = 17; // spruce log = meta 1
+                $leafBlock = 18; // spruce leaves = meta 1
+                $trunkHeight = 6 + self::nextRngInt($rng, 3); // 6-8
+                break;
+            default: // oak
+                break;
+        }
+
+        $topY = $baseY + $trunkHeight;
+
+        if ($type === 'spruce') {
+            // Conical spruce: trunk + narrowing leaf layers
+            for ($y = $baseY + 1; $y <= $topY; $y++) {
+                $sections = self::writeBlock($sections, $x, $y, $z, $logBlock, true);
+            }
+            // Leaf layers: wide at bottom, narrow at top
+            for ($layer = 0; $layer < 4; $layer++) {
+                $ly = $topY - 2 + $layer;
+                $r = $layer < 2 ? 2 - $layer : 0; // 2, 1, 0, 0
+                for ($dx = -$r; $dx <= $r; $dx++) {
+                    for ($dz = -$r; $dz <= $r; $dz++) {
+                        if ($dx === 0 && $dz === 0) {
+                            continue; // trunk space
+                        }
+                        if (abs($dx) === $r && abs($dz) === $r && $r > 0) {
+                            continue; // cut corners
+                        }
+                        $sections = self::writeBlock($sections, $x + $dx, $ly, $z + $dz, $leafBlock, true);
+                    }
+                }
+            }
+            // Top cap
+            $sections = self::writeBlock($sections, $x, $topY + 1, $z, $leafBlock, true);
+        } else {
+            // Oak / Birch: trunk + 2x 5x5 canopy + 3x3 cap
+            for ($y = $baseY + 1; $y <= $topY; $y++) {
+                $sections = self::writeBlock($sections, $x, $y, $z, $logBlock, true);
+            }
+            // Two 5x5 layers (minus corners)
+            for ($ly = 0; $ly <= 1; $ly++) {
+                $y = $topY + $ly;
+                for ($dx = -2; $dx <= 2; $dx++) {
+                    for ($dz = -2; $dz <= 2; $dz++) {
+                        if (abs($dx) === 2 && abs($dz) === 2) {
+                            continue;
+                        }
+                        if ($dx === 0 && $dz === 0 && $ly === 1) {
+                            continue; // trunk tip
+                        }
+                        $sections = self::writeBlock($sections, $x + $dx, $y, $z + $dz, $leafBlock, true);
+                    }
+                }
+            }
+            // 3x3 cap
+            $y = $topY + 2;
+            for ($dx = -1; $dx <= 1; $dx++) {
+                for ($dz = -1; $dz <= 1; $dz++) {
+                    $sections = self::writeBlock($sections, $x + $dx, $y, $z + $dz, $leafBlock, true);
+                }
+            }
+        }
     }
 
     // ---- Noise helpers ----
