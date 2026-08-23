@@ -51,10 +51,17 @@ final class KhronosConfig {
     public string $generatorType = 'normal';
 
     /** When false, weather stays clear forever (no rain/storms). */
-    public bool $worldWeatherEnabled = true;
-
-    /** When true, time stays locked at 1000 (noon) — no day/night cycle. */
+    public bool $worldWeatherEnabled = true;        /** When true, time stays locked at 1000 (noon) — no day/night cycle. */
     public bool $worldLockTime = false;
+
+    /** Whether hostile mobs spawn in the default world. */
+    public bool $worldSpawnMobs = true;
+
+    /** Whether animals spawn in the default world. */
+    public bool $worldSpawnAnimals = true;
+
+    /** Per-world spawn overrides: folderName => ['spawn-mobs' => bool, 'spawn-animals' => bool]. */
+    public array $worldSpawnOverrides = [];
 
     /** Explicit default-spawn override; null = keep the world's own spawn. */
     public ?int $spawnX = null;
@@ -243,6 +250,30 @@ final class KhronosConfig {
             if (array_key_exists('lock-time', $world) && is_bool($world['lock-time'])) {
                 $this->worldLockTime = $world['lock-time'];
             }
+            if (array_key_exists('spawn-mobs', $world) && is_bool($world['spawn-mobs'])) {
+                $this->worldSpawnMobs = $world['spawn-mobs'];
+            }
+            if (array_key_exists('spawn-animals', $world) && is_bool($world['spawn-animals'])) {
+                $this->worldSpawnAnimals = $world['spawn-animals'];
+            }
+        }
+
+        // Per-world overrides: "worlds" => { "nether": { "spawn-mobs": false } }
+        $worlds = $data['worlds'] ?? null;
+        if (is_array($worlds)) {
+            foreach ($worlds as $folder => $cfg) {
+                if (!is_array($cfg) || !is_string($folder)) continue;
+                $override = [];
+                if (array_key_exists('spawn-mobs', $cfg) && is_bool($cfg['spawn-mobs'])) {
+                    $override['spawn-mobs'] = $cfg['spawn-mobs'];
+                }
+                if (array_key_exists('spawn-animals', $cfg) && is_bool($cfg['spawn-animals'])) {
+                    $override['spawn-animals'] = $cfg['spawn-animals'];
+                }
+                if (!empty($override)) {
+                    $this->worldSpawnOverrides[$folder] = $override;
+                }
+            }
         }
 
         if (isset($data['max-loaded-chunks']) && is_numeric($data['max-loaded-chunks'])) {
@@ -401,7 +432,15 @@ final class KhronosConfig {
             'world' => [
                 'weather-enabled' => true,   // false = always clear, no rain/storms
                 'lock-time' => false,         // true = always noon (1000), no day/night
+                'spawn-mobs' => true,         // false = no hostile mob spawning in default world
+                'spawn-animals' => true,      // false = no animal spawning in default world
             ],
+            // Per-world spawn overrides. Each key is a world folder name.
+            // Only worlds listed here get their spawn settings overridden;
+            // unlisted worlds inherit the default (world) settings.
+            // Example: disable mobs in a creative hub world:
+            //   "worlds": { "creative": { "spawn-mobs": false, "spawn-animals": false } }
+            'worlds' => [],
             // Loaded-chunk budget: resident chunks are evicted FIFO above
             // this count. Sized for the 512M floor; raise on high-RAM hosts.
             'max-loaded-chunks' => 1200,

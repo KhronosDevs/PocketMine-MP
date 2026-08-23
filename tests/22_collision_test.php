@@ -30,9 +30,9 @@ use pocketmine\core\resource\ChunkStore;
 
 $kernel = \pocketmine\bootstrap();
 $world = $kernel->getWorld();
-$config = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
-if ($config instanceof \pocketmine\core\resource\ServerConfig) {
-    $config->spawnMobs = false; // no mob spawning interfering with the assertions
+$worldConfig = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
+if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+    $worldConfig->spawnMobs = false; // no mob spawning interfering with the assertions
 }
 
 /** Load chunk 0,0 and carve the deterministic test region. */

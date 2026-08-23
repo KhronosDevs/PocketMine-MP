@@ -88,9 +88,10 @@ final class MobSpawnerSystem implements System {
         if ($kernel === null) {
             return;
         }
-        $config = $kernel->getResourceRegistry()->get(ServerConfig::class);
-        if ($config instanceof ServerConfig && !$config->spawnMobs) {
-            return; // mob spawning disabled by configuration
+        // Per-world mob spawning toggle: WorldConfig::spawnMobs replaces
+        // the old global ServerConfig::spawnMobs.
+        if ($worldConfig instanceof WorldConfig && !$worldConfig->spawnMobs) {
+            return; // mob spawning disabled for this world
         }
         // 14.6: hostile mobs only spawn after dusk (time >= 12000). During
         // the day the world is quiet; the night gate makes day/night mean

@@ -30,9 +30,9 @@ use pocketmine\core\ecs\World;
 
 $kernel = \pocketmine\bootstrap();
 $world = $kernel->getWorld();
-$config = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
-if ($config instanceof \pocketmine\core\resource\ServerConfig) {
-    $config->spawnMobs = false; // no mobs interfering with the pickup assertions
+$worldConfig = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
+if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+    $worldConfig->spawnMobs = false; // no mobs interfering with the pickup assertions
 }
 
 function pickupPlayer(World $world, float $x, float $z): EntityRef {

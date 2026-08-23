@@ -37,9 +37,9 @@ $kernel = \pocketmine\bootstrap();
 // internally - keep the worker threads alive across runs.
 $kernel->setAutoShutdownOnRun(false);
 $world = $kernel->getWorld();
-$config = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
-if ($config instanceof \pocketmine\core\resource\ServerConfig) {
-    $config->spawnMobs = true;
+$worldConfig = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
+if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+    $worldConfig->spawnMobs = true;
 }
 // 14.6: hostile mobs only spawn after dusk. The spawn tests need night
 // (midnight = 18000) - the day-gate test flips back to day to prove the
@@ -176,10 +176,10 @@ test('mobs do not spawn during the day (night gate)', function () use ($kernel, 
     same($before, $after, 'no hostile mobs spawn while the sun is up');
 });
 
-test('mob spawning stops when ServerConfig::spawnMobs is false', function () use ($kernel, $world): void {
-    $config = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
-    if ($config instanceof \pocketmine\core\resource\ServerConfig) {
-        $config->spawnMobs = false;
+test('mob spawning stops when WorldConfig::spawnMobs is false', function () use ($kernel, $world): void {
+    $worldConfig = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
+    if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+        $worldConfig->spawnMobs = false;
     }
     // Back to night so the gate is not the reason no mobs spawn.
     $worldConfig = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
@@ -199,10 +199,8 @@ test('mob spawning stops when ServerConfig::spawnMobs is false', function () use
 test('hostile mobs far from ALL players are despawned before the caps run', function () use ($world, $kernel, $config, $worldConfig, $player, $playerPos, $top, $px, $pz, $store): void {
     // The despawn sweep lives behind the night + spawnMobs gates in the
     // spawner; earlier tests may have flipped either.
-    if ($config instanceof \pocketmine\core\resource\ServerConfig) {
-        $config->spawnMobs = true;
-    }
     if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+        $worldConfig->spawnMobs = true;
         $worldConfig->time = \pocketmine\core\system\TimeSystem::TIME_MIDNIGHT;
     }
 

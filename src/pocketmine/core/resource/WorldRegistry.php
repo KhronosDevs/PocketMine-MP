@@ -173,6 +173,12 @@ final class WorldRegistry {
         return $world !== null ? $world['config'] : null;
     }
 
+    /** Look up a WorldConfig by its on-disk folder name. */
+    public function getWorldConfig(string $folderName): ?WorldConfig {
+        $id = $this->byFolder[$folderName] ?? null;
+        return $id !== null ? $this->getConfig($id) : null;
+    }
+
     public function getStorage(int $id): ?StoragePort {
         $world = $this->worlds[$id] ?? null;
         return $world !== null ? $world['storage'] : null;

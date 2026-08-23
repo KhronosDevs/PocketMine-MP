@@ -37,5 +37,11 @@ final class WorldConfig {
         public int $weather = 0,
         public int $weatherDuration = 12000,
         public int $lightningTick = 0,
+        // Mob spawning: per-world toggle. ServerConfig::spawnMobs was
+        // a global switch; this moves it to per-world granularity so
+        // admins can disable mobs in specific worlds (e.g. a creative
+        // hub) while keeping them in others.
+        public bool $spawnMobs = true,
+        public bool $spawnAnimals = true,
     ) {}
 }

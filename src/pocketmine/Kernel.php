@@ -1861,6 +1861,30 @@ function applyKhronosConfig(ResourceRegistry $resourceRegistry, \pocketmine\core
     if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
         $worldConfig->name = $config->defaultWorld;
         $worldConfig->folderName = $config->defaultWorld;
+        // Per-world mob spawning from khronos.json replaces the old
+        // global ServerConfig::spawnMobs / spawnAnimals.
+        $worldConfig->spawnMobs = $config->worldSpawnMobs;
+        $worldConfig->spawnAnimals = $config->worldSpawnAnimals;
+    }
+
+    // Per-world spawn overrides: apply to any already-registered worlds
+    // matching the folder name, and to worlds created later via the
+    // WorldRegistry hook.
+    if (!empty($config->worldSpawnOverrides)) {
+        $worldRegistry = $resourceRegistry->get(\pocketmine\core\resource\WorldRegistry::class);
+        if ($worldRegistry instanceof \pocketmine\core\resource\WorldRegistry) {
+            foreach ($config->worldSpawnOverrides as $folder => $override) {
+                $wc = $worldRegistry->getWorldConfig($folder);
+                if ($wc instanceof \pocketmine\core\resource\WorldConfig) {
+                    if (array_key_exists('spawn-mobs', $override)) {
+                        $wc->spawnMobs = $override['spawn-mobs'];
+                    }
+                    if (array_key_exists('spawn-animals', $override)) {
+                        $wc->spawnAnimals = $override['spawn-animals'];
+                    }
+                }
+            }
+        }
     }
 
     // Port: khronos.json overrides server.properties when explicitly set.
@@ -1910,8 +1934,8 @@ function applyServerProperties(NetworkPort $networkPort, ResourceRegistry $resou
     if ($serverConfig instanceof \pocketmine\core\resource\ServerConfig) {
         $serverConfig->viewDistance = \pocketmine\core\resource\ServerProperties::int($props, 'view-distance', $serverConfig->viewDistance);
         $serverConfig->pvpEnabled = \pocketmine\core\resource\ServerProperties::bool($props, 'pvp', $serverConfig->pvpEnabled);
-        $serverConfig->spawnAnimals = \pocketmine\core\resource\ServerProperties::bool($props, 'spawn-animals', $serverConfig->spawnAnimals);
-        $serverConfig->spawnMobs = \pocketmine\core\resource\ServerProperties::bool($props, 'spawn-mobs', $serverConfig->spawnMobs);
+        // spawn-animals and spawn-mobs are now per-world in khronos.json
+        // (WorldConfig::spawnMobs / spawnAnimals), not global in server.properties.
         $serverConfig->difficulty = \pocketmine\core\enum\Difficulty::coerce(\pocketmine\core\resource\ServerProperties::int($props, 'difficulty', $serverConfig->difficulty->value));
         $serverConfig->whiteList = \pocketmine\core\resource\ServerProperties::bool($props, 'white-list', $serverConfig->whiteList);
         $serverConfig->defaultGameMode = \pocketmine\core\enum\GameMode::coerce(\pocketmine\core\resource\ServerProperties::int($props, 'gamemode', $serverConfig->defaultGameMode->value));

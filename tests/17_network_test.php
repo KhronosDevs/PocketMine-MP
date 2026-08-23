@@ -396,8 +396,8 @@ if ($serverCfg instanceof \pocketmine\core\resource\ServerConfig) {
 // 14.3: the builtin MobSpawnerSystem would otherwise populate hostile mobs
 // around Alice every 40 ticks, making her health/position non-deterministic
 // for the assertions below (the mob spawner has its own dedicated test).
-$worldCfg = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
-if ($worldCfg instanceof \pocketmine\core\resource\ServerConfig) {
+$worldCfg = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
+if ($worldCfg instanceof \pocketmine\core\resource\WorldConfig) {
     $worldCfg->spawnMobs = false;
 }
 

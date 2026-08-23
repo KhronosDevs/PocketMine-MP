@@ -23,7 +23,10 @@ $kernel->setAutoShutdownOnRun(false);
 $cfg = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
 if ($cfg instanceof \pocketmine\core\resource\ServerConfig) {
     $cfg->seed = 1;
-    $cfg->spawnMobs = false;
+}
+$worldCfg = $kernel->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);
+if ($worldCfg instanceof \pocketmine\core\resource\WorldConfig) {
+    $worldCfg->spawnMobs = false;
 }
 
 $kernel->run(1); // bind socket + start the RakNet thread + first tick
