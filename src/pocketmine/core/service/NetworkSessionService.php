@@ -38,6 +38,7 @@ use pocketmine\core\enum\Difficulty;
 use pocketmine\core\enum\EntityType;
 use pocketmine\core\enum\GameMode;
 use pocketmine\core\resource\WorldRegistry;
+use pocketmine\port\driven\ChunkData;
 use pocketmine\port\driven\NetworkPort;
 use pocketmine\port\driven\PlayerRef;
 use pocketmine\port\driving\CommandPort;
@@ -150,6 +151,8 @@ final class NetworkSessionService {
     private int $chunkPerTick = 10;
     private float $chunkTimeBudgetMs = 30.0;
     private bool $chunkUseTimeBudget = true;
+    /** Bug 39: round-robin starting offset so late joiners are not perpetually last. */
+    private int $streamOffset = 0;
 
     /**
      * Blocker 2 anti-cheat limits, read from khronos.json (KhronosConfig
@@ -6290,66 +6293,107 @@ final class NetworkSessionService {
     }
 
     private function streamChunks(): void {
-        // Time-budget scheduler: process chunks across all sessions until
-        // the global budget is exhausted. This prevents tick spikes when
-        // many players need chunks simultaneously.
         $budgetStart = $this->chunkUseTimeBudget ? hrtime(true) : 0;
         $budgetNs = (int)($this->chunkTimeBudgetMs * 1_000_000);
-        
-        foreach (array_keys($this->sessions) as $addrKey) {
-            // Check time budget every session (not every chunk) to avoid
-            // timer overhead. The check costs ~0.1µs vs ~500µs per chunk.
+
+        // Bug 39: round-robin rotation — advance the starting offset each
+        // tick so sessions added earlier do not always get served first.
+        $allKeys = array_keys($this->sessions);
+        $count = count($allKeys);
+        if ($count > 0) {
+            $this->streamOffset = ($this->streamOffset + 1) % $count;
+        }
+        $rotated = [];
+        for ($i = 0; $i < $count; $i++) {
+            $rotated[] = $allKeys[($this->streamOffset + $i) % $count];
+        }
+
+        // ----------------------------------------------------------------
+        // Bug 38: cross-player chunk batching
+        //
+        // Pass 1 — collect the per-session pending coords, deduplicate
+        // globally, and respect per-player CPT caps.
+        // ----------------------------------------------------------------
+        /** @var array<string, list<array{0: int, 1: int}>> worldId => deduped coords */
+        $allCoords = [];
+        /** @var array<string, list<array{0: int, 1: int, 2: string}>> addrKey => pending entries */
+        $sessionPending = [];
+        /** @var array<string, list<array{0: int, 1: int, 2: string}>> addrKey => already-loaded entries */
+        $sessionAlready = [];
+        /** @var array<string, bool> deduped coord keys */
+        $seen = [];
+
+        foreach ($rotated as $addrKey) {
             if ($this->chunkUseTimeBudget) {
                 $elapsed = hrtime(true) - $budgetStart;
                 if ($elapsed >= $budgetNs) {
                     break;
                 }
             }
-            
             $session = $this->sessions[$addrKey];
-            // Gather the next CHUNKS_PER_TICK unsent queue entries, then load
-            // them in ONE loadChunks() call: the parallel WorldGenPort batch
-            // is far cheaper per chunk than a per-chunk loadChunk() (each of
-            // which pays a pool round-trip + light recalc alone).
-            $pending = [];
+            $worldKey = (string)$session['worldId'];
+            if (!isset($allCoords[$worldKey])) {
+                $allCoords[$worldKey] = [];
+            }
+            $sessionPending[$addrKey] = [];
+            $sessionAlready[$addrKey] = [];
             $sent = 0;
             while ($sent < $this->chunkPerTick && $session['chunkQueueIndex'] < count($session['chunkQueue'])) {
                 [$chunkX, $chunkZ] = $session['chunkQueue'][$session['chunkQueueIndex']];
                 $session['chunkQueueIndex']++;
                 $key = $chunkX . ',' . $chunkZ;
                 if (isset($session['chunksSent'][$key])) {
+                    $sessionAlready[$addrKey][] = [[$chunkX, $chunkZ], $key];
                     continue;
                 }
-                $pending[] = [[$chunkX, $chunkZ], $key];
+                $sessionPending[$addrKey][] = [[$chunkX, $chunkZ], $key];
+                if (!isset($seen[$worldKey][$key])) {
+                    $seen[$worldKey][$key] = true;
+                    $allCoords[$worldKey][] = [$chunkX, $chunkZ];
+                }
                 $sent++;
             }
-            if ($pending === []) {
-                if (!$session['spawned'] && !empty($session['chunksSent'])) {
-                    $status = new PlayStatusPacket();
-                    $status->status = PlayStatusPacket::PLAYER_SPAWN;
-                    $this->queuePacket($session['playerRef'], $status);
-                    $session['spawned'] = true;
-                    // 0.15 parity: old-src doFirstSpawn() re-sends entity
-                    // metadata, adventure settings, and inventory contents
-                    // AFTER the client has spawned. The client ignores
-                    // inventory data sent before PLAYER_SPAWN.
-                    $this->sendDoFirstSpawn($addrKey);
-                }
-                $this->sessions[$addrKey] = $session;
-                continue;
+            $this->sessions[$addrKey] = $session;
+        }
+
+        // ----------------------------------------------------------------
+        // Single loadChunks() per world — one thread-pool trip for all
+        // players' pending chunks combined (deduped).
+        // ----------------------------------------------------------------
+        /** @var array<string, list<ChunkData>> worldId => ChunkData list (same order as allCoords) */
+        $worldResults = [];
+        foreach ($allCoords as $worldKey => $coords) {
+            if ($coords !== []) {
+                $worldResults[$worldKey] = $this->chunkLoadService->loadChunks($coords, (int)$worldKey);
             }
-            $coords = array_column($pending, 0);
-            $chunkDatas = $this->chunkLoadService->loadChunks($coords, $session['worldId']);
-            $store = $this->getChunkStore($session['worldId']);
-            foreach ($pending as $i => [$coord, $key]) {
+        }
+
+        // Build coord→ChunkData index per world for fast lookup.
+        /** @var array<string, array<string, ChunkData>> */
+        $worldIndex = [];
+        foreach ($allCoords as $worldKey => $coords) {
+            $results = $worldResults[$worldKey] ?? [];
+            foreach ($results as $i => $chunkData) {
+                $worldIndex[$worldKey][$coords[$i][0] . ',' . $coords[$i][1]] = $chunkData;
+            }
+        }
+
+        // ----------------------------------------------------------------
+        // Pass 2 — fan out results to each session.
+        // ----------------------------------------------------------------
+        foreach ($rotated as $addrKey) {
+            $session = $this->sessions[$addrKey];
+            $worldKey = (string)$session['worldId'];
+            $store = $this->getChunkStore((int)$worldKey);
+            $idx = $worldIndex[$worldKey] ?? [];
+
+            // Send chunks that were freshly loaded (common path).
+            foreach (($sessionPending[$addrKey] ?? []) as [$coord, $key]) {
                 [$chunkX, $chunkZ] = $coord;
-                $chunkData = $chunkDatas[$i] ?? null;
+                $chunkData = $idx[$key] ?? null;
                 if ($chunkData === null) {
                     continue;
                 }
-                // Serialized-wire cache: one serialize per chunk, shared by
-                // every viewer (and the light-dirty flush), instead of once
-                // per viewer per send. The store invalidates it on mutation.
                 $wire = $store !== null ? $store->getSerializedWire($chunkX, $chunkZ) : null;
                 if ($wire === null) {
                     continue;
@@ -6360,34 +6404,63 @@ final class NetworkSessionService {
                 $chunk->order = FullChunkDataPacket::ORDER_LAYERED;
                 $chunk->data = $wire;
                 $this->sendChunkBatch($addrKey, $chunk);
-
-                // 14.24: after the chunk, send tile-entity data (sign text,
-                // item frame contents) so the client renders them (legacy
-                // Spawnable::spawnTo per chunk viewer).
-                $this->sendChunkTiles($session['playerRef'], $chunkX, $chunkZ, $session['worldId']);
-
+                $this->sendChunkTiles($session['playerRef'], $chunkX, $chunkZ, (int)$worldKey);
                 $session['chunksSent'][$key] = true;
-                // The freshly generated chunk was marked light-dirty during
-                // load (recalculateLight), but the payload we just serialized
-                // ALREADY carries that light - so the per-tick light-dirty
-                // flush must not re-serialize and re-send the same chunk.
-                // Without this, every streamed chunk went out twice (the
-                // benchmark: ~16ms/tick of pure duplicate sends while
-                // streaming, ~30% of the whole network flush).
                 if ($store !== null) {
                     $store->clearLightDirty($chunkX, $chunkZ);
                 }
             }
+
+            // Send chunks that were already resident (loaded this tick
+            // for another player — shared via ChunkStore wire cache).
+            foreach (($sessionAlready[$addrKey] ?? []) as [$coord, $key]) {
+                [$chunkX, $chunkZ] = $coord;
+                $wire = $store !== null ? $store->getSerializedWire($chunkX, $chunkZ) : null;
+                if ($wire === null) {
+                    continue;
+                }
+                $chunk = new FullChunkDataPacket();
+                $chunk->chunkX = $chunkX;
+                $chunk->chunkZ = $chunkZ;
+                $chunk->order = FullChunkDataPacket::ORDER_LAYERED;
+                $chunk->data = $wire;
+                $this->sendChunkBatch($addrKey, $chunk);
+                $this->sendChunkTiles($session['playerRef'], $chunkX, $chunkZ, (int)$worldKey);
+                $session['chunksSent'][$key] = true;
+                if ($store !== null) {
+                    $store->clearLightDirty($chunkX, $chunkZ);
+                }
+            }
+
+            // PLAYER_SPAWN fires once the first batch of chunks is sent.
             if (!$session['spawned'] && !empty($session['chunksSent'])) {
                 $status = new PlayStatusPacket();
                 $status->status = PlayStatusPacket::PLAYER_SPAWN;
                 $this->queuePacket($session['playerRef'], $status);
                 $session['spawned'] = true;
-                // 0.15 parity: old-src doFirstSpawn() re-sends entity
-                // metadata, adventure settings, and inventory contents
-                // AFTER the client has spawned.
                 $this->sendDoFirstSpawn($addrKey);
             }
+
+            // Bug 40: prune chunksSent entries that are far outside render
+            // radius.  The keep radius is current render radius + 4 chunks
+            // buffer — chunks beyond that were evicted from the ChunkStore
+            // long ago and re-queueing them on movement is idempotent, so
+            // the entry no longer serves a purpose and just leaks memory.
+            if (!empty($session['chunksSent'])) {
+                $pos = $session['entityRef']->getPosition();
+                if ($pos !== null) {
+                    $cx = (int)floor($pos->x / 16);
+                    $cz = (int)floor($pos->z / 16);
+                    $keepRadius = $session['radius'] + 4;
+                    foreach ($session['chunksSent'] as $k => $_) {
+                        $parts = explode(',', $k, 2);
+                        if (abs((int)$parts[0] - $cx) > $keepRadius || abs((int)$parts[1] - $cz) > $keepRadius) {
+                            unset($session['chunksSent'][$k]);
+                        }
+                    }
+                }
+            }
+
             $this->sessions[$addrKey] = $session;
         }
     }
