@@ -20,3 +20,4 @@ vendor/
 composer.phar
 php-cs-fixer
 .php_cs.cache
+server.zip
