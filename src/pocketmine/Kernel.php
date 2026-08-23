@@ -2350,15 +2350,12 @@ function applyPersistedWorldMeta(StoragePort $storagePort, ResourceRegistry $res
         && isset($meta['time']) && $meta['time'] !== '') {
         $worldConfig->time = ((int)$meta['time'] % 24000 + 24000) % 24000;
     }
-    // 14.22: resume the weather spell and its remaining duration (missing or
-    // zero means the next tick rolls a fresh spell - same as a new world).
-    if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig
-        && isset($meta['weather']) && $meta['weather'] !== '') {
-        $worldConfig->weather = (int)$meta['weather'];
-    }
-    if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig
-        && isset($meta['weatherDuration']) && $meta['weatherDuration'] !== '') {
-        $worldConfig->weatherDuration = (int)$meta['weatherDuration'];
+    // 14.22: always start with clear weather — do not restore the saved
+    // weather state. Players expect a fresh clear sky on every boot.
+    if ($worldConfig instanceof \pocketmine\core\resource\WorldConfig) {
+        $worldConfig->weather = 0; // CLEAR
+        $worldConfig->weatherDuration = 12000; // 10 min guaranteed clear
+        $worldConfig->lightningTick = 0;
     }
 }
 

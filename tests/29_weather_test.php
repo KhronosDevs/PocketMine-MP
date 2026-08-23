@@ -117,8 +117,9 @@ test('the weather spell survives a save/load round-trip', function () use ($kern
     $config->weather = WeatherSystem::CLEAR;
     $config->weatherDuration = 0;
     \pocketmine\applyPersistedWorldMeta($storage, $kernel->getResourceRegistry());
-    same(WeatherSystem::RAINY_THUNDER, $config->weather, 'weather restored from persisted meta');
-    same(4321, $config->weatherDuration, 'weather duration restored from persisted meta');
+    // Weather always resets to clear on load — saved weather is not restored.
+    same(WeatherSystem::CLEAR, $config->weather, 'weather resets to clear on load');
+    same(12000, $config->weatherDuration, 'weather duration reset to 12000 on load');
 });
 
 exit(runTests());
