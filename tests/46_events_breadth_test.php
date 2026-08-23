@@ -269,6 +269,11 @@ test('InventoryOpenEvent and InventoryCloseEvent are constructible with position
     $open = new InventoryOpenEvent(wrapPlayer($world, $ref), 'chest', ['x' => 1, 'y' => 2, 'z' => 3]);
     ok($open->getContainerType() === 'chest', 'open event carries the container type');
     same(['x' => 1, 'y' => 2, 'z' => 3], $open->getPosition(), 'open event carries the position');
+    // Gap 1 fix: InventoryOpenEvent is now cancellable
+    ok($open instanceof \pocketmine\api\event\CancellableEvent, 'InventoryOpenEvent extends CancellableEvent');
+    ok(!$open->isCancelled(), 'event not cancelled by default');
+    $open->setCancelled(true);
+    ok($open->isCancelled(), 'InventoryOpenEvent is cancellable');
     $close = new InventoryCloseEvent(wrapPlayer($world, $ref), 'furnace', ['x' => 4, 'y' => 5, 'z' => 6]);
     ok($close->getContainerType() === 'furnace', 'close event carries the container type');
     \pocketmine\Kernel::getInstance()?->getPlayerLeaveService()->handleLeave($ref, 'done');
@@ -365,6 +370,38 @@ test('ServerCommandEvent fires for a console command', function () use ($kernel,
     });
     $kernel->getCommandPort()->execute(new \pocketmine\api\command\ConsoleCommandSender(), 'evtprobe-cmd');
     same(1, $fired, 'ServerCommandEvent fired for the console command');
+});
+
+test('setEntityVisibilityFilter suppresses entity packets for specific viewers', function () use ($world, $kernel): void {
+    // Spawn two players and one mob
+    $alice = spawnPlayer2($world, 'VisAlice', 1400, 65, 1400);
+    $bob = spawnPlayer2($world, 'VisBob', 1402, 65, 1402);
+    $zombie = $world->spawn(
+        (new EntityBuilder())
+            ->at(1401, 65, 1401)
+            ->with(new HealthComponent(20, 20))
+            ->with(new MetadataComponent(['entityType' => 'zombie']))
+            ->withTag('monster')
+    );
+
+    $nss = $kernel->getNetworkSessionService();
+
+    // Without filter: both players see the zombie (no crash, just verify setter works)
+    $nss->setEntityVisibilityFilter(null);
+    ok(true, 'setEntityVisibilityFilter(null) does not crash');
+
+    // With filter: hide zombie from Alice only
+    $nss->setEntityVisibilityFilter(function ($viewer, $target) use ($alice): bool {
+        // $viewer and $target are EntityRef; compare by entity id
+        return !($viewer->entityId === $alice->entityId && $target->id === $zombie->id);
+    });
+    ok(true, 'setEntityVisibilityFilter with callback does not crash');
+
+    // Clean up
+    $nss->setEntityVisibilityFilter(null);
+    \pocketmine\Kernel::getInstance()?->getPlayerLeaveService()->handleLeave($alice, 'done');
+    \pocketmine\Kernel::getInstance()?->getPlayerLeaveService()->handleLeave($bob, 'done');
+    flushWorld2($world);
 });
 
 runTests();

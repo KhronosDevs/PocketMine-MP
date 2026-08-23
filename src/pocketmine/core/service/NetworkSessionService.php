@@ -243,6 +243,17 @@ final class NetworkSessionService {
     /** Tick counter for periodic loginAttempts sweep (every ~5 min). */
     private int $loginSweepTick = 0;
 
+    /**
+     * Per-viewer entity visibility filter. When set, broadcastEntityStates()
+     * calls this callback for each viewer→target pair and only sends packets
+     * when it returns true.
+     *
+     * Signature: fn(PlayerRef $viewer, \pocketmine\core\ecs\EntityRef $target): bool
+     *
+     * @var callable|null
+     */
+    private $entityVisibilityFilter = null;
+
     /** Movement packets are only re-sent when an entity moves this far. */
     private const MOVE_EPSILON = 0.01;
 
@@ -522,6 +533,17 @@ final class NetworkSessionService {
         }
         $this->sessions = [];
         $this->outbound = [];
+    }
+
+    /**
+     * Set the per-viewer entity visibility filter.
+     *
+     * The callback receives (PlayerRef $viewer, EntityRef $target) and
+     * returns true to allow the entity state packet, false to suppress it.
+     * Pass null to remove the filter.
+     */
+    public function setEntityVisibilityFilter(?callable $filter): void {
+        $this->entityVisibilityFilter = $filter;
     }
 
     /**
@@ -1359,17 +1381,25 @@ final class NetworkSessionService {
             : new \pocketmine\api\entity\Player($ref, $this->world);
     }
 
-    /** Blocker 4 audit: InventoryOpenEvent for a session's container open. */
-    private function emitContainerOpen(string $addrKey, string $type, ?array $position): void {
+    /**
+     * Emit InventoryOpenEvent for a session's container open.
+     *
+     * Returns true if the open is allowed (event not cancelled), false if a
+     * plugin cancelled it and the caller should skip sending the container
+     * packet / opening the window.
+     */
+    private function emitContainerOpen(string $addrKey, string $type, ?array $position): bool {
         $session = $this->sessions[$addrKey] ?? null;
         if ($session === null) {
-            return;
+            return false;
         }
-        $this->eventPort->emit(new \pocketmine\api\event\InventoryOpenEvent(
+        $event = new \pocketmine\api\event\InventoryOpenEvent(
             $this->wrapApiPlayer($session['entityRef']),
             $type,
             $position,
-        ));
+        );
+        $this->eventPort->emit($event);
+        return !$event->isCancelled();
     }
 
     /** Blocker 4 audit: InventoryCloseEvent for a session's container close. */
@@ -3338,7 +3368,12 @@ final class NetworkSessionService {
             ? ['x' => $pair[0], 'y' => $y, 'z' => $pair[1], 'type' => 'chest', 'pair' => ['x' => $pair[2], 'z' => $pair[3]]]
             : ['x' => $x, 'y' => $y, 'z' => $z, 'type' => 'chest', 'pair' => null];
         $this->sessions[$addrKey] = $session;
-        $this->emitContainerOpen($addrKey, 'chest', ['x' => $x, 'y' => $y, 'z' => $z]);
+        if (!$this->emitContainerOpen($addrKey, 'chest', ['x' => $x, 'y' => $y, 'z' => $z])) {
+            // Plugin cancelled the open — revert openContainer state.
+            $session['openContainer'] = null;
+            $this->sessions[$addrKey] = $session;
+            return;
+        }
 
         // Chest lid animation + sound for everyone watching (legacy
         // ChestInventory::onOpen BlockEventPacket case1=1 case2=2). Legacy
@@ -3426,7 +3461,11 @@ final class NetworkSessionService {
         }
         $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z, 'type' => $type, 'pair' => null];
         $this->sessions[$addrKey] = $session;
-        $this->emitContainerOpen($addrKey, $type, ['x' => $x, 'y' => $y, 'z' => $z]);
+        if (!$this->emitContainerOpen($addrKey, $type, ['x' => $x, 'y' => $y, 'z' => $z])) {
+            $session['openContainer'] = null;
+            $this->sessions[$addrKey] = $session;
+            return;
+        }
 
         [$windowId, $typeId, $size] = match ($type) {
             'dispenser' => [self::DISPENSER_WINDOW_ID, 10, \pocketmine\core\resource\ContainerStore::DISPENSER_SIZE],
@@ -3487,7 +3526,11 @@ final class NetworkSessionService {
         }
         $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z, 'type' => 'enchant', 'options' => null];
         $this->sessions[$addrKey] = $session;
-        $this->emitContainerOpen($addrKey, 'enchant', ['x' => $x, 'y' => $y, 'z' => $z]);
+        if (!$this->emitContainerOpen($addrKey, 'enchant', ['x' => $x, 'y' => $y, 'z' => $z])) {
+            $session['openContainer'] = null;
+            $this->sessions[$addrKey] = $session;
+            return;
+        }
 
         $open = new ContainerOpenPacket();
         $open->windowid = self::ENCHANT_WINDOW_ID;
@@ -3512,7 +3555,11 @@ final class NetworkSessionService {
         }
         $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z, 'type' => 'anvil'];
         $this->sessions[$addrKey] = $session;
-        $this->emitContainerOpen($addrKey, 'anvil', ['x' => $x, 'y' => $y, 'z' => $z]);
+        if (!$this->emitContainerOpen($addrKey, 'anvil', ['x' => $x, 'y' => $y, 'z' => $z])) {
+            $session['openContainer'] = null;
+            $this->sessions[$addrKey] = $session;
+            return;
+        }
 
         $open = new ContainerOpenPacket();
         $open->windowid = self::ANVIL_WINDOW_ID;
@@ -4115,7 +4162,11 @@ final class NetworkSessionService {
         }
         $session['openContainer'] = ['x' => $x, 'y' => $y, 'z' => $z, 'type' => 'furnace'];
         $this->sessions[$addrKey] = $session;
-        $this->emitContainerOpen($addrKey, 'furnace', ['x' => $x, 'y' => $y, 'z' => $z]);
+        if (!$this->emitContainerOpen($addrKey, 'furnace', ['x' => $x, 'y' => $y, 'z' => $z])) {
+            $session['openContainer'] = null;
+            $this->sessions[$addrKey] = $session;
+            return;
+        }
 
         // Legacy FurnaceInventory::onOpen: ContainerOpenPacket (type 3 =
         // InventoryType::FURNACE, 3 slots, block coords) then full contents.
@@ -6044,6 +6095,19 @@ final class NetworkSessionService {
                     $dz = $pos->z - $center->z;
                     if ($dx * $dx + $dy * $dy + $dz * $dz <= $rangeSq) {
                         $visible[$entityId] = $entity;
+                    }
+                }
+            }
+
+            // Per-viewer entity visibility filter: a plugin callback that
+            // suppresses add/move packets for specific viewer→target pairs.
+            // Auth plugins use this to hide unauthed players; spectator modes
+            // use it to hide entities from specific viewers.
+            if ($this->entityVisibilityFilter !== null && $visible !== []) {
+                $filter = $this->entityVisibilityFilter;
+                foreach ($visible as $entityId => $entity) {
+                    if (!$filter($session['playerRef'], $entity)) {
+                        unset($visible[$entityId]);
                     }
                 }
             }

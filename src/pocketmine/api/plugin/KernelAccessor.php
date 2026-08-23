@@ -97,6 +97,27 @@ class KernelAccessor {
         return $this->kernel->getNetworkPort();
     }
 
+    /**
+     * Set a per-viewer entity visibility filter on the network session service.
+     *
+     * The callback receives (PlayerRef $viewer, EntityRef $target) and
+     * returns true to allow the entity state packet, false to suppress it.
+     * This controls which entities each player sees during broadcastEntityStates.
+     *
+     * Use cases: auth plugins hiding unauthed players, spectator modes,
+     * region-locked entity hiding, stealth/invisibility.
+     *
+     * Pass null to remove the filter.
+     *
+     * If multiple filters are needed, compose them in the callback:
+     *   $this->setEntityVisibilityFilter(function ($viewer, $target) use ($auth, $regions) {
+     *       return $auth->isVisible($viewer, $target) && $regions->canSee($viewer, $target);
+     *   });
+     */
+    public function setEntityVisibilityFilter(?callable $filter): void {
+        $this->kernel->getNetworkSessionService()->setEntityVisibilityFilter($filter);
+    }
+
     public function getStoragePort(): \pocketmine\port\driven\StoragePort {
         return $this->kernel->getStoragePort();
     }

@@ -389,6 +389,24 @@ $this->registerEvent(BlockBreakEvent::class, function (BlockBreakEvent $event): 
 | `EntityDamageEvent` | ✅ | `Entity`, `cause` (const `CAUSE_*`), mutable `damage` |
 | `EntityDeathEvent` | – | `Entity`, `killer` |
 | `PlayerDeathEvent` | – | `Player`, `killer`, mutable `deathMessage` |
+| `InventoryOpenEvent` | ✅ | `Player`, `containerType`, `position` — cancelling prevents the ContainerOpenPacket from being sent |
+| `InventoryCloseEvent` | – | `Player`, `containerType`, `position` |
+
+### Entity visibility filter
+
+Plugins that need per-viewer entity hiding (auth plugins, spectator modes, stealth) can set a visibility filter:
+
+```php
+$this->setEntityVisibilityFilter(function ($viewer, $target): bool {
+    // $viewer = PlayerRef, $target = EntityRef
+    // Return true to allow, false to suppress entity state packets
+    return $this->isPlayerAuthenticated($viewer);
+});
+```
+
+The filter is called for every viewer→entity pair during `broadcastEntityStates`. Return `false` to hide the entity from that player. Pass `null` to remove the filter.
+
+**Important:** When the filter suppresses an entity, the client receives a `RemoveEntityPacket`. When the filter later allows it, the entity is re-added with a fresh `AddEntityPacket`. This means toggling visibility causes a brief despawn/respawn cycle — design your filter to be stable to avoid flickering.
 
 ---
 

@@ -125,6 +125,13 @@ abstract class Plugin {
         return $this->getKernel()->getNetworkPort();
     }
 
+    /**
+     * Set a per-viewer entity visibility filter. See KernelAccessor::setEntityVisibilityFilter().
+     */
+    final protected function setEntityVisibilityFilter(?callable $filter): void {
+        $this->getKernel()->setEntityVisibilityFilter($filter);
+    }
+
     final protected function getStoragePort(): \pocketmine\port\driven\StoragePort {
         return $this->getKernel()->getStoragePort();
     }
