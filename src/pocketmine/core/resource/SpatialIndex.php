@@ -57,7 +57,9 @@ final class SpatialIndex {
             for ($dz = -$cellRadius; $dz <= $cellRadius; $dz++) {
                 $key = ($cellX + $dx) . ',' . ($cellZ + $dz);
                 if (isset($this->grid[$key])) {
-                    $entities = array_merge($entities, $this->grid[$key]);
+                    foreach ($this->grid[$key] as $id) {
+                        $entities[] = $id;
+                    }
                 }
             }
         }

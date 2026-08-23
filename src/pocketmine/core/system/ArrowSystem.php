@@ -291,8 +291,19 @@ final class ArrowSystem implements System {
     private function findHitTarget(World $world, float $x, float $y, float $z, int $age, int $shooterId): ?int {
         $bestId = null;
         $bestDist = 1.0; // hit radius in blocks
-        foreach ($world->getEntities() as $id => $candidate) {
+        $bestDistSq = $bestDist * $bestDist;
+        // Use SpatialIndex for O(1) cell lookup instead of scanning all entities.
+        // The hit radius is 1 block — only entities in nearby cells matter.
+        $spatial = $world->getResourceRegistry()->get(\pocketmine\core\resource\SpatialIndex::class);
+        $candidates = $spatial instanceof \pocketmine\core\resource\SpatialIndex
+            ? $spatial->getNearby($x, $z, $bestDist)
+            : array_keys($world->getEntities());
+        foreach ($candidates as $id) {
             if ($id === $shooterId && $age < 5) {
+                continue;
+            }
+            $candidate = $world->getEntity($id);
+            if ($candidate === null) {
                 continue;
             }
             $cMeta = $candidate->get(MetadataComponent::class);
@@ -315,7 +326,8 @@ final class ArrowSystem implements System {
             $dy = $cPos->y - $y;
             $dz = $cPos->z - $z;
             $distSq = $dx * $dx + $dy * $dy + $dz * $dz;
-            if ($distSq < $bestDist * $bestDist) {
+            if ($distSq < $bestDistSq) {
+                $bestDistSq = $distSq;
                 $bestDist = sqrt($distSq);
                 $bestId = $id;
             }

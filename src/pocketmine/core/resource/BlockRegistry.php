@@ -282,8 +282,11 @@ final class BlockRegistry {
         return array_keys(self::BLOCKS);
     }
 
+    /** @var array<int, array<string, mixed>> */
+    private static array $mergedCache = [];
+
     public function get(int $id): array {
-        return array_merge(self::DEFAULTS, self::BLOCKS[$id] ?? []);
+        return self::$mergedCache[$id] ??= array_merge(self::DEFAULTS, self::BLOCKS[$id] ?? []);
     }
 
     public function getName(int $id): string {

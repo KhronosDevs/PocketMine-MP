@@ -133,6 +133,16 @@ final class MobSpawnerSystem implements System {
             return;
         }
 
+        // Periodic cleanup: despawn hostile mobs stuck against walls / unreachable
+        // spots (their AI state never changes, so they permanently occupy spawn
+        // budget). Runs every 10 spawn cycles (~40 seconds) to avoid per-tick cost.
+        if ($this->tickCounter % (self::SPAWN_INTERVAL * 10) === 0) {
+            $despawnSvc = $kernel->getEntityDespawnService();
+            if ($despawnSvc !== null) {
+                $despawnSvc->despawnInactiveEntities();
+            }
+        }
+
         // Despawn hostiles far from all players (inlined — no separate scan).
         $maxDespawnSq = self::DESPAWN_DISTANCE * self::DESPAWN_DISTANCE;
         $despawned = 0;
