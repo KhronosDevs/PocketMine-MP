@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\adapter\driven\worldgen;
 
+use pocketmine\core\resource\NativeAccel;
 use pocketmine\port\driven\ChunkData;
 
 /**
@@ -51,16 +52,20 @@ final class NukkitNormalGenerator {
      * order — no column strings, no transpose.
      */
     public static function generateChunk(int $chunkX, int $chunkZ, int $seed): ChunkData {
+        // Try native FFI acceleration FIRST: one C call replaces all PHP noise + terrain math.
+        $native = NativeAccel::nukkitProfiles($chunkX, $chunkZ, $seed);
+        if ($native !== null) {
+            $heights = $native['heights'];
+            $biomes = $native['biomes'];
+        } else {
+        // PHP fallback: compute noise grids + per-column height + biome
         $rngState = self::seedRng($chunkX, $chunkZ, $seed);
-
-        // Precompute noise grids (5 grids × 256 values each)
         $seaFloorNoise = self::sampleNoiseGrid($chunkX, $chunkZ, 1.0, 0.125, 1.0 / 64.0, $rngState);
         $landNoise = self::sampleNoiseGrid($chunkX, $chunkZ, 2.0, 0.125, 1.0 / 512.0, $rngState);
         $mountainNoise = self::sampleNoiseGrid($chunkX, $chunkZ, 4.0, 1.0, 1.0 / 500.0, $rngState);
         $baseNoise = self::sampleNoiseGrid($chunkX, $chunkZ, 4.0, 0.25, 1.0 / 64.0, $rngState);
         $riverNoise = self::sampleNoiseGrid($chunkX, $chunkZ, 2.0, 1.0, 1.0 / 512.0, $rngState);
 
-        // Pass 1: compute per-column height + biome (256 values)
         $heights = [];
         $biomes = [];
         for ($genz = 0; $genz < 16; $genz++) {
@@ -137,11 +142,19 @@ final class NukkitNormalGenerator {
                 $heights[$idx] = $genyHeight;
             }
         }
+        } // end PHP fallback
 
-        // Pass 2: build sections directly in row-major order (no transpose)
+        // Pass 2: build sections directly in row-major order.
+        // Fast path: rows entirely above max surface → all air, rows entirely
+        // below min surface + dirt layer → all stone. Only boundary rows need
+        // per-cell work.
         $maxH = max($heights);
+        $minH = min($heights);
         $topSectionY = min(7, intdiv($maxH + 8, 16));
         $air = "\x00";
+        $airRow = str_repeat($air, 256);
+        $stoneRow = str_repeat(chr(self::STONE), 256);
+        $waterRow = str_repeat(chr(self::STILL_WATER), 256);
         $sections = [];
 
         for ($sy = 0; $sy <= $topSectionY; $sy++) {
@@ -149,6 +162,22 @@ final class NukkitNormalGenerator {
             $rows = [];
             for ($r = 0; $r < 16; $r++) {
                 $y = $y0 + $r;
+                // Fast path: row above all surfaces → all air
+                if ($y > max($maxH, self::SEA_HEIGHT)) {
+                    $rows[] = $airRow;
+                    continue;
+                }
+                // Fast path: row below dirt+surface everywhere AND above bedrock → all stone
+                if ($y >= self::BEDROCK_DEPTH && $y < $minH - 3) {
+                    $rows[] = $stoneRow;
+                    continue;
+                }
+                // Fast path: row entirely underwater AND no ice biomes at sea level
+                if ($y > $maxH && $y > self::SEA_HEIGHT) {
+                    $rows[] = $waterRow;
+                    continue;
+                }
+                // Slow path: per-cell (surface / water / bedrock rows)
                 $row = '';
                 for ($genz = 0; $genz < 16; $genz++) {
                     for ($genx = 0; $genx < 16; $genx++) {
@@ -160,31 +189,27 @@ final class NukkitNormalGenerator {
                         if ($y > $generateHeight) {
                             $row .= $air;
                         } elseif ($y < self::BEDROCK_DEPTH) {
-                            // Bedrock: y=0 always, y>0 random (use deterministic hash)
                             $row .= ($y === 0 || (($chunkX * 16 + $genx) * 374761393 ^ ($chunkZ * 16 + $genz) * 668265263 ^ $y * 1103515245) % 5 === 0)
                                 ? chr(self::BEDROCK) : chr(self::STONE);
                         } elseif ($y > $genyHeight) {
-                            // Water/ice
                             if (($biome === self::BIOME_ICE_PLAINS || $biome === self::BIOME_TAIGA) && $y === self::SEA_HEIGHT) {
                                 $row .= chr(self::ICE);
                             } else {
                                 $row .= chr(self::STILL_WATER);
                             }
                         } elseif ($y === $genyHeight) {
-                            // Surface
                             if ($biome === self::BIOME_BEACH || $biome === self::BIOME_DESERT || $biome === self::BIOME_OCEAN) {
-                                $row .= chr(12); // sand
+                                $row .= chr(12);
                             } elseif ($genyHeight >= 96 && ($biome === self::BIOME_MOUNTAINS || $biome === self::BIOME_ICE_PLAINS)) {
                                 $row .= chr(12);
                             } else {
-                                $row .= chr(2); // grass
+                                $row .= chr(2);
                             }
                         } elseif ($y >= $genyHeight - 3) {
-                            // Dirt/sandstone layer
                             if ($biome === self::BIOME_BEACH || $biome === self::BIOME_DESERT) {
-                                $row .= chr(24); // sandstone
+                                $row .= chr(24);
                             } else {
-                                $row .= chr(3); // dirt
+                                $row .= chr(3);
                             }
                         } else {
                             $row .= chr(self::STONE);
@@ -195,7 +220,7 @@ final class NukkitNormalGenerator {
             }
             $blocks = implode('', $rows);
             if (strlen($blocks) < 4096) {
-                $blocks .= str_repeat("\x00", 4096 - strlen($blocks));
+                $blocks .= str_repeat($air, 4096 - strlen($blocks));
             }
             $sections[] = [
                 'y' => $sy,
