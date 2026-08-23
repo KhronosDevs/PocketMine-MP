@@ -15,6 +15,7 @@ use pocketmine\core\component\PathComponent;
 use pocketmine\core\component\InventoryComponent;
 use pocketmine\core\component\AttributeComponent;
 use pocketmine\core\component\EffectComponent;
+use pocketmine\core\resource\SpatialIndex;
 
 /**
  * Opaque entity reference for plugin API.
@@ -146,6 +147,14 @@ final class EntityRef {
         $entity = $this->getEntity();
         if (!$entity) return false;
 
+        // Update SpatialIndex before and after position change so
+        // broadcastEntityStates() finds the entity at the new position
+        // this same tick (SpatialIndex is rebuilt before poll()).
+        $spatial = $this->world->getResourceRegistry()->get(SpatialIndex::class);
+        if ($spatial instanceof SpatialIndex) {
+            $spatial->remove($entity);
+        }
+
         $pos = $entity->get(PositionComponent::class) ?? new PositionComponent();
         $pos->x = $x;
         $pos->y = $y;
@@ -158,6 +167,10 @@ final class EntityRef {
         $rot->setYaw($yaw);
         $rot->setPitch($pitch);
         $entity->set(RotationComponent::class, $rot);
+
+        if ($spatial instanceof SpatialIndex) {
+            $spatial->insert($entity);
+        }
 
         return true;
     }
