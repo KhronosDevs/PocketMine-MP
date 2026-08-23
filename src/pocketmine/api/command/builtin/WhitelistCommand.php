@@ -20,6 +20,7 @@ final class WhitelistCommand extends BuiltinCommand {
             '/whitelist <on|off|add|remove|list> [player]',
             ['wl'],
             'khronos.command.whitelist',
+            category: 'admin',
         );
     }
 

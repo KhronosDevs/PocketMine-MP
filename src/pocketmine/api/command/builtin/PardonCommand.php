@@ -17,6 +17,7 @@ final class PardonCommand extends BuiltinCommand {
             '/pardon <player>',
             ['unban'],
             'khronos.command.pardon',
+            category: 'admin',
         );
     }
 

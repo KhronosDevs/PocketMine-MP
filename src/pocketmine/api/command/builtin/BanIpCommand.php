@@ -18,6 +18,7 @@ final class BanIpCommand extends BuiltinCommand {
             '/ban-ip <ip> [reason]',
             [],
             'khronos.command.ban-ip',
+            category: 'admin',
         );
     }
 

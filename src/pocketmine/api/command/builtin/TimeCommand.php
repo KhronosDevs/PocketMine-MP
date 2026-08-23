@@ -20,6 +20,7 @@ final class TimeCommand extends BuiltinCommand {
             '/time set <value|day|night>',
             [],
             'khronos.command.time',
+            category: 'world',
         );
     }
 

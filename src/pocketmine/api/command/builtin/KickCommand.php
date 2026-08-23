@@ -20,6 +20,7 @@ final class KickCommand extends BuiltinCommand {
             '/kick <player> [reason]',
             [],
             'khronos.command.kick',
+            category: 'admin',
         );
     }
 

@@ -13,6 +13,7 @@ abstract class Command {
         public readonly string $usage = "",
         public readonly array $aliases = [],
         public readonly ?string $permission = null,
+        public readonly string $category = 'general',
     ) {}
 
     public function getName(): string {

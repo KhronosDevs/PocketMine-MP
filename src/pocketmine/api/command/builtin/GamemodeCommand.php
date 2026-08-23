@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\constants\MetadataKeys;
 use pocketmine\core\enum\GameMode;
@@ -24,6 +25,7 @@ final class GamemodeCommand extends BuiltinCommand {
             '/gamemode <0|1|2|3|survival|creative|adventure|spectator> [player]',
             ['gm'],
             'khronos.command.gamemode',
+            category: 'player',
         );
     }
 
@@ -37,13 +39,13 @@ final class GamemodeCommand extends BuiltinCommand {
             default => null,
         };
         if ($mode === null) {
-            $sender->sendMessage("Unknown gamemode \"$modeArg\" - use 0/survival, 1/creative, 2/adventure or 3/spectator.");
+            $sender->sendMessage(Format::error("Unknown gamemode \"$modeArg\" — use survival, creative, adventure, or spectator."));
             return false;
         }
 
         $targetId = $this->resolvePlayerId($sender, array_shift($args) ?? null);
         if ($targetId === null) {
-            $sender->sendMessage('Player not found.');
+            $sender->sendMessage(Format::error('Player not found.'));
             return false;
         }
 
@@ -67,7 +69,7 @@ final class GamemodeCommand extends BuiltinCommand {
         );
         $kernel->getEventPort()->emit($event);
         if ($event->isCancelled()) {
-            $sender->sendMessage('The gamemode change was cancelled.');
+            $sender->sendMessage(Format::error('The gamemode change was cancelled.'));
             return false;
         }
         $metadata->set(MetadataKeys::GAMEMODE, $event->getNewGameMode()->value);
@@ -80,7 +82,7 @@ final class GamemodeCommand extends BuiltinCommand {
             GameMode::Spectator => 'spectator',
             default => 'survival',
         };
-        $sender->sendMessage("$name is now in {$label} mode.");
+        $sender->sendMessage(Format::success($name . ' is now in ' . Format::VALUE . $label . Format::SUCCESS . ' mode.'));
         return true;
     }
 }

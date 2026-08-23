@@ -19,6 +19,7 @@ final class StopCommand extends BuiltinCommand {
             '/stop',
             [],
             'khronos.command.stop',
+            category: 'admin',
         );
     }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 use pocketmine\core\component\PositionComponent;
 
 /**
@@ -22,6 +23,7 @@ final class TeleportCommand extends BuiltinCommand {
             '/tp <x y z> | /tp <player> <x y z> | /tp <player1> <player2>',
             ['tp'],
             'khronos.command.tp',
+            category: 'player',
         );
     }
 
@@ -54,7 +56,7 @@ final class TeleportCommand extends BuiltinCommand {
 
         $targetId = $this->resolvePlayerId($sender, $targetName);
         if ($targetId === null) {
-            $sender->sendMessage('Player not found.');
+            $sender->sendMessage(Format::error('Player not found.'));
             return false;
         }
 
@@ -79,7 +81,7 @@ final class TeleportCommand extends BuiltinCommand {
         );
         $kernel->getEventPort()->emit($event);
         if ($event->isCancelled()) {
-            $sender->sendMessage('The teleport was cancelled.');
+            $sender->sendMessage(Format::error('The teleport was cancelled.'));
             return false;
         }
         [$x, $y, $z] = $event->getTo();
@@ -107,7 +109,7 @@ final class TeleportCommand extends BuiltinCommand {
         $kernel->getNetworkSessionService()->sendTeleportTo($targetId, $x, $y, $z);
 
         $name = $this->playerName($targetId);
-        $sender->sendMessage("Teleported $name to $x, $y, $z.");
+        $sender->sendMessage(Format::success('Teleported ' . Format::VALUE . $name . Format::SUCCESS . ' to ' . Format::VALUE . "$x, $y, $z" . Format::SUCCESS . '.'));
         return true;
     }
 

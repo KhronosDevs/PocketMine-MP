@@ -26,6 +26,7 @@ final class WorldCommand extends BuiltinCommand {
             '/world [list|create <name> [seed] [generator]|load <name>|unload <name>] [name]',
             ['worlds'],
             'khronos.command.world',
+            category: 'world',
         );
     }
 

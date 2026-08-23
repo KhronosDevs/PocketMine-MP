@@ -18,6 +18,7 @@ final class SaveAllCommand extends BuiltinCommand {
             '/save-all',
             ['save'],
             'khronos.command.save-all',
+            category: 'admin',
         );
     }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 use pocketmine\core\component\InventoryComponent;
 use pocketmine\core\component\ItemStack;
 use pocketmine\core\resource\ItemRegistry;
@@ -22,6 +23,7 @@ final class GiveCommand extends BuiltinCommand {
             '/give <player> <item> [count]',
             [],
             'khronos.command.give',
+            category: 'player',
         );
     }
 
@@ -32,16 +34,16 @@ final class GiveCommand extends BuiltinCommand {
 
         $targetId = $this->resolvePlayerId($sender, $targetName);
         if ($targetId === null) {
-            $sender->sendMessage('Player not found.');
+            $sender->sendMessage(Format::error('Player not found.'));
             return false;
         }
         if (!ctype_digit($itemArg)) {
-            $sender->sendMessage('Item must be a numeric id.');
+            $sender->sendMessage(Format::error('Item must be a numeric id.'));
             return false;
         }
         $itemId = (int)$itemArg;
         if ($itemId < 1 || $itemId > 436) {
-            $sender->sendMessage("Unknown item id $itemId.");
+            $sender->sendMessage(Format::error("Unknown item id $itemId."));
             return false;
         }
         $count = max(1, min(2304, (int)$countArg)); // 64 * 36 window-0 slots
@@ -57,7 +59,7 @@ final class GiveCommand extends BuiltinCommand {
 
         $item = new ItemStack($itemId, 0, $count);
         if (!$inventory->add($item)) {
-            $sender->sendMessage('Inventory is full.');
+            $sender->sendMessage(Format::error('Inventory is full.'));
             return false;
         }
 
@@ -66,7 +68,7 @@ final class GiveCommand extends BuiltinCommand {
         $registry = $kernel->getWorld()->getResourceRegistry()->get(ItemRegistry::class);
         $name = $registry instanceof ItemRegistry ? $registry->getName($itemId) : "item $itemId";
         $target = $this->playerName($targetId);
-        $sender->sendMessage("Gave $count x $name to $target.");
+        $sender->sendMessage(Format::success('Gave ' . Format::VALUE . "$count x $name" . Format::SUCCESS . ' to ' . Format::VALUE . $target . Format::SUCCESS . '.'));
         return true;
     }
 }

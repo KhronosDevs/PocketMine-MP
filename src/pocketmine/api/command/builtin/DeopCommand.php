@@ -18,6 +18,7 @@ final class DeopCommand extends BuiltinCommand {
             '/deop <player>',
             [],
             'khronos.command.deop',
+            category: 'admin',
         );
     }
 

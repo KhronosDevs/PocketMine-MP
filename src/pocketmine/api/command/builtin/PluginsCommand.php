@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 
 /**
  * /plugins — list the currently loaded plugins (name + version).
@@ -17,6 +18,7 @@ final class PluginsCommand extends BuiltinCommand {
             '/plugins',
             ['pl'],
             'khronos.command.plugins',
+            category: 'general',
         );
     }
 
@@ -28,14 +30,15 @@ final class PluginsCommand extends BuiltinCommand {
         $pluginPort = $kernel->getPluginPort();
         $plugins = method_exists($pluginPort, 'getPlugins') ? $pluginPort->getPlugins() : [];
         if ($plugins === []) {
-            $sender->sendMessage('No plugins loaded.');
+            $sender->sendMessage(Format::MUTED . 'No plugins loaded.' . Format::RESET);
             return true;
         }
-        $names = [];
+        $lines = [];
         foreach ($plugins as $plugin) {
-            $names[] = $plugin->getName() . ' v' . $plugin->getVersion();
+            $lines[] = Format::GREEN . $plugin->getName() . Format::MUTED . ' v' . Format::VALUE . $plugin->getVersion() . Format::RESET;
         }
-        $sender->sendMessage('Plugins (' . count($names) . '): ' . implode(', ', $names));
+        $sender->sendMessage(Format::header('Plugins') . ' ' . Format::VALUE . count($lines) . Format::RESET);
+        $sender->sendMessage(Format::MUTED . implode(', ', $lines) . Format::RESET);
         return true;
     }
 }

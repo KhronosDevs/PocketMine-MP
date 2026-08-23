@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 use pocketmine\core\ecs\EntityRef;
 
 /**
@@ -20,13 +21,14 @@ final class KillCommand extends BuiltinCommand {
             '/kill [player]',
             [],
             'khronos.command.kill',
+            category: 'player',
         );
     }
 
     public function execute(CommandSender $sender, array $args): bool {
         $targetId = $this->resolvePlayerId($sender, array_shift($args) ?? null);
         if ($targetId === null) {
-            $sender->sendMessage('Player not found.');
+            $sender->sendMessage(Format::error('Player not found.'));
             return false;
         }
 
@@ -42,7 +44,7 @@ final class KillCommand extends BuiltinCommand {
         $kernel->getCombatService()->kill(EntityRef::create($targetId, $world));
 
         $name = $this->playerName($targetId);
-        $sender->sendMessage("Killed $name.");
+        $sender->sendMessage(Format::success('Killed ' . Format::VALUE . $name . Format::SUCCESS . '.'));
         return true;
     }
 }

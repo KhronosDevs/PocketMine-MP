@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\api\command;
 
+use pocketmine\api\command\Format;
 use pocketmine\api\event\PlayerCommandPreprocessEvent;
 use pocketmine\api\event\ServerCommandEvent;
 use pocketmine\port\driving\CommandPort;
@@ -77,12 +78,12 @@ class CommandMap implements CommandPort {
         $command = $this->getCommand($name);
 
         if (!$command) {
-            $sender->sendMessage("Unknown command: $name");
+            $sender->sendMessage(Format::error("Unknown command: $name"));
             return false;
         }
 
         if (!$command->testPermission($sender)) {
-            $sender->sendMessage("You don't have permission to use this command.");
+            $sender->sendMessage(Format::error("You don't have permission to use this command."));
             return false;
         }
 

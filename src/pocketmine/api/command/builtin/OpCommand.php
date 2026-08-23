@@ -20,6 +20,7 @@ final class OpCommand extends BuiltinCommand {
             '/op <player>',
             [],
             'khronos.command.op',
+            category: 'admin',
         );
     }
 

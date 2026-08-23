@@ -24,6 +24,7 @@ final class SetSpawnCommand extends BuiltinCommand {
             '/setspawn',
             [],
             'khronos.command.setspawn',
+            category: 'player',
         );
     }
 

@@ -18,6 +18,7 @@ final class BanCommand extends BuiltinCommand {
             '/ban <player> [reason]',
             [],
             'khronos.command.ban',
+            category: 'admin',
         );
     }
 

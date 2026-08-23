@@ -17,6 +17,7 @@ final class PardonIpCommand extends BuiltinCommand {
             '/pardon-ip <ip>',
             [],
             'khronos.command.pardon-ip',
+            category: 'admin',
         );
     }
 
