@@ -33,6 +33,7 @@ use pocketmine\core\resource\ProjectileRegistry;
 use pocketmine\core\resource\BlockRegistry;
 use pocketmine\core\resource\ChunkStore;
 use pocketmine\core\resource\ServerConfig;
+use pocketmine\core\resource\SpatialIndex;
 use pocketmine\core\resource\WorldConfig;
 use pocketmine\core\enum\Difficulty;
 use pocketmine\core\enum\EntityType;
@@ -5902,6 +5903,14 @@ final class NetworkSessionService {
      */
     private function broadcastEntityStates(): void {
         $worldEntities = $this->world->getEntities();
+        // SpatialIndex: rebuilt each tick by AISystem, gives O(1) cell
+        // lookup instead of scanning all entities per player.
+        $spatial = $this->world->getResourceRegistry()->get(SpatialIndex::class);
+        if (!($spatial instanceof SpatialIndex)) {
+            // Fallback: if SpatialIndex is not available, use the full
+            // entity list (same behavior as before the optimization).
+            $spatial = null;
+        }
         // entityId => session: players use AddPlayerPacket/MovePlayerPacket
         // and their identity comes from session state, not ECS metadata.
         $playerSessions = [];
@@ -5918,31 +5927,60 @@ final class NetworkSessionService {
             $known = $session['knownEntities'];
             $selfId = $session['playerRef']->entityId;
 
-            // Visible set for this viewer: all entities within range except self.
+            // Visible set for this viewer: entities within range except self.
+            // Uses SpatialIndex (rebuilt each tick by AISystem) to only
+            // check entities in nearby chunk cells instead of scanning ALL
+            // world entities — reduces O(players × total_entities) to
+            // O(players × nearby_entities).
             $visible = [];
             $worldId = $session['worldId'];
-            foreach ($worldEntities as $entityId => $entity) {
-                if ($entityId === $selfId) {
-                    continue;
+            if ($spatial !== null) {
+                $candidateIds = $spatial->getNearby($center->x, $center->z, $session['radius'] * 16 + 16);
+                foreach ($candidateIds as $entityId) {
+                    if ($entityId === $selfId) {
+                        continue;
+                    }
+                    $entity = $worldEntities[$entityId] ?? null;
+                    if ($entity === null) {
+                        continue;
+                    }
+                    $entityWorld = $entity->get(WorldComponent::class);
+                    $entityWorldId = $entityWorld instanceof WorldComponent ? $entityWorld->id : 0;
+                    if ($entityWorldId !== $worldId) {
+                        continue;
+                    }
+                    $pos = $entity->get(PositionComponent::class);
+                    if ($pos === null) {
+                        continue;
+                    }
+                    $dx = $pos->x - $center->x;
+                    $dy = $pos->y - $center->y;
+                    $dz = $pos->z - $center->z;
+                    if ($dx * $dx + $dy * $dy + $dz * $dz <= $rangeSq) {
+                        $visible[$entityId] = $entity;
+                    }
                 }
-                // 14.20: only entities of the viewer's own world are visible
-                // (players in other worlds do not render across worlds).
-                // Entities without a WorldComponent default to world 0 so a
-                // stray spawn never leaks across worlds.
-                $entityWorld = $entity->get(WorldComponent::class);
-                $entityWorldId = $entityWorld instanceof WorldComponent ? $entityWorld->id : 0;
-                if ($entityWorldId !== $worldId) {
-                    continue;
-                }
-                $pos = $entity->get(PositionComponent::class);
-                if ($pos === null) {
-                    continue;
-                }
-                $dx = $pos->x - $center->x;
-                $dy = $pos->y - $center->y;
-                $dz = $pos->z - $center->z;
-                if ($dx * $dx + $dy * $dy + $dz * $dz <= $rangeSq) {
-                    $visible[$entityId] = $entity;
+            } else {
+                // Fallback: full scan if SpatialIndex is unavailable.
+                foreach ($worldEntities as $entityId => $entity) {
+                    if ($entityId === $selfId) {
+                        continue;
+                    }
+                    $entityWorld = $entity->get(WorldComponent::class);
+                    $entityWorldId = $entityWorld instanceof WorldComponent ? $entityWorld->id : 0;
+                    if ($entityWorldId !== $worldId) {
+                        continue;
+                    }
+                    $pos = $entity->get(PositionComponent::class);
+                    if ($pos === null) {
+                        continue;
+                    }
+                    $dx = $pos->x - $center->x;
+                    $dy = $pos->y - $center->y;
+                    $dz = $pos->z - $center->z;
+                    if ($dx * $dx + $dy * $dy + $dz * $dz <= $rangeSq) {
+                        $visible[$entityId] = $entity;
+                    }
                 }
             }
 
