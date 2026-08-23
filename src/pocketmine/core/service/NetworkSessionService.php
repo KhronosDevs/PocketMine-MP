@@ -6574,6 +6574,8 @@ final class NetworkSessionService {
             $pk->namedtag = $payload;
             $this->queuePacket($player, $pk);
         }
+        // Bug 23: paintings re-announce themselves as their chunk streams.
+        $this->sendChunkPaintings($player, $chunkX, $chunkZ, $worldId);
     }
 
     /**
@@ -6583,9 +6585,21 @@ final class NetworkSessionService {
         $out = [];
         foreach ($tiles->snapshotsForChunk($chunkX, $chunkZ) as $snapshot) {
             $out[] = [$snapshot->x, $snapshot->y, $snapshot->z];
-            // Bug 23: paintings re-announce themselves as their chunk streams
-            // (they are not BlockEntityData tiles on the wire - they ride
-            // AddPaintingPacket).
+        }
+        return $out;
+    }
+
+    /**
+     * Send painting entities for a chunk. Paintings ride AddPaintingPacket
+     * instead of BlockEntityDataPacket, so they are handled separately from
+     * the tile entity data loop in sendChunkTiles().
+     */
+    private function sendChunkPaintings(PlayerRef $player, int $chunkX, int $chunkZ, int $worldId): void {
+        $tiles = $this->tileEntityStore($worldId);
+        if ($tiles === null) {
+            return;
+        }
+        foreach ($tiles->snapshotsForChunk($chunkX, $chunkZ) as $snapshot) {
             if ($snapshot->type === TileEntityStore::TILE_PAINTING) {
                 $pk = new AddPaintingPacket();
                 $pk->eid = $this->nextPaintingEid();
@@ -6597,7 +6611,6 @@ final class NetworkSessionService {
                 $this->queuePacket($player, $pk);
             }
         }
-        return $out;
     }
 
     /**
