@@ -125,7 +125,7 @@ final class HelpCommand extends BuiltinCommand {
         $sender->sendMessage(
             Format::MUTED . 'Use ' .
             Format::INFO . '/help <command>' .
-            Format::MUTED . ' for details  •  ' .
+            Format::MUTED . ' for details  *  ' .
             Format::INFO . '/help ' . ($page < $totalPages ? ($page + 1) : 1) .
             Format::MUTED . ' for next page' .
             Format::RESET
