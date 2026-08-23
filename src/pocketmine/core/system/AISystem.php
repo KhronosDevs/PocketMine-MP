@@ -486,15 +486,10 @@ final class AISystem implements System {
             $pos = $entity->get(PositionComponent::class);
             if ($pos === null) {
                 continue;
+            }                $byType[$type][] = ['entity' => $entity, 'meta' => $meta, 'pos' => $pos];
             }
-            $byType[$type][] = ['entity' => $entity, 'meta' => $meta, 'pos' => $pos];
-        }
-        static $dbgN = 0;
-        if ($dbgN++ < 6) {
-            error_log("[BR] types=" . json_encode(array_map(fn($a) => count($a), $byType)) . " tick=$tick");
-        }
 
-        $spawner = \pocketmine\Kernel::getInstance()?->getEntitySpawnService();
+            $spawner = \pocketmine\Kernel::getInstance()?->getEntitySpawnService();
         $wes = \pocketmine\Kernel::getInstance()?->getWorldEventService();
         foreach ($byType as $type => $animals) {
             while (count($animals) >= 2) {
