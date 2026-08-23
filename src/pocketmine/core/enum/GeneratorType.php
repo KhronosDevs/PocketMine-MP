@@ -14,6 +14,7 @@ enum GeneratorType: string {
     case Flat = 'flat';
     case Void = 'void';
     case Nether = 'nether';
+    case Nukkit = 'nukkit';
 
     /**
      * Coerce an unknown/foreign value (e.g. from a foreign level.dat that has
