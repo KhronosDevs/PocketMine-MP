@@ -50,6 +50,12 @@ final class KhronosConfig {
     /** World generator type: normal, flat, void, nether, nukkit. */
     public string $generatorType = 'normal';
 
+    /** When false, weather stays clear forever (no rain/storms). */
+    public bool $worldWeatherEnabled = true;
+
+    /** When true, time stays locked at 1000 (noon) — no day/night cycle. */
+    public bool $worldLockTime = false;
+
     /** Explicit default-spawn override; null = keep the world's own spawn. */
     public ?int $spawnX = null;
     public ?int $spawnY = null;
@@ -229,6 +235,16 @@ final class KhronosConfig {
             }
         }
 
+        $world = $data['world'] ?? null;
+        if (is_array($world)) {
+            if (array_key_exists('weather-enabled', $world) && is_bool($world['weather-enabled'])) {
+                $this->worldWeatherEnabled = $world['weather-enabled'];
+            }
+            if (array_key_exists('lock-time', $world) && is_bool($world['lock-time'])) {
+                $this->worldLockTime = $world['lock-time'];
+            }
+        }
+
         if (isset($data['max-loaded-chunks']) && is_numeric($data['max-loaded-chunks'])) {
             $this->maxLoadedChunks = max(64, (int)$data['max-loaded-chunks']);
         }
@@ -381,6 +397,11 @@ final class KhronosConfig {
             // World generator type: 'normal' (default), 'flat', 'void',
             // 'nether', or 'nukkit' (Nukkit-style simplex noise terrain).
             'generator-type' => 'normal',
+            // World rules.
+            'world' => [
+                'weather-enabled' => true,   // false = always clear, no rain/storms
+                'lock-time' => false,         // true = always noon (1000), no day/night
+            ],
             // Loaded-chunk budget: resident chunks are evicted FIFO above
             // this count. Sized for the 512M floor; raise on high-RAM hosts.
             'max-loaded-chunks' => 1200,

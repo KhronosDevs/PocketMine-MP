@@ -35,7 +35,7 @@ final class WorldConfig {
         // per-tick counter the WeatherSystem advances during storms that the
         // network layer reads to time lightning strikes.
         public int $weather = 0,
-        public int $weatherDuration = 0,
+        public int $weatherDuration = 12000,
         public int $lightningTick = 0,
     ) {}
 }

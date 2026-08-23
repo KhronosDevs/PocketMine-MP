@@ -51,6 +51,18 @@ final class WeatherSystem implements System {
             return;
         }
 
+        // When weather is disabled in khronos.json, force clear and skip.
+        $kernel = \pocketmine\Kernel::getInstance();
+        $khConfig = $kernel?->getResourceRegistry()->get(\pocketmine\core\resource\KhronosConfig::class);
+        if ($khConfig instanceof \pocketmine\core\resource\KhronosConfig && !$khConfig->worldWeatherEnabled) {
+            if ($config->weather !== self::CLEAR) {
+                $config->weather = self::CLEAR;
+                $config->weatherDuration = 0;
+                $config->lightningTick = 0;
+            }
+            return;
+        }
+
         // Legacy calcWeather decrements first, then rolls a new spell once the
         // current one is spent - so the very first tick of a fresh world (0
         // remaining) rolls immediately, and a restored spell resumes mid-way.

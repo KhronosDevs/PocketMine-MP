@@ -39,6 +39,17 @@ final class TimeSystem implements System {
         if (!$config instanceof WorldConfig) {
             return;
         }
+
+        // When lock-time is enabled in khronos.json, freeze at noon.
+        $kernel = \pocketmine\Kernel::getInstance();
+        $khConfig = $kernel?->getResourceRegistry()->get(\pocketmine\core\resource\KhronosConfig::class);
+        if ($khConfig instanceof \pocketmine\core\resource\KhronosConfig && $khConfig->worldLockTime) {
+            if ($config->time !== 1000) {
+                $config->time = 1000;
+            }
+            return;
+        }
+
         $config->time = ($config->time + 1) % self::DAY_LENGTH;
     }
 
