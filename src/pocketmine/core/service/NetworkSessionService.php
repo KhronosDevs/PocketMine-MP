@@ -3278,8 +3278,10 @@ final class NetworkSessionService {
         } else {
             // Claim a stack. It must be backed by the same item already in the
             // slot plus credit released by earlier slot-empties this session.
+            // When allow-inventory-cheats is true, skip the credit check so
+            // plugins and creative-mode tools can manipulate inventory freely.
             $need = max(0, $count - $inSlot);
-            if ($need > $credit[$creditKey]) {
+            if (!$this->antiCheat->allowInventoryCheats && $need > $credit[$creditKey]) {
                 return; // hostile claim - reject and keep authoritative state
             }
             $credit[$creditKey] -= $need;

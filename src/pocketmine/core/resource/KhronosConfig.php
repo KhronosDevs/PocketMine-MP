@@ -205,6 +205,13 @@ final class KhronosConfig {
     public int $maxChatLength = 256;
     public float $commandMinIntervalSeconds = 0.1;
 
+    // Inventory anti-cheat: when false (default), the server validates every
+    // inventory transaction against the authoritative slot state. A hostile
+    // client cannot conjure items, swap non-existent stacks, or drop items
+    // it does not hold. Set to true to allow inventory cheats (creative
+    // testing, plugins that manage inventory externally).
+    public bool $allowInventoryCheats = false;
+
     // Login throttle (per IP).
     public int $loginAttemptsPerMinute = 30;
     public int $maxSessionsPerIp = 25;
@@ -401,6 +408,9 @@ final class KhronosConfig {
             if (is_array($command) && isset($command['min-interval-seconds']) && is_numeric($command['min-interval-seconds'])) {
                 $this->commandMinIntervalSeconds = (float)$command['min-interval-seconds'];
             }
+            if (array_key_exists('allow-inventory-cheats', $ac) && is_bool($ac['allow-inventory-cheats'])) {
+                $this->allowInventoryCheats = $ac['allow-inventory-cheats'];
+            }
             $login = $ac['login'] ?? null;
             if (is_array($login)) {
                 if (isset($login['attempts-per-minute']) && is_numeric($login['attempts-per-minute'])) {
@@ -483,6 +493,7 @@ final class KhronosConfig {
                 'command' => [
                     'min-interval-seconds' => 0.1,
                 ],
+                'allow-inventory-cheats' => false,
                 'login' => [
                     'attempts-per-minute' => 30,
                     'max-sessions-per-ip' => 25,
