@@ -13,6 +13,7 @@ use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\component\tags\DeadTag;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\SpatialIndex;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driving\EventPort;
 
@@ -86,6 +87,11 @@ final class PlayerRespawnService {
         $entity = $entityRef->getEntity();
         if (!$entity) return;
 
+        // Update SpatialIndex before and after teleport so
+        // broadcastEntityStates() finds the entity at the new position
+        // (SpatialIndex is rebuilt before poll() with stale positions).
+        $spatial = $this->world->getResourceRegistry()->get(SpatialIndex::class);
+
         // Personal spawn first: a player who slept in a bed respawns there
         // (persisted in their metadata by sleepInBed). Falls back to the
         // world spawn from the config - PlayerJoinService resolves that to a
@@ -95,14 +101,26 @@ final class PlayerRespawnService {
         $sy = $meta?->get('spawnY');
         $sz = $meta?->get('spawnZ');
         if ($sx !== null && $sy !== null && $sz !== null) {
+            if ($spatial instanceof SpatialIndex) {
+                $spatial->remove($entity);
+            }
             $entityRef->teleport((float)$sx, (float)$sy, (float)$sz, 0, 0);
+            if ($spatial instanceof SpatialIndex) {
+                $spatial->insert($entity);
+            }
             return;
         }
 
         $kernel = \pocketmine\Kernel::getInstance();
         $config = $kernel?->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
         if ($config !== null) {
+            if ($spatial instanceof SpatialIndex) {
+                $spatial->remove($entity);
+            }
             $entityRef->teleport($config->spawnX, $config->spawnY, $config->spawnZ, 0, 0);
+            if ($spatial instanceof SpatialIndex) {
+                $spatial->insert($entity);
+            }
         }
     }
 
