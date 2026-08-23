@@ -55,10 +55,10 @@ final class KhronosConfig {
     public bool $worldLockTime = false;
 
     /** Whether hostile mobs spawn in the default world. */
-    public bool $worldSpawnMobs = true;
+    public bool $worldSpawnMobs = false;
 
     /** Whether animals spawn in the default world. */
-    public bool $worldSpawnAnimals = true;
+    public bool $worldSpawnAnimals = false;
 
     /** Per-world spawn overrides: folderName => ['spawn-mobs' => bool, 'spawn-animals' => bool]. */
     public array $worldSpawnOverrides = [];
@@ -432,8 +432,8 @@ final class KhronosConfig {
             'world' => [
                 'weather-enabled' => true,   // false = always clear, no rain/storms
                 'lock-time' => false,         // true = always noon (1000), no day/night
-                'spawn-mobs' => true,         // false = no hostile mob spawning in default world
-                'spawn-animals' => true,      // false = no animal spawning in default world
+                'spawn-mobs' => false,        // true = enable hostile mob spawning in default world
+                'spawn-animals' => false,     // true = enable animal spawning in default world
             ],
             // Per-world spawn overrides. Each key is a world folder name.
             // Only worlds listed here get their spawn settings overridden;

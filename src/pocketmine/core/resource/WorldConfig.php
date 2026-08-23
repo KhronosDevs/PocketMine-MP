@@ -41,7 +41,7 @@ final class WorldConfig {
         // a global switch; this moves it to per-world granularity so
         // admins can disable mobs in specific worlds (e.g. a creative
         // hub) while keeping them in others.
-        public bool $spawnMobs = true,
-        public bool $spawnAnimals = true,
+        public bool $spawnMobs = false,
+        public bool $spawnAnimals = false,
     ) {}
 }
