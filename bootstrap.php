@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/autoload.php';
 
+use pocketmine\utils\Terminal;
 use function pocketmine\bootstrap;
 
+Terminal::init();
 $kernel = bootstrap();
 
 // Real server: serve clients. run() binds the UDP socket and the session
