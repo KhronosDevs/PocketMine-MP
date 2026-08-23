@@ -47,6 +47,9 @@ final class KhronosConfig {
     /** Folder (and display name) of the default world. */
     public string $defaultWorld = 'world';
 
+    /** World generator type: normal, flat, void, nether, nukkit. */
+    public string $generatorType = 'normal';
+
     /** Explicit default-spawn override; null = keep the world's own spawn. */
     public ?int $spawnX = null;
     public ?int $spawnY = null;
@@ -219,6 +222,13 @@ final class KhronosConfig {
             $this->defaultWorld = $data['default-world'];
         }
 
+        if (isset($data['generator-type']) && is_string($data['generator-type'])) {
+            $valid = ['normal', 'flat', 'void', 'nether', 'nukkit'];
+            if (in_array($data['generator-type'], $valid, true)) {
+                $this->generatorType = $data['generator-type'];
+            }
+        }
+
         if (isset($data['max-loaded-chunks']) && is_numeric($data['max-loaded-chunks'])) {
             $this->maxLoadedChunks = max(64, (int)$data['max-loaded-chunks']);
         }
@@ -368,6 +378,9 @@ final class KhronosConfig {
             // Folder (and display name) of the default world. A fresh world is
             // generated under worlds/<folder>/ on first boot.
             'default-world' => 'world',
+            // World generator type: 'normal' (default), 'flat', 'void',
+            // 'nether', or 'nukkit' (Nukkit-style simplex noise terrain).
+            'generator-type' => 'normal',
             // Loaded-chunk budget: resident chunks are evicted FIFO above
             // this count. Sized for the 512M floor; raise on high-RAM hosts.
             'max-loaded-chunks' => 1200,
