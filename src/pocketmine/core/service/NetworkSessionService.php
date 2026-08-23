@@ -1552,9 +1552,19 @@ final class NetworkSessionService {
             }
 
             // 2. Update ECS position and queue remaining chunks for streaming.
+            // Also update SpatialIndex so broadcastEntityStates() finds
+            // this entity at the new position this same tick (SpatialIndex
+            // was rebuilt before poll() with the OLD position).
+            $spatial = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\SpatialIndex::class);
+            if ($spatial instanceof \pocketmine\core\resource\SpatialIndex) {
+                $spatial->remove($entity);
+            }
             $pos->x = $x;
             $pos->y = $y;
             $pos->z = $z;
+            if ($spatial instanceof \pocketmine\core\resource\SpatialIndex) {
+                $spatial->insert($entity);
+            }
             $session['lastChunkX'] = $destCX;
             $session['lastChunkZ'] = $destCZ;
             $this->queueChunks($addrKey);

@@ -16,7 +16,7 @@ class Config {
         if (file_exists($file)) {
             $content = file_get_contents($file);
             if ($content !== false) {
-                $this->data = array_merge($defaults, yaml_parse($content) ?? []);
+                $this->data = array_merge($defaults, \yaml_parse($content) ?? []);
             }
         }
     }

@@ -233,7 +233,7 @@ class PluginManager implements PluginPort {
             throw new \RuntimeException('Missing plugin.yml in ' . $real);
         }
 
-        $data = yaml_parse($content);
+        $data = \yaml_parse($content);
         if (!is_array($data)) {
             throw new \RuntimeException('Invalid YAML in plugin.yml of ' . $real);
         }
