@@ -195,8 +195,10 @@ final class KhronosConfig {
 
     // Max UDP datagram size (bytes). Oversized packets are rejected
     // before processing and counted against the per-IP rate limit.
-    // MTU ~1432; 1500 is a safe ceiling for legitimate traffic.
-    public int $maxDatagramSize = 1500;
+    // 8192 allows RakNet control packets (ACK/NACK/batch) while
+    // rejecting absurd payloads. RakNet handles fragmentation
+    // internally — this only catches junk.
+    public int $maxDatagramSize = 8192;
 
     // Max packets per IP per tick before blocking (rate limit).
     public int $packetLimit = 350;
@@ -412,7 +414,7 @@ final class KhronosConfig {
                     'attempts-per-minute' => 30,
                     'max-sessions-per-ip' => 25,
                 ],
-                'max-datagram-size' => 1500,  // reject oversized UDP packets
+                'max-datagram-size' => 8192,  // reject oversized UDP packets (RakNet needs >1500)
                 'packet-limit' => 350,         // max packets/IP/tick before block
             ],
             // Chunk streaming: controls how chunks are compressed and sent

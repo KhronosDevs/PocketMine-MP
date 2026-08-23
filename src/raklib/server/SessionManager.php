@@ -85,10 +85,10 @@ class SessionManager {
     protected int $packetLimit = 350;
 
     /** Max datagram size in bytes. UDP packets larger than this are
-     *  rejected before any processing — they cannot be legitimate MCPE
-     *  traffic (MTU ~1432) and are likely abuse. Counted against the
-     *  per-IP rate limit. */
-    protected int $maxDatagramSize = 1500;
+     *  rejected before any processing. Set high enough to accept RakNet
+     *  control packets (ACK/NACK/batch) but reject absurd payloads.
+     *  RakNet handles fragmentation internally; we only catch junk. */
+    protected int $maxDatagramSize = 8192;
 
     protected bool $shutdown = false;
 
