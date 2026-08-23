@@ -71,8 +71,14 @@ class CraftingDataPacket extends DataPacket {
                         $writer->putSlot([0, 0, 0, null]);
                         continue;
                     }
-                    $meta = $ing->meta === -1 ? 32767 : $ing->meta; // wildcard damage
-                    $writer->putSlot([$ing->itemId, 1, $meta, null]);
+                    // Handle both ItemStack objects and plain integer IDs
+                    // (some code paths store raw IDs in the key map).
+                    if ($ing instanceof \pocketmine\core\component\ItemStack) {
+                        $meta = $ing->meta === -1 ? 32767 : $ing->meta;
+                        $writer->putSlot([$ing->itemId, 1, $meta, null]);
+                    } else {
+                        $writer->putSlot([(int)$ing, 1, 0, null]);
+                    }
                 }
             }
 
