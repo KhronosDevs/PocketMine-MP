@@ -198,6 +198,9 @@ final class KhronosConfig {
     // MTU ~1432; 1500 is a safe ceiling for legitimate traffic.
     public int $maxDatagramSize = 1500;
 
+    // Max packets per IP per tick before blocking (rate limit).
+    public int $packetLimit = 350;
+
     /** Parse a khronos.json file, merging onto the built-in defaults. */
     public static function load(string $path): self {
         $config = new self();
@@ -351,6 +354,9 @@ final class KhronosConfig {
             if (isset($ac['max-datagram-size']) && is_numeric($ac['max-datagram-size'])) {
                 $this->maxDatagramSize = max(512, (int)$ac['max-datagram-size']);
             }
+            if (isset($ac['packet-limit']) && is_numeric($ac['packet-limit'])) {
+                $this->packetLimit = max(10, (int)$ac['packet-limit']);
+            }
         }
     }
 
@@ -407,6 +413,7 @@ final class KhronosConfig {
                     'max-sessions-per-ip' => 25,
                 ],
                 'max-datagram-size' => 1500,  // reject oversized UDP packets
+                'packet-limit' => 350,         // max packets/IP/tick before block
             ],
             // Chunk streaming: controls how chunks are compressed and sent
             // to clients. L2 is recommended (fast CPU, reasonable bandwidth).

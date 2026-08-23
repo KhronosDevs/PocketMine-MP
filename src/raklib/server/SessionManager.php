@@ -82,7 +82,7 @@ class SessionManager {
 
     protected string $name = "";
 
-    protected int $packetLimit = 250;
+    protected int $packetLimit = 350;
 
     /** Max datagram size in bytes. UDP packets larger than this are
      *  rejected before any processing — they cannot be legitimate MCPE
@@ -125,7 +125,7 @@ class SessionManager {
     public function initialize(): void {
         $this->rakLibTps = 100;
         $this->rakLibTimePerTick = 1 / 100;
-        $this->packetLimit = 250;
+        $this->packetLimit = 350;
         $this->portChecking = false;
         $this->wireTrace = getenv('KHRONOS_WIRE_TRACE') === '1';
     }

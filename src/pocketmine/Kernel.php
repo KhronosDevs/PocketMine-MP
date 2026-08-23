@@ -1883,6 +1883,14 @@ function applyKhronosConfig(ResourceRegistry $resourceRegistry, \pocketmine\core
             $networkPort->setMaxDatagramSize($config->maxDatagramSize);
         }
     }
+
+    // Packet limit: max packets/IP/tick before blocking in RakLib.
+    if ($config->packetLimit !== 350) {
+        $networkPort = $resourceRegistry->get(\pocketmine\port\driven\NetworkPort::class);
+        if ($networkPort instanceof \pocketmine\adapter\driven\network\Protocol84NetworkAdapter) {
+            $networkPort->setPacketLimit($config->packetLimit);
+        }
+    }
 }
 
 /**
