@@ -216,6 +216,9 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
         if ($generatorType === 'nether') {
             return self::populateNetherChunkPure($chunkX, $chunkZ, $data, $seed);
         }
+        if ($generatorType === 'nukkit') {
+            return NukkitNormalGenerator::populateChunk($chunkX, $chunkZ, $data, $seed);
+        }
         return self::populateChunkPure($chunkX, $chunkZ, $data, $seed);
     }
 
@@ -233,6 +236,9 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
         }
         if ($generatorType === "nether") {
             return self::generateNetherChunk($chunkX, $chunkZ, $seed);
+        }
+        if ($generatorType === "nukkit") {
+            return NukkitNormalGenerator::generateChunk($chunkX, $chunkZ, $seed);
         }
 
         return self::generateTerrainChunk($chunkX, $chunkZ, $seed);
