@@ -71,7 +71,13 @@ class PluginManager implements PluginPort {
         try {
             $description = $this->loadDescription($real);
         } catch (\Throwable $e) {
-            error_log("Plugin load failed for $path: " . $e->getMessage());
+            error_log(sprintf(
+                "Plugin load failed for %s: %s in %s on line %d",
+                $path,
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine()
+            ));
             return null;
         }
 
@@ -224,6 +230,13 @@ class PluginManager implements PluginPort {
      * Parse plugin.yml from a directory or .phar archive.
      */
     private function loadDescription(string $real): PluginDescription {
+        if (!function_exists('\yaml_parse')) {
+            throw new \RuntimeException(
+                'yaml extension not loaded. Install php-yaml or compile PHP with --enable-yaml. '
+                . 'Tried to load plugin.yml from: ' . $real
+            );
+        }
+
         if (is_dir($real)) {
             $content = @file_get_contents($real . DIRECTORY_SEPARATOR . 'plugin.yml');
         } else {
