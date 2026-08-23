@@ -240,6 +240,8 @@ final class NetworkSessionService {
     private array $outbound = [];
     /** Blocker 2: ip => [count, windowStart] login attempts (throttle). */
     private array $loginAttempts = [];
+    /** Tick counter for periodic loginAttempts sweep (every ~5 min). */
+    private int $loginSweepTick = 0;
 
     /** Movement packets are only re-sent when an entity moves this far. */
     private const MOVE_EPSILON = 0.01;
@@ -337,6 +339,17 @@ final class NetworkSessionService {
         // Bug 13: fishing bites (splash + catch window) per session.
         $this->processFishing();
         $this->flushOutbound();
+        // Periodic cleanup: purge loginAttempts entries older than 5 min
+        // so bot scanner IPs don't leak memory indefinitely.
+        if (++$this->loginSweepTick >= 300) {
+            $this->loginSweepTick = 0;
+            $now = time();
+            foreach ($this->loginAttempts as $ip => [$attempts, $windowStart]) {
+                if ($now - $windowStart > 300) {
+                    unset($this->loginAttempts[$ip]);
+                }
+            }
+        }
     }
 
     /**

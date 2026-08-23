@@ -100,6 +100,15 @@ final class ItemPickupSystem implements System {
             if (!$entity->has(\pocketmine\core\constants\EntityTags::ITEM)) {
                 continue;
             }
+            // Item despawn timer: vanilla MCPE despawns dropped items after
+            // 5 minutes (6000 ticks). Without this, items near players
+            // accumulate indefinitely.
+            $age = (int)$meta->get('itemAge', 0);
+            $meta->set('itemAge', $age + 1);
+            if ($age >= 6000) {
+                $world->despawn($entity);
+                continue;
+            }
             // Count down the drop's pickup delay before it can be collected.
             $delay = (int)$meta->get('pickupDelay', 0);
             if ($delay > 0) {

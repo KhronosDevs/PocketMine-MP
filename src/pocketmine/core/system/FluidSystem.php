@@ -175,10 +175,18 @@ final class FluidSystem implements System {
      * during the join burst.
      */
     private function seedNewChunks(ChunkStore $store): void {
-        // Fast path: every chunk we know about has already been scanned, so
-        // there is nothing new to seed (the block listener registers liquids
-        // placed inside already-seeded chunks). This keeps the per-pass cost
-        // O(1) even with hundreds of chunks loaded.
+        // Prune entries for chunks that are no longer loaded (evicted).
+        // Without this, the array grows forever as players explore.
+        $loaded = [];
+        foreach ($store->getLoadedChunkCoordinates() as [$cx, $cz]) {
+            $loaded[$cx . ':' . $cz] = true;
+        }
+        foreach ($this->seededChunks as $key => $_) {
+            if (!isset($loaded[$key])) {
+                unset($this->seededChunks[$key]);
+            }
+        }
+        // Fast path: every loaded chunk has already been scanned.
         if (count($this->seededChunks) >= $store->getCount()) {
             return;
         }
