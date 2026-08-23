@@ -232,7 +232,8 @@ final class NetworkSessionService {
      *   moveViolationStartTick: int,
      *   teleportGraceTicks: int,
      *   lastChatAt: float,
-     *   lastCommandAt: float
+     *   lastCommandAt: float,
+     *   pendingTeleport: array{x: float, y: float, z: float}|null
      * }>
      */
     private array $sessions = [];
@@ -327,6 +328,9 @@ final class NetworkSessionService {
         // batch with the burst would blow past the UDP payload ceiling.
         $this->flushOutbound();
         $this->streamChunks();
+        // Finalize deferred teleports: once the 3×3 chunk area around the
+        // destination is confirmed sent, send the MovePlayerPacket.
+        $this->finishPendingTeleports();
         // 14.29: re-send chunks whose light changed since the last sync
         // (torch place/break, glowstone, TNT blast, ...) so the client's
         // light arrays follow the world. The store marks these during
@@ -1018,6 +1022,7 @@ final class NetworkSessionService {
             // alive.
             'fallDistance' => 0.0,
             'lastY' => null,
+            'pendingTeleport' => null,
         ];
 
         // Blocker 1: an ops.txt operator gets the op permission on their
@@ -1507,18 +1512,14 @@ final class NetworkSessionService {
      * MovePlayerPacket (MODE_RESET) to the actor.
      */
     public function sendTeleportTo(int $entityId, float $x, float $y, float $z, bool $grace = true): void {
-        // Pre-load destination chunks before moving the player so the client
-        // has terrain to render immediately — without this, a far teleport
-        // shows void until the async streamChunks() pass loads them next tick.
-        // Covers the center chunk + 1 in each direction (3×3 = 9 chunks).
-        $destCX = (int)floor($x / 16);
-        $destCZ = (int)floor($z / 16);
-        for ($dx = -1; $dx <= 1; $dx++) {
-            for ($dz = -1; $dz <= 1; $dz++) {
-                $this->chunkLoadService->loadChunk($destCX + $dx, $destCZ + $dz);
-            }
-        }
-
+        // Deferred teleport (old-src pattern): set pendingTeleport and queue
+        // chunks, but do NOT send the MovePlayerPacket or update the ECS
+        // position yet.  finishPendingTeleports() (called after streamChunks)
+        // checks that the 3×3 chunk area around the destination has been
+        // confirmed sent to the client, then finalizes the teleport.
+        //
+        // This prevents the void glitch: the client needs terrain loaded
+        // before it can render the new position.
         foreach ($this->sessions as $addrKey => $session) {
             if ($session['playerRef']->entityId !== $entityId) {
                 continue;
@@ -1528,45 +1529,98 @@ final class NetworkSessionService {
             if ($pos === null) {
                 return;
             }
+
+            // Update ECS position to the destination so queueChunks()
+            // centers on the right chunk column. The MovePlayerPacket is
+            // deferred to finishPendingTeleports() once chunks are confirmed sent.
             $pos->x = $x;
             $pos->y = $y;
             $pos->z = $z;
+
+            // Pre-load destination chunks into the ChunkStore so streamChunks
+            // can send them immediately.
+            $destCX = (int)floor($x / 16);
+            $destCZ = (int)floor($z / 16);
+            for ($dx = -1; $dx <= 1; $dx++) {
+                for ($dz = -1; $dz <= 1; $dz++) {
+                    $this->chunkLoadService->loadChunk($destCX + $dx, $destCZ + $dz);
+                }
+            }
+
+            // Queue chunks for the destination.
+            $session['lastChunkX'] = $destCX;
+            $session['lastChunkZ'] = $destCZ;
+            $this->queueChunks($addrKey);
+
+            // Blocker 2: grace the anti-cheat so converging moves from the
+            // OLD position don't trigger a hack detection.
+            if ($grace) {
+                $session['teleportGraceTicks'] = 3;
+            }
+            $session['fallDistance'] = 0.0;
+            $session['lastY'] = null;
+
+            // Store the pending teleport — finishPendingTeleports() will
+            // finalize once the 3×3 area is confirmed sent.
+            $session['pendingTeleport'] = ['x' => $x, 'y' => $y, 'z' => $z];
+            $this->sessions[$addrKey] = $session;
+            return;
+        }
+    }
+
+    /**
+     * Finalize deferred teleports.  Called after streamChunks() each tick.
+     * Once the 3×3 chunk area around the destination has been confirmed sent
+     * to the client (chunksSent), we update the ECS position, send the
+     * MovePlayerPacket (MODE_RESET), and clear the pending teleport.
+     */
+    private function finishPendingTeleports(): void {
+        foreach ($this->sessions as $addrKey => $session) {
+            $pt = $session['pendingTeleport'];
+            if ($pt === null) {
+                continue;
+            }
+            $destCX = (int)floor($pt['x'] / 16);
+            $destCZ = (int)floor($pt['z'] / 16);
+            // Check that the 3×3 chunk area is confirmed sent (same logic
+            // as old-src Player::checkTeleportPosition).
+            $ready = true;
+            for ($dx = -1; $dx <= 1 && $ready; $dx++) {
+                for ($dz = -1; $dz <= 1 && $ready; $dz++) {
+                    $key = ($destCX + $dx) . ',' . ($destCZ + $dz);
+                    if (!isset($session['chunksSent'][$key])) {
+                        $ready = false;
+                    }
+                }
+            }
+            if (!$ready) {
+                continue;
+            }
+            // All 9 chunks confirmed — finalize.
+            $entity = $session['entityRef']->getEntity();
+            $pos = $entity?->get(PositionComponent::class);
+            if ($pos === null) {
+                $session['pendingTeleport'] = null;
+                $this->sessions[$addrKey] = $session;
+                continue;
+            }
+            $pos->x = $pt['x'];
+            $pos->y = $pt['y'];
+            $pos->z = $pt['z'];
             $rotation = $entity->get(RotationComponent::class);
             $pk = new MovePlayerPacket();
             $pk->eid = 0; // protocol 84: the player's own entity is always 0
-            $pk->x = $x;
-            $pk->y = $y;
-            $pk->z = $z;
+            $pk->x = $pt['x'];
+            $pk->y = $pt['y'];
+            $pk->z = $pt['z'];
             $pk->yaw = $rotation?->yaw ?? 0.0;
             $pk->bodyYaw = $rotation?->yaw ?? 0.0;
             $pk->pitch = $rotation?->pitch ?? 0.0;
             $pk->mode = MovePlayerPacket::MODE_RESET;
             $pk->onGround = true;
             $this->queuePacket($session['playerRef'], $pk);
-            // Blocker 2: the client's in-flight move packets were produced at
-            // the OLD position - grace the next few ticks so converging moves
-            // are not misread as a teleport/speed hack. A rubber-band (grace
-            // off) keeps strict validation so the next hack is still caught.
-            if ($grace) {
-                $session['teleportGraceTicks'] = 3;
-            }
-            // old-src resetFallDistance(): the descent to the new position
-            // must not count as a fall.
-            $session['fallDistance'] = 0.0;
-            $session['lastY'] = null;
-            // A far teleport must stream the new area (walking across a chunk
-            // boundary re-queues in handleMove; a server teleport /tp must do
-            // the same - queueChunks is idempotent, already-sent chunks are
-            // skipped).
-            $chunkX = (int)floor($pos->x / 16);
-            $chunkZ = (int)floor($pos->z / 16);
-            if ($chunkX !== $session['lastChunkX'] || $chunkZ !== $session['lastChunkZ']) {
-                $session['lastChunkX'] = $chunkX;
-                $session['lastChunkZ'] = $chunkZ;
-                $this->queueChunks($addrKey);
-            }
+            $session['pendingTeleport'] = null;
             $this->sessions[$addrKey] = $session;
-            return;
         }
     }
 
