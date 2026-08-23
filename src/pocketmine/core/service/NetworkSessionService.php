@@ -1507,6 +1507,18 @@ final class NetworkSessionService {
      * MovePlayerPacket (MODE_RESET) to the actor.
      */
     public function sendTeleportTo(int $entityId, float $x, float $y, float $z, bool $grace = true): void {
+        // Pre-load destination chunks before moving the player so the client
+        // has terrain to render immediately — without this, a far teleport
+        // shows void until the async streamChunks() pass loads them next tick.
+        // Covers the center chunk + 1 in each direction (3×3 = 9 chunks).
+        $destCX = (int)floor($x / 16);
+        $destCZ = (int)floor($z / 16);
+        for ($dx = -1; $dx <= 1; $dx++) {
+            for ($dz = -1; $dz <= 1; $dz++) {
+                $this->chunkLoadService->loadChunk($destCX + $dx, $destCZ + $dz);
+            }
+        }
+
         foreach ($this->sessions as $addrKey => $session) {
             if ($session['playerRef']->entityId !== $entityId) {
                 continue;
