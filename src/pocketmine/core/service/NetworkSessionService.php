@@ -6045,7 +6045,6 @@ final class NetworkSessionService {
                 // other viewers — sneak because the flags byte didn't include
                 // the sneak bit, rotation because known[] only tracked x/y/z.
                 $sneaking = $pMeta !== null && (bool)$pMeta->get(\pocketmine\core\constants\MetadataKeys::SNEAKING, false);
-                $flagsByte |= ($sneaking ? 0x02 : 0x00); // DATA_FLAG_SNEAKING
                 $yaw = $entity->get(\pocketmine\core\component\RotationComponent::class)?->yaw ?? 0.0;
                 $flagsByte = ($onFire ? 0x01 : 0x00) | ($invisible ? 0x20 : 0x00) | ($sneaking ? 0x02 : 0x00);
                 if (!isset($known[$entityId])) {
