@@ -251,6 +251,29 @@ final class ChunkStore {
         $chunk['meta'][$idx] = chr($meta & 0xFF);
         $chunk['wire'] = null; // content changed: drop the serialized cache
         $chunk['compressedBatch'] = null; // invalidate compressed cache too
+
+        // Incremental heightmap maintenance: avoid the O(65536) rescan in
+        // toChunkData() and the O(256) scan in getHighestBlockAt().
+        // Vanilla MCPE pattern: when a non-air block is placed above current
+        // height, update; when the top block is removed, rescan that column.
+        $localX = $x & 15;
+        $localZ = $z & 15;
+        $col = $localZ * 16 + $localX;
+        $curHeight = $chunk['heightmap'][$col] ?? 0;
+        if ($id !== 0 && $y + 1 > $curHeight) {
+            $chunk['heightmap'][$col] = $y + 1;
+        } elseif ($id === 0 && $y + 1 === $curHeight) {
+            // Top block removed: rescan this column only (worst case 256, not 65536).
+            $h = 0;
+            for ($yy = $y - 1; $yy >= 0; $yy--) {
+                if ($chunk['blocks'][$this->index($yy, $localZ, $localX)] !== "\x00") {
+                    $h = $yy + 1;
+                    break;
+                }
+            }
+            $chunk['heightmap'][$col] = $h;
+        }
+
         $this->chunks[$key] = $chunk;
         if ($this->blockListener !== null) {
             ($this->blockListener)($x, $y, $z, $id);
@@ -415,14 +438,10 @@ final class ChunkStore {
             return 0;
         }
         $chunk = $this->chunks[$key];
-        $localX = $x & 15;
-        $localZ = $z & 15;
-        for ($y = 255; $y >= 0; $y--) {
-            if (ord($chunk['blocks'][$this->index($y, $localZ, $localX)]) !== 0) {
-                return $y;
-            }
-        }
-        return 0;
+        $col = ($z & 15) * 16 + ($x & 15);
+        // Heightmap stores y+1 (above-surface convention). getHighestBlockAt
+        // returns the y of the highest solid block, so subtract 1.
+        return max(0, ($chunk['heightmap'][$col] ?? 0) - 1);
     }
 
     public function markGenerated(int $chunkX, int $chunkZ): void {
@@ -481,21 +500,8 @@ final class ChunkStore {
             $biomes[] = ord($chunk['biomes'][$i]);
         }
 
-        // Recompute the heightmap from the live block data so persisted chunks
-        // always match what is actually in the store after edits.
-        $heightmap = [];
-        for ($bz = 0; $bz < 16; $bz++) {
-            for ($bx = 0; $bx < 16; $bx++) {
-                $h = 0;
-                for ($y = 255; $y >= 0; $y--) {
-                    if (ord($chunk['blocks'][$this->index($y, $bz, $bx)]) !== 0) {
-                        $h = $y + 1;
-                        break;
-                    }
-                }
-                $heightmap[$bz * 16 + $bx] = $h;
-            }
-        }
+        // Heightmap is maintained incrementally by setBlock() — read directly.
+        $heightmap = $chunk['heightmap'];
 
         return new ChunkData(
             $chunkX,

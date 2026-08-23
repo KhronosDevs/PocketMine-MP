@@ -99,6 +99,10 @@ final class ChunkUnloadService {
             return 0; // nobody here: leave it to the count-cap backstop
         }
 
+        // Pre-bucketize entities once for the whole eviction pass — O(M)
+        // instead of O(entities) per chunk evicted.
+        $entityBucket = \pocketmine\core\service\ChunkEntityPersistence::bucketizeEntities($this->world);
+
         $evicted = 0;
         foreach ($store->getLoadedChunkCoordinates() as [$chunkX, $chunkZ]) {
             if ($evicted >= $maxEvictions) {
@@ -114,7 +118,7 @@ final class ChunkUnloadService {
                 }
             }
             if (!$near) {
-                $this->persistAndUnload($chunkX, $chunkZ, $worldId);
+                $this->persistAndUnload($chunkX, $chunkZ, $worldId, $entityBucket);
                 $evicted++;
             }
         }
@@ -143,6 +147,9 @@ final class ChunkUnloadService {
         }
         $players = $this->getPlayerChunkPositions($worldId);
 
+        // Pre-bucketize entities once for the whole eviction pass.
+        $entityBucket = \pocketmine\core\service\ChunkEntityPersistence::bucketizeEntities($this->world);
+
         // Coordinates come back in insertion (load) order, so this walks
         // oldest -> newest exactly like the previous getOldestLoadedChunk()
         // loop, while being able to skip guarded chunks.
@@ -161,13 +168,13 @@ final class ChunkUnloadService {
             if ($near) {
                 continue;
             }
-            $this->persistAndUnload($chunkX, $chunkZ, $worldId);
+            $this->persistAndUnload($chunkX, $chunkZ, $worldId, $entityBucket);
             $evicted++;
         }
         return $evicted;
     }
 
-    private function persistAndUnload(int $chunkX, int $chunkZ, int $worldId = 0): void {
+    private function persistAndUnload(int $chunkX, int $chunkZ, int $worldId = 0, ?array $entityBucket = null): void {
         // Persist and drop the chunk from the in-memory store.
         $store = $this->getChunkStore($worldId);
         if ($store !== null && $store->isLoaded($chunkX, $chunkZ)) {
@@ -187,9 +194,9 @@ final class ChunkUnloadService {
                 // Bug 35: capture dropped items / XP orbs in this chunk as
                 // EntitySnapshots so they survive eviction. Without this,
                 // items silently vanish when the chunk unloads.
-                $entitySnapshots = \pocketmine\core\service\ChunkEntityPersistence::captureEntitiesForChunk(
-                    $this->world, $chunkX, $chunkZ,
-                );
+                $entitySnapshots = $entityBucket !== null
+                    ? ($entityBucket[$chunkX . ',' . $chunkZ] ?? [])
+                    : \pocketmine\core\service\ChunkEntityPersistence::captureEntitiesForChunk($this->world, $chunkX, $chunkZ);
                 if ($entitySnapshots !== []) {
                     $chunkData = new \pocketmine\port\driven\ChunkData(
                         $chunkData->chunkX,

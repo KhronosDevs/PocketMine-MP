@@ -51,10 +51,7 @@ final class RandomTickSystem implements System {
         // loaded chunks within view range are ticked (bounds the cost to
         // where players can actually see).
         $anchors = [];
-        foreach ($world->getEntities() as $entity) {
-            if (!$entity->has(PlayerTag::class)) {
-                continue;
-            }
+        foreach ($world->query()->with(PlayerTag::class)->build() as $entity) {
             $pos = $entity->get(PositionComponent::class);
             $worldComponent = $entity->get(WorldComponent::class);
             if ($pos === null || ($worldComponent !== null && $worldComponent->id !== 0)) {

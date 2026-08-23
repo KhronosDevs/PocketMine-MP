@@ -147,8 +147,39 @@ final class AISystem implements System {
             }
         }
 
-        $this->processBreeding($world);
-        $this->processCreepers($world, $combat);
+        // Quick count pass: only scan entities once to decide which subsystems
+        // need to run. Without this, processCreepers and processBreeding each
+        // iterate ALL entities (items, arrows, etc.) even when there are zero
+        // creepers or zero animals in love mode — the common case by far.
+        $tick = \pocketmine\Kernel::getInstance()?->getResourceRegistry()?->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0;
+        $hasCreepers = false;
+        $hasBreeding = false;
+        foreach ($world->getEntities() as $entity) {
+            if (!$hasCreepers) {
+                $meta = $entity->get(MetadataComponent::class);
+                if ($meta !== null && $meta->get(\pocketmine\core\constants\MetadataKeys::MOB_TYPE) === 'Creeper') {
+                    $hasCreepers = true;
+                }
+            }
+            if (!$hasBreeding) {
+                $meta2 = $entity->get(MetadataComponent::class);
+                if ($meta2 !== null && (int)($meta2->get('inLoveUntil', 0)) > $tick) {
+                    $type = (string)$meta2->get(\pocketmine\core\constants\MetadataKeys::MOB_TYPE, '');
+                    if (isset(self::BREED_FOODS[$type])) {
+                        $hasBreeding = true;
+                    }
+                }
+            }
+            if ($hasCreepers && $hasBreeding) {
+                break;
+            }
+        }
+        if ($hasBreeding) {
+            $this->processBreeding($world);
+        }
+        if ($hasCreepers) {
+            $this->processCreepers($world, $combat);
+        }
     }
 
     /**

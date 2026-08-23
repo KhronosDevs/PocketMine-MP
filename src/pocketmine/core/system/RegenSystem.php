@@ -41,10 +41,7 @@ final class RegenSystem implements System {
         $this->tick++;
 
         $alive = [];
-        foreach ($world->getEntities() as $entity) {
-            if (!$entity->has(PlayerTag::class)) {
-                continue;
-            }
+        foreach ($world->query()->with(PlayerTag::class)->build() as $entity) {
             $health = $entity->get(HealthComponent::class);
             $pos = $entity->get(PositionComponent::class);
             if ($health === null || $pos === null) {

@@ -39,10 +39,7 @@ final class ItemPickupSystem implements System {
         // Alive players only (dead players do not collect items). Spectators
         // pass through the world without interacting with it.
         $players = [];
-        foreach ($world->getEntities() as $entity) {
-            if (!$entity->has(PlayerTag::class)) {
-                continue;
-            }
+        foreach ($world->query()->with(PlayerTag::class)->build() as $entity) {
             $health = $entity->get(HealthComponent::class);
             $pos = $entity->get(PositionComponent::class);
             if ($health === null || $health->current <= 0 || $pos === null) {

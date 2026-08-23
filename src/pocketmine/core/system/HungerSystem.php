@@ -38,10 +38,7 @@ final class HungerSystem implements System {
         $this->tick++;
 
         $alive = [];
-        foreach ($world->getEntities() as $entity) {
-            if (!$entity->has(PlayerTag::class)) {
-                continue;
-            }
+        foreach ($world->query()->with(PlayerTag::class)->build() as $entity) {
             // Spectators neither drain food nor starve (vanilla: spectator is
             // fully detached from the survival loop).
             $meta = $entity->get(\pocketmine\core\component\MetadataComponent::class);
