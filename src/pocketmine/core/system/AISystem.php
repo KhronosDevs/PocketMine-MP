@@ -524,14 +524,13 @@ final class AISystem implements System {
         $wes = \pocketmine\Kernel::getInstance()?->getWorldEventService();
         foreach ($byType as $type => $animals) {
             while (count($animals) >= 2) {
-                [$a, $b] = [$array_a = array_shift($animals), array_shift($animals)];
+                [$a, $b] = [array_shift($animals), array_shift($animals)];
                 $dx = $a['pos']->x - $b['pos']->x;
                 $dz = $a['pos']->z - $b['pos']->z;
                 if ($dx * $dx + $dz * $dz > 100) {
                     // Too far apart to pair this tick; both go back in.
                     $animals[] = $a;
                     array_unshift($animals, $b);
-                    sort($animals);
                     break;
                 }
                 // Baby spawns midway; parents start their cooldown.

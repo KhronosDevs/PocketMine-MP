@@ -272,7 +272,7 @@ final class NukkitNormalGenerator {
                     $oy = $y + self::nextRngInt($rng, 3) - 1;
                     if ($ox >= 0 && $ox <= 15 && $oz >= 0 && $oz <= 15 && $oy >= 1 && $oy <= 126) {
                         if (self::readBlock($sections, $ox, $oy, $oz) === self::STONE) {
-                            $sections = self::writeBlock($sections, $ox, $oy, $oz, $oreId, false);
+                            self::writeBlock($sections, $ox, $oy, $oz, $oreId, false);
                         }
                     }
                 }
@@ -292,7 +292,7 @@ final class NukkitNormalGenerator {
                     $oy = $y + self::nextRngInt($rng, 3) - 1;
                     if ($ox >= 0 && $ox <= 15 && $oz >= 0 && $oz <= 15 && $oy >= 1 && $oy <= 126) {
                         if (self::readBlock($sections, $ox, $oy, $oz) === self::STONE) {
-                            $sections = self::writeBlock($sections, $ox, $oy, $oz, $blockId, false);
+                            self::writeBlock($sections, $ox, $oy, $oz, $blockId, false);
                         }
                     }
                 }
@@ -321,16 +321,16 @@ final class NukkitNormalGenerator {
 
                 $roll = self::nextRngInt($rng, 100);
                 if ($biome === self::BIOME_PLAINS || $biome === self::BIOME_FOREST) {
-                    if ($roll < 40) $sections = self::writeBlock($sections, $bx, $top + 1, $bz, 31, false);
-                    elseif ($roll < 43) $sections = self::writeBlock($sections, $bx, $top + 1, $bz, 38, false);
-                    elseif ($roll < 45) $sections = self::writeBlock($sections, $bx, $top + 1, $bz, 37, false);
+                    if ($roll < 40) self::writeBlock($sections, $bx, $top + 1, $bz, 31, false);
+                    elseif ($roll < 43) self::writeBlock($sections, $bx, $top + 1, $bz, 38, false);
+                    elseif ($roll < 45) self::writeBlock($sections, $bx, $top + 1, $bz, 37, false);
                 } elseif ($biome === self::BIOME_DESERT) {
                     if ($roll < 2 && $top + 2 <= 126) {
                         $h = 2 + self::nextRngInt($rng, 2);
-                        for ($cy = 1; $cy <= $h; $cy++) $sections = self::writeBlock($sections, $bx, $top + $cy, $bz, 81, false);
-                    } elseif ($roll < 4) $sections = self::writeBlock($sections, $bx, $top + 1, $bz, 32, false);
+                        for ($cy = 1; $cy <= $h; $cy++) self::writeBlock($sections, $bx, $top + $cy, $bz, 81, false);
+                    } elseif ($roll < 4) self::writeBlock($sections, $bx, $top + 1, $bz, 32, false);
                 } elseif ($biome === self::BIOME_TAIGA || $biome === self::BIOME_ICE_PLAINS) {
-                    if ($roll < 30) $sections = self::writeBlock($sections, $bx, $top + 1, $bz, 31, false);
+                    if ($roll < 30) self::writeBlock($sections, $bx, $top + 1, $bz, 31, false);
                 }
             }
         }
@@ -447,7 +447,7 @@ final class NukkitNormalGenerator {
                             if ($bx < 0 || $bx > 15 || $bz < 0 || $bz > 15 || $by < 1 || $by > 126) continue;
                             $cur = self::readBlock($sections, $bx, $by, $bz);
                             if ($cur === self::STONE || $cur === 3) {
-                                $sections = self::writeBlock($sections, $bx, $by, $bz, 0, false);
+                                self::writeBlock($sections, $bx, $by, $bz, 0, false);
                             }
                         }
                     }
@@ -482,7 +482,7 @@ final class NukkitNormalGenerator {
                     if (abs($dx) === $w && self::nextRngInt($rng, 2) === 0) continue;
                     $cur = self::readBlock($sections, $rx, $ry, $bz);
                     if ($cur !== 0 && $cur !== 8 && $cur !== 9) {
-                        $sections = self::writeBlock($sections, $rx, $ry, $bz, 0, false);
+                        self::writeBlock($sections, $rx, $ry, $bz, 0, false);
                     }
                 }
             }
@@ -505,7 +505,7 @@ final class NukkitNormalGenerator {
 
         if ($type === 'spruce') {
             for ($y = $baseY + 1; $y <= $topY; $y++) {
-                $sections = self::writeBlock($sections, $x, $y, $z, $logBlock, true);
+                self::writeBlock($sections, $x, $y, $z, $logBlock, true);
             }
             for ($layer = 0; $layer < 4; $layer++) {
                 $ly = $topY - 2 + $layer;
@@ -514,14 +514,14 @@ final class NukkitNormalGenerator {
                     for ($dz = -$r; $dz <= $r; $dz++) {
                         if ($dx === 0 && $dz === 0) continue;
                         if (abs($dx) === $r && abs($dz) === $r && $r > 0) continue;
-                        $sections = self::writeBlock($sections, $x + $dx, $ly, $z + $dz, $leafBlock, true);
+                        self::writeBlock($sections, $x + $dx, $ly, $z + $dz, $leafBlock, true);
                     }
                 }
             }
-            $sections = self::writeBlock($sections, $x, $topY + 1, $z, $leafBlock, true);
+            self::writeBlock($sections, $x, $topY + 1, $z, $leafBlock, true);
         } else {
             for ($y = $baseY + 1; $y <= $topY; $y++) {
-                $sections = self::writeBlock($sections, $x, $y, $z, $logBlock, true);
+                self::writeBlock($sections, $x, $y, $z, $logBlock, true);
             }
             for ($ly = 0; $ly <= 1; $ly++) {
                 $y = $topY + $ly;
@@ -529,14 +529,14 @@ final class NukkitNormalGenerator {
                     for ($dz = -2; $dz <= 2; $dz++) {
                         if (abs($dx) === 2 && abs($dz) === 2) continue;
                         if ($dx === 0 && $dz === 0 && $ly === 1) continue;
-                        $sections = self::writeBlock($sections, $x + $dx, $y, $z + $dz, $leafBlock, true);
+                        self::writeBlock($sections, $x + $dx, $y, $z + $dz, $leafBlock, true);
                     }
                 }
             }
             $y = $topY + 2;
             for ($dx = -1; $dx <= 1; $dx++) {
                 for ($dz = -1; $dz <= 1; $dz++) {
-                    $sections = self::writeBlock($sections, $x + $dx, $y, $z + $dz, $leafBlock, true);
+                    self::writeBlock($sections, $x + $dx, $y, $z + $dz, $leafBlock, true);
                 }
             }
         }
@@ -551,7 +551,7 @@ final class NukkitNormalGenerator {
         return isset($sections[$sy]['blocks'][$idx]) ? ord($sections[$sy]['blocks'][$idx]) : 0;
     }
 
-    private static function writeBlock(array $sections, int $x, int $y, int $z, int $blockId, bool $clearLight = false): array {
+    private static function writeBlock(array &$sections, int $x, int $y, int $z, int $blockId, bool $clearLight = false): void {
         $sy = intdiv($y, 16);
         if (!isset($sections[$sy])) {
             $sections[$sy] = [
@@ -564,7 +564,6 @@ final class NukkitNormalGenerator {
         }
         $idx = ($y & 15) * 256 + $z * 16 + $x;
         $sections[$sy]['blocks'][$idx] = chr($blockId);
-        return $sections;
     }
 
     // ---- RNG ----

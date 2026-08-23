@@ -144,46 +144,53 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
         // (N chunks across the worker pool, not N serialized calls).
         /** @var list<ChunkGenResult> $cells */
         $cells = [];
+        /** @var array<int, int> spl_object_id => index for O(1) lookup */
+        $cellIndex = [];
+        $idx = 0;
         foreach ($chunks as [$chunkX, $chunkZ]) {
             $out = new ChunkGenResult();
             $cells[] = $out;
+            $cellIndex[spl_object_id($out)] = $idx;
+            $idx++;
             $this->pool->submit(
                 new ChunkGenerationTask($chunkX, $chunkZ, $config->generatorType, $config->seed, $out, NativeAccel::isEnabled())
             );
         }
 
-        // Await completion by reaping finished tasks. Reading each result
-        // INSIDE the collector callback is the safe pattern (what PocketMine
-        // does): the pool hands us a task whose run() has fully returned and
-        // that is still referenced by the pool, so touching its result cell
-        // there cannot race a worker that is still unwinding (which would
-        // otherwise throw "connection to an object which has already been
-        // destroyed" and dump core).
+        // Await completion: wait on a pending result's condvar instead of
+        // usleep(500) polling. Workers call notify() on their ChunkGenResult
+        // when done, so any pending result's condvar will wake us.
         $count = count($chunks);
         /** @var array<int, ChunkData> $data */
         $data = [];
         $deadline = microtime(true) + 30.0;
         while (count($data) < $count) {
-            $this->pool->collect(function (ChunkGenerationTask $task) use (&$cells, &$data): bool {
+            $this->pool->collect(function (ChunkGenerationTask $task) use (&$cells, &$cellIndex, &$data): bool {
                 $out = $task->getOut();
-                foreach ($cells as $i => $cell) {
-                    if ($cell === $out) {
-                        $data[$i] = $this->decodeResult($task->getChunkX(), $task->getChunkZ(), $cell);
-                        // Release the cell now that its task is reaped, so a
-                        // big batch's memory stays bounded by in-flight work
-                        // instead of the whole batch (a 256-chunk batch holds
-                        // ~20MB of serialized results alone).
-                        unset($cells[$i]);
-                        return true;
-                    }
+                $oid = spl_object_id($out);
+                if (isset($cellIndex[$oid])) {
+                    $i = $cellIndex[$oid];
+                    $data[$i] = $this->decodeResult($task->getChunkX(), $task->getChunkZ(), $out);
+                    unset($cells[$i], $cellIndex[$oid]);
                 }
-                return true; // a leftover task from a previous call: just reap it
+                return true;
             });
             if (count($data) < $count) {
                 if (microtime(true) > $deadline) {
                     throw new \RuntimeException('chunk generation timed out');
                 }
-                usleep(500); // workers still running; poll again
+                // Wait on any pending result's condvar — a worker will
+                // notify() it when done, waking us immediately.
+                $pending = reset($cells);
+                if ($pending !== false) {
+                    $pending->synchronized(function () use ($pending): void {
+                        if (!$pending->done) {
+                            $pending->wait(1_000_000); // 1s max
+                        }
+                    });
+                } else {
+                    usleep(100); // fallback: all cells reaped but count disagrees
+                }
             }
         }
 
@@ -491,7 +498,7 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
                     continue;
                 }
                 if (self::readBlock($sections, $ox, $oy, $oz) === self::NETHERRACK_BLOCK) {
-                    $sections = self::writeBlock($sections, $ox, $oy, $oz, self::NETHER_QUARTZ_ORE, false);
+                    self::writeBlock($sections, $ox, $oy, $oz, self::NETHER_QUARTZ_ORE, false);
                 }
             }
         }
@@ -516,7 +523,7 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
                         continue;
                     }
                     if (self::readBlock($sections, $ox, $oy, $oz) === self::NETHERRACK_BLOCK) {
-                        $sections = self::writeBlock($sections, $ox, $oy, $oz, $patchBlock, false);
+                        self::writeBlock($sections, $ox, $oy, $oz, $patchBlock, false);
                     }
                 }
             }
@@ -550,7 +557,7 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
                     continue;
                 }
                 if (self::readBlock($sections, $ox, $oy, $oz) === 0) {
-                    $sections = self::writeBlock($sections, $ox, $oy, $oz, self::GLOWSTONE_BLOCK, false);
+                    self::writeBlock($sections, $ox, $oy, $oz, self::GLOWSTONE_BLOCK, false);
                 }
             }
         }
@@ -569,7 +576,7 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
                 }
             }
             if ($top >= 1 && $top < 126 && self::readBlock($sections, $bx, $top + 1, $bz) === 0) {
-                $sections = self::writeBlock($sections, $bx, $top + 1, $bz, 51, false); // FIRE
+                self::writeBlock($sections, $bx, $top + 1, $bz, 51, false); // FIRE
             }
         }
 
@@ -586,7 +593,7 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
                 }
             }
             if ($top >= 1 && $top < 126 && self::readBlock($sections, $bx, $top + 1, $bz) === 0) {
-                $sections = self::writeBlock($sections, $bx, $top + 1, $bz, self::LAVA_BLOCK, false);
+                self::writeBlock($sections, $bx, $top + 1, $bz, self::LAVA_BLOCK, false);
             }
         }
 
@@ -900,7 +907,7 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
 
             // Trunk.
             for ($y = $baseY + 1; $y <= $topY; $y++) {
-                $sections = self::writeBlock($sections, $tx, $y, $tz, self::LOG_BLOCK, true);
+                self::writeBlock($sections, $tx, $y, $tz, self::LOG_BLOCK, true);
             }
             // Canopy: two 5x5 (minus corners) layers, then a 3x3 cap.
             for ($ly = 0; $ly <= 1; $ly++) {
@@ -913,14 +920,14 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
                         if ($dx === 0 && $dz === 0 && $ly === 1) {
                             continue; // leave room for the trunk tip
                         }
-                        $sections = self::writeBlock($sections, $tx + $dx, $y, $tz + $dz, self::LEAVES_BLOCK, true);
+                        self::writeBlock($sections, $tx + $dx, $y, $tz + $dz, self::LEAVES_BLOCK, true);
                     }
                 }
             }
             $y = $topY + 2;
             for ($dx = -1; $dx <= 1; $dx++) {
                 for ($dz = -1; $dz <= 1; $dz++) {
-                    $sections = self::writeBlock($sections, $tx + $dx, $y, $tz + $dz, self::LEAVES_BLOCK, true);
+                    self::writeBlock($sections, $tx + $dx, $y, $tz + $dz, self::LEAVES_BLOCK, true);
                 }
             }
         }
@@ -946,7 +953,7 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
                         $nbSand = self::readBlock($sections, $x - 1, $col['y'], $z) === self::SAND_BLOCK
                             && self::readBlock($sections, $x + 1, $col['y'], $z) === self::SAND_BLOCK;
                         if ($nbSand) {
-                            $sections = self::writeBlock($sections, $x, $col['y'] + 1, $z, self::CACTUS_BLOCK, true);
+                            self::writeBlock($sections, $x, $col['y'] + 1, $z, self::CACTUS_BLOCK, true);
                         }
                         continue;
                     }
@@ -963,7 +970,7 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
                 }
             }
             if ($id !== 0) {
-                $sections = self::writeBlock($sections, $x, $col['y'] + 1, $z, $id, true);
+                self::writeBlock($sections, $x, $col['y'] + 1, $z, $id, true);
             }
         }
 
@@ -1075,7 +1082,7 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
                                 if ($by > 1 && self::readBlock($sections, $bx, $by - 1, $bz) !== self::STONE_BLOCK) {
                                     continue;
                                 }
-                                $sections = self::writeBlock($sections, $bx, $by, $bz, $oreId, false);
+                                self::writeBlock($sections, $bx, $by, $bz, $oreId, false);
                             }
                         }
                     }
@@ -1200,7 +1207,7 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
                     } elseif ($col['biome'] === self::BIOME_OCEAN && $by < self::SEA_LEVEL) {
                         $replacement = self::WATER_BLOCK; // flooded caves under the sea
                     }
-                    $sections = self::writeBlock($sections, $bx, $by, $bz, $replacement, false);
+                    self::writeBlock($sections, $bx, $by, $bz, $replacement, false);
                 }
             }
         }
@@ -1219,21 +1226,20 @@ final class ParallelGeneratorAdapter implements WorldGenPort {
     }
 
     /** Set a block (onlyIfAir skips non-air cells), returning updated sections. */
-    private static function writeBlock(array $sections, int $x, int $y, int $z, int $id, bool $onlyIfAir): array {
+    private static function writeBlock(array &$sections, int $x, int $y, int $z, int $id, bool $onlyIfAir): void {
         $sy = intdiv($y, 16);
         $sec = $sections[$sy] ?? null;
         if ($sec === null) {
-            return $sections;
+            return;
         }
         $idx = ($y & 15) * 256 + $z * 16 + $x;
         $blocks = $sec['blocks'];
         if ($onlyIfAir && $blocks[$idx] !== "\x00") {
-            return $sections;
+            return;
         }
         $blocks[$idx] = chr($id);
         $sec['blocks'] = $blocks;
         $sections[$sy] = $sec;
-        return $sections;
     }
 
     /** Deterministic per-chunk RNG seed. */

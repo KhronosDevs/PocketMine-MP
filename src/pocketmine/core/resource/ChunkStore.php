@@ -178,6 +178,25 @@ final class ChunkStore {
             }
         }
 
+        // If the heightmap is all zeros (missing or stale), recompute from
+        // block data so incremental maintenance in setBlock() starts from
+        // a correct baseline.
+        $heightmap = $data->heightmap;
+        if (array_sum($heightmap) === 0 && $data->sections !== []) {
+            for ($bz = 0; $bz < 16; $bz++) {
+                for ($bx = 0; $bx < 16; $bx++) {
+                    $h = 0;
+                    for ($y = 255; $y >= 0; $y--) {
+                        if ($blocks[$this->index($y, $bz, $bx)] !== "\x00") {
+                            $h = $y + 1;
+                            break;
+                        }
+                    }
+                    $heightmap[$bz * 16 + $bx] = $h;
+                }
+            }
+        }
+
         $this->chunks[$this->key($data->chunkX, $data->chunkZ)] = [
             'x' => $data->chunkX,
             'z' => $data->chunkZ,
@@ -186,7 +205,7 @@ final class ChunkStore {
             'skyLight' => $skyLight,
             'blockLight' => $blockLight,
             'biomes' => $biomes,
-            'heightmap' => $data->heightmap,
+            'heightmap' => $heightmap,
             'entities' => $data->entities,
             'tileEntities' => $data->tileEntities,
             'generated' => true,
