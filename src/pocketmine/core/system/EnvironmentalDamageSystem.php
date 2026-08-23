@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\core\system;
 
+use pocketmine\core\component\EffectComponent;
 use pocketmine\core\component\FireComponent;
 use pocketmine\core\component\HealthComponent;
 use pocketmine\core\component\MetadataComponent;
@@ -83,6 +84,7 @@ final class EnvironmentalDamageSystem implements System {
                 continue;
             }
             $ref = \pocketmine\core\ecs\EntityRef::create($entity->id, $world);
+            $effects = $entity->get(EffectComponent::class);
 
             // --- Void: y <= -16, fixed 10 damage ------------------------
             if ($pos->y <= -16) {
