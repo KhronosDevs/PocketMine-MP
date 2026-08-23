@@ -245,7 +245,14 @@ final class PlayerJoinService {
         // load one chunk here; the 8-neighbour scan below is the rare path.
         $this->chunkLoadService->loadChunk($chunkX, $chunkZ);
         if ($isDry($spawnX, $spawnZ)) {
-            return [$spawnX, $store->getHighestBlockAt($spawnX, $spawnZ) + 1, $spawnZ];
+            $y = $store->getHighestBlockAt($spawnX, $spawnZ) + 1;
+            // Verify the column is actually safe (highest block + head
+            // room both non-solid). Trees or overhangs can make the
+            // heightmap position unsafe.
+            if ($this->isSafePosition((float)$spawnX, (float)$y, (float)$spawnZ)) {
+                return [$spawnX, $y, $spawnZ];
+            }
+            // Unsafe — fall through to the neighbour scan.
         }
 
         // Slow path: the configured spawn is underwater - scan the 8

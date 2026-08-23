@@ -13,6 +13,8 @@ use pocketmine\core\component\VelocityComponent;
 use pocketmine\core\component\tags\DeadTag;
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
+use pocketmine\core\resource\BlockRegistry;
+use pocketmine\core\resource\ChunkStore;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driving\EventPort;
 
@@ -88,15 +90,17 @@ final class PlayerRespawnService {
 
         // Personal spawn first: a player who slept in a bed respawns there
         // (persisted in their metadata by sleepInBed). Falls back to the
-        // world spawn from the config - PlayerJoinService resolves that to a
-        // terrain-safe Y so respawn never lands inside a hill.
+        // world spawn from the config.
         $meta = $entity->get(MetadataComponent::class);
         $sx = $meta?->get('spawnX');
         $sy = $meta?->get('spawnY');
         $sz = $meta?->get('spawnZ');
         if ($sx !== null && $sy !== null && $sz !== null) {
-            $entityRef->teleport((float)$sx, (float)$sy, (float)$sz, 0, 0);
-            return;
+            if ($this->isSafePosition((float)$sx, (float)$sy, (float)$sz)) {
+                $entityRef->teleport((float)$sx, (float)$sy, (float)$sz, 0, 0);
+                return;
+            }
+            // Personal spawn is inside terrain — fall through to world spawn.
         }
 
         $kernel = \pocketmine\Kernel::getInstance();
@@ -104,6 +108,24 @@ final class PlayerRespawnService {
         if ($config !== null) {
             $entityRef->teleport($config->spawnX, $config->spawnY, $config->spawnZ, 0, 0);
         }
+    }
+
+    /**
+     * Is a position safe? Feet and head blocks must be non-solid.
+     */
+    private function isSafePosition(float $x, float $y, float $z): bool {
+        $kernel = \pocketmine\Kernel::getInstance();
+        $registry = $kernel?->getResourceRegistry();
+        $store = $registry?->get(ChunkStore::class);
+        $blocks = $registry?->get(BlockRegistry::class);
+        if (!$store instanceof ChunkStore || !$blocks instanceof BlockRegistry) {
+            return false;
+        }
+        $bx = (int)floor($x);
+        $by = (int)floor($y);
+        $bz = (int)floor($z);
+        return !$blocks->isSolid($store->getBlock($bx, $by, $bz))
+            && !$blocks->isSolid($store->getBlock($bx, $by + 1, $bz));
     }
 
     private function clearEffects(\pocketmine\core\ecs\Entity $entity): void {
