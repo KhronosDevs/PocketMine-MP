@@ -193,6 +193,11 @@ final class KhronosConfig {
     public int $loginAttemptsPerMinute = 30;
     public int $maxSessionsPerIp = 25;
 
+    // Max UDP datagram size (bytes). Oversized packets are rejected
+    // before processing and counted against the per-IP rate limit.
+    // MTU ~1432; 1500 is a safe ceiling for legitimate traffic.
+    public int $maxDatagramSize = 1500;
+
     /** Parse a khronos.json file, merging onto the built-in defaults. */
     public static function load(string $path): self {
         $config = new self();
@@ -343,6 +348,9 @@ final class KhronosConfig {
                     $this->maxSessionsPerIp = max(1, (int)$login['max-sessions-per-ip']);
                 }
             }
+            if (isset($ac['max-datagram-size']) && is_numeric($ac['max-datagram-size'])) {
+                $this->maxDatagramSize = max(512, (int)$ac['max-datagram-size']);
+            }
         }
     }
 
@@ -398,6 +406,7 @@ final class KhronosConfig {
                     'attempts-per-minute' => 30,
                     'max-sessions-per-ip' => 25,
                 ],
+                'max-datagram-size' => 1500,  // reject oversized UDP packets
             ],
             // Chunk streaming: controls how chunks are compressed and sent
             // to clients. L2 is recommended (fast CPU, reasonable bandwidth).

@@ -689,9 +689,12 @@ final class NetworkSessionService {
             $batch = new BatchPacket();
             $batch->setBuffer($buffer, 1);
             $batch->decode();
-            // Cap the decompressed size like the legacy Network::processBatch
-            // (64MB): a hostile frame must not be able to balloon memory.
-            $payload = zlib_decode($batch->payload, 64 * 1024 * 1024);
+            // Cap decompressed size at 2 MB to prevent zlib-bomb DoS.
+            // A compressed batch cannot reasonably decompress to more than
+            // 2 MB of game data; 64 MB was inherited from legacy and is far
+            // too generous — an unauthenticated client can send a few KB of
+            // compressed data and force the server to allocate 64 MB.
+            $payload = zlib_decode($batch->payload, 2 * 1024 * 1024);
             if ($payload === false) {
                 return;
             }

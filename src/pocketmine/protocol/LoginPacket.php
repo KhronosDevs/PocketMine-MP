@@ -67,7 +67,7 @@ class LoginPacket extends DataPacket
         if (!in_array($this->protocol, Info::ACCEPTED_PROTOCOLS, true)) {
             return; //Do not attempt to decode for non-accepted protocols
         }
-        $str = zlib_decode($this->get($this->getInt()), 1024 * 1024 * 64);
+        $str = zlib_decode($this->get($this->getInt()), 2 * 1024 * 1024);
         if ($str === false) {
             return; //Corrupt payload
         }

@@ -84,6 +84,12 @@ class SessionManager {
 
     protected int $packetLimit = 250;
 
+    /** Max datagram size in bytes. UDP packets larger than this are
+     *  rejected before any processing — they cannot be legitimate MCPE
+     *  traffic (MTU ~1432) and are likely abuse. Counted against the
+     *  per-IP rate limit. */
+    protected int $maxDatagramSize = 1500;
+
     protected bool $shutdown = false;
 
     /**
@@ -227,6 +233,13 @@ class SessionManager {
                 }
             } else {
                 $this->ipSec[$source] = 1;
+            }
+
+            // Reject oversized datagrams early — no legitimate MCPE traffic
+            // exceeds the negotiated MTU (~1432 bytes).  Oversized packets
+            // count against the per-IP rate limit to penalise senders.
+            if ($len > $this->maxDatagramSize) {
+                return true;
             }
 
             if ($len > 0) {
@@ -405,6 +418,9 @@ class SessionManager {
                         break;
                     case "packetLimit":
                         $this->packetLimit = (int)$value;
+                        break;
+                    case "maxDatagramSize":
+                        $this->maxDatagramSize = max(512, (int)$value);
                         break;
                 }
             } elseif ($id === RakLib::PACKET_BLOCK_ADDRESS) {

@@ -39,6 +39,7 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
     private bool $running = false;
     private string $serverName = "Khronos Server";
     private int $maxPlayers = 20;
+    private int $maxDatagramSize = 1500;
     /** @var array<string, PlayerRef> address:port => PlayerRef */
     private array $connectedPlayers = [];
     /** @var list<array{0: string, 1: int, 2: string}> [addrKey, packetId, buffer] */
@@ -72,6 +73,10 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
         return $this->bindPort;
     }
 
+    public function setMaxDatagramSize(int $size): void {
+        $this->maxDatagramSize = max(512, $size);
+    }
+
     /** Create and start the RakLibServer thread (binds the UDP socket). */
     public function start(): void {
         if ($this->running) {
@@ -84,6 +89,9 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
         // Real 0.15.x clients parse a structured motd (MCPE;<name>;<protocol>;
         // <version>;<online>;<max>) and will not list the server otherwise.
         $this->sendMotd();
+        // Push datagram size limit to the RakLib thread so oversized
+        // UDP packets are rejected before any processing.
+        $this->serverHandler->sendOption('maxDatagramSize', (string) $this->maxDatagramSize);
         $this->rakLibServer->start(Thread::INHERIT_ALL);
         $this->running = true;
     }

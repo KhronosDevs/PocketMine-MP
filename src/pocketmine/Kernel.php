@@ -1875,6 +1875,14 @@ function applyKhronosConfig(ResourceRegistry $resourceRegistry, \pocketmine\core
     if ($config->memoryLimit !== null) {
         ini_set('memory_limit', $config->memoryLimit);
     }
+
+    // Max datagram size: reject oversized UDP packets in the RakLib thread.
+    if ($config->maxDatagramSize !== 1500) {
+        $networkPort = $resourceRegistry->get(\pocketmine\port\driven\NetworkPort::class);
+        if ($networkPort instanceof \pocketmine\adapter\driven\network\Protocol84NetworkAdapter) {
+            $networkPort->setMaxDatagramSize($config->maxDatagramSize);
+        }
+    }
 }
 
 /**
