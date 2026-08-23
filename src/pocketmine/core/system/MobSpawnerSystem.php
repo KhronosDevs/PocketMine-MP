@@ -90,13 +90,13 @@ final class MobSpawnerSystem implements System {
         }
         // Per-world mob spawning toggle: WorldConfig::spawnMobs replaces
         // the old global ServerConfig::spawnMobs.
+        $worldConfig = $world->getResourceRegistry()->get(WorldConfig::class);
         if ($worldConfig instanceof WorldConfig && !$worldConfig->spawnMobs) {
             return; // mob spawning disabled for this world
         }
         // 14.6: hostile mobs only spawn after dusk (time >= 12000). During
         // the day the world is quiet; the night gate makes day/night mean
         // something in the game rather than mobs appearing 24/7.
-        $worldConfig = $world->getResourceRegistry()->get(WorldConfig::class);
         if ($worldConfig instanceof WorldConfig && !TimeSystem::isNight($worldConfig->time)) {
             return; // daylight: no hostile spawns
         }
