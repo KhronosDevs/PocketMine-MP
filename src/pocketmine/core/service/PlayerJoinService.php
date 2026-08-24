@@ -49,10 +49,17 @@ final class PlayerJoinService {
             return null;
         }
 
+        // Mark the player as online so Player::isOnline() returns true.
+        // Must happen before any events fire so plugins observing join see
+        // the player as online.
+        $meta = $entityRef->getEntity()?->get(\pocketmine\core\component\MetadataComponent::class);
+        if ($meta !== null) {
+            $meta->set(\pocketmine\core\constants\MetadataKeys::ONLINE, true);
+        }
+
         // Blocker 1: the server-default gamemode (server.properties gamemode=)
         // applies to new players, and to returning players when force-gamemode
         // is on. Returning players otherwise keep their saved gamemode.
-        $meta = $entityRef->getEntity()?->get(\pocketmine\core\component\MetadataComponent::class);
         $force = \pocketmine\api\server\Server::getInstance()->isForceGamemode();
         if ($meta !== null && ($meta->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE) === null || $force)) {
             $worldConfig = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\WorldConfig::class);

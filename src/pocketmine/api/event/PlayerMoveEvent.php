@@ -8,7 +8,7 @@ use pocketmine\api\entity\Player;
 use pocketmine\api\entity\Entity;
 use pocketmine\api\block\Block;
 
-class PlayerMoveEvent extends Event {
+class PlayerMoveEvent extends CancellableEvent {
     public function __construct(
         public readonly Player $player,
         public readonly array $from,

@@ -166,19 +166,15 @@ class Player extends Entity
 
     private function sendTextPacket(int $type, string $message): void
     {
-        $kernel = \pocketmine\Kernel::getInstance();
-        if ($kernel === null) {
+        // Route through NetworkSessionService::sendTextTo() which uses the
+        // batch pipeline (queuePacket → outbound buffer → flush → batch →
+        // compress → send). Going directly through NetworkPort::sendPacket()
+        // sends unbatched raw packets that the MCPE client ignores.
+        $nss = \pocketmine\Kernel::getInstance()?->getNetworkSessionService();
+        if ($nss === null) {
             return;
         }
-        $ref = new \pocketmine\port\driven\PlayerRef(
-            $this->getUniqueId(),
-            $this->getId(),
-            $this->getName()
-        );
-        $packet = new \pocketmine\protocol\TextPacket();
-        $packet->type = $type;
-        $packet->message = $message;
-        $kernel->getNetworkPort()->sendPacket($ref, $packet);
+        $nss->sendTextTo($this->getId(), $type, $message);
     }
 
     public function getInventory(): InventoryComponent

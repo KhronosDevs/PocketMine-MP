@@ -1129,9 +1129,37 @@ final class NetworkSessionService {
         // Persist the accepted move's bookkeeping (lastMoveTick / grace).
         $this->sessions[$addrKey] = $session;
 
-        // The pre-move position, captured before the mutation below so the
-        // event's from/to reflect the actual movement.
+        // The pre-move position, captured BEFORE any mutation so we can
+        // revert if the event is cancelled.
         $from = $pos !== null ? [$pos->x, $pos->y, $pos->z] : [0.0, 0.0, 0.0];
+
+        // Fire PlayerMoveEvent BEFORE applying the position change.
+        // Cancellable: if a plugin cancels, the move is rejected and the
+        // client is snapped back to the old position (old-src parity).
+        $moveEvent = new \pocketmine\api\event\PlayerMoveEvent(
+            $this->wrapApiPlayer($session['entityRef']),
+            $from,
+            [$pk->x, $pk->y, $pk->z],
+        );
+        $this->eventPort->emit($moveEvent);
+
+        if ($moveEvent->isCancelled()) {
+            // Revert: send the client back to its last authoritative position.
+            $resetPk = new \pocketmine\protocol\MovePlayerPacket();
+            $resetPk->eid = 0; // protocol 84: the player is always entity 0
+            $resetPk->x = (float)$from[0];
+            $resetPk->y = (float)$from[1];
+            $resetPk->z = (float)$from[2];
+            $resetPk->yaw = $rot !== null ? $rot->yaw : 0.0;
+            $resetPk->bodyYaw = $rot !== null ? $rot->yaw : 0.0;
+            $resetPk->pitch = $rot !== null ? $rot->pitch : 0.0;
+            $resetPk->mode = MovePlayerPacket::MODE_RESET;
+            $resetPk->onGround = true;
+            $this->queuePacket($session['playerRef'], $resetPk);
+            return;
+        }
+
+        // Move accepted: apply the new position and rotation.
         if ($pos !== null) {
             $pos->x = $pk->x;
             $pos->y = $pk->y;
@@ -1141,15 +1169,6 @@ final class NetworkSessionService {
             $rot->yaw = $pk->yaw;
             $rot->pitch = $pk->pitch;
         }
-
-        // Blocker 4: PlayerMoveEvent (non-cancellable) fires after the move is
-        // accepted so plugins observe the same authoritative position the
-        // rest of the server sees.
-        $this->eventPort->emit(new \pocketmine\api\event\PlayerMoveEvent(
-            $this->wrapApiPlayer($session['entityRef']),
-            $from,
-            [$pk->x, $pk->y, $pk->z],
-        ));
 
         // The world is infinite: queueChunks() only fires on login / radius
         // change / world switch, so a player who walks beyond the initially
@@ -1443,13 +1462,38 @@ final class NetworkSessionService {
      * service lazily via Kernel::getInstance().
      */
     public function sendMessageTo(int $entityId, string $message): void {
+        $this->sendTextTo($entityId, TextPacket::TYPE_RAW, $message);
+    }
+
+    /**
+     * Send a tip (temporary on-screen message) to a player via the batch
+     * pipeline (same path as sendMessageTo).
+     */
+    public function sendTipTo(int $entityId, string $message): void {
+        $this->sendTextTo($entityId, TextPacket::TYPE_TIP, $message);
+    }
+
+    /**
+     * Send a popup (action-bar message) to a player via the batch pipeline.
+     */
+    public function sendPopupTo(int $entityId, string $message): void {
+        $this->sendTextTo($entityId, TextPacket::TYPE_SYSTEM, $message);
+    }
+
+    /**
+     * Send a TextPacket of any type to a player, routed through the batch
+     * pipeline (queuePacket → outbound buffer → flush → batch → compress → send).
+     * This is the correct path — going directly through NetworkPort::sendPacket()
+     * sends unbatched raw packets that the client ignores.
+     */
+    public function sendTextTo(int $entityId, int $type, string $message, string $source = ''): void {
         foreach ($this->sessions as $session) {
             if ($session['playerRef']->entityId !== $entityId) {
                 continue;
             }
             $pk = new TextPacket();
-            $pk->type = TextPacket::TYPE_RAW;
-            $pk->source = '';
+            $pk->type = $type;
+            $pk->source = $source;
             $pk->message = $message;
             $this->queuePacket($session['playerRef'], $pk);
             return;

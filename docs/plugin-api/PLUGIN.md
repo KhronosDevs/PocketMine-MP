@@ -381,7 +381,7 @@ $this->registerEvent(BlockBreakEvent::class, function (BlockBreakEvent $event): 
 | `PlayerRespawnEvent` | – | `Player` |
 | `PlayerChatEvent` | ✅ | `Player`, mutable `message` |
 | `PlayerCommandPreprocessEvent` | ✅ | `Player`, mutable `command` |
-| `PlayerMoveEvent` | – | `Player`, `from`, `to` (position arrays) |
+| `PlayerMoveEvent` | ✅ | `Player`, `from`, `to` (position arrays) — cancelling reverts the player to `from` and sends a position reset to the client |
 | `PlayerInteractEvent` | ✅ | `Player`, `action` (const `LEFT_CLICK_AIR`/`LEFT_CLICK_BLOCK`/`RIGHT_CLICK_AIR`/`RIGHT_CLICK_BLOCK`), `target` entity, `face` |
 | `BlockBreakEvent` | ✅ | `Player`, `Block` |
 | `BlockPlaceEvent` | ✅ | `Player`, `Block`, `face` |

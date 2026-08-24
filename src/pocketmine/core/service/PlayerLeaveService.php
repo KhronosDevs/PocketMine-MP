@@ -48,6 +48,14 @@ final class PlayerLeaveService {
             $this->wrapApiPlayer($entityRef),
         ));
         
+        // Mark player offline so Player::isOnline() returns false after
+        // disconnect. Done after events so plugins can still check isOnline()
+        // during leave events.
+        $meta = $entity->get(\pocketmine\core\component\MetadataComponent::class);
+        if ($meta !== null) {
+            $meta->set(\pocketmine\core\constants\MetadataKeys::ONLINE, false);
+        }
+
         // Despawn entity
         $this->world->despawn($entity);
     }
