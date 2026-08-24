@@ -261,7 +261,7 @@ final class PlayerJoinService {
             // room both non-solid). Trees or overhangs can make the
             // heightmap position unsafe.
             if ($this->isSafePosition((float)$spawnX, (float)$y, (float)$spawnZ)) {
-                return [$spawnX, $y, $spawnZ];
+                return [$spawnX + 0.5, $y, $spawnZ + 0.5];
             }
             // Unsafe — fall through to the neighbour scan.
         }
@@ -307,7 +307,7 @@ final class PlayerJoinService {
                         $dist = abs($x - $spawnX) + abs($z - $spawnZ);
                         if ($dist < $bestDist) {
                             $bestDist = $dist;
-                            $best = [$x, $safeY, $z];
+                            $best = [$x + 0.5, $safeY, $z + 0.5];
                         }
                     }
                 }
@@ -321,7 +321,7 @@ final class PlayerJoinService {
         // configured spawn so the player at least doesn't spawn inside a
         // block (they will swim).
         $top = $store !== null ? $store->getHighestBlockAt($spawnX, $spawnZ) : $seaLevel;
-        return [$spawnX, max($top + 1, $seaLevel + 1), $spawnZ];
+        return [$spawnX + 0.5, max($top + 1, $seaLevel + 1), $spawnZ + 0.5];
     }
 
     private function sendJoinPackets(EntityRef $entityRef): void {
