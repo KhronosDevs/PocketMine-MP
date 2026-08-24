@@ -23,4 +23,18 @@ final class EntityTags {
     public const PRIMED_TNT = 'primed_tnt';
     public const FALLING_SAND = 'falling_sand';
     public const VEHICLE = 'vehicle';
+
+    /**
+     * Marker for entities that survive chunk unload/reload and server
+     * restart.  ChunkEntityPersistence captures and restores these
+     * entities through their full component snapshot.
+     *
+     * Plugins mark an entity persistent with:
+     *   $entity->set(EntityTags::PERSISTENT, true);
+     *
+     * On restore, ALL components are deserialized via
+     * ComponentSerializer — plugin-added components are preserved
+     * as long as their class exists in the autoloaded classmap.
+     */
+    public const PERSISTENT = 'persistent';
 }

@@ -415,6 +415,34 @@ final class ChunkLoadService {
             }
             $spawnService = \pocketmine\Kernel::getInstance()?->getEntitySpawnService();
             $spawnService?->spawnEntity(\pocketmine\core\enum\EntityType::from(\pocketmine\core\constants\EntityTags::XP_ORB), $snapshot->x, $snapshot->y, $snapshot->z, 0, 0, ['entityType' => 'XPOrb', 'xp' => $xpAmount], $worldId);
+        } elseif ($snapshot->type !== 'unknown') {
+            // Generic persistent entity restore: the snapshot type is an
+            // EntityType value string (e.g. 'Zombie', 'Villager') stored
+            // by ChunkEntityPersistence for entities marked with
+            // EntityTags::PERSISTENT.
+            $entityType = \pocketmine\core\enum\EntityType::tryFrom($snapshot->type);
+            if ($entityType === null) {
+                return; // unknown type, can't restore
+            }
+            $spawnService = \pocketmine\Kernel::getInstance()?->getEntitySpawnService();
+            if ($spawnService === null) {
+                return;
+            }
+            $ref = $spawnService->spawnEntity(
+                $entityType, $snapshot->x, $snapshot->y, $snapshot->z,
+                $snapshot->yaw, $snapshot->pitch, [], $worldId,
+            );
+            // Deserialize ALL components from the snapshot and overwrite
+            // the defaults that spawnEntity created.  This preserves
+            // plugin-added custom components, metadata overrides (DISPLAY_NAME,
+            // SCALE, etc.), and any other state the entity had.
+            $entity = $ref->getEntity();
+            if ($entity !== null) {
+                $restored = \pocketmine\core\ecs\ComponentSerializer::deserializeAll($snapshot->components);
+                foreach ($restored as $type => $component) {
+                    $entity->set($type, $component);
+                }
+            }
         }
     }
 

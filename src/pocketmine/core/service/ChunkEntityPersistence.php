@@ -63,7 +63,8 @@ final class ChunkEntityPersistence {
             $isItem = $meta?->get(MetadataKeys::ITEM) instanceof \pocketmine\core\component\ItemStack
                 || $entity->has(EntityTags::ITEM);
             $isXpOrb = $entity->has(EntityTags::XP_ORB) || $meta?->get('xp') !== null;
-            if (!$isItem && !$isXpOrb) continue;
+            $isPersistent = $entity->has(EntityTags::PERSISTENT);
+            if (!$isItem && !$isXpOrb && !$isPersistent) continue;
 
             $chunkKey = ((int)floor($pos->x) >> 4) . ',' . ((int)floor($pos->z) >> 4);
             $rot = $entity->get(RotationComponent::class);
@@ -72,7 +73,17 @@ final class ChunkEntityPersistence {
                 if (!is_object($component)) continue;
                 $components[$type] = \pocketmine\core\ecs\ComponentSerializer::serialize($component);
             }
-            $type = $entity->has(EntityTags::ITEM) ? 'item' : ($entity->has(EntityTags::XP_ORB) ? 'xp_orb' : 'unknown');
+            if ($entity->has(EntityTags::ITEM)) {
+                $type = 'item';
+            } elseif ($entity->has(EntityTags::XP_ORB)) {
+                $type = 'xp_orb';
+            } elseif ($isPersistent) {
+                // Store the EntityType string so restoreEntityFromSnapshot
+                // knows which entity to recreate.
+                $type = $meta?->get(MetadataKeys::ENTITY_TYPE) ?? 'persistent';
+            } else {
+                $type = 'unknown';
+            }
             $buckets[$chunkKey][] = new \pocketmine\port\driven\EntitySnapshot(
                 'chunk_' . $entity->id,
                 $type,

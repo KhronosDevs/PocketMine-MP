@@ -408,6 +408,33 @@ The filter is called for every viewer→entity pair during `broadcastEntityState
 
 **Important:** When the filter suppresses an entity, the client receives a `RemoveEntityPacket`. When the filter later allows it, the entity is re-added with a fresh `AddEntityPacket`. This means toggling visibility causes a brief despawn/respawn cycle — design your filter to be stable to avoid flickering.
 
+### Persistent entities
+
+Entities marked with `EntityTags::PERSISTENT` survive chunk unload/reload and server restart. Their full component state (including plugin-added components and metadata overrides) is serialized on chunk unload and deserialized on chunk reload.
+
+```php
+use pocketmine\core\constants\EntityTags;
+
+// Mark an entity as persistent
+$entity->set(EntityTags::PERSISTENT, true);
+
+// Now when the chunk unloads, the entity is captured as a snapshot.
+// When the chunk reloads (or server restarts), it is restored with
+// ALL components intact — position, rotation, metadata, custom components.
+```
+
+**How it works:**
+1. Chunk unload → `ChunkEntityPersistence` captures all entities with the `PERSISTENT` tag
+2. Components are serialized via `ComponentSerializer` (reflection-based, handles nested objects)
+3. Snapshot stored in the chunk's data alongside tile entities
+4. Chunk reload → `ChunkLoadService::restoreEntityFromSnapshot()` deserializes components and recreates the entity
+
+**Important:**
+- The entity's class must be autoloadable for `ComponentSerializer::deserialize()` to work
+- Plugin-added custom components are preserved as long as their class exists
+- The `ENTITY_TYPE` metadata key is used to determine which entity type to recreate on restore
+- Players are never persisted this way (they have their own connection lifecycle)
+
 ### Add-packet providers (NPC rendering)
 
 Plugins can register **per-entity add-packet providers** to control how custom entities (NPCs, custom mobs, etc.) are rendered to clients.
