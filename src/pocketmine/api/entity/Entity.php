@@ -6,6 +6,7 @@ namespace pocketmine\api\entity;
 
 use pocketmine\core\ecs\EntityRef;
 use pocketmine\core\ecs\World;
+use pocketmine\core\math\AxisAlignedBB;
 use pocketmine\core\ecs\EntityBuilder;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\RotationComponent;
@@ -126,6 +127,16 @@ class Entity {
 
     public function getCollision(): CollisionComponent {
         return $this->ref->getCollision() ?? new CollisionComponent();
+    }
+
+    /**
+     * Current axis-aligned bounding box (hitbox) for this entity.
+     * Built from position + CollisionComponent width/height.
+     */
+    public function getBoundingBox(): AxisAlignedBB {
+        $pos = $this->getPosition();
+        $col = $this->getCollision();
+        return AxisAlignedBB::ofEntity($pos->x, $pos->y, $pos->z, $col->width, $col->height);
     }
 
     public function isPlayer(): bool {

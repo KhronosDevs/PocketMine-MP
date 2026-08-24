@@ -408,6 +408,66 @@ The filter is called for every viewer→entity pair during `broadcastEntityState
 
 **Important:** When the filter suppresses an entity, the client receives a `RemoveEntityPacket`. When the filter later allows it, the entity is re-added with a fresh `AddEntityPacket`. This means toggling visibility causes a brief despawn/respawn cycle — design your filter to be stable to avoid flickering.
 
+### Math — AxisAlignedBB & RayTraceResult
+
+Bounding boxes and raycasting for hitboxes, collision, and region checks.
+
+```php
+use pocketmine\core\math\AxisAlignedBB;
+use pocketmine\core\math\RayTraceResult;
+```
+
+**AxisAlignedBB** (immutable value object):
+
+| Method | Description |
+|---|---|
+| `AxisAlignedBB::ofBlock(x, y, z)` | 1×1×1 box for a single block |
+| `AxisAlignedBB::ofEntity(x, y, z, width, height)` | Entity hitbox (centered on x/z) |
+| `$bb->grow(x, y, z)` | Expand outward |
+| `$bb->shrink(x, y, z)` | Shrink inward |
+| `$bb->offset(x, y, z)` | Move by offset |
+| `$bb->addCoord(x, y, z)` | Expand to include a point |
+| `$bb->intersectsWith($other)` | Do two boxes overlap? |
+| `$bb->isVectorInside(x, y, z)` | Is a point inside? |
+| `$bb->distanceToPoint(x, y, z)` | Distance to nearest face (0 if inside) |
+| `$bb->calculateIntercept(x1,y1,z1, x2,y2,z2)` | Raycast segment → box, returns `?RayTraceResult` |
+
+**RayTraceResult** (raycast hit):
+
+| Property | Description |
+|---|---|
+| `$x, $y, $z` | Hit point coordinates |
+| `$face` | Face hit (FACE_UP, FACE_DOWN, FACE_NORTH, FACE_SOUTH, FACE_EAST, FACE_WEST) |
+| `$distance` | Parametric distance along the ray |
+
+**Entity::getBoundingBox()** — returns the entity's current AABB from position + CollisionComponent:
+
+```php
+$bb = $entity->getBoundingBox();
+if ($bb->intersectsWith($otherBB)) {
+    // collision!
+}
+```
+
+**Example — raycast from player eyes:**
+
+```php
+$eyeY = $pos->y + 1.62; // eye height
+$reach = 5.0;
+// direction from yaw/pitch (simplified)
+$dirX = -sin(deg2rad($yaw)) * cos(deg2rad($pitch));
+$dirY = -sin(deg2rad($pitch));
+$dirZ = cos(deg2rad($yaw)) * cos(deg2rad($pitch));
+
+$ray = AxisAlignedBB::ofBlock($bx, $by, $bz)->calculateIntercept(
+    $pos->x, $eyeY, $pos->z,
+    $pos->x + $dirX * $reach, $eyeY + $dirY * $reach, $pos->z + $dirZ * $reach,
+);
+if ($ray !== null) {
+    echo "Hit {$ray->getFaceName()} at ({$ray->x}, {$ray->y}, {$ray->z})";
+}
+```
+
 ---
 
 ## 8. KernelAccessor — services and ports
