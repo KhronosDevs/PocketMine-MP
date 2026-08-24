@@ -53,6 +53,7 @@ enum EntityType: string {
     case XPOrb = 'XPOrb';
     case PrimedTNT = 'PrimedTNT';
     case FishingHook = 'FishingHook';
+    case FallingSand = 'FallingSand';
     // Vehicles (14.25)
     case Boat = 'Boat';
     case Minecart = 'Minecart';
@@ -95,6 +96,7 @@ enum EntityType: string {
             self::ThrownPotion => 86,
             self::XPOrb => 69,
             self::PrimedTNT => 65,
+            self::FallingSand => 66,
             self::Minecart => 84,
             self::Boat => 90,
         };
@@ -111,6 +113,11 @@ enum EntityType: string {
     /** Explosive entities (PrimedTNT). */
     public function isExplosive(): bool {
         return $this === self::PrimedTNT;
+    }
+
+    /** Gravity blocks that fall when unsupported (sand, gravel, anvils). */
+    public function isFallingBlock(): bool {
+        return $this === self::FallingSand;
     }
 
     /** Rideable vehicles (boats / minecarts). */

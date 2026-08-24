@@ -6347,6 +6347,28 @@ final class NetworkSessionService {
             $pk->metadata[17] = [\pocketmine\utils\Binary::DATA_TYPE_LONG, (int)$meta->get(MetadataKeys::SHOOTER_ID, 0)];
             return $pk;
         }
+        // FallingSand renders as legacy FallingSand (network id 66) with
+        // DATA_BLOCK_INFO (20) carrying the block id so the client draws
+        // the correct block type (sand/gravel/anvil).
+        if ($entity->has(\pocketmine\core\constants\EntityTags::FALLING_SAND)) {
+            $blockData = (int)($meta?->get(MetadataKeys::BLOCK_DATA, 0));
+            $pk = new AddEntityPacket();
+            $pk->eid = $entityId;
+            $pk->type = 66; // legacy FallingSand::NETWORK_ID
+            $pos = $entity->get(PositionComponent::class);
+            $vel = $entity->get(VelocityComponent::class);
+            $pk->x = $pos?->x ?? 0.0;
+            $pk->y = $pos?->y ?? 0.0;
+            $pk->z = $pos?->z ?? 0.0;
+            $pk->speedX = $vel?->x ?? 0.0;
+            $pk->speedY = $vel?->y ?? 0.0;
+            $pk->speedZ = $vel?->z ?? 0.0;
+            $pk->metadata = $this->legacyMetadataDefaults();
+            // DATA_BLOCK_INFO (20): block id | (meta << 8) — legacy
+            // FallingSand::DATA_BLOCK_INFO
+            $pk->metadata[20] = [\pocketmine\utils\Binary::DATA_TYPE_INT, $blockData];
+            return $pk;
+        }
         $type = EntityType::tryFrom((string)($meta?->get(MetadataKeys::MOB_TYPE) ?? $meta?->get(MetadataKeys::ENTITY_TYPE) ?? ''));
         $networkId = $type?->networkId();
         if ($networkId === null) {

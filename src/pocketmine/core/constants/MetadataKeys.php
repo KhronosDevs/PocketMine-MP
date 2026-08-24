@@ -79,6 +79,9 @@ final class MetadataKeys {
     public const SNEAKING = 'sneaking';
     public const SPRINTING = 'sprinting';
 
+    // FallingSand block data
+    public const BLOCK_DATA = 'blockData';
+
     // Vehicles / riding (14.25)
     public const VEHICLE_TYPE = 'vehicleType';
     public const VEHICLE_RIDER_ID = 'vehicleRiderId';

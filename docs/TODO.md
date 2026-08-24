@@ -52,14 +52,16 @@ bounding box overlaps the plate's block position.
 - **Missing:** per-tick entity-over-block detection system, plate activation/deactivation
   logic, redstone signal emission (tied to redstone engine).
 
-### 6. Falling sand / falling gravel
+### 6. Falling sand / falling gravel ✅
 
-Sand and gravel should fall when the block below is removed, as a gravity entity
+Sand, gravel, and anvils fall when the block below is removed, as a gravity entity
 that lands on the next solid block.
 
-- **Already in place:** `BlockIds::SAND = 12`, `BlockIds::GRAVEL = 13` in BlockRegistry.
-- **Missing:** gravity check on block-break (if block below is air, spawn a FallingSand
-  entity), FallingSand entity with gravity + collision, anvil fall sound on landing.
+- **Done:** `FallingSandSystem` handles gravity, block collision, and landing.
+- **Done:** `BlockBreakService::checkGravityBlocksAbove` scans upward for gravity blocks
+  after a break and spawns FallingSand entities.
+- **Done:** Anvil fall sound on landing.
+- **Done:** Falls as item when landing position is occupied.
 
 ### 7. Cauldron (118)
 

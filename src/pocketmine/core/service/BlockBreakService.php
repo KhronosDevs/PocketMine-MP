@@ -17,8 +17,10 @@ use pocketmine\core\resource\ChunkStore;
 use pocketmine\core\resource\WorldRegistry;
 use pocketmine\core\resource\Hunger;
 use pocketmine\core\resource\ItemDurability;
+use pocketmine\core\system\FallingSandSystem;
 use pocketmine\port\driven\StoragePort;
 use pocketmine\port\driving\EventPort;
+use function floor;
 
 final class BlockBreakService {
     public function __construct(
@@ -250,6 +252,10 @@ final class BlockBreakService {
         // stacked attachables (cactus/sugar cane columns) come down too.
         $this->breakAttachedBlocks($x, $y + 1, $z, $worldId);
 
+        // Falling sand / gravel / anvils: check blocks above for gravity blocks
+        // that should fall now that their support is gone.
+        $this->checkGravityBlocksAbove($x, $y + 1, $z, $worldId);
+
         return true;
     }
 
@@ -285,6 +291,41 @@ final class BlockBreakService {
         }
         // Chain upward: sugar cane / cactus columns, torch stacks...
         $this->breakAttachedBlocks($x, $y + 1, $z, $worldId);
+    }
+
+    /**
+    /**
+     * Falling sand / gravel / anvils: when a block is broken, check above
+     * for gravity blocks that should now fall. Chains upward so a column of
+     * sand falls piece by piece (legacy Fallable::onUpdate).
+     */
+    private function checkGravityBlocksAbove(int $x, int $y, int $z, int $worldId): void {
+        $store = $this->getChunkStore($worldId);
+        if ($store === null) {
+            return;
+        }
+        $scanY = $y;
+        while ($scanY < 256) {
+            $aboveId = $store->getBlock($x, $scanY, $z);
+            if ($aboveId === 0) {
+                $scanY++;
+                continue;
+            }
+            if (!FallingSandSystem::isGravityBlock($aboveId)) {
+                break;
+            }
+            $belowId = $store->getBlock($x, $scanY - 1, $z);
+            if ($belowId !== 0) {
+                break;
+            }
+            $store->setBlock($x, $scanY, $z, 0, 0);
+            $registry = $this->getBlockRegistry();
+            $store->recalculateLight((int)floor($x / 16), (int)floor($z / 16), $registry);
+            FallingSandSystem::spawn(
+                $this->world, $x + 0.5, $scanY, $z + 0.5, $aboveId, $worldId
+            );
+            $scanY++;
+        }
     }
 
     /**

@@ -2498,6 +2498,8 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // the rider follows the vehicle. After movement/physics so the vehicle
     // sees the integrated position; before chunk work.
     $scheduler->register(new \pocketmine\core\system\VehicleSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // Falling sand / gravel / anvils: detect landing and convert to blocks.
+    $scheduler->register(new \pocketmine\core\system\FallingSandSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     $scheduler->register(new \pocketmine\core\system\ChunkUpdateSystem(), \pocketmine\core\ecs\SystemPhase::CHUNK_PARALLEL);
     // Post-movement block collision: clamps the pending positions written by
     // the parallel systems against solid blocks before they are committed

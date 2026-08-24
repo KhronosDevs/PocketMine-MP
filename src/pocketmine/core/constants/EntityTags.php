@@ -21,5 +21,6 @@ final class EntityTags {
     public const ITEM = 'item';
     public const XP_ORB = 'xp_orb';
     public const PRIMED_TNT = 'primed_tnt';
+    public const FALLING_SAND = 'falling_sand';
     public const VEHICLE = 'vehicle';
 }
