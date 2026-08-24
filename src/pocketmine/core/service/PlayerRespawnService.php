@@ -96,18 +96,52 @@ final class PlayerRespawnService {
         $sy = $meta?->get('spawnY');
         $sz = $meta?->get('spawnZ');
         if ($sx !== null && $sy !== null && $sz !== null) {
-            if ($this->isSafePosition((float)$sx, (float)$sy, (float)$sz)) {
-                $entityRef->teleport((float)$sx, (float)$sy, (float)$sz, 0, 0);
+            $safe = $this->findSafeAbove((float)$sx, (float)$sy, (float)$sz);
+            if ($safe !== null) {
+                $entityRef->teleport($safe[0], $safe[1], $safe[2], 0, 0);
                 return;
             }
             // Personal spawn is inside terrain — fall through to world spawn.
         }
 
+        // World spawn from config — scan upward for safe position.
         $kernel = \pocketmine\Kernel::getInstance();
         $config = $kernel?->getResourceRegistry()->get(\pocketmine\core\resource\ServerConfig::class);
         if ($config !== null) {
+            $safe = $this->findSafeAbove($config->spawnX, $config->spawnY, $config->spawnZ);
+            if ($safe !== null) {
+                $entityRef->teleport($safe[0], $safe[1], $safe[2], 0, 0);
+                return;
+            }
+            // Last resort: raw config (may be inside terrain)
             $entityRef->teleport($config->spawnX, $config->spawnY, $config->spawnZ, 0, 0);
         }
+    }
+
+    /**
+     * Given a spawn coordinate, scan upward to find 2 consecutive air blocks
+     * (feet + head) so the player never suffocates. Returns [x, y, z] or
+     * null if no safe spot exists within 20 blocks above.
+     */
+    private function findSafeAbove(float $x, float $y, float $z): ?array {
+        $kernel = \pocketmine\Kernel::getInstance();
+        $registry = $kernel?->getResourceRegistry();
+        $store = $registry?->get(ChunkStore::class);
+        $blocks = $registry?->get(BlockRegistry::class);
+        if (!$store instanceof ChunkStore || !$blocks instanceof BlockRegistry) {
+            return null;
+        }
+        $bx = (int)floor($x);
+        $bz = (int)floor($z);
+        // Start at the configured Y, scan upward for 2 air blocks
+        $startY = max(1, (int)floor($y));
+        for ($by = $startY; $by < min($startY + 20, 255); $by++) {
+            if (!$blocks->isSolid($store->getBlock($bx, $by, $bz))
+                && !$blocks->isSolid($store->getBlock($bx, $by + 1, $bz))) {
+                return [(float)$bx + 0.5, (float)$by, (float)$bz + 0.5];
+            }
+        }
+        return null;
     }
 
     /**

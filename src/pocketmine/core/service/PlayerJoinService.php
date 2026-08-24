@@ -284,10 +284,24 @@ final class PlayerJoinService {
                         if (!$isDry($x, $z)) {
                             continue; // underwater column or open ocean
                         }
+                        $top = $store->getHighestBlockAt($x, $z);
+                        // Scan upward from the surface for 2 air blocks
+                        // (feet + head) so the player never suffocates.
+                        $safeY = null;
+                        for ($sy = $top + 1; $sy < min($top + 10, 255); $sy++) {
+                            if (!$blocks->isSolid($store->getBlock($x, $sy, $z))
+                                && !$blocks->isSolid($store->getBlock($x, $sy + 1, $z))) {
+                                $safeY = $sy;
+                                break;
+                            }
+                        }
+                        if ($safeY === null) {
+                            continue; // no headroom — trees/overhang
+                        }
                         $dist = abs($x - $spawnX) + abs($z - $spawnZ);
                         if ($dist < $bestDist) {
                             $bestDist = $dist;
-                            $best = [$x, $store->getHighestBlockAt($x, $z) + 1, $z];
+                            $best = [$x, $safeY, $z];
                         }
                     }
                 }

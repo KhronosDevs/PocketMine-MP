@@ -5487,10 +5487,21 @@ final class NetworkSessionService {
         // The world's spawn chunk may not be resident yet (a freshly created
         // nether has nothing loaded): load it so the scan sees real terrain.
         $this->chunkLoadService->loadChunk(intdiv($bx, 16), intdiv($bz, 16), $worldId);
+        $blocks = $this->resourceRegistry->get(\pocketmine\core\resource\BlockRegistry::class);
         $topY = $this->worldDimension($worldId) === 1 ? 126 : 120;
         for ($y = $topY; $y >= 1; $y--) {
             $id = $store->getBlock($bx, $y, $bz);
             if ($id !== 0 && !in_array($id, BlockIds::LIQUIDS, true)) {
+                // Found the surface — scan upward for 2 air blocks
+                // (feet + head) so the player never suffocates.
+                for ($sy = $y + 1; $sy < min($y + 10, 255); $sy++) {
+                    if ($blocks instanceof \pocketmine\core\resource\BlockRegistry
+                        && !$blocks->isSolid($store->getBlock($bx, $sy, $bz))
+                        && !$blocks->isSolid($store->getBlock($bx, $sy + 1, $bz))) {
+                        return [(float)$bx + 0.5, (float)$sy, (float)$bz + 0.5];
+                    }
+                }
+                // Fallback: just above the surface
                 return [(float)$bx + 0.5, (float)$y + 1, (float)$bz + 0.5];
             }
         }
