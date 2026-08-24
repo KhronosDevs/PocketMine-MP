@@ -21,3 +21,15 @@ composer.phar
 php-cs-fixer
 .php_cs.cache
 server.zip
+
+# Editor / IDE configuration & temporary files
+.vscode/
+.helix/
+.editorconfig
+.zed/
+nbproject/
+.nb-gradle/
+*.swp
+*~
+.DS_Store
+Thumbs.db
