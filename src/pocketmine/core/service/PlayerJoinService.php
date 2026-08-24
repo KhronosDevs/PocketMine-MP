@@ -194,8 +194,11 @@ final class PlayerJoinService {
         $bx = (int)floor($x);
         $by = (int)floor($y);
         $bz = (int)floor($z);
+        // Feet and head must be non-solid AND the block below must be solid
+        // (player stands on ground, not floating in a cave).
         return !$blocks->isSolid($store->getBlock($bx, $by, $bz))
-            && !$blocks->isSolid($store->getBlock($bx, $by + 1, $bz));
+            && !$blocks->isSolid($store->getBlock($bx, $by + 1, $bz))
+            && $blocks->isSolid($store->getBlock($bx, $by - 1, $bz));
     }
 
     private function getWorldSpawn(): PositionComponent {
@@ -286,17 +289,18 @@ final class PlayerJoinService {
                         }
                         $top = $store->getHighestBlockAt($x, $z);
                         // Scan upward from the surface for 2 air blocks
-                        // (feet + head) so the player never suffocates.
+                        // (feet + head) with solid ground below.
                         $safeY = null;
                         for ($sy = $top + 1; $sy < min($top + 10, 255); $sy++) {
                             if (!$blocks->isSolid($store->getBlock($x, $sy, $z))
-                                && !$blocks->isSolid($store->getBlock($x, $sy + 1, $z))) {
+                                && !$blocks->isSolid($store->getBlock($x, $sy + 1, $z))
+                                && $blocks->isSolid($store->getBlock($x, $sy - 1, $z))) {
                                 $safeY = $sy;
                                 break;
                             }
                         }
                         if ($safeY === null) {
-                            continue; // no headroom — trees/overhang
+                            continue; // no safe spot — keep scanning
                         }
                         $dist = abs($x - $spawnX) + abs($z - $spawnZ);
                         if ($dist < $bestDist) {

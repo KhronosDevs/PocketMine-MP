@@ -134,10 +134,12 @@ final class PlayerRespawnService {
         $bx = (int)floor($x);
         $bz = (int)floor($z);
         // Start at the configured Y, scan upward for 2 air blocks
+        // with solid ground below.
         $startY = max(1, (int)floor($y));
         for ($by = $startY; $by < min($startY + 20, 255); $by++) {
             if (!$blocks->isSolid($store->getBlock($bx, $by, $bz))
-                && !$blocks->isSolid($store->getBlock($bx, $by + 1, $bz))) {
+                && !$blocks->isSolid($store->getBlock($bx, $by + 1, $bz))
+                && $blocks->isSolid($store->getBlock($bx, $by - 1, $bz))) {
                 return [(float)$bx + 0.5, (float)$by, (float)$bz + 0.5];
             }
         }
@@ -145,7 +147,8 @@ final class PlayerRespawnService {
     }
 
     /**
-     * Is a position safe? Feet and head blocks must be non-solid.
+     * Is a position safe? Feet and head blocks must be non-solid,
+     * AND the block below feet must be solid (standing on ground).
      */
     private function isSafePosition(float $x, float $y, float $z): bool {
         $kernel = \pocketmine\Kernel::getInstance();
@@ -159,7 +162,8 @@ final class PlayerRespawnService {
         $by = (int)floor($y);
         $bz = (int)floor($z);
         return !$blocks->isSolid($store->getBlock($bx, $by, $bz))
-            && !$blocks->isSolid($store->getBlock($bx, $by + 1, $bz));
+            && !$blocks->isSolid($store->getBlock($bx, $by + 1, $bz))
+            && $blocks->isSolid($store->getBlock($bx, $by - 1, $bz));
     }
 
     private function clearEffects(\pocketmine\core\ecs\Entity $entity): void {
