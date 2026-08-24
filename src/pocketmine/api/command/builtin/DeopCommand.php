@@ -47,6 +47,16 @@ final class DeopCommand extends BuiltinCommand {
             }
         }
         $sender->sendMessage(Format::success('Deopped ' . Format::VALUE . $name . Format::SUCCESS . '.'));
+        $id = $this->findOnlineId($name);
+        if ($id !== null) {
+            $kernel = $this->kernel();
+            if ($kernel !== null) {
+                $kernel->getNetworkSessionService()->sendMessageTo(
+                    $id,
+                    Format::error('You are no longer an operator.')
+                );
+            }
+        }
         return true;
     }
 }

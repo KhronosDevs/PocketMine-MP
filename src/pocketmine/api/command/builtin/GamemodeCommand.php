@@ -83,6 +83,12 @@ final class GamemodeCommand extends BuiltinCommand {
             default => 'survival',
         };
         $sender->sendMessage(Format::success($name . ' is now in ' . Format::VALUE . $label . Format::SUCCESS . ' mode.'));
+        if ($targetId !== $this->selfId($sender)) {
+            $kernel->getNetworkSessionService()->sendMessageTo(
+                $targetId,
+                Format::success('Your game mode has been set to ' . Format::VALUE . $label . Format::SUCCESS . '.')
+            );
+        }
         return true;
     }
 }

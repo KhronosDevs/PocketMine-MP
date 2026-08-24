@@ -38,6 +38,16 @@ final class OpCommand extends BuiltinCommand {
         $lists->addOp($name);
         $this->grantOnline($name);
         $sender->sendMessage(Format::success('Opped ' . Format::VALUE . $name . Format::SUCCESS . '.'));
+        $id = $this->findOnlineId($name);
+        if ($id !== null) {
+            $kernel = $this->kernel();
+            if ($kernel !== null) {
+                $kernel->getNetworkSessionService()->sendMessageTo(
+                    $id,
+                    Format::success('You are now an operator.')
+                );
+            }
+        }
         return true;
     }
 
