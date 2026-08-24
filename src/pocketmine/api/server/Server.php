@@ -525,13 +525,14 @@ class Server {
     }
 
     public function getPlayerById(int $id): ?Player {
-        $world = \pocketmine\Kernel::getInstance()->getWorld();
-        $entity = $world->getEntity($id);
-        
-        if ($entity && $entity->hasComponent(\pocketmine\core\component\tags\PlayerTag::class)) {
+        // Use EntityRef::get() which already validates the entity exists
+        // and provides hasComponent(). The old code called hasComponent()
+        // on a raw ECS Entity which only has has() — fatal.
+        $ref = \pocketmine\core\ecs\EntityRef::get($id);
+        if ($ref !== null && $ref->hasComponent(\pocketmine\core\component\tags\PlayerTag::class)) {
             return new \pocketmine\api\entity\Player(
-                EntityRef::create($entity->id, $world),
-                $world
+                $ref,
+                \pocketmine\Kernel::getInstance()->getWorld()
             );
         }
         return null;

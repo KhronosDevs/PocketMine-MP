@@ -91,6 +91,25 @@ final class PmmpThreadPool implements ThreadingPort {
         return $pluginFuture;
     }
 
+    public function submitPluginTaskToWorker(int $workerId, Runnable $task): PluginFuture {
+        $future = new FutureImpl();
+        if ($task instanceof PluginTask) {
+            $task->setFuture($future);
+        }
+        $wrapper = new PluginRunnable($task, $future);
+        $this->pool->submitTo($workerId, $wrapper);
+        $pluginFuture = new PluginFuture($future);
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel !== null) {
+            $kernel->trackPluginFuture($pluginFuture);
+        }
+        return $pluginFuture;
+    }
+
+    public function submitTaskToWorker(int $workerId, Runnable $task): void {
+        $this->pool->submitTo($workerId, $task);
+    }
+
     public function shutdown(): void {
         $this->pool->shutdown();
     }

@@ -34,5 +34,22 @@ interface ThreadingPort {
      */
     public function submitPluginTask(Runnable $task): PluginFuture;
 
+    /**
+     * Submit a Runnable task to a SPECIFIC worker thread (pinned).
+     *
+     * Use this when a task needs worker affinity — e.g. SQLite tasks that
+     * benefit from a persistent connection on a known worker. The task will
+     * always land on worker $workerId, avoiding connection thrash.
+     *
+     * @throws \RuntimeException if workerId is out of range
+     */
+    public function submitPluginTaskToWorker(int $workerId, Runnable $task): PluginFuture;
+
+    /**
+     * Submit a Runnable directly to a specific worker (no future wrapping).
+     * Used by SystemScheduler for ECS tasks that manage their own result cells.
+     */
+    public function submitTaskToWorker(int $workerId, Runnable $task): void;
+
     public function shutdown(): void;
 }
