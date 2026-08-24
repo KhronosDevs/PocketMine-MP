@@ -17,7 +17,8 @@ use pmmp\thread\ThreadSafe;
  */
 final class FutureImpl extends ThreadSafe implements Future {
     private mixed $result = null;
-    private ?\Throwable $error = null;
+    /** @var string|null sanitised error message (raw Throwables are not ThreadSafe) */
+    private ?string $error = null;
     private bool $done = false;
     private bool $cancelled = false;
 
@@ -31,7 +32,7 @@ final class FutureImpl extends ThreadSafe implements Future {
 
     public function getResult(): mixed {
         if ($this->error !== null) {
-            throw $this->error;
+            throw new \RuntimeException($this->error);
         }
         return $this->result;
     }
@@ -64,8 +65,11 @@ final class FutureImpl extends ThreadSafe implements Future {
     }
 
     public function reject(\Throwable $e): void {
+        // Throwable objects are NOT ThreadSafe — storing one directly
+        // in a ThreadSafe property fatals the worker thread. Sanitise
+        // to a string the same way sanitizeResult handles plain objects.
         $this->synchronized(function () use ($e) {
-            $this->error = $e;
+            $this->error = self::sanitizeError($e);
             $this->done = true;
             $this->notify();
         });
@@ -80,5 +84,14 @@ final class FutureImpl extends ThreadSafe implements Future {
             return $result;
         }
         return json_encode($result, JSON_UNESCAPED_SLASHES);
+    }
+
+    /**
+     * Convert a Throwable into a string safe for ThreadSafe storage.
+     * Includes class name, message, and file:line for diagnostics.
+     */
+    private static function sanitizeError(\Throwable $e): string {
+        return get_class($e) . ': ' . $e->getMessage()
+            . ' @ ' . $e->getFile() . ':' . $e->getLine();
     }
 }

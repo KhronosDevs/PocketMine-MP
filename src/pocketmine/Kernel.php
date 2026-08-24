@@ -1562,15 +1562,21 @@ final class Kernel {
      * on the main thread. Called once per tick in the main loop.
      */
     private function drainPluginFutures(): void {
-        $remaining = [];
-        foreach ($this->pendingPluginFutures as $future) {
+        // Swap-then-drain: move the current batch into a local snapshot
+        // and clear the property BEFORE firing callbacks. This ensures that
+        // any trackPluginFuture() calls made from within callbacks land in
+        // the fresh (empty) array and survive — the old code overwrote them
+        // with $remaining after the foreach loop completed.
+        $batch = $this->pendingPluginFutures;
+        $this->pendingPluginFutures = [];
+
+        foreach ($batch as $future) {
             if (!$future->isDone()) {
-                $remaining[] = $future;
+                $this->pendingPluginFutures[] = $future;
                 continue;
             }
             $future->fireCallbacks();
         }
-        $this->pendingPluginFutures = $remaining;
     }
 
     /**
