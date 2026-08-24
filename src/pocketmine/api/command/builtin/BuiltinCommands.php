@@ -22,6 +22,7 @@ final class BuiltinCommands {
         $port->register(new TimeCommand());
         $port->register(new WeatherCommand());
         $port->register(new WorldCommand());
+        $port->register(new LoadAllCommand());
         $port->register(new HelpCommand());
         $port->register(new ListCommand());
         // Blocker 1 admin commands (console + ops).
