@@ -215,10 +215,11 @@ final class PlayerJoinService {
 
         // Persist the resolved spawn so respawn (and anything else reading
         // the config) lands on the same spot, not the un-resolved default.
+        // Config fields are int — store the block coordinate (not the +0.5).
         if ($config instanceof \pocketmine\core\resource\ServerConfig) {
-            $config->spawnX = $spawnX;
-            $config->spawnY = $spawnY;
-            $config->spawnZ = $spawnZ;
+            $config->spawnX = (int)$spawnX;
+            $config->spawnY = (int)$spawnY;
+            $config->spawnZ = (int)$spawnZ;
         }
 
         return new PositionComponent($spawnX, $spawnY, $spawnZ);
