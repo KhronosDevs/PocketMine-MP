@@ -236,6 +236,7 @@ final class PlayerJoinService {
     private function findSafeSpawn(int $spawnX, int $spawnZ): array {
         $store = $this->world->getResourceRegistry()->get(ChunkStore::class);
         $store = $store instanceof ChunkStore ? $store : null;
+        $blocks = $this->world->getResourceRegistry()->get(BlockRegistry::class);
         $seaLevel = \pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter::SEA_LEVEL;
         $water = \pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter::WATER_BLOCK;
 
@@ -292,7 +293,8 @@ final class PlayerJoinService {
                         // (feet + head) with solid ground below.
                         $safeY = null;
                         for ($sy = $top + 1; $sy < min($top + 10, 255); $sy++) {
-                            if (!$blocks->isSolid($store->getBlock($x, $sy, $z))
+                            if ($blocks !== null
+                                && !$blocks->isSolid($store->getBlock($x, $sy, $z))
                                 && !$blocks->isSolid($store->getBlock($x, $sy + 1, $z))
                                 && $blocks->isSolid($store->getBlock($x, $sy - 1, $z))) {
                                 $safeY = $sy;
