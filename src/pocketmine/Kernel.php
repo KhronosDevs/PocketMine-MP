@@ -1409,6 +1409,21 @@ final class Kernel {
                     $chunkZ,
                     $worldId,
                 );
+                // Persist entity snapshots (items, XP orbs, PERSISTENT entities)
+                // so they survive save+restart. Without this, persistent entities
+                // vanish on save because the chunk data has no snapshot record.
+                $entitySnapshots = \pocketmine\core\service\ChunkEntityPersistence::captureEntitiesForChunk($this->world, $chunkX, $chunkZ);
+                if ($entitySnapshots !== []) {
+                    $chunkData = new \pocketmine\port\driven\ChunkData(
+                        $chunkData->chunkX,
+                        $chunkData->chunkZ,
+                        $chunkData->sections,
+                        $chunkData->biomes,
+                        $chunkData->heightmap,
+                        array_merge($chunkData->entities, $entitySnapshots),
+                        $chunkData->tileEntities,
+                    );
+                }
                 $storage->saveChunk($chunkX, $chunkZ, $chunkData);
             }
         }
