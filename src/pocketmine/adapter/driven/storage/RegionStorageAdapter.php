@@ -337,10 +337,14 @@ abstract class RegionStorageAdapter implements StoragePort {
                 if ($data->getTag('generatorName') !== null) {
                     $meta['generator'] = $data->getString('generatorName', 'normal');
                 }
-                // 14.22: weather spell + remaining duration (custom keys -
-                // vanilla 0.15 level.dat has no weather persistence).
+                // Detect imported (non-Khronos) worlds: has a generatorName
+                // but no Khronos-specific markers. Imported flat worlds from
+                // old PocketMine must not auto-generate terrain — remap to void.
                 if ($data->getTag('KhronosWeather') !== null) {
                     $meta['weather'] = (string)self::readIntValue($data, 'KhronosWeather', 0);
+                    $meta['khronos'] = '1';
+                } else {
+                    $meta['imported'] = '1';
                 }
                 if ($data->getTag('KhronosWeatherDuration') !== null) {
                     $meta['weatherDuration'] = (string)self::readIntValue($data, 'KhronosWeatherDuration', 0);

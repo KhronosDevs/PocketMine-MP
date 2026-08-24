@@ -365,7 +365,18 @@ class Server {
             // it (normal/flat/void). Foreign or legacy level.dat files (no
             // generator info) default to VOID: the world is not regenerated
             // around the player - a dropped-in lobby stays as-is.
-            $config->generator = \pocketmine\core\enum\GeneratorType::coerce($meta['generator'] ?? 'void');
+            //
+            // Imported worlds (old PocketMine, no Khronos markers) with flat
+            // generator are remapped to void: old PM's flat generator was just
+            // a build platform, not auto-terrain. Khronos's flat generator
+            // would generate new terrain around the player, overwriting their
+            // builds. Normal generator is kept for imported worlds since old PM
+            // normal worlds had real terrain that should continue generating.
+            $gen = \pocketmine\core\enum\GeneratorType::coerce($meta['generator'] ?? 'void');
+            if (isset($meta['imported']) && $gen === \pocketmine\core\enum\GeneratorType::Flat) {
+                $gen = \pocketmine\core\enum\GeneratorType::Void;
+            }
+            $config->generator = $gen;
         } else {
             // No level.dat at all (a hand-dropped folder): treat as void so
             // nothing generates around whatever the user placed.

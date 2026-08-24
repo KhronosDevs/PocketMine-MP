@@ -2395,9 +2395,15 @@ function applyPersistedWorldMeta(StoragePort $storagePort, ResourceRegistry $res
     // The default world's generator follows the persisted level.dat when it
     // has one; a foreign/legacy level.dat (no generator info) defaults to
     // VOID so the world is never regenerated around the player's build.
+    // Imported flat worlds (old PocketMine, no Khronos markers) are remapped
+    // to void: old PM's flat was a build platform, not auto-terrain.
     $worldConfigGen = $resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class);
     if ($worldConfigGen instanceof \pocketmine\core\resource\WorldConfig) {
-        $worldConfigGen->generator = \pocketmine\core\enum\GeneratorType::coerce($meta['generator'] ?? 'void');
+        $gen = \pocketmine\core\enum\GeneratorType::coerce($meta['generator'] ?? 'void');
+        if (isset($meta['imported']) && $gen === \pocketmine\core\enum\GeneratorType::Flat) {
+            $gen = \pocketmine\core\enum\GeneratorType::Void;
+        }
+        $worldConfigGen->generator = $gen;
     }
     if (isset($meta['spawnY']) && $meta['spawnY'] !== '') {
         $config->spawnY = (int)$meta['spawnY'];
