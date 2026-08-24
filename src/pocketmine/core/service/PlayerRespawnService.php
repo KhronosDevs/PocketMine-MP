@@ -140,7 +140,7 @@ final class PlayerRespawnService {
             if (!$blocks->isSolid($store->getBlock($bx, $by, $bz))
                 && !$blocks->isSolid($store->getBlock($bx, $by + 1, $bz))
                 && $blocks->isSolid($store->getBlock($bx, $by - 1, $bz))) {
-                return [(float)$bx + 0.5, (float)$by, (float)$bz + 0.5];
+                return [(float)$bx + 0.5, (float)$by + 1, (float)$bz + 0.5];
             }
         }
         return null;

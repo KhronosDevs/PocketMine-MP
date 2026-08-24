@@ -5498,7 +5498,7 @@ final class NetworkSessionService {
                     if ($blocks instanceof \pocketmine\core\resource\BlockRegistry
                         && !$blocks->isSolid($store->getBlock($bx, $sy, $bz))
                         && !$blocks->isSolid($store->getBlock($bx, $sy + 1, $bz))) {
-                        return [(float)$bx + 0.5, (float)$sy, (float)$bz + 0.5];
+                        return [(float)$bx + 0.5, (float)$sy + 1, (float)$bz + 0.5];
                     }
                 }
                 // Fallback: just above the surface
