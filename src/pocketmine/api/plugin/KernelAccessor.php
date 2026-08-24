@@ -118,6 +118,30 @@ class KernelAccessor {
         $this->kernel->getNetworkSessionService()->setEntityVisibilityFilter($filter);
     }
 
+    /**
+     * Register a per-entity add-packet provider for NPC rendering.
+     * The callback receives (int $entityId, Entity $entity, array $playerSessions)
+     * and returns a DataPacket or null.
+     */
+    public function registerAddPacketProvider(callable $provider): void {
+        $this->kernel->getNetworkSessionService()->registerAddPacketProvider($provider);
+    }
+
+    /**
+     * Unregister a previously registered add-packet provider.
+     */
+    public function unregisterAddPacketProvider(callable $provider): void {
+        $this->kernel->getNetworkSessionService()->unregisterAddPacketProvider($provider);
+    }
+
+    /**
+     * Send a single packet into a specific player's batch pipeline.
+     * Returns true if queued, false if player not found.
+     */
+    public function sendPacketTo(int $entityId, \pocketmine\protocol\DataPacket $packet): bool {
+        return $this->kernel->getNetworkSessionService()->sendPacketTo($entityId, $packet);
+    }
+
     public function getStoragePort(): \pocketmine\port\driven\StoragePort {
         return $this->kernel->getStoragePort();
     }

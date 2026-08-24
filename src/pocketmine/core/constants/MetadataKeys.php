@@ -82,6 +82,13 @@ final class MetadataKeys {
     // FallingSand block data
     public const BLOCK_DATA = 'blockData';
 
+    // NPC rendering — plugins set these on entity metadata to customise
+    // the AddEntityPacket that broadcastEntityStates() sends for the entity.
+    // ADD_PACKET_TYPE overrides the EntityType network id (e.g. a Villager).
+    public const ADD_PACKET_TYPE = 'addPacketType';
+    // SCALE overrides DATA_SCALE (25) in the entity metadata.
+    public const SCALE = 'scale';
+
     // Vehicles / riding (14.25)
     public const VEHICLE_TYPE = 'vehicleType';
     public const VEHICLE_RIDER_ID = 'vehicleRiderId';

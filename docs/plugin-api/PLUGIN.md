@@ -408,6 +408,61 @@ The filter is called for every viewer→entity pair during `broadcastEntityState
 
 **Important:** When the filter suppresses an entity, the client receives a `RemoveEntityPacket`. When the filter later allows it, the entity is re-added with a fresh `AddEntityPacket`. This means toggling visibility causes a brief despawn/respawn cycle — design your filter to be stable to avoid flickering.
 
+### Add-packet providers (NPC rendering)
+
+Plugins can register **per-entity add-packet providers** to control how custom entities (NPCs, custom mobs, etc.) are rendered to clients.
+
+When `broadcastEntityStates()` needs to send an `AddEntityPacket` for an entity, it calls registered providers **in order** until one returns a non-null packet. If no provider handles the entity, the built-in type logic runs as usual.
+
+**Registering a provider:**
+
+```php
+$this->registerAddPacketProvider(function (int $entityId, Entity $entity, array $playerSessions) use ($npcSkins) {
+    $meta = $entity->get(MetadataComponent::class);
+    $npcId = $meta?->get('npcId');
+    if ($npcId === null) {
+        return null; // not our entity — pass to next provider
+    }
+    // Build a custom AddPlayerPacket with NPC skin
+    $pk = new AddPlayerPacket();
+    $pk->eid = $entityId;
+    $pk->uuid = $npcSkins[$npcId]['uuid'];
+    $pk->username = $npcSkins[$npcId]['name'];
+    // ... set position, metadata, etc.
+    return $pk;
+});
+```
+
+**Unregistering:**
+
+```php
+$this->unregisterAddPacketProvider($myProvider);
+```
+
+**Sending packets to specific players:**
+
+Use `sendPacketTo()` to inject any packet directly into a player's batch pipeline:
+
+```php
+$this->sendPacketTo($playerEntityId, $myPacket);
+```
+
+**Overriding nametag and scale via metadata:**
+
+Instead of a full provider, you can set metadata keys on the entity to customise the default `AddEntityPacket`:
+
+```php
+use pocketmine\core\constants\MetadataKeys;
+
+// Custom nametag (overrides mob type name)
+$entity->get(MetadataComponent::class)->set(MetadataKeys::DISPLAY_NAME, 'Villager #1');
+
+// Custom scale (DATA_SCALE, key 25)
+$entity->get(MetadataComponent::class)->set(MetadataKeys::SCALE, 1.5);
+```
+
+Multiple providers from different plugins are safe — they run in registration order and the first non-null result wins.
+
 ### Math — AxisAlignedBB & RayTraceResult
 
 Bounding boxes and raycasting for hitboxes, collision, and region checks.

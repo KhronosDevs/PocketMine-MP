@@ -132,6 +132,24 @@ abstract class Plugin {
         $this->getKernel()->setEntityVisibilityFilter($filter);
     }
 
+    /**
+     * Register a per-entity add-packet provider. See KernelAccessor::registerAddPacketProvider().
+     */
+    final protected function registerAddPacketProvider(callable $provider): void {
+        $this->getKernel()->registerAddPacketProvider($provider);
+    }
+
+    final protected function unregisterAddPacketProvider(callable $provider): void {
+        $this->getKernel()->unregisterAddPacketProvider($provider);
+    }
+
+    /**
+     * Send a single packet to a specific player's batch pipeline.
+     */
+    final protected function sendPacketTo(int $entityId, \pocketmine\protocol\DataPacket $packet): bool {
+        return $this->getKernel()->sendPacketTo($entityId, $packet);
+    }
+
     final protected function getStoragePort(): \pocketmine\port\driven\StoragePort {
         return $this->getKernel()->getStoragePort();
     }

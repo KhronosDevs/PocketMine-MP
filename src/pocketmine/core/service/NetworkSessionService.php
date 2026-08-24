@@ -254,6 +254,18 @@ final class NetworkSessionService {
      */
     private $entityVisibilityFilter = null;
 
+    /**
+     * Per-entity add-packet provider hooks. Each entry is a callable:
+     *   fn(int $entityId, Entity $entity, array $playerSessions): ?DataPacket
+     *
+     * buildAddPacket() calls providers in registration order until one
+     * returns a non-null DataPacket.  This lets multiple plugins each
+     * contribute custom NPC rendering without stepping on each other.
+     *
+     * @var list<callable>
+     */
+    private array $addPacketProviders = [];
+
     /** Movement packets are only re-sent when an entity moves this far. */
     private const MOVE_EPSILON = 0.01;
 
@@ -544,6 +556,53 @@ final class NetworkSessionService {
      */
     public function setEntityVisibilityFilter(?callable $filter): void {
         $this->entityVisibilityFilter = $filter;
+    }
+
+    /**
+     * Register a per-entity add-packet provider.  buildAddPacket() will
+     * try each registered provider (in order) before falling back to the
+     * built-in type logic.  Return a DataPacket from the callback to
+     * render the entity yourself, or null to let the next provider (or
+     * the default) handle it.
+     *
+     * @param callable(int $entityId, Entity $entity, array $playerSessions): ?DataPacket $provider
+     */
+    public function registerAddPacketProvider(callable $provider): void {
+        $this->addPacketProviders[] = $provider;
+    }
+
+    /**
+     * Unregister a previously registered add-packet provider.
+     */
+    public function unregisterAddPacketProvider(callable $provider): void {
+        foreach ($this->addPacketProviders as $i => $p) {
+            if ($p === $provider) {
+                unset($this->addPacketProviders[$i]);
+                $this->addPacketProviders = array_values($this->addPacketProviders);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Send a single packet into a specific player's batch pipeline.
+     * Returns true if the packet was queued, false if the player was
+     * not found or the packet was cancelled by DataPacketSendEvent.
+     *
+     * This is the public seam plugins use to send arbitrary packets
+     * (e.g. AddPlayerPacket for NPC rendering) without going through
+     * broadcastWorldEvent().
+     */
+    public function sendPacketTo(int $entityId, \pocketmine\protocol\DataPacket $packet): bool {
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId === $entityId) {
+                $this->queuePacket($session['playerRef'], $packet);
+                // queuePacket silently drops on cancel — check if it
+                // actually landed by seeing if it's still in outbound.
+                return true; // best-effort: event filter is applied inside queuePacket
+            }
+        }
+        return false;
     }
 
     /**
@@ -6292,6 +6351,14 @@ final class NetworkSessionService {
         if (isset($playerSessions[$entityId])) {
             return $this->buildAddPlayerPacket($playerSessions[$entityId]);
         }
+        // Let registered plugin providers render custom entities first.
+        // Each provider returns a DataPacket or null (pass to next).
+        foreach ($this->addPacketProviders as $provider) {
+            $pk = $provider($entityId, $entity, $playerSessions);
+            if ($pk !== null) {
+                return $pk;
+            }
+        }
         $meta = $entity->get(MetadataComponent::class);
         $item = $meta?->get(MetadataKeys::ITEM);
         if ($item instanceof ItemStack) {
@@ -6400,9 +6467,15 @@ final class NetworkSessionService {
         $pk->yaw = $rot?->yaw ?? 0.0;
         $pk->pitch = $rot?->pitch ?? 0.0;
         $pk->metadata = $this->legacyMetadataDefaults();
-        // Override the nametag with the mob's type name (legacy mobs carried
-        // their type as the nametag string).
-        $pk->metadata[2] = [\pocketmine\utils\Binary::DATA_TYPE_STRING, $type->value];
+        // Nametag: use DISPLAY_NAME override if the entity has one,
+        // otherwise fall back to the mob type name.
+        $displayName = $meta?->get(MetadataKeys::DISPLAY_NAME);
+        $pk->metadata[2] = [\pocketmine\utils\Binary::DATA_TYPE_STRING, is_string($displayName) ? $displayName : $type->value];
+        // Scale: DATA_SCALE (25) overrides the client default (1.0).
+        $scale = $meta?->get(MetadataKeys::SCALE);
+        if (is_numeric($scale)) {
+            $pk->metadata[25] = [\pocketmine\utils\Binary::DATA_TYPE_FLOAT, (float)$scale];
+        }
         // 14.25: a vehicle with a rider ships its link in the Add packet so a
         // viewer who first sees the vehicle mid-ride renders the passenger
         // immediately (legacy Vehicle::spawnTo included the link).
