@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 use pocketmine\core\component\PositionComponent;
 use pocketmine\core\component\WorldComponent;
 
@@ -77,7 +78,9 @@ final class SetSpawnCommand extends BuiltinCommand {
         $kernel->saveAllWorlds();
 
         $name = $world->getName();
-        $sender->sendMessage("Spawn of '$name' set to $x, $y, $z.");
+        $sender->sendMessage(Format::success("Spawn of '"
+            . Format::VALUE . $name . Format::SUCCESS . "' set to "
+            . Format::VALUE . "$x, $y, $z" . Format::SUCCESS . '.'));
         return true;
     }
 }

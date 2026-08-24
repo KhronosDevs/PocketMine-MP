@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 use pocketmine\core\resource\WorldConfig;
 
 /**
@@ -53,7 +54,7 @@ final class TimeCommand extends BuiltinCommand {
         }
 
         $config->time = $value;
-        $sender->sendMessage("Time set to $value.");
+        $sender->sendMessage(Format::success('Time set to ' . Format::VALUE . $value . Format::SUCCESS . '.'));
         return true;
     }
 }

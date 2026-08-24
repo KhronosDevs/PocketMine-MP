@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 use pocketmine\core\resource\WorldConfig;
 use pocketmine\core\system\WeatherSystem;
 
@@ -76,7 +77,7 @@ final class WeatherCommand extends BuiltinCommand {
         if (!WeatherSystem::isThundering($weather)) {
             $config->lightningTick = 0; // no timer outside storms
         }
-        $sender->sendMessage('Weather set to ' . self::NAMES[$weather] . " for $duration ticks.");
+        $sender->sendMessage(Format::success('Weather set to ' . Format::VALUE . self::NAMES[$weather] . Format::SUCCESS . " for " . Format::VALUE . $duration . Format::SUCCESS . ' ticks.'));
         return true;
     }
 }

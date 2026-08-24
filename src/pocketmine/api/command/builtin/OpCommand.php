@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 use pocketmine\core\component\MetadataComponent;
 
 /**
@@ -36,7 +37,7 @@ final class OpCommand extends BuiltinCommand {
         }
         $lists->addOp($name);
         $this->grantOnline($name);
-        $sender->sendMessage("Opped $name");
+        $sender->sendMessage(Format::success('Opped ' . Format::VALUE . $name . Format::SUCCESS . '.'));
         return true;
     }
 

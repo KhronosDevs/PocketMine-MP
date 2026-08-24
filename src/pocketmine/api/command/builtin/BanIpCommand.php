@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 
 /**
  * /ban-ip <ip> [reason] — ban a raw IP (persisted to banned-ips.txt) and
@@ -38,10 +39,10 @@ final class BanIpCommand extends BuiltinCommand {
             $reason = implode(' ', $args) ?: 'IP banned';
             $kicked = $kernel->getNetworkSessionService()->kickByIp($ip, $reason);
             if ($kicked > 0) {
-                $sender->sendMessage("Kicked $kicked session(s) from $ip");
+                $sender->sendMessage(Format::success('Kicked ' . Format::VALUE . $kicked . Format::SUCCESS . ' session(s) from ' . Format::VALUE . $ip . Format::SUCCESS . '.'));
             }
         }
-        $sender->sendMessage("Banned IP $ip");
+        $sender->sendMessage(Format::success('Banned IP ' . Format::VALUE . $ip . Format::SUCCESS . '.'));
         return true;
     }
 }

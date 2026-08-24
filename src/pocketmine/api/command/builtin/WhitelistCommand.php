@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 
 /**
  * /whitelist [on|off|add <player>|remove <player>|list] — manage the
@@ -34,12 +35,12 @@ final class WhitelistCommand extends BuiltinCommand {
             case 'on':
             case 'enable':
                 $this->setWhitelistEnabled(true);
-                $sender->sendMessage('Whitelist enabled.');
+                $sender->sendMessage(Format::success('Whitelist ' . Format::VALUE . 'enabled' . Format::SUCCESS . '.'));
                 return true;
             case 'off':
             case 'disable':
                 $this->setWhitelistEnabled(false);
-                $sender->sendMessage('Whitelist disabled.');
+                $sender->sendMessage(Format::success('Whitelist ' . Format::VALUE . 'disabled' . Format::SUCCESS . '.'));
                 return true;
             case 'add':
                 $name = array_shift($args);
@@ -48,7 +49,7 @@ final class WhitelistCommand extends BuiltinCommand {
                     return false;
                 }
                 $lists->addWhitelist($name);
-                $sender->sendMessage("Added $name to the whitelist.");
+                $sender->sendMessage(Format::success('Added ' . Format::VALUE . $name . Format::SUCCESS . ' to the whitelist.'));
                 return true;
             case 'remove':
             case 'del':
@@ -58,13 +59,13 @@ final class WhitelistCommand extends BuiltinCommand {
                     return false;
                 }
                 $lists->removeWhitelist($name);
-                $sender->sendMessage("Removed $name from the whitelist.");
+                $sender->sendMessage(Format::success('Removed ' . Format::VALUE . $name . Format::SUCCESS . ' from the whitelist.'));
                 return true;
             case 'list':
                 $entries = $lists->getWhitelist();
                 $sender->sendMessage($entries === []
-                    ? 'The whitelist is empty.'
-                    : 'Whitelisted: ' . implode(', ', $entries));
+                    ? Format::muted('The whitelist is empty.')
+                    : Format::success('Whitelisted: ' . Format::VALUE . implode(', ', $entries)));
                 return true;
             default:
                 $sender->sendMessage('Usage: /whitelist <on|off|add|remove|list> [player]');

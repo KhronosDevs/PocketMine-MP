@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 
 /**
  * /pardon-ip <ip> — lift an IP ban.
@@ -32,7 +33,7 @@ final class PardonIpCommand extends BuiltinCommand {
             return false;
         }
         $lists->pardonIp($ip);
-        $sender->sendMessage("Pardoned IP $ip");
+        $sender->sendMessage(Format::success('Pardoned IP ' . Format::VALUE . $ip . Format::SUCCESS . '.'));
         return true;
     }
 }

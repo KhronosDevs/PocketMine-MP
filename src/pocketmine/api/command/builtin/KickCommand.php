@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 
 /**
  * /kick <player> [reason] — disconnect an online player immediately (no ban
@@ -40,10 +41,10 @@ final class KickCommand extends BuiltinCommand {
         $reason = implode(' ', $args) ?: 'Kicked by an operator';
         $target = ($name === null || $name === '') ? $this->playerName($id) : $name;
         if ($kernel->getNetworkSessionService()->kick($id, $reason)) {
-            $sender->sendMessage("Kicked $target ($reason)");
+            $sender->sendMessage(Format::success('Kicked ' . Format::VALUE . $target . Format::SUCCESS . ' ' . Format::MUTED . "($reason)"));
             return true;
         }
-        $sender->sendMessage("Could not kick $target");
+        $sender->sendMessage(Format::error('Could not kick ' . Format::VALUE . $target));
         return false;
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 
 /**
  * /pardon <player> — lift a name ban.
@@ -32,7 +33,7 @@ final class PardonCommand extends BuiltinCommand {
             return false;
         }
         $lists->pardon($name);
-        $sender->sendMessage("Pardoned $name");
+        $sender->sendMessage(Format::success('Pardoned ' . Format::VALUE . $name . Format::SUCCESS . '.'));
         return true;
     }
 }

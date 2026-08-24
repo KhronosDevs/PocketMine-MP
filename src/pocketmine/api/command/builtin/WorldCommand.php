@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 use pocketmine\core\enum\GeneratorType;
 
 /**
@@ -51,7 +52,7 @@ final class WorldCommand extends BuiltinCommand {
                 return false;
             }
             $world = $server->generateWorld($name, $seed, $generator);
-            $sender->sendMessage("World '{$world->getName()}' created (seed {$world->getSeed()}, generator {$generator->value}).");
+            $sender->sendMessage(Format::success('World ' . Format::VALUE . $world->getName() . Format::SUCCESS . ' created (seed ' . Format::VALUE . $world->getSeed() . Format::SUCCESS . ', generator ' . Format::VALUE . $generator->value . Format::SUCCESS . ').'));
             return true;
         }
 
@@ -68,7 +69,8 @@ final class WorldCommand extends BuiltinCommand {
                 $sender->sendMessage('Could not load world: ' . $e->getMessage());
                 return false;
             }
-            $sender->sendMessage("World '{$world->getName()}' loaded (spawn {$world->getSpawnLocation()['x']}, {$world->getSpawnLocation()['y']}, {$world->getSpawnLocation()['z']}).");
+            $sp = $world->getSpawnLocation();
+            $sender->sendMessage(Format::success('World ' . Format::VALUE . $world->getName() . Format::SUCCESS . ' loaded (spawn ' . Format::VALUE . $sp['x'] . ', ' . $sp['y'] . ', ' . $sp['z'] . Format::SUCCESS . ').'));
             return true;
         }
 
@@ -80,7 +82,7 @@ final class WorldCommand extends BuiltinCommand {
                 return false;
             }
             if ($server->unloadWorld($name, true)) {
-                $sender->sendMessage("World '$name' saved and unloaded.");
+                $sender->sendMessage(Format::success('World ' . Format::VALUE . $name . Format::SUCCESS . ' saved and unloaded.'));
                 return true;
             }
             $sender->sendMessage("Could not unload '$name' (not loaded, or it is the default world).");
@@ -100,7 +102,7 @@ final class WorldCommand extends BuiltinCommand {
                 return false;
             }
             if ($kernel->getNetworkSessionService()->switchWorld($selfId, $world->getWorldId())) {
-                $sender->sendMessage("Switched to world '{$world->getName()}'.");
+                $sender->sendMessage(Format::success('Switched to world ' . Format::VALUE . $world->getName() . Format::SUCCESS . '.'));
                 return true;
             }
             $sender->sendMessage('Could not switch worlds.');

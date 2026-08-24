@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\api\command\builtin;
 
 use pocketmine\api\command\CommandSender;
+use pocketmine\api\command\Format;
 
 /**
  * /ban <player> [reason] — ban by name (and recorded uuid). Online players
@@ -41,7 +42,7 @@ final class BanCommand extends BuiltinCommand {
                 $kernel->getNetworkSessionService()->kick($id, $reason);
             }
         }
-        $sender->sendMessage("Banned $name");
+        $sender->sendMessage(Format::success('Banned ' . Format::VALUE . $name . Format::SUCCESS . '.'));
         return true;
     }
 }
