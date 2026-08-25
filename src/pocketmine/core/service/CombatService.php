@@ -144,10 +144,13 @@ final class CombatService {
         }
 
         // Cancellable damage event: plugins can modify or cancel entirely.
+        // Pass the attacker through so plugins can attribute melee damage
+        // (getDamager() — null for environmental causes).
         $event = new EntityDamageEvent(
             $this->wrapApiEntity($targetRef),
             $cause,
             $damage,
+            $source !== null ? $this->wrapApiEntity($source) : null,
         );
         $this->eventPort->emit($event);
         if ($event->isCancelled()) {

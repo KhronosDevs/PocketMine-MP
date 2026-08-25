@@ -28,10 +28,12 @@ final class EntityInteractionService {
         if (!$player || !$target) return false;
 
         // Blocker 4: cancellable PlayerInteractEvent (right-click on an
-        // entity) fires before any interaction handling.
+        // entity) fires before any interaction handling. Uses the dedicated
+        // RIGHT_CLICK_ENTITY action so plugins can distinguish entity
+        // clicks from block clicks (previously mislabeled RIGHT_CLICK_BLOCK).
         $event = new \pocketmine\api\event\PlayerInteractEvent(
             $this->wrapApiPlayer($playerRef),
-            \pocketmine\api\event\PlayerInteractEvent::RIGHT_CLICK_BLOCK,
+            \pocketmine\api\event\PlayerInteractEvent::RIGHT_CLICK_ENTITY,
             \pocketmine\api\entity\Entity::wrap($targetRef, $this->world),
         );
         $this->eventPort->emit($event);
@@ -356,7 +358,7 @@ final class EntityInteractionService {
         // entity) fires before damage so plugins can veto PvP/mob hits.
         $event = new \pocketmine\api\event\PlayerInteractEvent(
             $this->wrapApiPlayer($attackerRef),
-            \pocketmine\api\event\PlayerInteractEvent::LEFT_CLICK_BLOCK,
+            \pocketmine\api\event\PlayerInteractEvent::LEFT_CLICK_ENTITY,
             \pocketmine\api\entity\Entity::wrap($targetRef, $this->world),
         );
         $this->eventPort->emit($event);

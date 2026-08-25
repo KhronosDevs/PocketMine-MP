@@ -40,9 +40,12 @@ final class PlayerCommandSender implements CommandSender {
             return false;
         }
         $manager = Kernel::getInstance()?->getResourceRegistry()?->get(PermissionManager::class);
+        // Fail CLOSED: a missing PermissionManager must deny, not grant —
+        // this is a security check, defaulting to true would give every
+        // player every permission if the resource is absent.
         return $manager instanceof PermissionManager
             ? $manager->hasPermission($player, $permission)
-            : true;
+            : false;
     }
 
     public function getName(): string {

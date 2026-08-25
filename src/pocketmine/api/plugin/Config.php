@@ -7,18 +7,28 @@ namespace pocketmine\api\plugin;
 class Config
 {
     private string $file;
+    private array $defaults = [];
     private array $data = [];
     private bool $modified = false;
 
     public function __construct(string $file, array $defaults = [])
     {
         $this->file = $file;
+        $this->defaults = $defaults;
         $this->data = $defaults;
 
         if (file_exists($file)) {
             $content = file_get_contents($file);
             if ($content !== false) {
-                $this->data = array_merge($defaults, \yaml_parse($content) ?? []);
+                $disk = \yaml_parse($content) ?? [];
+                $this->data = array_merge($defaults, $disk);
+                // New default keys added in a later version are missing on
+                // disk: mark modified so the next save() writes them out.
+                // Previously save() early-returned success here and the new
+                // keys never reached the file.
+                if ($this->data !== $disk) {
+                    $this->modified = true;
+                }
             }
         }
     }
@@ -144,13 +154,22 @@ class Config
 
     public function reload(): void
     {
+        // Defaults first, then disk values on top — same merge as the
+        // constructor, so keys that exist only as defaults survive reloads.
+        $this->data = $this->defaults;
         if (file_exists($this->file)) {
             $content = file_get_contents($this->file);
             if ($content !== false) {
-                $this->data = yaml_parse($content) ?? [];
+                $disk = \yaml_parse($content) ?? [];
+                $this->data = array_merge($this->defaults, $disk);
+                if ($this->data !== $disk) {
+                    $this->modified = true;
+                }
             }
+        } else {
+            // No file yet: everything came from defaults.
+            $this->modified = true;
         }
-        $this->modified = false;
     }
 
     public function isModified(): bool

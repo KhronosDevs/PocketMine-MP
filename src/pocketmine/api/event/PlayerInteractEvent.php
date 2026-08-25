@@ -14,6 +14,11 @@ class PlayerInteractEvent extends CancellableEvent {
     public const RIGHT_CLICK_AIR = 2;
     public const RIGHT_CLICK_BLOCK = 3;
 
+    /** Entity interactions use dedicated constants so plugins can tell
+     * "clicked a mob/NPC" apart from "clicked air/block". */
+    public const LEFT_CLICK_ENTITY = 4;
+    public const RIGHT_CLICK_ENTITY = 5;
+
     public function __construct(
         public readonly Player $player,
         public readonly int $action,
