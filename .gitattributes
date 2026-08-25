@@ -1,0 +1,47 @@
+# ==============================================================================
+# Git Attributes configuration for KhronosDevs / PocketMine-MP
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Line Endings Normalization (EOL)
+# ------------------------------------------------------------------------------
+# Set default behavior to automatically normalize line endings to LF on commit
+* text=auto eol=lf
+
+# Force LF for source code, scripts, and configuration files
+*.php       text eol=lf
+*.json      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.md        text eol=lf
+*.ini       text eol=lf
+*.sh        text eol=lf executable
+*.cmd       text eol=bat
+*.bat       text eol=bat
+*.ps1       text eol=crlf
+
+# ------------------------------------------------------------------------------
+# 2. Binary Files Preservation
+# ------------------------------------------------------------------------------
+# Prevent Git from attempting to modify binary or compressed assets
+*.phar      binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.ico       binary
+*.gz        binary
+*.zip       binary
+*.dll       binary
+*.so        binary
+
+# ------------------------------------------------------------------------------
+# 3. Archive Export Exclusions (git archive / Release downloads)
+# ------------------------------------------------------------------------------
+# Exclude repository clutter, CI/CD workflows, tests, and dev configs from release archives
+/.github/           export-ignore
+/.gitattributes     export-ignore
+/.gitignore         export-ignore
+/tests/             export-ignore
+/phpunit.xml*       export-ignore
+/.php-cs-fixer*     export-ignore
+/phpstan*           export-ignore
