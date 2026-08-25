@@ -21,3 +21,51 @@ composer.phar
 php-cs-fixer
 .php_cs.cache
 server.zip
+/.phpunit.result.cache
+/.php-cs-fixer.cache
+/.phpstan.cache/
+/build/
+/coverage/
+
+# Docker
+.docker/
+docker-compose.override.yml
+*.env.local
+
+# Kubernetes & Helm
+.kube/
+*.k8s.yaml
+charts/*/charts/
+charts/*/learning/
+
+# IDES
+*.iws
+*.iml
+
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+.helix/*
+
+.zed/*
+
+# OS Specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+*.tmp
+*.log
+*.swp
+*.swo
+*~
+*.bak
