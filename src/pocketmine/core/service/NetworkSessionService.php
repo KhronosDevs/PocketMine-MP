@@ -250,9 +250,12 @@ final class NetworkSessionService {
      *
      * Signature: fn(PlayerRef $viewer, \pocketmine\core\ecs\EntityRef $target): bool
      *
-     * @var callable|null
+     * Multiple filters can be registered (one per plugin); an entity is
+     * only sent when EVERY registered filter allows it.
+     *
+     * @var array<int, callable> spl_object_id => filter
      */
-    private $entityVisibilityFilter = null;
+    private array $entityVisibilityFilters = [];
 
     /**
      * Per-entity add-packet provider hooks. Each entry is a callable:
@@ -554,8 +557,36 @@ final class NetworkSessionService {
      * returns true to allow the entity state packet, false to suppress it.
      * Pass null to remove the filter.
      */
+    /**
+     * Legacy single-slot setter. Kept for backward compatibility:
+     * passing a filter REPLACES all previously registered filters (the
+     * old exclusive-ownership behavior); passing null clears them all.
+     * New plugins should prefer registerEntityVisibilityFilter().
+     */
     public function setEntityVisibilityFilter(?callable $filter): void {
-        $this->entityVisibilityFilter = $filter;
+        if ($filter === null) {
+            $this->entityVisibilityFilters = [];
+            return;
+        }
+        $this->entityVisibilityFilters = [spl_object_id($filter) => $filter];
+    }
+
+    /**
+     * Register an additional per-viewer visibility filter. Unlike the
+     * legacy setter this does NOT clobber other plugins' filters.
+     * An entity is broadcast to a viewer only when every registered
+     * filter returns true for that viewer→target pair.
+     *
+     * Returns the filter so it can be passed to unregister later.
+     */
+    public function registerEntityVisibilityFilter(callable $filter): callable {
+        $this->entityVisibilityFilters[spl_object_id($filter)] = $filter;
+        return $filter;
+    }
+
+    /** Remove a previously registered visibility filter (identity match). */
+    public function unregisterEntityVisibilityFilter(callable $filter): void {
+        unset($this->entityVisibilityFilters[spl_object_id($filter)]);
     }
 
     /**
@@ -596,10 +627,7 @@ final class NetworkSessionService {
     public function sendPacketTo(int $entityId, \pocketmine\protocol\DataPacket $packet): bool {
         foreach ($this->sessions as $session) {
             if ($session['playerRef']->entityId === $entityId) {
-                $this->queuePacket($session['playerRef'], $packet);
-                // queuePacket silently drops on cancel — check if it
-                // actually landed by seeing if it's still in outbound.
-                return true; // best-effort: event filter is applied inside queuePacket
+                return $this->queuePacket($session['playerRef'], $packet);
             }
         }
         return false;
@@ -3422,9 +3450,21 @@ final class NetworkSessionService {
                 // Reducing the stack in place: the surplus joins move credit.
                 $credit[$creditKey] += $inSlot - $count;
             }
-            // Slot NBT arrives as raw bytes; parsed-NBT wiring is not done for
-            // slots yet, so item NBT is dropped here.
-            $inventory->set($invSlot, new ItemStack($id, $meta, $count));
+            // Wire the slot's NBT through: prefer the server's own NBT when
+            // the same item stays in the slot (moves must not strip custom
+            // names / enchantments), otherwise parse the client-reported
+            // compound (legacy behavior: inventory NBT is client-trusted;
+            // counts remain guarded by move credit above).
+            $nbt = null;
+            if ($inSlot > 0 && $current !== null) {
+                $nbt = $current->nbt;
+            } else {
+                $rawNbt = $pk->item[3] ?? null;
+                $nbt = is_string($rawNbt) && $rawNbt !== ''
+                    ? $this->parseItemNbtBytes($rawNbt)
+                    : null;
+            }
+            $inventory->set($invSlot, new ItemStack($id, $meta, $count, $nbt));
         }
         $session['moveCredit'] = $credit;
         $this->sessions[$addrKey] = $session;
@@ -4525,13 +4565,74 @@ final class NetworkSessionService {
     }
 
     /**
+     * Parse a wire item-NBT blob (little-endian compound) into the plain
+     * array shape ItemStack expects (['ench' => [['id','lvl'],...],
+     * 'display' => ['Name' => ...], ...]). Returns null for empty/invalid
+     * payloads so malformed client data cannot throw into packet handling.
+     */
+    private function parseItemNbtBytes(string $raw): ?array {
+        try {
+            $nbt = new \pocketmine\nbt\NBT(\pocketmine\nbt\NBT::LITTLE_ENDIAN);
+            $nbt->read($raw);
+            $root = $nbt->getData();
+        } catch (\Throwable) {
+            return null;
+        }
+        if (!$root instanceof \pocketmine\nbt\tag\CompoundTag) {
+            return null;
+        }
+        $out = $this->compoundToNbtArray($root);
+        return $out === [] ? null : $out;
+    }
+
+    /** Recursively flatten an NBT compound/list into plain PHP arrays. */
+    private function compoundToNbtArray(\pocketmine\nbt\tag\CompoundTag $compound): array {
+        $out = [];
+        foreach ((array)$compound as $key => $tag) {
+            if (!$tag instanceof \pocketmine\nbt\tag\Tag) {
+                continue; // skip non-tag dynamic properties
+            }
+            $out[$key] = match (true) {
+                $tag instanceof \pocketmine\nbt\tag\CompoundTag => $this->compoundToNbtArray($tag),
+                $tag instanceof \pocketmine\nbt\tag\ListTag => $this->listToNbtArray($tag),
+                default => $tag->getValue(), // scalars: byte/short/int/long/float/double/string/byte-array
+            };
+        }
+        return $out;
+    }
+
+    /** @return list<mixed> */
+    private function listToNbtArray(\pocketmine\nbt\tag\ListTag $list): array {
+        $out = [];
+        foreach ($list as $child) {
+            $out[] = match (true) {
+                $child instanceof \pocketmine\nbt\tag\CompoundTag => $this->compoundToNbtArray($child),
+                $child instanceof \pocketmine\nbt\tag\ListTag => $this->listToNbtArray($child),
+                default => $child->getValue(),
+            };
+        }
+        return $out;
+    }
+
+    /**
      * The client closed the chest window (or the server told it to): forget
      * the open container and mirror the close back (legacy
      * ContainerInventory::onClose).
      */
     private function handleContainerClose(string $addrKey, ContainerClosePacket $pk): void {
         $session = $this->sessions[$addrKey] ?? null;
-        if ($session === null || $session['openContainer'] === null) {
+        if ($session === null) {
+            return;
+        }
+        if ($session['openContainer'] === null) {
+            // Window not tracked server-side: this is a plugin-opened window
+            // (raw ContainerOpenPacket without openContainer state). Still
+            // mirror the close so the client's window shuts cleanly, and fire
+            // a generic InventoryCloseEvent so plugins get a close signal.
+            $this->emitContainerClose($addrKey, 'plugin', null);
+            $close = new ContainerClosePacket();
+            $close->windowid = $pk->windowid;
+            $this->queuePacket($session['playerRef'], $close);
             return;
         }
         $closed = $session['openContainer'];
@@ -6213,15 +6314,18 @@ final class NetworkSessionService {
                 }
             }
 
-            // Per-viewer entity visibility filter: a plugin callback that
-            // suppresses add/move packets for specific viewer→target pairs.
+            // Per-viewer entity visibility filters: plugin callbacks that
+            // suppress add/move packets for specific viewer→target pairs.
             // Auth plugins use this to hide unauthed players; spectator modes
-            // use it to hide entities from specific viewers.
-            if ($this->entityVisibilityFilter !== null && $visible !== []) {
-                $filter = $this->entityVisibilityFilter;
+            // use it to hide entities from specific viewers. All registered
+            // filters must allow the pair (any plugin can hide).
+            if ($this->entityVisibilityFilters !== [] && $visible !== []) {
                 foreach ($visible as $entityId => $entity) {
-                    if (!$filter($session['playerRef'], $entity)) {
-                        unset($visible[$entityId]);
+                    foreach ($this->entityVisibilityFilters as $filter) {
+                        if (!$filter($session['playerRef'], $entity)) {
+                            unset($visible[$entityId]);
+                            break;
+                        }
                     }
                 }
             }
@@ -6932,11 +7036,13 @@ final class NetworkSessionService {
         $this->outbound = [];
     }
 
-    /** Queue a packet for the next poll flush (batched). */
-    private function queuePacket(PlayerRef $player, DataPacket $packet): void {
+    /** Queue a packet for the next poll flush (batched). Returns false
+     * when the player has no session or the send was cancelled by
+     * DataPacketSendEvent. */
+    private function queuePacket(PlayerRef $player, DataPacket $packet): bool {
         $addrKey = $this->addrKeyForPlayer($player);
         if ($addrKey === null) {
-            return;
+            return false;
         }
 
         // Events breadth audit: cancellable DataPacketSendEvent for every
@@ -6949,11 +7055,12 @@ final class NetworkSessionService {
             );
             $this->eventPort->emit($sendEvent);
             if ($sendEvent->isCancelled()) {
-                return;
+                return false;
             }
         }
 
         $this->outbound[$addrKey][] = $packet;
+        return true;
     }
 
     /**

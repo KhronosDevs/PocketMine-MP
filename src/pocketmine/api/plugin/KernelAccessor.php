@@ -119,6 +119,21 @@ class KernelAccessor {
     }
 
     /**
+     * Register an ADDITIONAL per-viewer entity visibility filter without
+     * clobbering filters registered by other plugins. An entity is only
+     * broadcast to a viewer when every registered filter allows it.
+     * Returns the filter so it can be passed to unregister later.
+     */
+    public function registerEntityVisibilityFilter(callable $filter): callable {
+        return $this->kernel->getNetworkSessionService()->registerEntityVisibilityFilter($filter);
+    }
+
+    /** Remove a previously registered visibility filter (identity match). */
+    public function unregisterEntityVisibilityFilter(callable $filter): void {
+        $this->kernel->getNetworkSessionService()->unregisterEntityVisibilityFilter($filter);
+    }
+
+    /**
      * Register a per-entity add-packet provider for NPC rendering.
      * The callback receives (int $entityId, Entity $entity, array $playerSessions)
      * and returns a DataPacket or null.

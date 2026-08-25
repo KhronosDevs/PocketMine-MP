@@ -95,6 +95,13 @@ class Scheduler {
         return new TaskHandlerImpl($task);
     }
 
+    /**
+     * @deprecated DECEPTIVE NAME: this executes the closure SYNCHRONOUSLY
+     * on the main thread (PmmpThreadPool::submit() runs it inline). It does
+     * NOT free the tick loop. For real off-thread work use
+     * scheduleAsyncPluginTask(Runnable) which dispatches to a pmmpthread
+     * worker and returns a PluginFuture with ->then() callbacks.
+     */
     public function scheduleAsyncTask(callable $callback): void {
         $this->threadingPort->submit(fn() => $callback());
     }

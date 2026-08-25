@@ -31,11 +31,22 @@ class EntityDamageEvent extends CancellableEvent {
     public const CAUSE_DRAGON_BREATH = 19;
     public const CAUSE_CUSTOM = 20;
 
+    /**
+     * @param Entity|null $damager the entity that CAUSED the damage
+     *   (attacker for CAUSE_ENTITY_ATTACK / CAUSE_PROJECTILE), null for
+     *   environmental causes.
+     */
     public function __construct(
         public readonly Entity $entity,
         public readonly int $cause,
         public float $damage,
+        public readonly ?Entity $damager = null,
     ) {}
+
+    /** The entity that dealt this damage, or null if environmental. */
+    public function getDamager(): ?Entity {
+        return $this->damager;
+    }
 
     public function getEntity(): Entity {
         return $this->entity;

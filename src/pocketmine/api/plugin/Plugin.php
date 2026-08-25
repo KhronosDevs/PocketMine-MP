@@ -132,6 +132,14 @@ abstract class Plugin {
         $this->getKernel()->setEntityVisibilityFilter($filter);
     }
 
+    final protected function registerEntityVisibilityFilter(callable $filter): callable {
+        return $this->getKernel()->registerEntityVisibilityFilter($filter);
+    }
+
+    final protected function unregisterEntityVisibilityFilter(callable $filter): void {
+        $this->getKernel()->unregisterEntityVisibilityFilter($filter);
+    }
+
     /**
      * Register a per-entity add-packet provider. See KernelAccessor::registerAddPacketProvider().
      */
@@ -316,6 +324,11 @@ abstract class Plugin {
         return $this->getScheduler()->scheduleDelayedRepeatingTask($callback, $delay, $period);
     }
 
+    /**
+     * @deprecated Runs SYNCHRONOUSLY on the main thread despite the name
+     * (see Scheduler::scheduleAsyncTask()). Use scheduleAsyncPluginTask()
+     * for real off-thread work with a PluginFuture.
+     */
     final protected function scheduleAsyncTask(callable $callback): void {
         $this->getScheduler()->scheduleAsyncTask($callback);
     }
