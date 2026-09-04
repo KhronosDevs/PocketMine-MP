@@ -341,6 +341,206 @@ static int nukkit_pick_biome(int wx, int wz, int seed)
     return 1;
 }
 
+/* ------------------------------------------------------------------ */
+/* Java world import: byte-identical to JavaBlockTranslator.            */
+/*                                                                      */
+/* Keep the tables in sync with JavaBlockTranslator's PHP constants     */
+/* (JAVA_ONLY_REMAP, NUMERIC_META_FIX, PE_VALID_RANGES) when either     */
+/* side changes; native/verify.php asserts byte-identical output.       */
+/* ------------------------------------------------------------------ */
+
+/* JAVA_ONLY_REMAP: id -> [newId, newMeta]; -1 = no remap. Mirrors
+ * JavaBlockTranslator::JAVA_ONLY_REMAP exactly. */
+static const int8_t java_remap_id[256] = {
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,49,
+    -1,-1,49,-1,-1,-1,-1,-1,-1,-1,49,-1,-1,-1,-1,-1,-1,1,89,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,102,-1,-1,-1,-1,-1,0,-1,
+    98,89,-1,-1,-1,-1,-1,-1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
+};
+static const int8_t java_remap_meta[256] = {
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+};
+
+/* NUMERIC_META_FIX: kind 1 = mask meta, kind 2 = log axis (12 -> vertical). */
+static const int8_t java_fix_kind[256] = {
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+};
+static const int8_t java_fix_mask[256] = {
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+};
+
+/* PE-valid ranges (0.15 client renderable ids) — JavaBlockTranslator::
+ * PE_VALID_RANGES. */
+static const struct { int lo, hi; } java_valid_ranges[] = {
+    {0,35},{37,83},{85,118},{120,121},{123,129},{131,136},{139,159},
+    {161,165},{167,167},{170,175},{178,187},{193,199},{243,251},{255,255}
+};
+
+static int java_is_valid_id(int id)
+{
+    for (unsigned i = 0; i < sizeof(java_valid_ranges)/sizeof(java_valid_ranges[0]); i++) {
+        if (id >= java_valid_ranges[i].lo && id <= java_valid_ranges[i].hi) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/*
+ * Sanitize one 16x16x16 section in place (JavaBlockTranslator::
+ * sanitizeSection): every emitted state is renderable by the 0.15 client.
+ * blocks[4096], data[4096] byte-per-block id/meta. Returns the number of
+ * bytes changed (0 means the section was already clean).
+ */
+int kh_java_sanitize(unsigned char *blocks, unsigned char *data)
+{
+    int changed = 0;
+    for (int i = 0; i < 4096; i++) {
+        int id = blocks[i];
+        if (java_remap_id[id] >= 0) {
+            int nid = java_remap_id[id], nmeta = java_remap_meta[id];
+            if (id != nid || data[i] != nmeta) {
+                blocks[i] = (unsigned char)nid;
+                data[i] = (unsigned char)nmeta;
+                changed++;
+            }
+        } else if (java_fix_kind[id] == 1) {
+            int m = data[i] & java_fix_mask[id];
+            if (m != data[i]) {
+                data[i] = (unsigned char)m;
+                changed++;
+            }
+        } else if (java_fix_kind[id] == 2) {
+            if ((data[i] & 0x0C) == 0x0C) {
+                data[i] = (unsigned char)(data[i] & 0x03);
+                changed++;
+            }
+        } else if (!java_is_valid_id(id)) {
+            if (id != 1 || data[i] != 0) {
+                blocks[i] = 1;
+                data[i] = 0;
+                changed++;
+            }
+        }
+    }
+    return changed;
+}
+
+/*
+ * Decode a packed palette section's 4096 block indices (the bit-unpack half
+ * of JavaBlockTranslator::decodePaletteSection — name -> state resolution
+ * stays in PHP). Byte-identical to the PHP peekBits loop.
+ *
+ *   longs[nlongs]    packed 64-bit words; bit 0 of each word is the LSB of
+ *                    the first stored index (PHP int semantics: negative
+ *                    values arrive as their two's-complement bit pattern)
+ *   bits             index width (>= 4)
+ *   continuous       1 = pre-1.16 continuous bit stream; 0 = 1.16+ per-word
+ *                    layout (floor(64/bits) values per word from bit 0)
+ *   pal_id/pal_meta  per-palette-entry resolved (id, meta)
+ *   npal             palette size (>= 1)
+ *   blocks[4096], data[4096]  outputs (caller pre-zeroed)
+ */
+void kh_java_palette_fill(const int64_t *longs, int nlongs, int bits,
+                          int continuous,
+                          const unsigned char *pal_id,
+                          const unsigned char *pal_meta, int npal,
+                          unsigned char *blocks, unsigned char *data)
+{
+    if (npal == 1) {
+        for (int i = 0; i < 4096; i++) {
+            blocks[i] = pal_id[0];
+            data[i] = pal_meta[0];
+        }
+        return;
+    }
+    if (continuous) {
+        /* Pre-1.16: one uninterrupted little-endian bit stream across the
+         * whole word array (values may straddle word boundaries). */
+        long long total_bits = (long long)nlongs * 64;
+        for (int k = 0; k < 4096; k++) {
+            long long bit_index = (long long)k * bits;
+            if (bit_index + bits > total_bits) {
+                break; /* truncated buffer: leave the rest as air */
+            }
+            int idx = 0;
+            int width = bits;
+            int got = 0;
+            while (width > 0) {
+                int word = (int)(bit_index >> 6);
+                if (word >= nlongs) {
+                    idx = 0;
+                    break;
+                }
+                uint64_t w = (uint64_t)longs[word];
+                int off = (int)(bit_index & 63);
+                int take = width < 64 - off ? width : 64 - off;
+                uint64_t chunk = (w >> off) & (((uint64_t)1 << take) - 1);
+                idx |= (int)(chunk << got);
+                got += take;
+                bit_index += take;
+                width -= take;
+            }
+            if (idx >= npal) {
+                idx = 0;
+            }
+            blocks[k] = pal_id[idx];
+            data[k] = pal_meta[idx];
+        }
+        return;
+    }
+    /* 1.16+: values never straddle a word. Each word holds
+     * floor(64 / bits) values packed from bit 0; the trailing
+     * 64 % bits bits of each word are unused. */
+    int per_word = 64 / bits;
+    for (int k = 0; k < 4096; k++) {
+        int word = k / per_word;
+        if (word >= nlongs) {
+            break; /* truncated buffer: leave the rest as air */
+        }
+        int off = (k % per_word) * bits;
+        uint64_t w = (uint64_t)longs[word];
+        int idx = (int)((w >> off) & (((uint64_t)1 << bits) - 1));
+        if (idx >= npal) {
+            idx = 0;
+        }
+        blocks[k] = pal_id[idx];
+        data[k] = pal_meta[idx];
+    }
+}
+
 void kh_nukkit_profiles(int chunk_x, int chunk_z, int seed,
                         int *out_heights, int *out_biomes)
 {
