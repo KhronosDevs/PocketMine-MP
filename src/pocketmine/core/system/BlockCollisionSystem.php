@@ -86,11 +86,18 @@ final class BlockCollisionSystem implements System {
             // X, then Y, then Z: each axis is resolved against the position
             // settled by the previous one, so a blocked axis does not stop
             // the other two (sliding along walls, walking up to ledges).
-            $tx = $x + $vx * $deltaTime;
-            if ($this->collidesAt($store, $solidFlags, $col, $tx, $y, $z)) {
-                [$x, $vx] = $this->clampAxis($store, $solidFlags, $col, $x, $y, $z, $tx, $vx, 'x');
-            } else {
-                $x = $tx;
+            // A zero-displacement axis is skipped entirely: a stationary
+            // entity (idle mob, settled item) has nothing to resolve - the
+            // probe would only re-check the same footprint it occupied last
+            // tick. Gravity keeps the Y sweep live for every entity; X/Z are
+            // swept only when actually moving on that axis.
+            if ($vx !== 0.0) {
+                $tx = $x + $vx * $deltaTime;
+                if ($this->collidesAt($store, $solidFlags, $col, $tx, $y, $z)) {
+                    [$x, $vx] = $this->clampAxis($store, $solidFlags, $col, $x, $y, $z, $tx, $vx, 'x');
+                } else {
+                    $x = $tx;
+                }
             }
 
             $ty = $y + $vy * $deltaTime;
@@ -106,11 +113,13 @@ final class BlockCollisionSystem implements System {
                 $y = $ty;
             }
 
-            $tz = $z + $vz * $deltaTime;
-            if ($this->collidesAt($store, $solidFlags, $col, $x, $y, $tz)) {
-                [$z, $vz] = $this->clampAxis($store, $solidFlags, $col, $x, $y, $z, $tz, $vz, 'z');
-            } else {
-                $z = $tz;
+            if ($vz !== 0.0) {
+                $tz = $z + $vz * $deltaTime;
+                if ($this->collidesAt($store, $solidFlags, $col, $x, $y, $tz)) {
+                    [$z, $vz] = $this->clampAxis($store, $solidFlags, $col, $x, $y, $z, $tz, $vz, 'z');
+                } else {
+                    $z = $tz;
+                }
             }
 
             $pos->setPending(

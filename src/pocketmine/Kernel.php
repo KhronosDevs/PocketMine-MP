@@ -23,6 +23,7 @@ use pocketmine\core\service\PlayerJoinService;
 use pocketmine\core\service\PlayerLeaveService;
 use pocketmine\core\service\PlayerRespawnService;
 use pocketmine\core\service\ChunkLoadService;
+use pocketmine\core\service\ChunkSaveService;
 use pocketmine\core\service\ChunkUnloadService;
 use pocketmine\core\service\BlockBreakService;
 use pocketmine\core\service\BlockPlaceService;
@@ -182,6 +183,7 @@ final class Kernel {
     private PlayerRespawnService $playerRespawnService;
     private ChunkLoadService $chunkLoadService;
     private ChunkUnloadService $chunkUnloadService;
+    private ChunkSaveService $chunkSaveService;
     private NetworkSessionService $networkSessionService;
     private BlockBreakService $blockBreakService;
     private BlockPlaceService $blockPlaceService;
@@ -219,11 +221,16 @@ final class Kernel {
     ) {
         // The load service enforces the loaded-chunk budget by evicting via
         // the unload service, so the unload service is constructed first. The
-        // load service is built before the join service: a new player's spawn
-        // point must be derived from the actual terrain (safe spawn), which
-        // requires loading the spawn chunk.
-        $this->chunkUnloadService = new ChunkUnloadService($world, $storagePort, $eventPort);
-        $this->chunkLoadService = new ChunkLoadService($world, $storagePort, $worldGenPort, $this->chunkUnloadService, $maxLoadedChunks ?? ChunkLoadService::DEFAULT_MAX_LOADED_CHUNKS, $eventPort);
+        // deferred save service is constructed before both: evictions and
+        // autosaves queue into it and the kernel drains a small budget per
+        // tick, so a full-world autosave never stalls a tick with hundreds
+        // of inline ~0.4ms chunk writes. The load service is built before
+        // the join service: a new player's spawn point must be derived from
+        // the actual terrain (safe spawn), which requires loading the spawn
+        // chunk.
+        $this->chunkSaveService = new ChunkSaveService($world, $storagePort);
+        $this->chunkUnloadService = new ChunkUnloadService($world, $storagePort, $eventPort, $this->chunkSaveService);
+        $this->chunkLoadService = new ChunkLoadService($world, $storagePort, $worldGenPort, $this->chunkUnloadService, $maxLoadedChunks ?? ChunkLoadService::DEFAULT_MAX_LOADED_CHUNKS, $eventPort, $this->chunkSaveService);
         $this->playerJoinService = new PlayerJoinService($world, $networkPort, $storagePort, $worldGenPort, $this->chunkLoadService, $eventPort);
         $this->playerLeaveService = new PlayerLeaveService($world, $networkPort, $storagePort, $eventPort);
         $this->playerRespawnService = new PlayerRespawnService($world, $storagePort, $eventPort);
@@ -590,7 +597,18 @@ final class Kernel {
                 ? max(1, $autosaveConfig->autosaveIntervalTicks)
                 : 6000;
             if ($tick > 0 && $tick % $autosaveTicks === 0) {
-                $this->saveWorld();
+                // Autosave queues every resident chunk through the deferred
+                // save service instead of writing them all inline (that was a
+                // hundreds-of-ms freeze every interval); the per-tick drain
+                // below flushes the queue gradually.
+                $this->saveWorld(false);
+            }
+
+            // Deferred chunk-save drain: flush a few pending saves per tick
+            // (~0.4ms each) so full-world autosaves and eviction bursts never
+            // stall a single tick. A no-op when nothing is pending.
+            if ($this->chunkSaveService->pendingCount() > 0) {
+                $this->chunkSaveService->drainBudget(ChunkSaveService::DEFAULT_DRAIN_PER_TICK);
             }
 
             // 4. Distance-based chunk unloading (periodic sweep): evict
@@ -1350,7 +1368,18 @@ final class Kernel {
      * world meta (seed/spawn/difficulty) so a restart reproduces the same
      * terrain and spawn point. Called on the autosave interval and shutdown.
      */
-    private function saveWorld(): void {
+    /**
+     * 14.4 persistence: flush every resident chunk to disk and write the
+     * world meta (seed/spawn/difficulty) so a restart reproduces the same
+     * terrain and spawn point. Called on the autosave interval and shutdown.
+     *
+     * Chunks are QUEUED through the deferred save service; $flushNow decides
+     * whether they are written synchronously (shutdown, /save-all - exact
+     * persistence points) or left for the per-tick drain (autosave, so the
+     * periodic full-world write never stalls a tick). Player state and world
+     * meta are written immediately in both modes - they are tiny.
+     */
+    private function saveWorld(bool $flushNow = true): void {
         // 14.20: every world bundle persists its own store to its own storage
         // folder. The default world (id 0) keeps the historical behavior; new
         // worlds save their region files under worlds/<folderName>/.
@@ -1366,6 +1395,9 @@ final class Kernel {
             if ($store instanceof \pocketmine\core\resource\ChunkStore) {
                 $this->saveWorldBundle(0, $store, $this->storagePort, $this->resourceRegistry->get(\pocketmine\core\resource\WorldConfig::class));
             }
+        }
+        if ($flushNow) {
+            $this->chunkSaveService->flushAll();
         }
         // 14.4b: persist every online player (position/health/inventory/
         // metadata) on the same interval so a crash loses at most the
@@ -1434,7 +1466,10 @@ final class Kernel {
                         $chunkData->tileEntities,
                     );
                 }
-                $storage->saveChunk($chunkX, $chunkZ, $chunkData);
+                // Deferred: the drain (or flushAll on shutdown/save-all)
+                // writes the region file - never inline, so a full autosave
+                // cannot stall the tick it runs on.
+                $this->chunkSaveService->queueSave($worldId, $chunkX, $chunkZ, $chunkData);
             }
         }
         $config = $this->resourceRegistry->get(\pocketmine\core\resource\ServerConfig::class);
@@ -1671,6 +1706,10 @@ final class Kernel {
 
     public function getChunkUnloadService(): ChunkUnloadService {
         return $this->chunkUnloadService;
+    }
+
+    public function getChunkSaveService(): ChunkSaveService {
+        return $this->chunkSaveService;
     }
 
     public function getBlockBreakService(): BlockBreakService {

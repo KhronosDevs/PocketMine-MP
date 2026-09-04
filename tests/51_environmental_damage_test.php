@@ -122,6 +122,47 @@ test('creative players are immune to environmental damage', function () use ($wo
     $world->despawn($world->getEntity($c->getId()));
 });
 
+test('undead mobs burn in direct daylight (CAUSE_FIRE_TICK)', function () use ($world, $kernel, &$fired, $store, $registry): void {
+    // Regression: the sun-burn branch read $meta before it was assigned, so
+    // $mobType was always '' and zombies/skeletons never caught fire in the
+    // day - dead code plus a per-entity warning each tick.
+    //
+    // Fixture (all inside chunk 0,0 so every setBlock lands): one stone
+    // platform x 2..14 / z 2..14 rising to y 80 with a cleared-air corridor
+    // above it, so the zombie and its player-target stand in full daylight
+    // on flat ground and the zombie cannot wander under a tree canopy while
+    // burning.
+    for ($y = 60; $y <= 80; $y++) {
+        for ($px = 2; $px <= 14; $px++) {
+            for ($pz = 2; $pz <= 14; $pz++) {
+                placeBlock($store, $registry, $px, $y, $pz, 1); // stone
+            }
+        }
+    }
+    for ($y = 82; $y <= 200; $y++) {
+        for ($px = 8; $px <= 13; $px++) {
+            for ($pz = 8; $pz <= 9; $pz++) {
+                placeBlock($store, $registry, $px, $y, $pz, 0); // clear sky
+            }
+        }
+    }
+    // Recompute the chunk's light from the live block grid so the stored
+    // sky-light nibbles reflect the cleared corridor (independent of what
+    // the generated terrain originally placed there).
+    $store->recalculateLight(0, 0, $registry);
+    ok($store->getSkyLightLevel(8, 82, 8) >= 14, 'fixture column has direct sky light');
+    $zombie = $kernel->getEntitySpawnService()->spawnMob(
+        \pocketmine\core\enum\EntityType::Zombie,
+        8.5, 81.0, 8.5,
+    );
+    $sun = mkPlayer($world, 12.5, 81.0, 8.5); // survival anchor + chase target
+    $kernel->run(40);
+    ok(($fired[\pocketmine\api\event\EntityDamageEvent::CAUSE_FIRE_TICK] ?? 0) > 0,
+        'zombie in direct daylight took CAUSE_FIRE_TICK damage');
+    $world->despawn($world->getEntity($zombie->getId()));
+    $world->despawn($world->getEntity($sun->getId()));
+});
+
 foreach ($world->getEntities() as $entity) {
     $world->despawn($entity);
 }

@@ -51,6 +51,17 @@ final class EnvironmentalDamageSystem implements System {
     /** Legacy drain rate: $air -= tickDiff * 4. */
     private const AIR_DRAIN_PER_TICK = 4;
 
+    /**
+     * Activation range (blocks from the nearest alive player of the same
+     * world). Mirrors AISystem::PLAYER_ACTIVATION_RANGE so environmental
+     * damage (burning, suffocation, drowning) only runs for entities inside
+     * the same simulation bubble as mob AI: an entity beyond it parks (its
+     * fire/air state freezes) and resumes when a player approaches - the
+     * vanilla "entities outside simulation distance stand idle" semantic.
+     * The void check runs BEFORE the gate, so void deaths always resolve.
+     */
+    private const PLAYER_ACTIVATION_RANGE = 64.0;
+
     /** @var array<int, int> entityId => remaining air ticks */
     private array $airTicks = [];
 
@@ -66,6 +77,11 @@ final class EnvironmentalDamageSystem implements System {
             return;
         }
 
+        // Per-tick memoized lookups for the whole pass (players are few;
+        // mob packs can be hundreds - scan the player list once).
+        $solidOpaque = $registry->getSolidOpaqueFlags();
+        $playersByWorld = $this->collectPlayersByWorld($world);
+
         foreach ($world->query()
             ->with(PositionComponent::class, HealthComponent::class)
             ->build() as $entity) {
@@ -73,9 +89,14 @@ final class EnvironmentalDamageSystem implements System {
             if ($health === null || $health->current <= 0 || $entity->has(DeadTag::class)) {
                 continue;
             }
-            // Creative players are immune to environmental damage (old-src
-            // Player::attack gate covered every cause except magic/suicide).
-            if ($this->isCreative($entity)) {
+            $meta = $entity->get(MetadataComponent::class);
+            $mode = $meta !== null
+                ? GameMode::coerce($meta->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE))
+                : GameMode::Survival;
+            // Creative/spectator players are immune to environmental damage
+            // (old-src Player::attack gate covered every cause except
+            // magic/suicide; spectators are fully detached).
+            if ($mode === GameMode::Creative || $mode === GameMode::Spectator) {
                 continue;
             }
 
@@ -84,28 +105,47 @@ final class EnvironmentalDamageSystem implements System {
                 continue;
             }
             $ref = \pocketmine\core\ecs\EntityRef::create($entity->id, $world);
-            $effects = $entity->get(EffectComponent::class);
 
             // --- Void: y <= -16, fixed 10 damage ------------------------
+            // Runs before the activation gate: falling into the void must
+            // resolve even when no player is nearby to watch.
             if ($pos->y <= -16) {
                 $combat->applyDamage($ref, 10.0, null, \pocketmine\api\event\EntityDamageEvent::CAUSE_VOID);
                 continue; // nothing else matters while falling through the void
             }
 
+            // --- Activation gate (same simulation bubble as mob AI) -----
+            // Entities beyond PLAYER_ACTIVATION_RANGE of every same-world
+            // player park: no lava/fire/suffocation/drowning bookkeeping, no
+            // per-entity block probes. Their state resumes on approach.
+            $players = $playersByWorld[(int)($entity->get(WorldComponent::class)?->id ?? 0)] ?? [];
+            if ($players !== [] && !$this->anyPlayerWithin($players, $pos->x, $pos->z, self::PLAYER_ACTIVATION_RANGE)) {
+                continue;
+            }
+
+            $effects = $entity->get(EffectComponent::class);
             $fx = (int)floor($pos->x);
             $fz = (int)floor($pos->z);
             $feet = (int)floor($pos->y);
-            $feetBlock = $store->getBlock($fx, $feet, $fz);
-            $bodyBlock = $store->getBlock($fx, $feet + 1, $fz);
+            $headY = (int)floor($pos->y + 1.62); // eye height (legacy getEyeHeight)
+
+            // Feet/body/head blocks come from ONE column resolve - the three
+            // levels always share a chunk column, and getBlock() re-resolves
+            // the chunk (floor-div + key concat + hash) per level, which was
+            // the dominant per-entity cost of this system.
+            $colIds = $store->readColumnBlockRange($fx, min($feet, $headY), max($feet, $headY), $fz);
+            $feetBlock = $colIds[$feet] ?? 0;
+            $bodyBlock = $colIds[$feet + 1] ?? 0;
+            $headBlock = $colIds[$headY] ?? 0;
 
             // --- Sunlight burning: undead mobs in direct sky light during
             // daytime catch fire (legacy EntityEffects + vanilla behavior).
             // Without this, night-spawned zombies/skeletons accumulate on
             // the surface indefinitely.
-            $mobType = $meta?->get(MetadataKeys::MOB_TYPE) ?? '';
+            $mobType = $meta?->get(\pocketmine\core\constants\MetadataKeys::MOB_TYPE) ?? '';
             if (($mobType === 'Zombie' || $mobType === 'Skeleton' || $mobType === 'ZombieVillager')
                 && !TimeSystem::isNight($worldConfig?->time ?? 0)) {
-                $skyLight = $store->getSkyLightLevel((int)floor($pos->x), (int)floor($pos->y + 1), (int)floor($pos->z));
+                $skyLight = $store->getSkyLightLevel($fx, (int)floor($pos->y + 1), $fz);
                 if ($skyLight >= 14) {
                     $combat->applyDamage($ref, 1.0, null,
                         \pocketmine\api\event\EntityDamageEvent::CAUSE_FIRE_TICK);
@@ -134,11 +174,8 @@ final class EnvironmentalDamageSystem implements System {
                 $entity->remove(FireComponent::class); // extinguished
             }
 
-            $headY = (int)floor($pos->y + 1.62); // eye height (legacy getEyeHeight)
-            $headBlock = $store->getBlock($fx, $headY, $fz);
-
             // --- Suffocation: solid opaque block at eye height ----------
-            if ($this->isSolidOpaque($registry, $headBlock)) {
+            if (($solidOpaque[$headBlock] ?? 0) === 1) {
                 $combat->applyDamage($ref, 1.0, null, \pocketmine\api\event\EntityDamageEvent::CAUSE_SUFFOCATION);
             }
 
@@ -159,12 +196,45 @@ final class EnvironmentalDamageSystem implements System {
         }
     }
 
-    private function isCreative(Entity $entity): bool {
-        $meta = $entity->get(MetadataComponent::class);
-        $mode = $meta !== null ? GameMode::coerce($meta->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) : GameMode::Survival;
-        // Spectators take no environmental damage either (legacy
-        // isSpectator semantics: fully detached from the world).
-        return $mode === GameMode::Creative || $mode === GameMode::Spectator;
+    /**
+     * One pass over all entities collecting alive players grouped by their
+     * WorldComponent id (players without one default to world 0), as XZ
+     * activation anchors. Any gamemode anchors - a creative player watching
+     * a burning field keeps its simulation alive even though they take no
+     * damage themselves.
+     *
+     * @return array<int, list<array{x: float, z: float}>>
+     */
+    private function collectPlayersByWorld(World $world): array {
+        $out = [];
+        foreach ($world->query()
+            ->with(PositionComponent::class)
+            ->withTag(\pocketmine\core\component\tags\PlayerTag::class)
+            ->build() as $entity) {
+            $hp = $entity->get(HealthComponent::class);
+            if ($hp !== null && $hp->current <= 0) {
+                continue;
+            }
+            $pos = $entity->get(PositionComponent::class);
+            if ($pos === null) {
+                continue;
+            }
+            $out[(int)($entity->get(WorldComponent::class)?->id ?? 0)][] = ['x' => $pos->x, 'z' => $pos->z];
+        }
+        return $out;
+    }
+
+    /** Cheap XZ check used by the activation gate before any per-entity work. */
+    private function anyPlayerWithin(array $players, float $x, float $z, float $range): bool {
+        $rangeSq = $range * $range;
+        foreach ($players as $p) {
+            $dx = $p['x'] - $x;
+            $dz = $p['z'] - $z;
+            if ($dx * $dx + $dz * $dz <= $rangeSq) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Legacy setOnFire(): only ever extends the burn, never shortens it. */
@@ -175,14 +245,5 @@ final class EnvironmentalDamageSystem implements System {
         $fire = $entity->get(FireComponent::class) ?? new FireComponent();
         $fire->ticks = $newTicks;
         $entity->set(FireComponent::class, $fire);
-    }
-
-    /**
-     * Legacy isInsideOfSolid(): solid AND not transparent (glass does not
-     * suffocate, stone does).
-     */
-    private function isSolidOpaque(BlockRegistry $registry, int $blockId): bool {
-        $props = $registry->get($blockId);
-        return ($props['solid'] ?? false) === true && ($props['transparent'] ?? true) === false;
     }
 }

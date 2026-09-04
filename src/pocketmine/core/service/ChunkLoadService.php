@@ -34,6 +34,7 @@ final class ChunkLoadService {
         private readonly ChunkUnloadService $chunkUnloadService,
         int $maxLoadedChunks = self::DEFAULT_MAX_LOADED_CHUNKS,
         private readonly ?\pocketmine\port\driving\EventPort $eventPort = null,
+        private readonly ?ChunkSaveService $chunkSaveService = null,
     ) {
         $this->maxLoadedChunks = max(1, $maxLoadedChunks);
     }
@@ -99,6 +100,15 @@ final class ChunkLoadService {
                     $byIndex[$index] = $dto;
                     continue;
                 }
+            }
+            // Deferred-save hydration: a chunk that was unloaded while its
+            // save was still pending must rehydrate from the pending DTO (the
+            // newest known state) and cancel that disk write. Reading the
+            // stale disk copy instead would let the older pending save later
+            // overwrite newer in-memory edits - a lost update.
+            if ($this->chunkSaveService !== null && $this->chunkSaveService->isPending($worldId, $chunkX, $chunkZ)) {
+                $byIndex[$index] = $this->chunkSaveService->takePending($worldId, $chunkX, $chunkZ);
+                continue;
             }
             $chunkData = $this->getStorage($worldId)->loadChunk($chunkX, $chunkZ);
             if ($this->isEmptyChunk($chunkData)) {
@@ -297,7 +307,11 @@ final class ChunkLoadService {
                     $chunkZ,
                     $worldId,
                 );
-                $this->getStorage($worldId)->saveChunk($chunkX, $chunkZ, $chunkData);
+                if ($this->chunkSaveService !== null) {
+                    $this->chunkSaveService->queueSave($worldId, $chunkX, $chunkZ, $chunkData);
+                } else {
+                    $this->getStorage($worldId)->saveChunk($chunkX, $chunkZ, $chunkData);
+                }
             }
             $store->unload($chunkX, $chunkZ);
         }
@@ -319,7 +333,11 @@ final class ChunkLoadService {
             $data->chunkZ,
             $worldId,
         );
-        $this->getStorage($worldId)->saveChunk($data->chunkX, $data->chunkZ, $data);
+        if ($this->chunkSaveService !== null) {
+            $this->chunkSaveService->queueSave($worldId, $data->chunkX, $data->chunkZ, $data);
+        } else {
+            $this->getStorage($worldId)->saveChunk($data->chunkX, $data->chunkZ, $data);
+        }
     }
 
     private function getStorage(int $worldId = 0): StoragePort {

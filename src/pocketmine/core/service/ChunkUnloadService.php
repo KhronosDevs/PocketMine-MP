@@ -22,6 +22,7 @@ final class ChunkUnloadService {
         private readonly World $world,
         private readonly StoragePort $storagePort,
         private readonly ?\pocketmine\port\driving\EventPort $eventPort = null,
+        private readonly ?ChunkSaveService $chunkSaveService = null,
     ) {}
 
     public function unloadChunk(int $chunkX, int $chunkZ, int $worldId = 0): void {
@@ -208,7 +209,14 @@ final class ChunkUnloadService {
                         $chunkData->tileEntities,
                     );
                 }
-                $this->getStorage($worldId)->saveChunk($chunkX, $chunkZ, $chunkData);
+                // Deferred save: the drain writes the region file over the
+                // next ticks instead of stalling this (possibly burst) sweep;
+                // a reload before then hydrates from the pending DTO.
+                if ($this->chunkSaveService !== null) {
+                    $this->chunkSaveService->queueSave($worldId, $chunkX, $chunkZ, $chunkData);
+                } else {
+                    $this->getStorage($worldId)->saveChunk($chunkX, $chunkZ, $chunkData);
+                }
             }
             $store->unload($chunkX, $chunkZ);
         }
