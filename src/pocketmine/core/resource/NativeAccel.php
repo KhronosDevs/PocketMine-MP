@@ -47,6 +47,12 @@ int kh_unpack_nibbles(const unsigned char *in, size_t len, unsigned char *out);
 void kh_build_sky_light(const unsigned char *heightmap, unsigned char *out);
 void kh_nukkit_profiles(int chunk_x, int chunk_z, int seed,
                         int *out_heights, int *out_biomes);
+int kh_java_sanitize(unsigned char *blocks, unsigned char *data);
+void kh_java_palette_fill(const int64_t *longs, int nlongs, int bits,
+                          int continuous,
+                          const unsigned char *pal_id,
+                          const unsigned char *pal_meta, int npal,
+                          unsigned char *blocks, unsigned char *data);
 CDEF;
 
     private static ?\FFI $ffi = null;
@@ -61,6 +67,9 @@ CDEF;
     private static ?\FFI\CData $noiseBuf = null;
     private static ?\FFI\CData $packBuf = null;
     private static ?\FFI\CData $skyLightBuf = null;
+    private static ?\FFI\CData $javaSecBuf = null;  // 4096-byte section block buffer
+    private static ?\FFI\CData $javaSecBuf2 = null; // 4096-byte section data buffer
+    private static ?\FFI\CData $javaPalBuf = null;  // per-call palette entry arrays (ids + metas)
 
     private function __construct() {
     }
@@ -330,5 +339,91 @@ CDEF;
             return null;
         }
         return ['heights' => array_values($hVals), 'biomes' => array_values($bVals)];
+    }
+
+    /**
+     * Sanitize one 16x16x16 section (JavaBlockTranslator::sanitizeSection):
+     * replaces ids PE 0.15 cannot render and clamps exotic meta bits so
+     * every emitted state is client-safe. Outputs are new byte-per-block
+     * strings; the PHP fallback stays authoritative when FFI is missing.
+     *
+     * @return array{0: string, 1: string}|null [blocks, data] sanitized
+     */
+    public static function javaSanitize(string $blocks, string $data): ?array {
+        if (!self::available()) {
+            return null;
+        }
+        if (strlen($blocks) !== 4096 || strlen($data) !== 4096) {
+            return null;
+        }
+        try {
+            if (self::$javaSecBuf === null) {
+                self::$javaSecBuf = \FFI::new('unsigned char[4096]');
+            }
+            if (self::$javaSecBuf2 === null) {
+                self::$javaSecBuf2 = \FFI::new('unsigned char[4096]');
+            }
+            \FFI::memcpy(self::$javaSecBuf, $blocks, 4096);
+            \FFI::memcpy(self::$javaSecBuf2, $data, 4096);
+            self::$ffi->kh_java_sanitize(self::$javaSecBuf, self::$javaSecBuf2);
+            $outBlocks = \FFI::string(self::$javaSecBuf, 4096);
+            $outData = \FFI::string(self::$javaSecBuf2, 4096);
+        } catch (\Throwable $e) {
+            return null;
+        }
+        return [$outBlocks, $outData];
+    }
+
+    /**
+     * Bit-unpack one 1.13+ palette section's 4096 indices into raw
+     * byte-per-block id/meta buffers (the hot half of
+     * JavaBlockTranslator::decodePaletteSection; name -> state resolution
+     * stays in PHP).
+     *
+     * @param int[] $longs raw signed 64-bit words (negative values arrive
+     *                     as their two's-complement bit pattern)
+     * @param array<int, array{0:int, 1:int}> $resolved per-palette-entry
+     *                                            [id, meta]
+     * @return array{0: string, 1: string}|null [blocks, data] decoded
+     */
+    public static function javaPaletteFill(array $longs, int $bits, bool $continuous, array $resolved): ?array {
+        if (!self::available()) {
+            return null;
+        }
+        $npal = count($resolved);
+        if ($npal === 0 || $bits < 1 || $bits > 16) {
+            return null;
+        }
+        try {
+            if (self::$javaSecBuf === null) {
+                self::$javaSecBuf = \FFI::new('unsigned char[4096]');
+            }
+            if (self::$javaSecBuf2 === null) {
+                self::$javaSecBuf2 = \FFI::new('unsigned char[4096]');
+            }
+            \FFI::memset(self::$javaSecBuf, 0, 4096); // leftover stays air on truncation
+            \FFI::memset(self::$javaSecBuf2, 0, 4096);
+
+            if (self::$javaPalBuf === null || (int)\FFI::sizeof(self::$javaPalBuf) < $npal * 2) {
+                self::$javaPalBuf = \FFI::new('unsigned char[' . max(1, $npal * 2) . ']');
+            }
+            for ($i = 0; $i < $npal; $i++) {
+                self::$javaPalBuf[$i] = $resolved[$i][0];
+                self::$javaPalBuf[$npal + $i] = $resolved[$i][1];
+            }
+            $ids = \FFI::cast('unsigned char *', self::$javaPalBuf);
+            $metas = \FFI::cast('unsigned char *', \FFI::addr(self::$javaPalBuf[$npal]));
+
+            $cLongs = \FFI::new('int64_t[' . count($longs) . ']');
+            foreach ($longs as $i => $v) {
+                $cLongs[$i] = $v;
+            }
+            self::$ffi->kh_java_palette_fill($cLongs, count($longs), $bits, $continuous ? 1 : 0, $ids, $metas, $npal, self::$javaSecBuf, self::$javaSecBuf2);
+            $outBlocks = \FFI::string(self::$javaSecBuf, 4096);
+            $outData = \FFI::string(self::$javaSecBuf2, 4096);
+        } catch (\Throwable $e) {
+            return null;
+        }
+        return [$outBlocks, $outData];
     }
 }

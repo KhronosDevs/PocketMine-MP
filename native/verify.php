@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/autoload.php';
 
+use pocketmine\adapter\driven\storage\JavaBlockTranslator;
 use pocketmine\adapter\driven\worldgen\ParallelGeneratorAdapter;
 use pocketmine\core\resource\BlockRegistry;
 use pocketmine\core\resource\LightCalculator;
@@ -227,6 +228,94 @@ foreach ([[array_fill(0, 256, 0), 'all-zero'], [array_fill(0, 256, 200), 'all-hi
     $check("buildSkyLight $name", $ffi !== null && $php === $ffi);
 }
 
+// ---- 5. Java world import: sanitize + palette decode ----
+$mkSection = function (int $seed, bool $javaFlavored): array {
+    mt_srand($seed);
+    $blocks = '';
+    $data = '';
+    $pe = [0, 1, 2, 3, 4, 5, 12, 13, 17, 18, 22, 24, 35, 43, 44, 49, 50, 51, 62, 67, 68, 80, 82, 85, 87, 90, 98, 109, 117, 139, 140, 155, 156, 171];
+    $javaOnly = [119, 122, 130, 137, 138, 160, 166, 168, 169, 176, 177];
+    for ($i = 0; $i < 4096; $i++) {
+        $id = $javaFlavored && $i % 23 === 0
+            ? $javaOnly[mt_rand(0, count($javaOnly) - 1)]
+            : $pe[mt_rand(0, count($pe) - 1)];
+        $blocks .= chr($id);
+        $data .= chr(mt_rand(0, 15));
+    }
+    return [$blocks, $data];
+};
+
+$sanitizeCases = [
+    'PE-valid ids, random meta' => $mkSection(7, false),
+    'Java-only ids every 23rd block' => $mkSection(7, true),
+    'all stone' => [str_repeat("\x01", 4096), str_repeat("\x00", 4096)],
+    'log axis 12 (bark) on every log' => [str_repeat("\x11", 4096), str_repeat("\x0C", 4096)],
+    'leaves with decay flags' => [str_repeat("\x12", 4096), str_repeat("\x0F", 4096)],
+];
+foreach ($sanitizeCases as $name => [$blocks, $data]) {
+    $php = JavaBlockTranslator::sanitizeSection($blocks, $data);
+    $ffi = NativeAccel::javaSanitize($blocks, $data);
+    $label = "javaSanitize $name";
+    if ($ffi === null) {
+        $check($label . ' [ffi returned null]', false);
+        continue;
+    }
+    $check($label, $php[0] === $ffi[0] && $php[1] === $ffi[1] && $php[2] === ($php[0] !== $blocks || $php[1] !== $data));
+}
+
+$namePool = [
+    'minecraft:air', 'minecraft:stone', 'minecraft:grass_block', 'minecraft:dirt',
+    'minecraft:cobblestone', 'minecraft:oak_planks', 'minecraft:oak_log', 'minecraft:oak_leaves',
+    'minecraft:water', 'minecraft:gravel', 'minecraft:sand', 'minecraft:glowstone',
+    'minecraft:coal_ore', 'minecraft:iron_ore', 'minecraft:torch', 'minecraft:tall_grass',
+    'minecraft:stone_brick_stairs', 'minecraft:white_wool', 'minecraft:acacia_log',
+    'minecraft:deepslate_coal_ore', 'minecraft:potted_poppy', 'minecraft:end_portal_frame',
+];
+$packIndices = function (array $indices, int $bits, bool $continuous): array {
+    $longs = [];
+    $perWord = intdiv(64, $bits);
+    foreach ($indices as $k => $idx) {
+        if ($continuous) {
+            $word = intdiv($k * $bits, 64);
+            $off = ($k * $bits) & 63;
+        } else {
+            $word = intdiv($k, $perWord);
+            $off = ($k % $perWord) * $bits;
+        }
+        if (!isset($longs[$word])) {
+            $longs[$word] = 0;
+        }
+        $longs[$word] |= $idx << $off;
+    }
+    ksort($longs);
+    return array_values($longs);
+};
+foreach ([[4, false], [6, false], [6, true], [9, false], [2, false], [2, true]] as [$npal, $continuous]) {
+    // mirror JavaBlockTranslator::decodePaletteSection bit-width rules
+    $bits = $npal > 1 ? max(4, (int)ceil(log($npal, 2))) : 4;
+    mt_srand(11 + $npal * 7);
+    $states = [];
+    $resolved = [];
+    for ($i = 0; $i < $npal; $i++) {
+        $n = $namePool[$i % count($namePool)];
+        $states[] = [$n, []];
+        $resolved[] = JavaBlockTranslator::nameToState($n, []);
+    }
+    $indices = [];
+    for ($k = 0; $k < 4096; $k++) {
+        $indices[] = mt_rand(0, $npal - 1);
+    }
+    $longs = $packIndices($indices, $bits, $continuous);
+    $php = JavaBlockTranslator::decodePaletteSection($states, $longs, $continuous);
+    $ffi = NativeAccel::javaPaletteFill($longs, $bits, $continuous, $resolved);
+    $label = "javaPaletteFill npal=$npal bits=$bits " . ($continuous ? 'continuous' : 'per-word');
+    if ($ffi === null) {
+        $check($label . ' [ffi returned null]', false);
+        continue;
+    }
+    $check($label, $php[0] === $ffi[0] && $php[1] === $ffi[1]);
+}
+
 $kernel->shutdown();
-echo $failures === 0 ? "\nALL VERIFIED: byte-identical across light/noise/pack/sky-light\n" : "\n$failures FAILURES\n";
+echo $failures === 0 ? "\nALL VERIFIED: byte-identical across light/noise/pack/sky-light/java-import\n" : "\n$failures FAILURES\n";
 exit($failures === 0 ? 0 : 1);

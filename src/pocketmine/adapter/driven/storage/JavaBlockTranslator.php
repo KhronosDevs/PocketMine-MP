@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\adapter\driven\storage;
 
+use pocketmine\core\resource\NativeAccel;
 use function chr;
 use function count;
 use function error_log;
@@ -108,6 +109,13 @@ final class JavaBlockTranslator {
      * @return array{0: string, 1: string, 2: bool} [blocks, data, changed]
      */
     public static function sanitizeSection(string $blocks, string $data): array {
+        // Native fast path (kh_native.c kh_java_sanitize, byte-identical)
+        // falls back to the loop below when FFI is unavailable.
+        $native = NativeAccel::javaSanitize($blocks, $data);
+        if ($native !== null) {
+            return [$native[0], $native[1], $native[0] !== $blocks || $native[1] !== $data];
+        }
+
         $rules = self::numericRules();
         $outBlocks = $blocks;
         $outData = $data;
@@ -216,6 +224,16 @@ final class JavaBlockTranslator {
             $resolved[] = [$id, $meta];
             if ($id === 1 && !in_array($entry[0], ['stone', 'minecraft:stone'], true)) {
                 $hadUnknown = true;
+            }
+        }
+
+        // Native fast path (kh_native.c kh_java_palette_fill, byte-identical
+        // to the bit-unpack loops below) for multi-entry palettes; the PHP
+        // loops stay as the fallback when FFI is unavailable.
+        if ($count > 1) {
+            $native = NativeAccel::javaPaletteFill($longs, $bits, $continuous, $resolved);
+            if ($native !== null) {
+                return [$native[0], $native[1], $hadUnknown];
             }
         }
 
