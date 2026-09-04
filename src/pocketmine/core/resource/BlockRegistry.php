@@ -333,6 +333,27 @@ final class BlockRegistry {
         return (bool)$this->get($id)['solid'];
     }
 
+    /** @var array<int, array<int, int>>|null id => 256-entry 1/0 solid flags, memoized per registry */
+    private ?array $solidFlagsCache = null;
+
+    /**
+     * 256-entry lookup: block id => 1 if solid else 0 (ids outside the table
+     * use DEFAULTS['solid'], matching isSolid()). Built once per registry and
+     * reused by hot paths (BlockCollisionSystem) that probe raw chunk bytes.
+     *
+     * @return array<int, int>
+     */
+    public function getSolidFlags(): array {
+        if ($this->solidFlagsCache === null) {
+            $flags = [];
+            for ($id = 0; $id <= 255; $id++) {
+                $flags[$id] = (bool)$this->get($id)['solid'] ? 1 : 0;
+            }
+            $this->solidFlagsCache = $flags;
+        }
+        return $this->solidFlagsCache;
+    }
+
     public function isTransparent(int $id): bool {
         return (bool)$this->get($id)['transparent'];
     }

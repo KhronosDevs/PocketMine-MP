@@ -256,6 +256,56 @@ final class ChunkStore {
         return ord($chunk['meta'][$this->index($y, $localZ, $localX)]);
     }
 
+    /**
+     * Fast solid-probe for hot collision paths (BlockCollisionSystem).
+     *
+     * Resolves the chunk key ONCE per spanned chunk column instead of per
+     * voxel: `getBlock()` rebuilds the "x:z" key (floor div + string concat +
+     * hash) for every call, which dominates mob-collision sweeps (~1-3k
+     * probes per tick). The footprint is small (an entity AABB spans at most
+     * a 2x2 group of chunk columns), so each column's raw 65536-byte block
+     * string is resolved once and voxels are indexed by direct offset.
+     *
+     * Behaviour is identical to looping getBlock()/isSolid over the same box:
+     * unloaded columns and Y outside 0..255 count as air, exactly like a
+     * getBlock() returning id 0 there.
+     *
+     * @param int[] $solidLookup 256 per-id 1/0 flags (BlockRegistry::isSolid precomputed)
+     */
+    public function probeSolidFootprint(int $minX, int $maxX, int $minY, int $maxY, int $minZ, int $maxZ, array $solidLookup): bool {
+        for ($cx = $minX >> 4; $cx <= $maxX >> 4; $cx++) {
+            $originX = $cx << 4;
+            $bx0 = max($minX, $originX);
+            $bx1 = min($maxX, $originX + 15);
+            for ($cz = $minZ >> 4; $cz <= $maxZ >> 4; $cz++) {
+                $chunk = $this->chunks[$cx . ':' . $cz] ?? null;
+                if ($chunk === null) {
+                    continue; // unloaded column: air, like getBlock() returning 0
+                }
+                $blocks = $chunk['blocks'];
+                $originZ = $cz << 4;
+                $bz0 = max($minZ, $originZ);
+                $bz1 = min($maxZ, $originZ + 15);
+                for ($by = $minY; $by <= $maxY; $by++) {
+                    if ($by < 0 || $by > 255) {
+                        continue; // never collide with the void / ceiling guard
+                    }
+                    $rowBase = $by << 8;
+                    for ($bx = $bx0; $bx <= $bx1; $bx++) {
+                        $lx = $bx - $originX;
+                        for ($bz = $bz0; $bz <= $bz1; $bz++) {
+                            $idx = $rowBase | (($bz - $originZ) << 4) | $lx;
+                            if ($solidLookup[ord($blocks[$idx])] === 1) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     public function setBlock(int $x, int $y, int $z, int $id, int $meta = 0): bool {
         if ($y < 0 || $y > 255 || $id < 0 || $id > 255) {
             return false;

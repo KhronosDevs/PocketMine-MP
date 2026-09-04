@@ -43,6 +43,11 @@ final class BlockCollisionSystem implements System {
             return;
         }
 
+        // 256-entry id => 1/0 solid flags, built once per tick (registry
+        // memoizes it after the first call). Lets the voxel sweeps below
+        // index raw chunk bytes without an isSolid() function call per voxel.
+        $solidFlags = $registry->getSolidFlags();
+
         $query = $world->query()
             ->with(PositionComponent::class, VelocityComponent::class, CollisionComponent::class)
             ->without(PlayerTag::class, \pocketmine\core\constants\EntityTags::VEHICLE)
@@ -82,15 +87,15 @@ final class BlockCollisionSystem implements System {
             // settled by the previous one, so a blocked axis does not stop
             // the other two (sliding along walls, walking up to ledges).
             $tx = $x + $vx * $deltaTime;
-            if ($this->collidesAt($store, $registry, $col, $tx, $y, $z)) {
-                [$x, $vx] = $this->clampAxis($store, $registry, $col, $x, $y, $z, $tx, $vx, 'x');
+            if ($this->collidesAt($store, $solidFlags, $col, $tx, $y, $z)) {
+                [$x, $vx] = $this->clampAxis($store, $solidFlags, $col, $x, $y, $z, $tx, $vx, 'x');
             } else {
                 $x = $tx;
             }
 
             $ty = $y + $vy * $deltaTime;
-            if ($this->collidesAt($store, $registry, $col, $x, $ty, $z)) {
-                [$y, $vy] = $this->clampAxis($store, $registry, $col, $x, $y, $z, $ty, $vy, 'y');
+            if ($this->collidesAt($store, $solidFlags, $col, $x, $ty, $z)) {
+                [$y, $vy] = $this->clampAxis($store, $solidFlags, $col, $x, $y, $z, $ty, $vy, 'y');
                 // Item entities stop completely when they hit the ground
                 // (no sliding). Match vanilla MCPE: drops land and stay put.
                 if ($vy === 0.0 && $entity->has(\pocketmine\core\constants\EntityTags::ITEM)) {
@@ -102,8 +107,8 @@ final class BlockCollisionSystem implements System {
             }
 
             $tz = $z + $vz * $deltaTime;
-            if ($this->collidesAt($store, $registry, $col, $x, $y, $tz)) {
-                [$z, $vz] = $this->clampAxis($store, $registry, $col, $x, $y, $z, $tz, $vz, 'z');
+            if ($this->collidesAt($store, $solidFlags, $col, $x, $y, $tz)) {
+                [$z, $vz] = $this->clampAxis($store, $solidFlags, $col, $x, $y, $z, $tz, $vz, 'z');
             } else {
                 $z = $tz;
             }
@@ -122,7 +127,7 @@ final class BlockCollisionSystem implements System {
      */
     private function collidesAt(
         ChunkStore $store,
-        BlockRegistry $registry,
+        array $solidFlags,
         CollisionComponent $col,
         float $x,
         float $y,
@@ -135,19 +140,7 @@ final class BlockCollisionSystem implements System {
         $maxY = (int)floor($y + $col->height - self::EPSILON);
         $minZ = (int)floor($z - $hw + self::EPSILON);
         $maxZ = (int)floor($z + $hw - self::EPSILON);
-        for ($bx = $minX; $bx <= $maxX; $bx++) {
-            for ($by = $minY; $by <= $maxY; $by++) {
-                if ($by < 0 || $by > 255) {
-                    continue; // never collide with the void / ceiling guard
-                }
-                for ($bz = $minZ; $bz <= $maxZ; $bz++) {
-                    if ($registry->isSolid($store->getBlock($bx, $by, $bz))) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
+        return $store->probeSolidFootprint($minX, $maxX, $minY, $maxY, $minZ, $maxZ, $solidFlags);
     }
 
     /**
@@ -158,7 +151,7 @@ final class BlockCollisionSystem implements System {
      */
     private function clampAxis(
         ChunkStore $store,
-        BlockRegistry $registry,
+        array $solidFlags,
         CollisionComponent $col,
         float $x,
         float $y,
@@ -173,7 +166,7 @@ final class BlockCollisionSystem implements System {
                 $start = (int)floor($x + $hw + self::EPSILON);
                 $limit = (int)floor($t + $hw + self::EPSILON);
                 for ($i = $start; $i <= $limit; $i++) {
-                    if ($this->slabCollides($store, $registry, $col, 'x', $i, $x, $y, $z)) {
+                    if ($this->slabCollides($store, $solidFlags, $col, 'x', $i, $x, $y, $z)) {
                         return [$i - $hw - self::EPSILON, 0.0];
                     }
                 }
@@ -181,7 +174,7 @@ final class BlockCollisionSystem implements System {
                 $start = (int)floor($x - $hw - self::EPSILON);
                 $limit = (int)floor($t - $hw - self::EPSILON);
                 for ($i = $start; $i >= $limit; $i--) {
-                    if ($this->slabCollides($store, $registry, $col, 'x', $i, $x, $y, $z)) {
+                    if ($this->slabCollides($store, $solidFlags, $col, 'x', $i, $x, $y, $z)) {
                         return [$i + $hw + self::EPSILON, 0.0];
                     }
                 }
@@ -194,7 +187,7 @@ final class BlockCollisionSystem implements System {
                 $start = (int)floor($y + $col->height + self::EPSILON);
                 $limit = (int)floor($t + $col->height + self::EPSILON);
                 for ($i = $start; $i <= $limit; $i++) {
-                    if ($this->slabCollides($store, $registry, $col, 'y', $i, $x, $y, $z)) {
+                    if ($this->slabCollides($store, $solidFlags, $col, 'y', $i, $x, $y, $z)) {
                         return [$i - $col->height - self::EPSILON, 0.0];
                     }
                 }
@@ -205,7 +198,7 @@ final class BlockCollisionSystem implements System {
                     if ($i < 0) {
                         break;
                     }
-                    if ($this->slabCollides($store, $registry, $col, 'y', $i, $x, $y, $z)) {
+                    if ($this->slabCollides($store, $solidFlags, $col, 'y', $i, $x, $y, $z)) {
                         return [$i + 1.0 + self::EPSILON, 0.0];
                     }
                 }
@@ -217,7 +210,7 @@ final class BlockCollisionSystem implements System {
             $start = (int)floor($z + $hw + self::EPSILON);
             $limit = (int)floor($t + $hw + self::EPSILON);
             for ($i = $start; $i <= $limit; $i++) {
-                if ($this->slabCollides($store, $registry, $col, 'z', $i, $x, $y, $z)) {
+                if ($this->slabCollides($store, $solidFlags, $col, 'z', $i, $x, $y, $z)) {
                     return [$i - $hw - self::EPSILON, 0.0];
                 }
             }
@@ -225,7 +218,7 @@ final class BlockCollisionSystem implements System {
             $start = (int)floor($z - $hw - self::EPSILON);
             $limit = (int)floor($t - $hw - self::EPSILON);
             for ($i = $start; $i >= $limit; $i--) {
-                if ($this->slabCollides($store, $registry, $col, 'z', $i, $x, $y, $z)) {
+                if ($this->slabCollides($store, $solidFlags, $col, 'z', $i, $x, $y, $z)) {
                     return [$i + $hw + self::EPSILON, 0.0];
                 }
             }
@@ -239,7 +232,7 @@ final class BlockCollisionSystem implements System {
      */
     private function slabCollides(
         ChunkStore $store,
-        BlockRegistry $registry,
+        array $solidFlags,
         CollisionComponent $col,
         string $axis,
         int $i,
@@ -256,43 +249,13 @@ final class BlockCollisionSystem implements System {
         $maxZ = (int)floor($z + $hw - self::EPSILON);
 
         if ($axis === 'x') {
-            for ($by = $minY; $by <= $maxY; $by++) {
-                if ($by < 0 || $by > 255) {
-                    continue;
-                }
-                for ($bz = $minZ; $bz <= $maxZ; $bz++) {
-                    if ($registry->isSolid($store->getBlock($i, $by, $bz))) {
-                        return true;
-                    }
-                }
-            }
-            return false;
+            return $store->probeSolidFootprint($i, $i, $minY, $maxY, $minZ, $maxZ, $solidFlags);
         }
 
         if ($axis === 'y') {
-            if ($i < 0 || $i > 255) {
-                return false;
-            }
-            for ($bx = $minX; $bx <= $maxX; $bx++) {
-                for ($bz = $minZ; $bz <= $maxZ; $bz++) {
-                    if ($registry->isSolid($store->getBlock($bx, $i, $bz))) {
-                        return true;
-                    }
-                }
-            }
-            return false;
+            return $store->probeSolidFootprint($minX, $maxX, $i, $i, $minZ, $maxZ, $solidFlags);
         }
 
-        for ($bx = $minX; $bx <= $maxX; $bx++) {
-            for ($by = $minY; $by <= $maxY; $by++) {
-                if ($by < 0 || $by > 255) {
-                    continue;
-                }
-                if ($registry->isSolid($store->getBlock($bx, $by, $i))) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return $store->probeSolidFootprint($minX, $maxX, $minY, $maxY, $i, $i, $solidFlags);
     }
 }

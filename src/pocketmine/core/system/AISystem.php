@@ -43,6 +43,22 @@ final class AISystem implements System {
     /** Distance at which the fuse cancels (player escaped). */
     public const CREEPER_CANCEL_RANGE = 7.0;
 
+    /**
+     * Mob AI activation range (blocks from the nearest alive player).
+     *
+     * Vanilla MCPE only runs full entity AI within its simulation distance of
+     * a player; mobs beyond it stand idle. Khronos mirrors that: a targetless
+     * mob whose nearest player (same world) is farther than this parks its
+     * velocity and skips decision work (acquisition/chase/flee/wander). Mobs
+     * with a target or a manual path always tick, so chases that leave the
+     * range complete normally, and worlds with no players keep full AI.
+     *
+     * This is also what makes per-mob cost LINEAR in mob count: target
+     * acquisition scans the small player list (below), not the whole mob
+     * pack, so 400 idle mobs no longer pay 400x400 candidate checks per tick.
+     */
+    public const PLAYER_ACTIVATION_RANGE = 64.0;
+
     /** Breed foods per passive type (bug 20). */
     private const BREED_FOODS = [
         'Cow' => 337,      // wheat
@@ -53,14 +69,22 @@ final class AISystem implements System {
     private ?CombatService $combatService = null;
 
     public function run(World $world, float $deltaTime): void {
-        // The spatial index is only consumed here; rebuild it once per tick so
-        // target acquisition sees current positions. O(entities) insert.
+        // The spatial index is rebuilt here once per tick so ArrowSystem (and
+        // legacy consumers) see current positions. Mob target acquisition no
+        // longer scans it - that was O(nearby entities) per mob and went
+        // quadratic in dense packs - so its rebuild is purely for arrows.
         $spatial = $world->getResourceRegistry()->get(SpatialIndex::class);
         if ($spatial instanceof SpatialIndex) {
             $spatial->rebuild($world);
         }
 
         $combat = $this->getCombatService();
+
+        // Per-world alive player snapshots (players are FEW - a mob pack can
+        // be hundreds - so acquisition scans this list, never the entity
+        // index). Also scopes AI per game-world: a mob never targets or even
+        // activates for a player in another world.
+        $playersByWorld = $this->collectPlayersByWorld($world);
 
         $query = $world->query()
             ->with(
@@ -72,6 +96,10 @@ final class AISystem implements System {
                 MetadataComponent::class,
             )
             ->build();
+
+        $tick = \pocketmine\Kernel::getInstance()?->getResourceRegistry()?->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0;
+        $hasCreepers = false;
+        $hasBreeding = false;
 
         foreach ($query as $entity) {
             $ai = $entity->get(AIStateComponent::class);
@@ -89,12 +117,44 @@ final class AISystem implements System {
             }
 
             $hostile = (bool)$meta->get(\pocketmine\core\constants\MetadataKeys::HOSTILE, false);
+            $mobType = (string)$meta->get(\pocketmine\core\constants\MetadataKeys::MOB_TYPE, '');
 
             // Shorn sheep regrow their fleece after ~60s (vanilla-lite: the
             // original ate grass to regrow; a timer keeps it simple).
-            if ($meta->get('shorn') && ($tick = \pocketmine\Kernel::getInstance()?->getResourceRegistry()?->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0) - (int)($meta->get('shornAt', 0)) >= 1200) {
+            if ($meta->get('shorn') && $tick - (int)($meta->get('shornAt', 0)) >= 1200) {
                 $meta->remove('shorn');
                 $meta->remove('shornAt');
+            }
+
+            // --- Activation gate (vanilla simulation distance) ---
+            // A targetless mob only runs its AI while a player of its own
+            // world is within range; far mobs park (velocity zeroed) instead
+            // of paying chase/acquire/wander cost no one observes. Mobs with
+            // a target or a manual path always tick, and worlds without any
+            // player keep full AI (creative/test worlds, offline spawns).
+            $players = $playersByWorld[(int)($entity->get(WorldComponent::class)?->id ?? 0)] ?? [];
+            if ($players !== []
+                && $ai->targetEntity === null
+                && $ai->state !== 2 // manual path set by plugins/trainers
+                && !$this->anyPlayerWithin($players, $pos, self::PLAYER_ACTIVATION_RANGE)
+            ) {
+                $vel->x = 0.0;
+                $vel->z = 0.0;
+                continue;
+            }
+
+            // Creeper/breeding bookkeeping rides the same query pass instead
+            // of a second full-entity scan: only AI mobs can be creepers or
+            // in-love animals, and a creeper parked by the gate cannot fuse.
+            // Counted before the chase/flee branches so a chasing creeper (or
+            // an in-love animal mid-flee) still triggers its subsystem.
+            if (!$hasCreepers && $mobType === 'Creeper') {
+                $hasCreepers = true;
+            }
+            if (!$hasBreeding && (int)($meta->get('inLoveUntil', 0)) > $tick
+                && isset(self::BREED_FOODS[$mobType])
+            ) {
+                $hasBreeding = true;
             }
 
             // Validate the current target: gone, dead, or out of follow range.
@@ -111,7 +171,7 @@ final class AISystem implements System {
 
             // Hostile mobs acquire the nearest living player as a target.
             if ($hostile && $ai->targetEntity === null) {
-                $this->acquireTarget($world, $spatial, $ai, $pos, $entity->id);
+                $this->acquireTarget($world, $players, $ai, $pos, $entity->id);
             }
 
             // Retreat: any mob below its health threshold flees the nearest
@@ -120,7 +180,7 @@ final class AISystem implements System {
                 && $health->max > 0
                 && $health->current <= $health->max * $ai->retreatHealthPercent;
             if ($flee) {
-                $this->handleFleeing($world, $spatial, $ai, $pos, $rot, $vel, $entity->id);
+                $this->handleFleeing($world, $players, $ai, $pos, $rot, $vel, $entity->id);
                 continue;
             }
 
@@ -146,40 +206,66 @@ final class AISystem implements System {
                     break;
             }
         }
-
-        // Quick count pass: only scan entities once to decide which subsystems
-        // need to run. Without this, processCreepers and processBreeding each
-        // iterate ALL entities (items, arrows, etc.) even when there are zero
-        // creepers or zero animals in love mode — the common case by far.
-        $tick = \pocketmine\Kernel::getInstance()?->getResourceRegistry()?->get(\pocketmine\core\resource\TickCounter::class)?->value ?? 0;
-        $hasCreepers = false;
-        $hasBreeding = false;
-        foreach ($world->getEntities() as $entity) {
-            if (!$hasCreepers) {
-                $meta = $entity->get(MetadataComponent::class);
-                if ($meta !== null && $meta->get(\pocketmine\core\constants\MetadataKeys::MOB_TYPE) === 'Creeper') {
-                    $hasCreepers = true;
-                }
-            }
-            if (!$hasBreeding) {
-                $meta2 = $entity->get(MetadataComponent::class);
-                if ($meta2 !== null && (int)($meta2->get('inLoveUntil', 0)) > $tick) {
-                    $type = (string)$meta2->get(\pocketmine\core\constants\MetadataKeys::MOB_TYPE, '');
-                    if (isset(self::BREED_FOODS[$type])) {
-                        $hasBreeding = true;
-                    }
-                }
-            }
-            if ($hasCreepers && $hasBreeding) {
-                break;
-            }
-        }
         if ($hasBreeding) {
             $this->processBreeding($world);
         }
         if ($hasCreepers) {
             $this->processCreepers($world, $combat);
         }
+    }
+
+    /**
+     * One pass over all entities collecting alive players, grouped by their
+     * WorldComponent id (players without one default to world 0). Each entry
+     * carries the position and whether the player is a valid combat target
+     * (creative/spectator players activate mob AI but are never targeted,
+     * matching the legacy gamemode exclusion in findNearestPlayer).
+     *
+     * @return array<int, array<int, array{id: int, x: float, y: float, z: float, targetable: bool}>>
+     */
+    private function collectPlayersByWorld(World $world): array {
+        $out = [];
+        foreach ($world->getEntities() as $entity) {
+            if (!$entity->has(PlayerTag::class)) {
+                continue;
+            }
+            $pos = $entity->get(PositionComponent::class);
+            $hp = $entity->get(HealthComponent::class);
+            if ($pos === null || ($hp !== null && $hp->current <= 0)) {
+                continue;
+            }
+            $meta = $entity->get(MetadataComponent::class);
+            $mode = $meta !== null
+                ? \pocketmine\core\enum\GameMode::coerce($meta->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE))
+                : \pocketmine\core\enum\GameMode::Survival;
+            $out[(int)($entity->get(WorldComponent::class)?->id ?? 0)][] = [
+                'id' => $entity->id,
+                'x' => $pos->x,
+                'y' => $pos->y,
+                'z' => $pos->z,
+                'targetable' => $mode !== \pocketmine\core\enum\GameMode::Creative
+                    && $mode !== \pocketmine\core\enum\GameMode::Spectator,
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Whether any collected player (any gamemode) is within $range of $pos.
+     * Cheap XZ check used by the activation gate before any per-mob work.
+     *
+     * @param array<int, array{id: int, x: float, y: float, z: float, targetable: bool}> $players
+     */
+    private function anyPlayerWithin(array $players, PositionComponent $pos, float $range): bool {
+        $rangeSq = $range * $range;
+        foreach ($players as $p) {
+            $dx = $p['x'] - $pos->x;
+            $dz = $p['z'] - $pos->z;
+            if ($dx * $dx + $dz * $dz <= $rangeSq) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -389,14 +475,14 @@ final class AISystem implements System {
     /** Move away from the nearest player (panic / retreat). */
     private function handleFleeing(
         World $world,
-        ?SpatialIndex $spatial,
+        array $players,
         AIStateComponent $ai,
         PositionComponent $pos,
         RotationComponent $rot,
         VelocityComponent $vel,
         int $mobId,
     ): void {
-        $playerId = $this->findNearestPlayer($world, $spatial, $pos, 16.0, $mobId);
+        $playerId = $this->findNearestPlayer($players, $pos, 16.0, $mobId);
         if ($playerId === null) {
             $vel->x = 0;
             $vel->z = 0;
@@ -423,51 +509,38 @@ final class AISystem implements System {
     /** Pick the nearest living player inside the follow range. */
     private function acquireTarget(
         World $world,
-        ?SpatialIndex $spatial,
+        array $players,
         AIStateComponent $ai,
         PositionComponent $pos,
         int $mobId,
     ): void {
-        $playerId = $this->findNearestPlayer($world, $spatial, $pos, $ai->followRange, $mobId);
+        $playerId = $this->findNearestPlayer($players, $pos, $ai->followRange, $mobId);
         if ($playerId !== null) {
             $ai->setTargetEntity($playerId);
         }
     }
 
-    private function findNearestPlayer(World $world, ?SpatialIndex $spatial, PositionComponent $pos, float $radius, int $selfId): ?int {
-        if ($spatial === null) {
-            return null;
-        }
-        $candidates = $spatial->getNearby($pos->x, $pos->z, $radius);
+    /**
+     * Nearest targetable player from the per-world snapshot, within $radius.
+     * Scans the (few) collected players directly - never the entity index,
+     * which in a dense mob pack holds hundreds of nearby mobs and made
+     * acquisition quadratic in pack size.
+     *
+     * @param array<int, array{id: int, x: float, y: float, z: float, targetable: bool}> $players
+     */
+    private function findNearestPlayer(array $players, PositionComponent $pos, float $radius, int $selfId): ?int {
         $bestId = null;
         $bestDistSq = $radius * $radius;
-        foreach ($candidates as $candidateId) {
-            if ($candidateId === $selfId) {
+        foreach ($players as $candidate) {
+            if ($candidate['id'] === $selfId || !$candidate['targetable']) {
                 continue;
             }
-            $candidate = $world->getEntity($candidateId);
-            if ($candidate === null || !$candidate->has(PlayerTag::class)) {
-                continue;
-            }
-            $candidateHealth = $candidate->get(HealthComponent::class);
-            if ($candidateHealth === null || $candidateHealth->current <= 0) {
-                continue;
-            }
-            // Creative players are not valid targets (legacy: mobs ignore
-            // creative players entirely). Spectators likewise.
-            $candidateMeta = $candidate->get(MetadataComponent::class);
-            $candidateMode = $candidateMeta !== null ? \pocketmine\core\enum\GameMode::coerce($candidateMeta->get(\pocketmine\core\constants\MetadataKeys::GAMEMODE)) : \pocketmine\core\enum\GameMode::Survival;
-            if ($candidateMode === \pocketmine\core\enum\GameMode::Creative || $candidateMode === \pocketmine\core\enum\GameMode::Spectator) {
-                continue;
-            }
-            $candidatePos = $candidate->get(PositionComponent::class);
-            if ($candidatePos === null) {
-                continue;
-            }
-            $d = $this->distSq($pos, $candidatePos);
+            $dx = $candidate['x'] - $pos->x;
+            $dz = $candidate['z'] - $pos->z;
+            $d = $dx * $dx + $dz * $dz;
             if ($d < $bestDistSq) {
                 $bestDistSq = $d;
-                $bestId = $candidateId;
+                $bestId = $candidate['id'];
             }
         }
         return $bestId;
