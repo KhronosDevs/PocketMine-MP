@@ -199,3 +199,12 @@ the engine at all.
 - **Client:** protocol 84 only — players must run the ancient MCPE 0.15.10 client (project design; caps the audience).
 - **Scale:** single RakNet thread + main-thread ECS is fine for tens of players; untested above that.
 - **Persistence:** player data + chunks save; chests/furnaces save via tile snapshots (14.16); world meta round-trips real `level.dat`.
+
+### Java Edition world import follow-ups
+
+The import boundary is safe now (PR: numeric sanitizer + 1.13+ palette support, `tests/49_java_import_test.php`): no Java chunk can send a block state the 0.15 client cannot render. Remaining gaps, all cosmetic/functional rather than crash-related:
+
+- **Java tile-entity contents** — chests/furnaces/signs in a Java world import as tiles whose `id` is the Java lowercase name (`minecraft:chest`), but the tile stores key on the legacy short names (`Chest`, `Furnace`). Map `minecraft:*` tile ids to the 0.15 names + translate container `Items` so imported chests/furnaces actually hold their loot (block position/Y already match).
+- **Java entities** — mob/player entity NBT carries a `Pos`/`Rotation`/`id` shape the vanilla decoder already tolerates, but the resulting `EntitySnapshot.type` is the `minecraft:`-prefixed name; normalize to the 0.15 entity names (Zombie, Cow, ...) so imported worlds spawn their mobs.
+- **1.13+ light arrays** — modern Java sections usually omit `BlockLight`/`SkyLight` when uniform; imported caves stay dark until the lighting pass recomputes block light (sky light already derives from the heightmap on serialize).
+- **Level.dat extras** — Java `SpawnY` above 127 or a `generatorOptions` superflat string are ignored; superflat template layers could seed the void/flat generator for exact replication.

@@ -17,6 +17,7 @@ use pocketmine\port\driven\TileEntitySnapshot;
 use pocketmine\utils\BinaryStream;
 use function array_fill;
 use function count;
+use function intdiv;
 use function ord;
 use function str_repeat;
 use function strlen;
@@ -115,13 +116,12 @@ final class AnvilStorageAdapter extends RegionStorageAdapter {
             if (!$root instanceof CompoundTag) {
                 return null;
             }
-            $level = $root->getCompoundTag('Level');
-            if ($level === null) {
-                return null;
-            }
+            // Java 1.13-1.17 wraps everything in "Level"; 1.18+ moved the
+            // tags to the chunk root (sections/entities lowercased).
+            $level = $root->getCompoundTag('Level') ?? $root;
 
             $sections = [];
-            $sectionsTag = $level->getListTag('Sections');
+            $sectionsTag = $level->getListTag('Sections') ?? $level->getListTag('sections');
             if ($sectionsTag !== null) {
                 foreach ($sectionsTag as $tag) {
                     if (!$tag instanceof CompoundTag) {
@@ -131,21 +131,40 @@ final class AnvilStorageAdapter extends RegionStorageAdapter {
                     if ($sy < 0 || $sy > 15) {
                         continue;
                     }
+
+                    // 1.13+ sections carry a block-state palette instead of
+                    // raw Blocks/Data arrays: "Palette" directly on the
+                    // section (1.13-1.17) or a "block_states" container with
+                    // lowercase keys (1.18+).
+                    $palette = $tag->getCompoundTag('block_states')
+                        ?? ($tag->getTag('Palette') !== null ? $tag : null);
+                    if ($palette !== null) {
+                        $decoded = $this->decodePaletteSection($palette, $root, $sy, $tag);
+                        if ($decoded !== null) {
+                            $sections[] = $decoded;
+                        }
+                        continue;
+                    }
+
                     $blocks = $tag->getByteArray('Blocks', '');
                     if (strlen($blocks) !== 4096) {
                         $blocks = str_repeat("\x00", 4096);
                     }
                     // Apply the extended-id nibble array (Add) so chunks with
-                    // block ids above 255 still render (clamped to the 8-bit
+                    // block ids above 255 still load (clamped to the 8-bit
                     // internal store, which 0.15 content never exceeds).
                     $add = $tag->getByteArray('Add', '');
                     if (strlen($add) === 2048) {
                         $blocks = $this->applyAddArray($blocks, $add);
                     }
+                    $data = self::unpackNibbles($tag->getByteArray('Data', str_repeat("\x00", 2048)));
+                    // Sanitize Java-world states (ids PE 0.15 cannot render
+                    // and meta bits it does not model) into renderable ones.
+                    [$blocks, $data] = JavaBlockTranslator::sanitizeSection($blocks, $data);
                     $sections[] = [
                         'y' => $sy,
                         'blocks' => $blocks,
-                        'data' => self::unpackNibbles($tag->getByteArray('Data', str_repeat("\x00", 2048))),
+                        'data' => $data,
                         'skyLight' => $tag->getByteArray('SkyLight', str_repeat("\xff", 2048)),
                         'blockLight' => $tag->getByteArray('BlockLight', str_repeat("\x00", 2048)),
                     ];
@@ -159,10 +178,16 @@ final class AnvilStorageAdapter extends RegionStorageAdapter {
                 $biomes[] = strlen($biomesRaw) > $i ? ord($biomesRaw[$i]) : 0;
             }
 
-            $heightmap = $level->getIntArray('HeightMap', array_fill(0, 256, 0));
+            $heightmap = $level->getIntArray('HeightMap', []);
             if (count($heightmap) !== 256) {
-                $heightmap = array_fill(0, 256, 0);
+                // Modern Java chunks omit the int heightmap (or it lives in
+                // the packed Heightmaps/MOTION_BLOCKING buffer): derive it
+                // from the blocks so sky-light and spawning behave.
+                $heightmap = $this->computeHeightmap($sections);
             }
+
+            $entities = $level->getListTag('Entities') ?? $level->getListTag('entities');
+            $tiles = $level->getListTag('TileEntities') ?? $level->getListTag('block_entities');
 
             return new ChunkData(
                 $chunkX,
@@ -170,12 +195,178 @@ final class AnvilStorageAdapter extends RegionStorageAdapter {
                 $sections,
                 $biomes,
                 $heightmap,
-                $this->decodeEntities($level->getListTag('Entities')),
-                $this->decodeTileEntities($level->getListTag('TileEntities')),
+                $this->decodeEntities($entities),
+                $this->decodeTileEntities($tiles),
             );
         } catch (\Throwable) {
             return null; // corrupt / foreign payload: treat as an empty chunk
         }
+    }
+
+    /**
+     * Decode one palette section (1.9+) into the internal
+     * [y, blocks, data, lights] shape, or null when it is unreadable.
+     *
+     * Two palette flavours exist:
+     *  - 1.9-1.12: palette entries are IntTags holding legacy numeric
+     *    states ((id << 4) | meta) - decoded then run through the numeric
+     *    sanitizer like any pre-1.13 chunk.
+     *  - 1.13+: palette entries are named compounds ("minecraft:stone" +
+     *    properties) - resolved through the JavaBlockTranslator name table.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function decodePaletteSection(CompoundTag $palette, CompoundTag $chunkRoot, int $sy, CompoundTag $section): ?array {
+        $entries = $palette->getListTag('Palette') ?? $palette->getListTag('palette');
+        if ($entries === null) {
+            return null;
+        }
+        $longs = $palette->getLongArray('BlockStates', []);
+        if ($longs === []) {
+            $longs = $palette->getLongArray('data', []);
+        }
+
+        $namedStates = []; // [name, props] for 1.13+ palettes
+        $numericStates = []; // state ids for 1.9-1.12 palettes
+        $isNamed = null;
+        foreach ($entries as $entry) {
+            if ($entry instanceof CompoundTag) {
+                $nameTag = $entry->getTag('Name') ?? $entry->getTag('name');
+                $name = $nameTag instanceof \pocketmine\nbt\tag\StringTag ? $nameTag->getValue() : '';
+                $props = [];
+                $propsTag = $entry->getCompoundTag('Properties') ?? $entry->getCompoundTag('properties');
+                if ($propsTag !== null) {
+                    foreach ($propsTag as $prop) {
+                        if ($prop instanceof \pocketmine\nbt\tag\NamedTag) {
+                            $props[$prop->getName()] = (string)$prop->getValue();
+                        }
+                    }
+                }
+                $namedStates[] = [$name, $props];
+                $isNamed = true;
+            } elseif ($entry instanceof \pocketmine\nbt\tag\IntTag) {
+                $numericStates[] = $entry->getValue();
+                $isNamed = $isNamed ?? false;
+            }
+        }
+        if ($isNamed === null) {
+            return null;
+        }
+
+        // 1.16 changed the index packing so values never straddle a 64-bit
+        // word boundary; earlier versions pack one continuous bit stream.
+        $dataVersion = 0;
+        $dv = $chunkRoot->getTag('DataVersion');
+        if ($dv instanceof \pocketmine\nbt\tag\IntTag || $dv instanceof \pocketmine\nbt\tag\LongTag) {
+            $dataVersion = (int)$dv->getValue();
+        }
+        $continuous = $dataVersion > 0 && $dataVersion < 2529;
+
+        if ($isNamed) {
+            [$blocks, $data] = JavaBlockTranslator::decodePaletteSection($namedStates, $longs, $continuous);
+        } else {
+            [$blocks, $data] = $this->decodeNumericPalette($numericStates, $longs, $continuous);
+        }
+
+        return [
+            'y' => $sy,
+            'blocks' => $blocks,
+            'data' => $data,
+            'skyLight' => $section->getByteArray('SkyLight', str_repeat("\xff", 2048)),
+            'blockLight' => $section->getByteArray('BlockLight', str_repeat("\x00", 2048)),
+        ];
+    }
+
+    /**
+     * Decode a 1.9-1.12 numeric palette: each slot is a legacy
+     * (id << 4) | meta state. Sanitized like any numeric chunk.
+     *
+     * @param int[] $states
+     * @param int[] $longs
+     * @return array{0: string, 1: string} [blocks, data]
+     */
+    private function decodeNumericPalette(array $states, array $longs, bool $continuous): array {
+        $count = count($states);
+        if ($count === 0) {
+            $air = str_repeat("\x00", 4096);
+            return [$air, $air];
+        }
+        $bits = 1;
+        while ((1 << $bits) < $count) {
+            $bits++;
+        }
+        if ($bits < 4) {
+            $bits = 4;
+        }
+        $blocks = str_repeat("\x00", 4096);
+        $data = str_repeat("\x00", 4096);
+        if ($count === 1) {
+            $state = $states[0];
+            $idByte = chr(($state >> 4) & 0xFF);
+            $metaByte = chr($state & 0x0F);
+            for ($i = 0; $i < 4096; $i++) {
+                $blocks[$i] = $idByte;
+                $data[$i] = $metaByte;
+            }
+        } elseif ($continuous) {
+            // 1.9-1.15: one uninterrupted little-endian bit stream.
+            $totalBits = count($longs) * 64;
+            for ($k = 0; $k < 4096 && $k * $bits + $bits <= $totalBits; $k++) {
+                $state = JavaBlockTranslator::peekBits($longs, $k * $bits, $bits);
+                $state = $states[$state] ?? $states[0];
+                $blocks[$k] = chr(($state >> 4) & 0xFF);
+                $data[$k] = chr($state & 0x0F);
+            }
+        } else {
+            // 1.16+ layout: floor(64 / bits) values per word from bit 0.
+            $perWord = intdiv(64, $bits);
+            $totalWords = count($longs);
+            for ($k = 0; $k < 4096; $k++) {
+                $word = intdiv($k, $perWord);
+                if ($word >= $totalWords) {
+                    break;
+                }
+                $off = ($k % $perWord) * $bits;
+                $state = JavaBlockTranslator::peekBits($longs, $word * 64 + $off, $bits);
+                $state = $states[$state] ?? $states[0];
+                $blocks[$k] = chr(($state >> 4) & 0xFF);
+                $data[$k] = chr($state & 0x0F);
+            }
+        }
+        return JavaBlockTranslator::sanitizeSection($blocks, $data);
+    }
+
+    /**
+     * Heightmap fallback for chunks saved without one (modern Java): the
+     * highest non-air block per column + 1, capped at the wire height.
+     *
+     * @param array<int, array<string, mixed>> $sections
+     * @return int[]
+     */
+    private function computeHeightmap(array $sections): array {
+        $heightmap = array_fill(0, 256, 0);
+        foreach ($sections as $section) {
+            $sy = (int)$section['y'];
+            if ($sy < 0 || $sy > 15) {
+                continue;
+            }
+            $blocks = (string)$section['blocks'];
+            $base = $sy * 16;
+            for ($y = 0; $y < 16; $y++) {
+                $worldY = $base + $y;
+                if ($worldY >= 128) {
+                    break; // above the 0.15 world height: never recorded
+                }
+                $rowOffset = $y * 256;
+                for ($i = 0; $i < 256; $i++) {
+                    $id = ord($blocks[$rowOffset + $i]);
+                    if ($id !== 0 && $worldY + 1 > $heightmap[$i]) {
+                        $heightmap[$i] = $worldY + 1;
+                    }
+                }
+            }
+        }
+        return $heightmap;
     }
 
     /** Fold the 4-bit Add array into the block ids (clamped to 0-255). */
