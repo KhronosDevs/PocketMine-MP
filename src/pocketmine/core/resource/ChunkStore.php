@@ -246,6 +246,40 @@ final class ChunkStore {
         return (string)$this->chunks[$key]['blocks'];
     }
 
+    /**
+     * Read block ids over a contiguous Y range of one chunk column with a
+     * SINGLE chunk resolve. getBlock() re-resolves the chunk (floor-div +
+     * string key + hash) for every level, which dominates per-entity
+     * environment checks - feet/body/head probes of one entity all share
+     * the same column (EnvironmentalDamageSystem). Same semantics as
+     * getBlock(): unloaded columns and levels outside 0..255 read as air.
+     *
+     * @return array<int, int> absolute-y => block id, for every y in [y0, y1]
+     */
+    public function readColumnBlockRange(int $x, int $y0, int $y1, int $z): array {
+        $out = [];
+        if ($y0 < 0) {
+            $y0 = 0;
+        }
+        if ($y1 > 255) {
+            $y1 = 255;
+        }
+        if ($y0 > $y1) {
+            return $out;
+        }
+        $chunk = $this->chunkAt($x, $y0, $z);
+        if ($chunk === null) {
+            return $out;
+        }
+        $blocks = $chunk['blocks'];
+        $localX = $x & 15;
+        $localZ = $z & 15;
+        for ($y = $y0; $y <= $y1; $y++) {
+            $out[$y] = ord($blocks[($y << 8) | ($localZ << 4) | $localX]);
+        }
+        return $out;
+    }
+
     public function getBlockMeta(int $x, int $y, int $z): int {
         $chunk = $this->chunkAt($x, $y, $z);
         if ($chunk === null) {

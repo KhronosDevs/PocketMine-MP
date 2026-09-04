@@ -44,6 +44,16 @@ final class AISystem implements System {
     public const CREEPER_CANCEL_RANGE = 7.0;
 
     /**
+     * Targetless hostiles retry player acquisition at most once every N ticks
+     * (staggered by entity id). A mob within the activation gate but beyond
+     * its follow range CANNOT acquire and would otherwise re-scan the player
+     * list every tick forever - with hundreds of far mobs that is the single
+     * biggest per-tick AI cost. 10 ticks = 0.5s worst case before a freshly
+     * arrived player is targeted, matching vanilla re-evaluation cadence.
+     */
+    public const ACQUIRE_RETRY_INTERVAL = 10;
+
+    /**
      * Mob AI activation range (blocks from the nearest alive player).
      *
      * Vanilla MCPE only runs full entity AI within its simulation distance of
@@ -85,6 +95,25 @@ final class AISystem implements System {
         // index). Also scopes AI per game-world: a mob never targets or even
         // activates for a player in another world.
         $playersByWorld = $this->collectPlayersByWorld($world);
+
+        // Per-world bounding box of players inflated by the activation range.
+        // Lets the gate reject a far mob in O(1) (four comparisons) instead
+        // of scanning every player - loaded chunks can hold hundreds of mobs
+        // in the annulus between the gate and the follow range, and they all
+        // re-check distance every tick.
+        $activeBounds = [];
+        foreach ($playersByWorld as $wid => $ps) {
+            $minX = $minZ = INF;
+            $maxX = $maxZ = -INF;
+            foreach ($ps as $p) {
+                $minX = min($minX, $p['x']);
+                $maxX = max($maxX, $p['x']);
+                $minZ = min($minZ, $p['z']);
+                $maxZ = max($maxZ, $p['z']);
+            }
+            $r = self::PLAYER_ACTIVATION_RANGE;
+            $activeBounds[$wid] = [$minX - $r, $maxX + $r, $minZ - $r, $maxZ + $r];
+        }
 
         $query = $world->query()
             ->with(
@@ -132,7 +161,23 @@ final class AISystem implements System {
             // of paying chase/acquire/wander cost no one observes. Mobs with
             // a target or a manual path always tick, and worlds without any
             // player keep full AI (creative/test worlds, offline spawns).
-            $players = $playersByWorld[(int)($entity->get(WorldComponent::class)?->id ?? 0)] ?? [];
+            $worldId = (int)($entity->get(WorldComponent::class)?->id ?? 0);
+            $players = $playersByWorld[$worldId] ?? [];
+            $bounds = $activeBounds[$worldId] ?? null;
+            // O(1) reject: outside the inflated player bounding box means no
+            // player can be within activation range - skip the exact scan.
+            // Mirrors the exact gate below (only targetless mobs without a
+            // manual path park), so plugin-set paths and active chases keep
+            // ticking exactly as before.
+            if ($players !== [] && $bounds !== null
+                && $ai->targetEntity === null
+                && $ai->state !== 2 // manual path set by plugins/trainers
+                && ($pos->x < $bounds[0] || $pos->x > $bounds[1] || $pos->z < $bounds[2] || $pos->z > $bounds[3])
+            ) {
+                $vel->x = 0.0;
+                $vel->z = 0.0;
+                continue;
+            }
             if ($players !== []
                 && $ai->targetEntity === null
                 && $ai->state !== 2 // manual path set by plugins/trainers
@@ -169,8 +214,16 @@ final class AISystem implements System {
                 }
             }
 
-            // Hostile mobs acquire the nearest living player as a target.
-            if ($hostile && $ai->targetEntity === null) {
+            // Hostile mobs acquire the nearest living player as a target -
+            // throttled and staggered: a mob beyond its follow range cannot
+            // acquire, and retrying for every one of those every tick was the
+            // dominant AI cost at mob scale (each attempt re-scans every
+            // player). Retries are spread by entity id so a mob reacts to a
+            // freshly arrived player within at most ACQUIRE_RETRY_INTERVAL
+            // ticks.
+            if ($hostile && $ai->targetEntity === null
+                && $tick % self::ACQUIRE_RETRY_INTERVAL === $entity->id % self::ACQUIRE_RETRY_INTERVAL
+            ) {
                 $this->acquireTarget($world, $players, $ai, $pos, $entity->id);
             }
 

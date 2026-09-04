@@ -354,6 +354,30 @@ final class BlockRegistry {
         return $this->solidFlagsCache;
     }
 
+    /** @var array<int, array<int, int>>|null id => 1 if solid AND opaque, memoized per registry */
+    private ?array $solidOpaqueFlagsCache = null;
+
+    /**
+     * 256-entry lookup: block id => 1 when the block is both solid and
+     * opaque else 0, matching the legacy suffocation rule (solid AND not
+     * transparent; unknown ids default to transparent so they never
+     * suffocate). Built once per registry; suffocation hot paths index it
+     * instead of calling get() per entity per tick.
+     *
+     * @return array<int, int>
+     */
+    public function getSolidOpaqueFlags(): array {
+        if ($this->solidOpaqueFlagsCache === null) {
+            $flags = [];
+            for ($id = 0; $id <= 255; $id++) {
+                $props = $this->get($id);
+                $flags[$id] = (($props['solid'] ?? false) && !($props['transparent'] ?? true)) ? 1 : 0;
+            }
+            $this->solidOpaqueFlagsCache = $flags;
+        }
+        return $this->solidOpaqueFlagsCache;
+    }
+
     public function isTransparent(int $id): bool {
         return (bool)$this->get($id)['transparent'];
     }
