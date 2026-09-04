@@ -31,6 +31,9 @@ use const JSON_UNESCAPED_SLASHES;
  *   default-world:  folder (and display name) of the default world. Routes
  *                   the storage adapter, so a fresh world is generated in
  *                   worlds/<folder>/.
+ *   shutdown-message: the disconnect reason shown to every online player when
+ *                   the server stops (legacy settings.shutdown-message,
+ *                   default "Server closed").
  *   default-spawn:  explicit world spawn override. Each of x/y/z may be null
  *                   (= keep the world's own saved spawn); only when all three
  *                   are numbers does it override the persisted level spawn.
@@ -46,6 +49,13 @@ final class KhronosConfig {
 
     /** Folder (and display name) of the default world. */
     public string $defaultWorld = 'world';
+
+    /**
+     * Disconnect reason shown to every online player when the server stops
+     * (legacy server.properties settings.shutdown-message default). Sent as
+     * the DisconnectPacket message by the shutdown kick.
+     */
+    public string $shutdownMessage = 'Server closed';
 
     /** World generator type: normal, flat, void, nether, nukkit. */
     public string $generatorType = 'normal';
@@ -242,6 +252,10 @@ final class KhronosConfig {
             $this->defaultWorld = $data['default-world'];
         }
 
+        if (isset($data['shutdown-message']) && is_string($data['shutdown-message']) && trim($data['shutdown-message']) !== '') {
+            $this->shutdownMessage = trim($data['shutdown-message']);
+        }
+
         if (isset($data['generator-type']) && is_string($data['generator-type'])) {
             $valid = ['normal', 'flat', 'void', 'nether', 'nukkit'];
             if (in_array($data['generator-type'], $valid, true)) {
@@ -435,6 +449,9 @@ final class KhronosConfig {
             // Folder (and display name) of the default world. A fresh world is
             // generated under worlds/<folder>/ on first boot.
             'default-world' => 'world',
+            // Disconnect reason shown to every online player when the server
+            // stops (legacy server.properties settings.shutdown-message).
+            'shutdown-message' => 'Server closed',
             // World generator type: 'normal' (default), 'flat', 'void',
             // 'nether', or 'nukkit' (Nukkit-style simplex noise terrain).
             'generator-type' => 'normal',
