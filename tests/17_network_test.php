@@ -5334,6 +5334,38 @@ test('standing in a portal crosses to the nether and back via ChangeDimensionPac
     }
 });
 
+test('server shutdown kicks every online player with a DisconnectPacket', function () use ($kernel, $client): void {
+    // Alice must still be connected when the server stops: the shutdown path
+    // queues a DisconnectPacket("Server closed") + a clean RakNet session
+    // close for every session BEFORE the socket dies (legacy forceShutdown
+    // parity - players see the shutdown message, not a dropped connection).
+    $online = array_column($kernel->getNetworkSessionService()->getOnlinePlayers(), 'username');
+    ok(in_array('Alice', $online, true), 'Alice is still online when the server stops');
+
+    $kernel->shutdown();
+
+    $onlineAfter = array_column($kernel->getNetworkSessionService()->getOnlinePlayers(), 'username');
+    ok(!in_array('Alice', $onlineAfter, true), 'Alice left the session service during shutdown');
+
+    $gotDisconnect = false;
+    $reason = '';
+    $deadline = microtime(true) + 3.0;
+    while (microtime(true) < $deadline && !$gotDisconnect) {
+        foreach ($client->readGamePackets() as [$id, $buffer]) {
+            if ($id === Info::DISCONNECT_PACKET) {
+                $s = new BinaryStream($buffer, 1);
+                $reason = $s->getString();
+                $gotDisconnect = true;
+            }
+        }
+        if (!$gotDisconnect) {
+            usleep(10000);
+        }
+    }
+    ok($gotDisconnect, 'the client received a DisconnectPacket on server shutdown');
+    same('Server closed', $reason, 'the disconnect reason is the legacy shutdown message');
+});
+
 test('server shuts down cleanly with active sessions', function () use ($kernel, $client): void {
     $adapter = $kernel->getNetworkPort();
     if ($adapter instanceof Protocol84NetworkAdapter) {
