@@ -16,6 +16,7 @@ use raklib\server\ServerHandler;
 use raklib\server\ServerInstance;
 use pmmp\thread\Thread;
 use function addcslashes;
+use function chr;
 use function count;
 use function rtrim;
 
@@ -149,16 +150,6 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
         $this->sendEncapsulatedBuffer($addrKey, $packet->getBuffer());
     }
 
-    /** sendPacket variant used by the kick/shutdown path (immediate flush). */
-    private function sendPacketImmediate(PlayerRef $player, DataPacket $packet): void {
-        $addrKey = $this->findAddressByPlayerRef($player);
-        if ($addrKey === null) {
-            return;
-        }
-        $packet->encode();
-        $this->sendEncapsulatedImmediate($addrKey, $packet->getBuffer());
-    }
-
     /**
      * Send a packet to a raw address (no PlayerRef registration required).
      * Used for pre-session replies such as login-failed status.
@@ -192,11 +183,18 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
             $pk = new DisconnectPacket();
             $pk->message = $reason;
             $pk->hideDisconnectionScreen = false;
-            // Legacy directDataPacket parity: the DisconnectPacket rides an
-            // IMMEDIATE flush so it leaves the RakLib thread the moment the
-            // frame command is drained - never batched behind regular chunk
-            // traffic - before the session close command follows.
-            $this->sendPacketImmediate($player, $pk);
+            // Legacy putPacket/directDataPacket parity, TWO parts:
+            //  (1) framing - every game frame to the client starts with the
+            //      0xfe marker (flushOutbound sends single packets the same
+            //      way: chr(0xfe) . buffer). A naked DisconnectPacket is
+            //      silently ignored by the real 0.15 client, which then only
+            //      notices the drop at its own connection timeout.
+            //  (2) priority - an IMMEDIATE flush so the frame leaves the
+            //      RakLib thread the moment the command is drained, never
+            //      queued behind regular chunk traffic, before the session
+            //      close command follows.
+            $pk->encode();
+            $this->sendGameFrameImmediate($addrKey, chr(0xfe) . $pk->getBuffer());
             if ($this->serverHandler !== null) {
                 $this->serverHandler->closeSession($addrKey, $reason);
             }
@@ -283,6 +281,15 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
     /** Send a frame with RakLib PRIORITY_IMMEDIATE (flushed on drain). */
     private function sendEncapsulatedImmediate(string $identifier, string $buffer): void {
         $this->sendEncapsulatedBuffer($identifier, $buffer, \raklib\RakLib::PRIORITY_IMMEDIATE);
+    }
+
+    /**
+     * sendGameFrame variant with RakLib PRIORITY_IMMEDIATE - used by the
+     * kick/shutdown disconnect path so the 0xfe-prefixed frame flushes the
+     * moment the RakLib thread drains the command.
+     */
+    private function sendGameFrameImmediate(string $identifier, string $buffer): void {
+        $this->sendEncapsulatedImmediate($identifier, $buffer);
     }
 
     /**
