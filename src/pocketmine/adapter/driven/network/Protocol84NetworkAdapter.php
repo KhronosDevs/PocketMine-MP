@@ -149,6 +149,16 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
         $this->sendEncapsulatedBuffer($addrKey, $packet->getBuffer());
     }
 
+    /** sendPacket variant used by the kick/shutdown path (immediate flush). */
+    private function sendPacketImmediate(PlayerRef $player, DataPacket $packet): void {
+        $addrKey = $this->findAddressByPlayerRef($player);
+        if ($addrKey === null) {
+            return;
+        }
+        $packet->encode();
+        $this->sendEncapsulatedImmediate($addrKey, $packet->getBuffer());
+    }
+
     /**
      * Send a packet to a raw address (no PlayerRef registration required).
      * Used for pre-session replies such as login-failed status.
@@ -182,7 +192,11 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
             $pk = new DisconnectPacket();
             $pk->message = $reason;
             $pk->hideDisconnectionScreen = false;
-            $this->sendPacket($player, $pk);
+            // Legacy directDataPacket parity: the DisconnectPacket rides an
+            // IMMEDIATE flush so it leaves the RakLib thread the moment the
+            // frame command is drained - never batched behind regular chunk
+            // traffic - before the session close command follows.
+            $this->sendPacketImmediate($player, $pk);
             if ($this->serverHandler !== null) {
                 $this->serverHandler->closeSession($addrKey, $reason);
             }
@@ -255,7 +269,7 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
 
     // --- Helpers -----------------------------------------------------------
 
-    private function sendEncapsulatedBuffer(string $identifier, string $buffer): void {
+    private function sendEncapsulatedBuffer(string $identifier, string $buffer, int $flags = \raklib\RakLib::PRIORITY_NORMAL): void {
         if ($this->serverHandler === null) {
             return;
         }
@@ -263,7 +277,12 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
         $pk->reliability = PacketReliability::RELIABLE_ORDERED;
         $pk->orderChannel = 0;
         $pk->buffer = $buffer;
-        $this->serverHandler->sendEncapsulated($identifier, $pk);
+        $this->serverHandler->sendEncapsulated($identifier, $pk, $flags);
+    }
+
+    /** Send a frame with RakLib PRIORITY_IMMEDIATE (flushed on drain). */
+    private function sendEncapsulatedImmediate(string $identifier, string $buffer): void {
+        $this->sendEncapsulatedBuffer($identifier, $buffer, \raklib\RakLib::PRIORITY_IMMEDIATE);
     }
 
     /**

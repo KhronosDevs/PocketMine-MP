@@ -1292,18 +1292,21 @@ final class Kernel {
             }
         }
         
-        // Disconnect all sessions before the socket closes.
+        // Disconnect all sessions first (legacy forceShutdown parity): each
+        // player receives a DisconnectPacket + clean RakNet session close.
+        // The network stays up from here on so the RakLib thread can flush
+        // those frames AND retransmit them if a datagram is dropped - the
+        // adapter's socket is only closed at the very end, after the world
+        // saves below have given the wire real time to deliver (legacy shut
+        // its interfaces down last for the same reason).
         $this->networkSessionService->shutdown();
 
-        // Stop the chunk-generation pool (real worker threads) and shut down
-        // the adapter's RakLibServer thread (which owns the UDP socket).
+        // Stop the chunk-generation pool (real worker threads). The network
+        // port is deliberately shut down LAST so the shutdown kicks above
+        // are reliably delivered (see the comment above).
         if ($this->worldGenPort instanceof ParallelGeneratorAdapter) {
             $this->worldGenPort->shutdown();
         }
-        if ($this->networkPort instanceof Protocol84NetworkAdapter) {
-            $this->networkPort->shutdown();
-        }
-        $this->threadingPort->shutdown();
         // Blocker 1: persist the player lists (ops/bans/whitelist) so the
         // text files on disk never lag the in-memory state.
         $lists = $this->resourceRegistry->get(\pocketmine\core\resource\PlayerListManager::class);
@@ -1313,6 +1316,13 @@ final class Kernel {
         // 14.4: persist everything before the process exits.
         $this->saveWorld();
         $this->storagePort->saveAll();
+        // Last: tear down the RakLibServer thread (owns the UDP socket) and
+        // the async task pool, once every queued disconnect frame has been
+        // flushed and no more saves need the threading port.
+        if ($this->networkPort instanceof Protocol84NetworkAdapter) {
+            $this->networkPort->shutdown();
+        }
+        $this->threadingPort->shutdown();
         $this->shutdownComplete = true;
     }
 
