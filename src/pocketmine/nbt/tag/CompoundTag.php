@@ -131,6 +131,14 @@ class CompoundTag extends NamedTag implements \ArrayAccess, \Countable, \Iterato
         return $this->getTagValue($name, IntArrayTag::class, $default);
     }
 
+    /**
+     * @param int[]|null $default
+     * @return int[]
+     */
+    public function getLongArray(string $name, array $default = null): array {
+        return $this->getTagValue($name, LongArrayTag::class, $default);
+    }
+
     public function setByte(string $name, int $value): self {
         return $this->setTag($name, new ByteTag($name, $value));
     }
@@ -168,6 +176,13 @@ class CompoundTag extends NamedTag implements \ArrayAccess, \Countable, \Iterato
      */
     public function setIntArray(string $name, array $value): self {
         return $this->setTag($name, new IntArrayTag($name, $value));
+    }
+
+    /**
+     * @param int[] $value
+     */
+    public function setLongArray(string $name, array $value): self {
+        return $this->setTag($name, new LongArrayTag($name, $value));
     }
 
     public function offsetExists(mixed $offset): bool {

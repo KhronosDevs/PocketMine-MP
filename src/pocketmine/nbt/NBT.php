@@ -12,6 +12,7 @@ use pocketmine\nbt\tag\EndTag;
 use pocketmine\nbt\tag\FloatTag;
 use pocketmine\nbt\tag\IntArrayTag;
 use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\LongArrayTag;
 use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\LongTag;
 use pocketmine\nbt\tag\NamedTag;
@@ -49,6 +50,7 @@ class NBT {
     public const TAG_List = 9;
     public const TAG_Compound = 10;
     public const TAG_IntArray = 11;
+    public const TAG_Long_Array = 12;
 
     public string $buffer = "";
     private int $offset = 0;
@@ -184,6 +186,10 @@ class NBT {
                 $tag = new IntArrayTag($this->getString());
                 $tag->read($this);
                 break;
+            case self::TAG_Long_Array:
+                $tag = new LongArrayTag($this->getString());
+                $tag->read($this);
+                break;
             case self::TAG_End: // no named tag
             default:
                 $tag = new EndTag();
@@ -239,6 +245,10 @@ class NBT {
                 return $tag;
             case self::TAG_IntArray:
                 $tag = new IntArrayTag("");
+                $tag->read($this);
+                return $tag;
+            case self::TAG_Long_Array:
+                $tag = new LongArrayTag("");
                 $tag->read($this);
                 return $tag;
             default:

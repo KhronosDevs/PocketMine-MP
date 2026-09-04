@@ -93,6 +93,15 @@ abstract class RegionStorageAdapter implements StoragePort {
      */
     abstract protected function decodeChunkPayload(string $payload, int $chunkX, int $chunkZ): ?ChunkData;
 
+    /**
+     * Decode a raw (already decompressed) region-record payload into
+     * ChunkData. Diagnostic / tooling entry point mirroring the decode step
+     * loadChunk performs; used by tests to feed crafted Java payloads.
+     */
+    public function decodePayload(string $payload, int $chunkX, int $chunkZ): ?ChunkData {
+        return $this->decodeChunkPayload($payload, $chunkX, $chunkZ);
+    }
+
     // --- Region container ---------------------------------------------------
 
     public function loadChunk(int $chunkX, int $chunkZ): ChunkData {
