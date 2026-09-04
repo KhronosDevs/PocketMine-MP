@@ -147,6 +147,13 @@ final class NetworkSessionService {
     private const DEFAULT_RADIUS = 4;
     private const MAX_RADIUS = 12;
 
+    /**
+     * Disconnect reason shown to every player when the server stops (legacy
+     * settings.shutdown-message default). Sent as a DisconnectPacket so the
+     * client shows "Server closed" instead of a dropped connection.
+     */
+    public const SHUTDOWN_MESSAGE = 'Server closed';
+
     /** Chunk streaming config, read from khronos.json at startup. */
     private int $chunkCompressionLevel = 2;
     private int $chunkPerTick = 10;
@@ -428,6 +435,54 @@ final class NetworkSessionService {
      * down the game session and persist the player through the leave service.
      */
     private function handleSessionClosed(string $addrKey, string $reason): void {
+        $this->teardownSession($addrKey, $reason);
+    }
+
+    /**
+     * Kick every connected player and tear each session down through the
+     * normal leave path (events + persistence + peer removal). Legacy
+     * forceShutdown parity: stopping the server announces itself to the
+     * players instead of dropping the socket under them.
+     *
+     * The adapter queues the DisconnectPacket frame and the RakNet session
+     * close into the RakLib thread's FIFO ahead of any PACKET_SHUTDOWN, and
+     * Session::close() flushes its send queue, so the disconnect frame is
+     * written to the client before the socket ever closes.
+     *
+     * @return int number of sessions kicked
+     */
+    public function kickAll(string $reason = self::SHUTDOWN_MESSAGE): int {
+        $kicked = 0;
+        foreach (array_keys($this->sessions) as $addrKey) {
+            $session = $this->sessions[$addrKey] ?? null;
+            if ($session === null) {
+                continue;
+            }
+            try {
+                if ($this->adapter !== null) {
+                    // Queues DisconnectPacket(reason) + the session close.
+                    $this->adapter->disconnect($session['playerRef'], $reason);
+                }
+                $this->teardownSession($addrKey, $reason);
+                $kicked++;
+            } catch (\Throwable $e) {
+                // A single bad session (plugin listener, storage hiccup)
+                // must never abort the server's own shutdown.
+                fwrite(STDERR, '[Khronos] shutdown kick failed for ' . $addrKey . ': '
+                    . $e->getMessage() . PHP_EOL);
+                unset($this->sessions[$addrKey], $this->outbound[$addrKey]);
+            }
+        }
+        return $kicked;
+    }
+
+    /**
+     * Full local teardown for a session that is ending (server kick, client
+     * quit, timeout): dismount, close container lids, drop the player from
+     * every peer's view, fire the leave events + persist through the leave
+     * service, and forget the session.
+     */
+    private function teardownSession(string $addrKey, string $reason): void {
         $session = $this->sessions[$addrKey] ?? null;
         if ($session === null) {
             return;
@@ -534,12 +589,21 @@ final class NetworkSessionService {
     }
 
     public function shutdown(): void {
-        // 14.4b: players still online when the server stops (no clean
-        // disconnect ever fired) are persisted here, BEFORE the sessions are
-        // forgotten - the kernel's saveWorld loop sees an empty session list
-        // after this returns.
+        // Legacy forceShutdown parity: every player still online is kicked
+        // with the shutdown message (a DisconnectPacket on the wire) BEFORE
+        // the socket closes. Each kick runs the normal leave path, so
+        // players are persisted through the leave service first - the
+        // kernel's saveWorld loop sees an empty session list after this
+        // returns.
+        $this->kickAll();
+        // 14.4b safety net: sessions whose kick above failed (or that
+        // appeared mid-kick) are still persisted before being forgotten.
         foreach ($this->sessions as $session) {
-            $this->playerLeaveService->savePlayer($session['entityRef']);
+            try {
+                $this->playerLeaveService->savePlayer($session['entityRef']);
+            } catch (\Throwable $e) {
+                fwrite(STDERR, '[Khronos] shutdown save failed: ' . $e->getMessage() . PHP_EOL);
+            }
         }
         if ($this->adapter !== null) {
             foreach ($this->sessions as $session) {
