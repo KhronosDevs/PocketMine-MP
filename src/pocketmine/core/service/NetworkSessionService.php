@@ -595,7 +595,13 @@ final class NetworkSessionService {
         // players are persisted through the leave service first - the
         // kernel's saveWorld loop sees an empty session list after this
         // returns.
-        $this->kickAll();
+        // The message is khronos.json "shutdown-message" (legacy
+        // settings.shutdown-message), falling back to the classic default.
+        $message = $this->antiCheat->shutdownMessage;
+        if ($message === '') {
+            $message = self::SHUTDOWN_MESSAGE;
+        }
+        $this->kickAll($message);
         // 14.4b safety net: sessions whose kick above failed (or that
         // appeared mid-kick) are still persisted before being forgotten.
         foreach ($this->sessions as $session) {
