@@ -1,6 +1,6 @@
 # TODO — What's left
 
-**Last updated:** 2026-08-21
+**Last updated:** 2026-09-04
 **Companion docs:** docs/PLAN.md (architecture & phase plan), docs/PROGRESS.md (completed work)
 
 The server is playable today for a small creative/casual-survival server (see the
@@ -191,6 +191,50 @@ the engine at all.
 - **Already in place:** nothing specific; paper/crafting infrastructure exists.
 - **Missing:** everything — map data store, wire packet, crafting recipe,
   exploration tracking, decoration API.
+
+---
+
+## Performance — Future Investigations (tick budget has headroom; parked here)
+
+**Verdict as of the second hot-path pass (PROGRESS #83 + #84):** the tick is
+comfortably fast for real loads. Whole-kernel phase profiles on master
+(20 TPS budget = 50 ms): **60 mobs + 10 players ≈ 0.71 ms/tick**, 150 mobs +
+20 players ≈ 1.19 ms, 450 mobs + 10 players (stress) ≈ 2.89 ms. Per-entity
+systems are linear (~1.3 µs/entity each; AI no longer superlinear). Decided to
+STOP optimizing and park the remaining measured candidates below — revisit
+only if a real server shows tick lag, or after mob-farm density (spawner
+farms) becomes a supported scenario.
+
+Measured candidates (each phase-traced, not speculation):
+
+1. **Env gate bounds pre-reject (AI parity)** — `EnvironmentalDamageSystem`
+   scans every entity against every player each tick with no O(1) bounds
+   reject, where `AISystem` parks far mobs with 4 comparisons. Dense pack:
+   gate scan 0.22 ms/tick (450 entities × 10 players) of a 0.57 ms total;
+   spread layout 0.37 ms total. Port AISystem's inflated per-world bounding
+   box. Est. env 0.37 → ~0.15 ms at 300/150 spread. Small, safe diff.
+
+2. **Settled-entity Y-sweep skip** — `BlockCollisionSystem` runs the Y sweep
+   for every entity every tick (0.14 ms floor at 450) because gravity keeps
+   `vy` alive even for AI-parked mobs; grounded non-moving entities re-probe
+   an identical footprint. Skip when `vy == 0` and the entity was grounded
+   last tick, guarded by a chunk-version check so a block change under the
+   column still wakes it. Medium risk (correctness surface: block updates
+   below an entity).
+
+3. **Shared per-tick player snapshot** — AI, env, and collision each iterate
+   the full entity set with their own component gets + player distance
+   scans. One per-tick "nearest-player proximity" snapshot consumed by both
+   AI and env removes the duplicate collection + per-entity scans.
+   Architectural; larger diff, dimmer return while the tick is this fast.
+
+4. **Earlier compression threads** (kept for context from the pre-pass era;
+   chunk *saves* are now deferred off the tick via `ChunkSaveService`, but
+   wire compression still runs per chunk with a cached serialized payload
+   (`compressedBatch`) — re-benchmark before acting): parallel/worker
+   compression, movement-prefetch compression, libdeflate vs zlib-ng, and
+   dirty-section/partial recompression. All documented above under
+   "Chunk Streaming / Compression — Future Investigations".
 
 ---
 
