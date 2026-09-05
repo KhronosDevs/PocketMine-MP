@@ -11,11 +11,12 @@ use pocketmine\core\component\MetadataComponent;
  * Registry of known permissions (declared in plugin.yml) with default and
  * inheritance resolution.
  *
- * A player's effective permissions are the union of:
- *   - explicit grants stored in the entity's metadata ('permissions' list),
- *   - defaults from every registered permission whose default applies to the
- *     player's op status (DEFAULT_TRUE applies to everyone),
- *   - children: holding a parent permission grants its true-valued children.
+ * A player's effective permissions are:
+ *   - ops are granted every permission unconditionally,
+ *   - otherwise the union of explicit grants stored in the entity's metadata
+ *     ('permissions' list), defaults from registered permissions applying to
+ *     the player's op status (DEFAULT_TRUE applies to everyone), and
+ *     children: holding a parent permission grants its true-valued children.
  */
 class PermissionManager {
     /** @var array<string, Permission> */
@@ -130,7 +131,13 @@ class PermissionManager {
         }
         $isOp = $this->isOp($permissions);
 
-        // Defaults from plugin.yml apply to op / non-op players.
+        // Ops are granted every permission (legacy PocketMine behaviour) -
+        // the default only matters for non-op players.
+        if ($isOp) {
+            return true;
+        }
+
+        // Defaults from plugin.yml apply to non-op players.
         $defaults = $isOp ? $this->defaultPermsOp : $this->defaultPerms;
         if (isset($defaults[$permission])) {
             return true;
