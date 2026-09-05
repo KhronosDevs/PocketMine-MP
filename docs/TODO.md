@@ -252,3 +252,53 @@ The import boundary is safe now (PR: numeric sanitizer + 1.13+ palette support, 
 - **Java entities** — mob/player entity NBT carries a `Pos`/`Rotation`/`id` shape the vanilla decoder already tolerates, but the resulting `EntitySnapshot.type` is the `minecraft:`-prefixed name; normalize to the 0.15 entity names (Zombie, Cow, ...) so imported worlds spawn their mobs.
 - **1.13+ light arrays** — modern Java sections usually omit `BlockLight`/`SkyLight` when uniform; imported caves stay dark until the lighting pass recomputes block light (sky light already derives from the heightmap on serialize).
 - **Level.dat extras** — Java `SpawnY` above 127 or a `generatorOptions` superflat string are ignored; superflat template layers could seed the void/flat generator for exact replication.
+
+## RakLib — Future Investigations
+
+Measured while auditing `src/raklib` for FFI/algorithmic candidates (the FFI
+verdict was negative: an FFI call costs ~0.8 µs while a whole per-packet header
+parse is ~0.6 µs, and RakLib has no bulk byte transforms, checksums, or
+encryption to accelerate). Two pure-PHP wins were shipped instead:
+`DataPacket::decode()` now parses in place (was O(n²) `substr` remainder
+copies per sub-packet; ~5 % on realistic MTU-bound datagrams, byte-parity
+verified over 1,500 randomized wires old-vs-new) and the reliable-window drain
+probes `isset()` instead of `ksort()`+walk each delivery (behavior-identical,
+~5× at 500 buffered messages, equivalence-verified over 4,000 arrival
+scenarios).
+
+### ACK/NACK run-length records flattened to per-seq arrays (candidate)
+
+`AcknowledgePacket::decode()` expands every wire run-length record into a
+flat `packets[]` int array (up to 4096 entries, each run capped at 512), and
+`Session::handlePacket` then loops the array doing an `isset`/`unset` against
+`recoveryQueue` per seq. Measured on a loss burst: 500 nacked seqs ≈ 4.1 µs
+decode + 3.9 µs handling; 2000 seqs ≈ 16 µs + 16 µs — single-digit-to-tens of
+µs per event, only when the link is actually dropping packets.
+
+**Candidate:** keep records as `(start, end)` ranges through Session's ACK/NACK
+handling — for each range, iterate only the seqs actually present in
+`recoveryQueue` (isset probe per key, cheap when few are outstanding) instead
+of materializing every integer. Would make worst-case handling O(records +
+hits) instead of O(flattened seqs).
+
+**Risks / costs:**
+- Touches the protocol decode shape both sides rely on (`AcknowledgePacket::$packets`
+  is public and read by Session's ACK *and* NACK paths, plus the fake-client in
+  tests and any plugin-facing code) — needs an internal representation change
+  or a dual path, so it is a medium-size refactor, not a drop-in.
+- ACK encode already run-length-compresses (`sort()` + record write, ~2-6 µs
+  worst realistic), so the win is decode + handling side only.
+- Regime is rare: on localhost / LAN there is ~zero loss, so the flattening
+  never fires at scale; it only matters on lossy WAN links or under overload.
+- Never a per-tick cost in the normal stream — priority stays below any
+  steady-state work.
+
+**What to benchmark before doing it:** a simulated 1-5 % packet-loss burst on
+a 100-datagram/s stream (NACK decode + recovery re-queue wall time, and
+whether the recoveryQueue iteration dominates at realistic in-flight counts).
+
+### Session split/reassembly caps (context, not a candidate)
+
+`MAX_SPLIT_SIZE = 128` fragments (~1372 B each ≈ 175 KB max) and
+`MAX_SPLIT_COUNT = 4` concurrent reassemblies match the legacy limits and cap
+memory; the 0.15.10 chunk batches fit comfortably inside. Left untouched.

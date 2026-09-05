@@ -48,19 +48,38 @@ class EncapsulatedPacket{
 	public ?int $identifierACK = null;
 
 	public static function fromBinary(string $binary, bool $internal = false, ?int &$offset = null) : EncapsulatedPacket{
+		[$packet, $offset] = self::parseAt($binary, 0, $internal);
+		return $packet;
+	}
 
+	/**
+	 * Parse one encapsulated packet starting at absolute byte $start of a
+	 * larger buffer, returning the packet and the offset just past it.
+	 *
+	 * Reading the whole datagram (or main-thread frame) in place lets a
+	 * caller decode many packets without re-substr-ing the remaining buffer
+	 * per packet - DataPacket::decode was O(n^2) in packets-per-datagram
+	 * because each iteration copied everything left. Behaviour is identical
+	 * to fromBinary(): same fields, same truncation tolerance.
+	 *
+	 * @return array{0: EncapsulatedPacket, 1: int} [packet, next offset]
+	 */
+	public static function parseAt(string $binary, int $start, bool $internal = false) : array{
 		$packet = new EncapsulatedPacket();
+		$offset = $start;
 
-		$flags = ord($binary[0]);
+		$flags = ord($binary[$offset]);
+		$offset++;
 		$packet->reliability = $reliability = ($flags & self::RELIABILITY_FLAGS) >> self::RELIABILITY_SHIFT;
 		$packet->hasSplit = $hasSplit = ($flags & self::SPLIT_FLAG) > 0;
 		if($internal){
-			$length = Binary::readInt(substr($binary, 1, 4));
-			$packet->identifierACK = Binary::readInt(substr($binary, 5, 4));
-			$offset = 9;
+			$length = Binary::readInt(substr($binary, $offset, 4));
+			$offset += 4;
+			$packet->identifierACK = Binary::readInt(substr($binary, $offset, 4));
+			$offset += 4;
 		}else{
-			$length = (int) ceil(Binary::readShort(substr($binary, 1, 2)) / 8);
-			$offset = 3;
+			$length = (int) ceil(Binary::readShort(substr($binary, $offset, 2)) / 8);
+			$offset += 2;
 			$packet->identifierACK = null;
 		}
 
@@ -89,7 +108,7 @@ class EncapsulatedPacket{
 		$packet->buffer = substr($binary, $offset, $length);
 		$offset += $length;
 
-		return $packet;
+		return [$packet, $offset];
 	}
 
 	public function getTotalLength() : int{
