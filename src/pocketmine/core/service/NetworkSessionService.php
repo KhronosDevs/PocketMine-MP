@@ -6318,6 +6318,16 @@ final class NetworkSessionService {
             $playerSessions[$session['playerRef']->entityId] = $addrKey;
         }
 
+        // Per-tick render-state cache: the flags byte, rotation and the
+        // move packet describe the ENTITY, not the viewer — they are
+        // byte-identical for every viewer. Compute each once per tick and
+        // fan the same objects out, instead of recomputing component gets
+        // + building a fresh packet per (viewer × visible entity) pair.
+        // This keeps broadcastEntityStates O(visible) in component work;
+        // only the distance check and known[] bookkeeping stay per-viewer.
+        /** @var array<int, array{pos: array{0: float, 1: float, 2: float}, yaw: float, pitch: float, flags: int, move: ?DataPacket}> */
+        $renderCache = [];
+
         foreach ($this->sessions as $addrKey => $session) {
             $center = $session['entityRef']->getPosition();
             if ($center === null) {
@@ -6349,13 +6359,20 @@ final class NetworkSessionService {
                     if ($entityWorldId !== $worldId) {
                         continue;
                     }
-                    $pos = $entity->get(PositionComponent::class);
+                    // Cached position: the same entity is distance-checked by
+                    // every viewer — resolve PositionComponent once per tick.
+                    $pos = $renderCache[$entityId]['pos'] ?? null;
                     if ($pos === null) {
-                        continue;
+                        $posComp = $entity->get(PositionComponent::class);
+                        if ($posComp === null) {
+                            continue;
+                        }
+                        $pos = [$posComp->x, $posComp->y, $posComp->z];
+                        $renderCache[$entityId]['pos'] = $pos;
                     }
-                    $dx = $pos->x - $center->x;
-                    $dy = $pos->y - $center->y;
-                    $dz = $pos->z - $center->z;
+                    $dx = $pos[0] - $center->x;
+                    $dy = $pos[1] - $center->y;
+                    $dz = $pos[2] - $center->z;
                     if ($dx * $dx + $dy * $dy + $dz * $dz <= $rangeSq) {
                         $visible[$entityId] = $entity;
                     }
@@ -6371,13 +6388,18 @@ final class NetworkSessionService {
                     if ($entityWorldId !== $worldId) {
                         continue;
                     }
-                    $pos = $entity->get(PositionComponent::class);
+                    $pos = $renderCache[$entityId]['pos'] ?? null;
                     if ($pos === null) {
-                        continue;
+                        $posComp = $entity->get(PositionComponent::class);
+                        if ($posComp === null) {
+                            continue;
+                        }
+                        $pos = [$posComp->x, $posComp->y, $posComp->z];
+                        $renderCache[$entityId]['pos'] = $pos;
                     }
-                    $dx = $pos->x - $center->x;
-                    $dy = $pos->y - $center->y;
-                    $dz = $pos->z - $center->z;
+                    $dx = $pos[0] - $center->x;
+                    $dy = $pos[1] - $center->y;
+                    $dz = $pos[2] - $center->z;
                     if ($dx * $dx + $dy * $dy + $dz * $dz <= $rangeSq) {
                         $visible[$entityId] = $entity;
                     }
@@ -6416,28 +6438,52 @@ final class NetworkSessionService {
             // health metadata - the player's own HUD is driven by
             // SetHealthPacket below, and mob health bars are client-side.
             foreach ($visible as $entityId => $entity) {
-                $pos = $entity->get(PositionComponent::class);
-                if ($pos === null) {
-                    continue;
+                // Flags byte, rotation and move packet are viewer-independent:
+                // resolve them once per entity per tick (first viewer that
+                // sees the entity pays the component gets; the rest reuse).
+                // The scan above may have seeded a partial entry (pos only),
+                // so test for the fully-resolved marker, not entry existence.
+                $st = $renderCache[$entityId] ?? null;
+                if ($st === null || !isset($st['flags'])) {
+                    $posArr = $renderCache[$entityId]['pos'] ?? null;
+                    if ($posArr === null) {
+                        $posComp = $entity->get(PositionComponent::class);
+                        if ($posComp === null) {
+                            continue;
+                        }
+                        $posArr = [$posComp->x, $posComp->y, $posComp->z];
+                    }
+                    // Metadata flags byte (old-src DATA_FLAGS): bit 0 = on fire
+                    // (FireComponent), bit 5 = invisible (spectators). Sent to
+                    // viewers on change so clients render both states.
+                    $onFire = ($entity->get(\pocketmine\core\component\FireComponent::class)?->ticks ?? 0) > 0;
+                    // Spectator detection reads the gamemode metadata directly:
+                    // only players carry GAMEMODE, so no player-tag lookup needed.
+                    $pMeta = $entity->get(MetadataComponent::class);
+                    $invisible = $pMeta !== null && GameMode::coerce($pMeta->get(MetadataKeys::GAMEMODE)) === GameMode::Spectator;
+                    // Bug 30: Invisibility potion effect also sets DATA_FLAG_INVISIBLE.
+                    if ($entity->get(\pocketmine\core\component\EffectComponent::class)?->get(14) !== null) {
+                        $invisible = true;
+                    }
+                    // Bug: sneak state and head rotation weren't broadcast to
+                    // other viewers — sneak because the flags byte didn't include
+                    // the sneak bit, rotation because known[] only tracked x/y/z.
+                    $sneaking = $pMeta !== null && (bool)$pMeta->get(\pocketmine\core\constants\MetadataKeys::SNEAKING, false);
+                    $rot = $entity->get(\pocketmine\core\component\RotationComponent::class);
+                    $flagsByte = ($onFire ? 0x01 : 0x00) | ($invisible ? 0x20 : 0x00) | ($sneaking ? 0x02 : 0x00);
+                    $st = $renderCache[$entityId] = [
+                        'pos' => $posArr,
+                        'yaw' => $rot?->yaw ?? 0.0,
+                        'pitch' => $rot?->pitch ?? 0.0,
+                        'flags' => $flagsByte,
+                        // Built lazily on the first viewer that needs a move
+                        // packet, then shared with every other viewer.
+                        'move' => null,
+                    ];
                 }
-                // Metadata flags byte (old-src DATA_FLAGS): bit 0 = on fire
-                // (FireComponent), bit 5 = invisible (spectators). Sent to
-                // viewers on change so clients render both states.
-                $onFire = ($entity->get(\pocketmine\core\component\FireComponent::class)?->ticks ?? 0) > 0;
-                // Spectator detection reads the gamemode metadata directly:
-                // only players carry GAMEMODE, so no player-tag lookup needed.
-                $pMeta = $entity->get(MetadataComponent::class);
-                $invisible = $pMeta !== null && GameMode::coerce($pMeta->get(MetadataKeys::GAMEMODE)) === GameMode::Spectator;
-                // Bug 30: Invisibility potion effect also sets DATA_FLAG_INVISIBLE.
-                if ($entity->get(\pocketmine\core\component\EffectComponent::class)?->get(14) !== null) {
-                    $invisible = true;
-                }
-                // Bug: sneak state and head rotation weren't broadcast to
-                // other viewers — sneak because the flags byte didn't include
-                // the sneak bit, rotation because known[] only tracked x/y/z.
-                $sneaking = $pMeta !== null && (bool)$pMeta->get(\pocketmine\core\constants\MetadataKeys::SNEAKING, false);
-                $yaw = $entity->get(\pocketmine\core\component\RotationComponent::class)?->yaw ?? 0.0;
-                $flagsByte = ($onFire ? 0x01 : 0x00) | ($invisible ? 0x20 : 0x00) | ($sneaking ? 0x02 : 0x00);
+                $posArr = $st['pos'];
+                $flagsByte = $st['flags'];
+                $yaw = $st['yaw'];
                 if (!isset($known[$entityId])) {
                     $pk = $this->buildAddPacket($entityId, $entity, $playerSessions);
                     if ($pk !== null) {
@@ -6454,23 +6500,29 @@ final class NetworkSessionService {
                             $this->queuePacket($session['playerRef'], $this->buildFlagsDataPacket($entityId, $flagsByte));
                         }
                     }
-                    $known[$entityId] = [$pos->x, $pos->y, $pos->z, $flagsByte, $yaw];
+                    $known[$entityId] = [$posArr[0], $posArr[1], $posArr[2], $flagsByte, $yaw];
                 } else {
                     $last = $known[$entityId];
-                    $moved = abs($pos->x - $last[0]) > self::MOVE_EPSILON
-                        || abs($pos->y - $last[1]) > self::MOVE_EPSILON
-                        || abs($pos->z - $last[2]) > self::MOVE_EPSILON;
+                    $moved = abs($posArr[0] - $last[0]) > self::MOVE_EPSILON
+                        || abs($posArr[1] - $last[1]) > self::MOVE_EPSILON
+                        || abs($posArr[2] - $last[2]) > self::MOVE_EPSILON;
                     // Bug: rotation-only changes (camera/head turn) were
                     // never broadcast because the moved check only compared
                     // x/y/z. Track yaw so look-around is relayed too.
-                    $curRotObj = $entity->get(\pocketmine\core\component\RotationComponent::class);
                     $rotChanged = isset($last[4]) && (
-                        abs(($curRotObj?->yaw ?? 0.0) - ($last[4] ?? 0.0)) > 1.0
-                        || abs(($curRotObj?->pitch ?? 0.0) - ($last[5] ?? 0.0)) > 1.0
+                        abs($st['yaw'] - ($last[4] ?? 0.0)) > 1.0
+                        || abs($st['pitch'] - ($last[5] ?? 0.0)) > 1.0
                     );
                     if ($moved || $rotChanged) {
-                        $this->queuePacket($session['playerRef'], $this->buildMovePacket($entityId, $entity, $playerSessions));
-                        $known[$entityId] = [$pos->x, $pos->y, $pos->z, $last[3], $curRotObj?->yaw ?? 0.0, $curRotObj?->pitch ?? 0.0];
+                        // One MoveEntityPacket/MovePlayerPacket per entity per
+                        // tick, queued to every viewer (content is identical);
+                        // flushOutbound encodes it once via isEncoded.
+                        if ($st['move'] === null) {
+                            $st['move'] = $this->buildMovePacket($entityId, $entity, $playerSessions);
+                            $renderCache[$entityId]['move'] = $st['move'];
+                        }
+                        $this->queuePacket($session['playerRef'], $st['move']);
+                        $known[$entityId] = [$posArr[0], $posArr[1], $posArr[2], $last[3], $st['yaw'], $st['pitch']];
                     }
                     if ((int)($last[3] ?? 0) !== $flagsByte) {
                         $this->queuePacket($session['playerRef'], $this->buildFlagsDataPacket($entityId, $flagsByte));
@@ -7072,7 +7124,15 @@ final class NetworkSessionService {
             $large = [];
             $pktIdx = 0;
             foreach ($packets as $packet) {
-                $packet->encode();
+                // Shared-packet fan-out (broadcastEntityStates): the same
+                // object is queued to N viewers, and its wire bytes are
+                // viewer-independent — encode once, reuse the buffer for the
+                // rest (legacy DataPacket::$isEncoded semantics). Objects are
+                // fresh per tick, so the flag never goes stale.
+                if (!$packet->isEncoded) {
+                    $packet->encode();
+                    $packet->isEncoded = true;
+                }
                 $buffer = $packet->getBuffer();
                 if ($this->wireTrace) {
                     $pid = ord($buffer[0]);
