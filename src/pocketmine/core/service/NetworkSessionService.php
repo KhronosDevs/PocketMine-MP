@@ -1197,6 +1197,11 @@ final class NetworkSessionService {
             // alive.
             'fallDistance' => 0.0,
             'lastY' => null,
+            // Bug 40 prune guard: the (chunk column, keep radius) the
+            // chunksSent sweep last ran at. null forces the first sweep.
+            'lastPruneX' => null,
+            'lastPruneZ' => null,
+            'lastPruneRadius' => null,
         ];
 
         // Blocker 1: an ops.txt operator gets the op permission on their
@@ -7022,17 +7027,33 @@ final class NetworkSessionService {
             // buffer — chunks beyond that were evicted from the ChunkStore
             // long ago and re-queueing them on movement is idempotent, so
             // the entry no longer serves a purpose and just leaks memory.
+            //
+            // Guard: the sweep only ever changes the map when the player's
+            // chunk column or render radius moved (streamChunks only ADDS
+            // entries, always inside the current radius, and a stationary
+            // player cannot gain out-of-radius entries). When neither moved,
+            // every entry was already checked against the same center last
+            // tick, so iterating the whole map is pure waste (~40us/session
+            // at radius 8, 289 entries).
             if (!empty($session['chunksSent'])) {
                 $pos = $session['entityRef']->getPosition();
                 if ($pos !== null) {
                     $cx = (int)floor($pos->x / 16);
                     $cz = (int)floor($pos->z / 16);
                     $keepRadius = $session['radius'] + 4;
-                    foreach ($session['chunksSent'] as $k => $_) {
-                        $parts = explode(',', $k, 2);
-                        if (abs((int)$parts[0] - $cx) > $keepRadius || abs((int)$parts[1] - $cz) > $keepRadius) {
-                            unset($session['chunksSent'][$k]);
+                    if ($cx !== $session['lastPruneX']
+                        || $cz !== $session['lastPruneZ']
+                        || $keepRadius !== $session['lastPruneRadius']
+                    ) {
+                        foreach ($session['chunksSent'] as $k => $_) {
+                            $parts = explode(',', $k, 2);
+                            if (abs((int)$parts[0] - $cx) > $keepRadius || abs((int)$parts[1] - $cz) > $keepRadius) {
+                                unset($session['chunksSent'][$k]);
+                            }
                         }
+                        $session['lastPruneX'] = $cx;
+                        $session['lastPruneZ'] = $cz;
+                        $session['lastPruneRadius'] = $keepRadius;
                     }
                 }
             }
