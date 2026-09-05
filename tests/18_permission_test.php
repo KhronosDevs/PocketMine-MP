@@ -190,7 +190,8 @@ test('default permissions resolve by op status', function () use ($world) {
     // Explicit grants bypass defaults.
     $alice->getMetadata()->set('permissions', ['demo.explicit']);
     ok($alice->hasPermission('demo.explicit'), 'explicit grant resolves');
-    ok(!$bob->hasPermission('demo.explicit'), 'explicit grant does not leak to other players');
+    ok($bob->hasPermission('demo.explicit'), 'op players are granted every permission');
+    ok(!$alice->hasPermission('demo.admin'), 'op-default permission still denied to non-op');
 
     // Children: granting the parent grants the child.
     $carol = spawnPlayer('PermCarol', 'cccccccc-0000-0000-0000-000000000003');
