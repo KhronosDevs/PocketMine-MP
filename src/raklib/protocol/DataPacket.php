@@ -52,11 +52,12 @@ abstract class DataPacket extends Packet{
 		parent::decode();
 		$this->seqNumber = $this->getLTriad();
 
-		while(!$this->feof()){
-			$offset = 0;
-			$data = substr($this->buffer, $this->offset);
-			$packet = EncapsulatedPacket::fromBinary($data, false, $offset);
-			$this->offset += $offset;
+		while(isset($this->buffer[$this->offset])){
+			// Parse in place against the whole datagram: the previous code
+			// re-substr'ed the remaining buffer per packet (O(n^2) copies for
+			// a datagram holding many sub-packets). parseAt walks one packet
+			// at the current offset and returns where the next one starts.
+			[$packet, $this->offset] = EncapsulatedPacket::parseAt($this->buffer, $this->offset, false);
 			if(strlen($packet->buffer) === 0){
 				break;
 			}
