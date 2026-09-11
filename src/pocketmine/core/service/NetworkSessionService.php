@@ -1691,17 +1691,15 @@ final class NetworkSessionService {
             // block-breaking animation). Legacy flag bits: 0x01 adventure (no
             // place/break), 0x100 spectator, 0x80 allowFlight.
             $settings = new AdventureSettingsPacket();
-            $settings->flags = match ($mode) {
-                GameMode::Creative => AdventureSettingsPacket::FLAGS_CREATIVE,
-                GameMode::Adventure => AdventureSettingsPacket::FLAGS_SURVIVAL | 0x01,
-                GameMode::Spectator => AdventureSettingsPacket::FLAGS_CREATIVE | 0x100 | 0x80,
-                default => AdventureSettingsPacket::FLAGS_SURVIVAL,
-            };
+            $settings->flags = $this->adventureSettingsFlags($mode);
             $settings->userPermission = 2;
             $settings->globalPermission = 2;
             $this->queuePacket($session['playerRef'], $settings);
             $typePk = new SetPlayerGameTypePacket();
-            $typePk->gamemode = $mode->value;
+            // Protocol-84 wire gamemode is binary (gamemode & 0x01, legacy
+            // parity): the 0.15 client only knows 0/1 - a raw 2 (adventure)
+            // hits undefined client behaviour (fly/noclip render state).
+            $typePk->gamemode = $mode->value & 0x01;
             $this->queuePacket($session['playerRef'], $typePk);
             // Legacy parity: after a gamemode flip, re-send the creative
             // inventory list (window 0x79), the player's full inventory
@@ -1714,6 +1712,21 @@ final class NetworkSessionService {
             $this->sendInventorySlot($session['playerRef'], $session['entityRef']->getEntity()?->get(InventoryComponent::class)?->heldSlot ?? 0);
             return;
         }
+    }
+
+    /**
+     * Legacy 0.15 AdventureSettings flag set for a gamemode. Shared by the
+     * join burst (sendDoFirstSpawn) and /gamemode (sendGamemodeTo) so the two
+     * paths can never diverge. Bits: 0x01 adventure (world immutable),
+     * 0x80 allow_fly, 0x100 noclip (old-src sendSettings() semantics).
+     */
+    private function adventureSettingsFlags(GameMode $mode): int {
+        return match ($mode) {
+            GameMode::Creative => AdventureSettingsPacket::FLAGS_CREATIVE,
+            GameMode::Adventure => AdventureSettingsPacket::FLAGS_SURVIVAL | 0x01,
+            GameMode::Spectator => AdventureSettingsPacket::FLAGS_CREATIVE | 0x100 | 0x80,
+            default => AdventureSettingsPacket::FLAGS_SURVIVAL,
+        };
     }
 
     /**
@@ -5453,9 +5466,11 @@ final class NetworkSessionService {
         $this->queuePacket($playerRef, $entityMeta);
 
         // 2) AdventureSettings — matches old-src sendSettings()
-        $creative = GameMode::coerce($entity?->get(\pocketmine\core\component\MetadataComponent::class)?->get(MetadataKeys::GAMEMODE)) === GameMode::Creative;
+        // Flags must match sendGamemodeTo() exactly (adventure 0x01, spectator
+        // noclip) - same helper, so the join burst and /gamemode never diverge.
+        $mode = GameMode::coerce($entity?->get(\pocketmine\core\component\MetadataComponent::class)?->get(MetadataKeys::GAMEMODE));
         $settings = new AdventureSettingsPacket();
-        $settings->flags = $creative ? AdventureSettingsPacket::FLAGS_CREATIVE : AdventureSettingsPacket::FLAGS_SURVIVAL;
+        $settings->flags = $this->adventureSettingsFlags($mode);
         $settings->userPermission = 2;
         $settings->globalPermission = 2;
         $this->queuePacket($playerRef, $settings);
@@ -6018,7 +6033,10 @@ final class NetworkSessionService {
         // Gamemode from the player's metadata (saved on disconnect, or 0 for
         // fresh players). The client needs the initial mode to render the
         // correct UI (survival: hotbar, creative: flight toggle).
-        $startGame->gamemode = GameMode::coerce($entity?->get(\pocketmine\core\component\MetadataComponent::class)?->get(MetadataKeys::GAMEMODE))->value;
+        // Protocol-84 wire gamemode is binary (gamemode & 0x01, legacy
+        // parity): the 0.15 client only knows 0/1 - a raw 2 (adventure) hits
+        // undefined client behaviour (fly/noclip render state).
+        $startGame->gamemode = GameMode::coerce($entity?->get(\pocketmine\core\component\MetadataComponent::class)?->get(MetadataKeys::GAMEMODE))->value & 0x01;
         $startGame->eid = 0; // protocol 84 always uses entity id 0 for the player
         $startGame->spawnX = $spawnX;
         $startGame->spawnY = $spawnY;
