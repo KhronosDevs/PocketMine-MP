@@ -171,20 +171,19 @@ bin/php7/bin/php -d memory_limit=512M -d extension=ffi -d ffi.enable=1 PocketMin
 
 Measured with the **native-accel FFI library enabled** (production config: light calc, terrain noise and nibble packing run in C via `native/kh_native.so`) on the benchmark scripts in `bench/`. The 20 TPS tick budget is **50 ms** — everything below runs well inside it.
 
+Latest run: **2026-09-11** (master `43d2dd2`, includes the in-place RakNet header parse and the ECS EntityRef eviction fix).
+
 | Benchmark | Result |
 |---|---|
-| Empty tick (no entities) | **0.36 ms** |
-| 1,000 moving entities, hot tick | **1.67 ms** |
-| 2,000 moving entities, hot tick | **3.42 ms** |
-| 5,000 moving entities, hot tick | **8.25 ms** |
-| 10,000 moving entities, hot tick | **16.77 ms** |
-| 10,000 entities, region pipeline apply, hot tick | **3.69 ms** |
-| Steady-state tick with a connected client (incl. network flush) | **0.42 ms** (0.39 ms net overhead) |
-| Inbound move packet processing | **~32,200 pkts/s** (~31 µs each) |
-| Chunk streaming to a client | **277 chunks/s** — radius 8 (289 chunks) fully delivered in ~1.0 s |
-| Parallel chunk generation (256 chunks) | **102 ms** (6.1× faster than sequential, 2.5× faster than pure PHP) |
+| Tick, 10 players + 100 mobs | **0.34 ms** mean (p99 0.57 ms) |
+| Tick, 50 players + 500 mobs | **1.27 ms** mean (p99 1.77 ms) |
+| Steady-state tick with a connected client (incl. network flush) | **0.17 ms** (0.09 ms net overhead) |
+| Inbound move packet processing | **~24,300 pkts/s** (~41 µs each) |
+| Chunk streaming to a client | **176 chunks/s** — radius 8 (289 chunks, 22.9 MB) fully delivered; login → spawn 1.64 s |
+| Parallel chunk generation (16-chunk batch) | **8.8 ms** (5.5× faster than sequential, 2.6× faster than pure PHP) |
 | Memory per entity | **~1.0 KB** (loaded-chunk budget enforced) |
 | Resident chunk memory | **~160 KB/chunk** (200 loaded → 64 resident at budget, 12 MB total) |
+| Entity spawn cost | 8,000 entities in 753 ms; archetype index reuse flat (freed indices recycled) |
 
 ## Plugin development
 
@@ -201,7 +200,7 @@ Khronos has a brand-new, ECS-based plugin API — **not compatible with existing
 
 - **Tests:** `bin/php7/bin/php tests/run.php` (49 files, per-process isolation; `-j N` runs files in parallel, `--filter=substring` runs one test)
 - **Static analysis:** `bin/php7/bin/php -d memory_limit=2G vendor/bin/phpstan analyse -c phpstan.neon`
-- **Benchmarks:** `bench/measure_baseline.php`, `bench/measure_pipeline.php`, `bench/measure_chunkgen.php`, `bench/measure_memory.php`, `bench/measure_network.php` — run with the same FFI flags as production (`-d extension=ffi -d ffi.enable=1`) to match the table above
+- **Benchmarks:** `bench/01_tick_profile.php <players> <mobs> <ticks>`, `bench/measure_chunkgen.php`, `bench/measure_memory.php`, `bench/measure_network.php` — run with `KHRONOS_FAST_TICKS=1` (and the same FFI flags as production) to match the table above
 - **Architecture at a glance:** ECS core (components → archetypes → systems) · ports & adapters (network/storage/worldgen/threading) · gameplay services · API facades · region-based threading (details in [docs/PLAN.md](docs/PLAN.md))
 
 ## Credits
