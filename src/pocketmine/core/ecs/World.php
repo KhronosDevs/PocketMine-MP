@@ -98,16 +98,25 @@ final class World {
                 $archetype->removeEntity($entity);
                 unset($this->entityArchetypes[$entity->id]);
             }
+            // Evict the despawned entity's EntityRef from the global map.
+            // EntityRef::$idToRef is process-wide and never self-cleans: ids
+            // are monotonic, so every leaked entry pinned its ECS Entity
+            // (via getEntity()) plus its whole World forever — an unbounded
+            // slow leak across a server's lifetime (every dropped item,
+            // arrow, TNT, despawned mob). Ids are never reused, so nothing
+            // can observe a stale ref from this point on.
+            \pocketmine\core\ecs\EntityRef::remove($entity->id);
             $changed = true;
         }
         $this->entitiesToRemove = [];
 
         // A cached Query holds a frozen entity array - spawning or despawning
         // an entity would otherwise leave every cached query (AI system
-        // included) iterating a stale snapshot forever. Drop the cache on any
-        // entity-set change; steady-state ticks (no add/remove) keep it.
+        // included) iterating a stale snapshot forever. Drop THIS world's
+        // cache on any entity-set change; steady-state ticks (no add/remove)
+        // keep it, and other worlds' caches are untouched.
         if ($changed) {
-            QueryBuilder::clearCache();
+            QueryBuilder::clearCache($this);
         }
 
         $this->reconcileArchetypes();

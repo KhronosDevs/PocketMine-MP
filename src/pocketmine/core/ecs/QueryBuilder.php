@@ -12,7 +12,16 @@ final class QueryBuilder {
     private $orderBy = null;
     private int $chunkSize = 0;
     private ?string $cacheKey = null;
-    private static array $queryCache = [];
+
+    /**
+     * Query cache, keyed by WORLD instance (WeakMap: entries vanish when
+     * their world is collected) then by query shape. Two worlds sharing
+     * one process (overworld + nether, or the check-plugin harness booting
+     * several kernels) previously shared ONE static map keyed only by
+     * component classes — world A's cached entity list was served to world
+     * B whenever their query shapes collided.
+     */
+    private static ?\WeakMap $cacheByWorld = null;
 
     public function __construct(
         private readonly World $world,
@@ -73,10 +82,15 @@ final class QueryBuilder {
 
     public function build(): Query {
         $cacheKey = $this->getCacheKey();
-        
-        // Check cache first
-        if (isset(self::$queryCache[$cacheKey]) && $this->where === null && $this->orderBy === null) {
-            return self::$queryCache[$cacheKey];
+
+        // Check cache first (only meaningful without runtime filters/sort)
+        if ($this->where === null && $this->orderBy === null) {
+            $cache = self::$cacheByWorld !== null
+                ? (self::$cacheByWorld[$this->world] ?? [])
+                : [];
+            if (isset($cache[$cacheKey])) {
+                return $cache[$cacheKey];
+            }
         }
 
         $entities = $this->world->getEntities();
@@ -136,13 +150,32 @@ final class QueryBuilder {
 
         // Cache if no runtime filter or sort
         if ($this->where === null && $this->orderBy === null) {
-            self::$queryCache[$cacheKey] = $query;
+            self::$cacheByWorld ??= new \WeakMap();
+            $cache = self::$cacheByWorld[$this->world] ?? [];
+            $cache[$cacheKey] = $query;
+            self::$cacheByWorld[$this->world] = $cache;
         }
 
         return $query;
     }
 
-    public static function clearCache(): void {
-        self::$queryCache = [];
+    /**
+     * Clear the query cache. With no argument every world's cache is
+     * dropped (legacy behavior); with a world only that world's entries
+     * are dropped — the per-spawn/despawn invalidation path uses this so
+     * heavy entity churn in one world does not thrash another world's
+     * cached queries.
+     */
+    public static function clearCache(?World $world = null): void {
+        if (self::$cacheByWorld === null) {
+            return;
+        }
+        if ($world === null) {
+            foreach (self::$cacheByWorld as $w => $cache) {
+                self::$cacheByWorld[$w] = [];
+            }
+        } else {
+            self::$cacheByWorld[$world] = [];
+        }
     }
 }
