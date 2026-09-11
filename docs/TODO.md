@@ -19,6 +19,25 @@ in rough priority order, so anyone picking up a task knows the seams to build on
 
 ---
 
+## Plugin API — old-PM Kernel level/Config compat layer
+
+`Config::getNested()/setNested()` + the `Config::YAML`-style constructor shipped
+(2026-09), but plugins ported from old PocketMine still hit deeper Kernel-API
+gaps. HorizonCore (real old-PM plugin) fails on enable with:
+
+- `Kernel::getWorld(string $name)` — old PM loaded/returned a level by name;
+  here `Kernel::getWorld()` takes no args and returns the ECS world. The API
+  surface for it exists (`Server::getWorldByName()`, `WorldRegistry`,
+  `loadLevel`-equivalent in the chunk services) — needs thin Kernel wrappers.
+- `Kernel::getDefaultLevelName()` — default world name lives in config but
+  has no accessor.
+- `Kernel::loadLevel(string $name)` — chunk services + WorldRegistry already
+  implement the mechanics; needs a public method that resolves or imports a
+  world folder and returns the API facade.
+
+Scope: a small compat surface on Kernel (3 methods + facade returns), worth
+doing as one commit when the next old-PM plugin port lands.
+
 ## Gameplay roadmap (Blocker 3) — deferred
 
 ### 1. ⭐ Ores (highest gameplay impact — mining has no reward yet)
