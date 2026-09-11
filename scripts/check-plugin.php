@@ -7,8 +7,8 @@ declare(strict_types=1);
  * the new Khronos API and reports which ones enabled successfully.
  *
  * Usage (from repo root, with the bundled php):
- *   bin/php7/bin/php scripts/check-plugin.php PartyCore
- *   bin/php7/bin/php scripts/check-plugin.php PartyCore CorePvP Golf
+ *   bin/php7/bin/php scripts/check-plugin.php <PluginFolderName>
+ *   bin/php7/bin/php scripts/check-plugin.php PluginA PluginB PluginC
  *   bin/php7/bin/php scripts/check-plugin.php all
  *
  * Each plugin is loaded into a fresh kernel (static ECS state is

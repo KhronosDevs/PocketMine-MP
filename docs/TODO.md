@@ -23,7 +23,7 @@ in rough priority order, so anyone picking up a task knows the seams to build on
 
 `Config::getNested()/setNested()` + the `Config::YAML`-style constructor shipped
 (2026-09), but plugins ported from old PocketMine still hit deeper Kernel-API
-gaps. HorizonCore (real old-PM plugin) fails on enable with:
+gaps. A real old-PM plugin fails on enable with:
 
 - `Kernel::getWorld(string $name)` — old PM loaded/returned a level by name;
   here `Kernel::getWorld()` takes no args and returns the ECS world. The API
