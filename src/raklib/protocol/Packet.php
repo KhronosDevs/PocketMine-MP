@@ -67,8 +67,25 @@ abstract class Packet{
 		return Binary::readTriad($this->get(3));
 	}
 
+	/**
+	 * In-place 3-byte little-endian read: no substr allocation for the 3
+	 * bytes. Called for the datagram seqNumber on every DATA packet and for
+	 * messageIndex/orderIndex on every encapsulated header, so this sat on
+	 * the hottest wire-decode path.
+	 *
+	 * Truncation tolerance matches get(3) + readLTriad(): with fewer than 3
+	 * bytes left the buffer, the offset still advances to the end (get()
+	 * behavior) and null is returned. Callers that ignore the null hit the
+	 * same `?? 0` fallback paths as before.
+	 */
 	protected function getLTriad() : ?int{
-		return Binary::readLTriad($this->get(3));
+		if(!isset($this->buffer[$this->offset + 2])){
+			$this->offset = strlen($this->buffer);
+			return null;
+		}
+		$v = Binary::readLTriadAt($this->buffer, $this->offset);
+		$this->offset += 3;
+		return $v;
 	}
 
 	protected function getByte() : int{

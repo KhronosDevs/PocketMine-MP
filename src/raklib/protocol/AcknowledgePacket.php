@@ -84,12 +84,21 @@ abstract class AcknowledgePacket extends Packet{
 		$cnt = 0;
 		for($i = 0; $i < $count && !$this->feof() && $cnt < 4096; ++$i){
 			if($this->getByte() === 0){
-				$start = $this->getLTriad();
-				$end = $this->getLTriad();
+				$start = (int) $this->getLTriad();
+				$end = (int) $this->getLTriad();
+				if($end < $start){
+					// Malformed record (end before start). The old code
+					// appended (end - start) zero ids here — up to 4096
+					// garbage entries on a truncated read — before Session's
+					// isset() probes discarded every one of them. Dropping
+					// the record is the same wire outcome with none of the
+					// blowup (a zlib-bomb NACK could force that allocation).
+					continue;
+				}
 				if(($end - $start) > 512){
 					$end = $start + 512;
 				}
-				for($c = $start; $c <= $end; ++$c){
+				for($c = $start; $c <= $end && $cnt < 4096; ++$c){
 					$this->packets[$cnt++] = $c;
 				}
 			}else{

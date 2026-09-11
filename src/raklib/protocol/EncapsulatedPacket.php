@@ -59,52 +59,98 @@ class EncapsulatedPacket{
 	 * Reading the whole datagram (or main-thread frame) in place lets a
 	 * caller decode many packets without re-substr-ing the remaining buffer
 	 * per packet - DataPacket::decode was O(n^2) in packets-per-datagram
-	 * because each iteration copied everything left. Behaviour is identical
-	 * to fromBinary(): same fields, same truncation tolerance.
+	 * because each iteration copied everything left.
+	 *
+	 * The header fields themselves are now ALSO read in place (ord() math
+	 * instead of substr + unpack per field): every encapsulated header
+	 * allocated 3-7 small strings just to throw them away, and at 100 Hz ×
+	 * sessions × packets-per-datagram that dominated the wire thread.
+	 * Behaviour is identical to fromBinary(): same fields, same truncation
+	 * tolerance - a header shorter than its declared fields yields an
+	 * empty-buffer packet (the old null-coerced reads collapsed to length
+	 * 0), and an overlong payload length yields the clamped remainder
+	 * exactly like substr() always did.
 	 *
 	 * @return array{0: EncapsulatedPacket, 1: int} [packet, next offset]
 	 */
 	public static function parseAt(string $binary, int $start, bool $internal = false) : array{
-		$packet = new EncapsulatedPacket();
-		$offset = $start;
+		if(!isset($binary[$start])){
+			// Empty / out-of-range input: same empty-packet shape as the
+			// truncated-header path below (the legacy code emitted a warning
+			// here; the DataPacket::decode loop never fed us one, but a
+			// defensive guard keeps malformed input warning-free).
+			return [new EncapsulatedPacket(), strlen($binary)];
+		}
+		$flags = ord($binary[$start]);
+		$reliability = ($flags & self::RELIABILITY_FLAGS) >> self::RELIABILITY_SHIFT;
+		$hasSplit = ($flags & self::SPLIT_FLAG) > 0;
 
-		$flags = ord($binary[$offset]);
-		$offset++;
-		$packet->reliability = $reliability = ($flags & self::RELIABILITY_FLAGS) >> self::RELIABILITY_SHIFT;
-		$packet->hasSplit = $hasSplit = ($flags & self::SPLIT_FLAG) > 0;
+		// Exact header size for this flag combination, checked once against
+		// the buffer length so every field read below is provably in bounds
+		// (no per-field isset traffic, no warnings on malformed input).
+		$headerSize = 1 + ($internal ? 8 : 2);
+		if($reliability > PacketReliability::UNRELIABLE){
+			if($reliability >= PacketReliability::RELIABLE && $reliability !== PacketReliability::UNRELIABLE_WITH_ACK_RECEIPT){
+				$headerSize += 3;
+			}
+			if($reliability <= PacketReliability::RELIABLE_SEQUENCED && $reliability !== PacketReliability::RELIABLE){
+				$headerSize += 4;
+			}
+		}
+		if($hasSplit){
+			$headerSize += 10;
+		}
+
+		if(!isset($binary[$start + $headerSize - 1])){
+			// Truncated header: the old code null-coerced every field read
+			// and collapsed to a zero-length packet. Deliver the same shape
+			// (empty buffer) and park the offset at the end so a decode loop
+			// terminates instead of spinning.
+			$packet = new EncapsulatedPacket();
+			$packet->reliability = $reliability;
+			$packet->hasSplit = $hasSplit;
+			return [$packet, strlen($binary)];
+		}
+
+		$packet = new EncapsulatedPacket();
+		$packet->reliability = $reliability;
+		$packet->hasSplit = $hasSplit;
+		$offset = $start + 1;
+
 		if($internal){
-			$length = Binary::readInt(substr($binary, $offset, 4));
-			$offset += 4;
-			$packet->identifierACK = Binary::readInt(substr($binary, $offset, 4));
-			$offset += 4;
+			$length = Binary::readUIntAt($binary, $offset);
+			$packet->identifierACK = Binary::readUIntAt($binary, $offset + 4);
+			$offset += 8;
 		}else{
-			$length = (int) ceil(Binary::readShort(substr($binary, $offset, 2)) / 8);
-			$offset += 2;
+			$length = (int) ceil(Binary::readUShortAt($binary, $offset) / 8);
 			$packet->identifierACK = null;
+			$offset += 2;
 		}
 
 		if($reliability > PacketReliability::UNRELIABLE){
 			if($reliability >= PacketReliability::RELIABLE && $reliability !== PacketReliability::UNRELIABLE_WITH_ACK_RECEIPT){
-				$packet->messageIndex = Binary::readLTriad(substr($binary, $offset, 3));
+				$packet->messageIndex = Binary::readLTriadAt($binary, $offset);
 				$offset += 3;
 			}
 
 			if($reliability <= PacketReliability::RELIABLE_SEQUENCED && $reliability !== PacketReliability::RELIABLE){
-				$packet->orderIndex = Binary::readLTriad(substr($binary, $offset, 3));
-				$offset += 3;
-				$packet->orderChannel = ord($binary[$offset++]);
+				$packet->orderIndex = Binary::readLTriadAt($binary, $offset);
+				$packet->orderChannel = ord($binary[$offset + 3]);
+				$offset += 4;
 			}
 		}
 
 		if($hasSplit){
-			$packet->splitCount = Binary::readInt(substr($binary, $offset, 4));
-			$offset += 4;
-			$packet->splitID = Binary::readShort(substr($binary, $offset, 2));
-			$offset += 2;
-			$packet->splitIndex = Binary::readInt(substr($binary, $offset, 4));
-			$offset += 4;
+			$packet->splitCount = Binary::readUIntAt($binary, $offset);
+			$packet->splitID = Binary::readUShortAt($binary, $offset + 4);
+			$packet->splitIndex = Binary::readUIntAt($binary, $offset + 6);
+			$offset += 10;
 		}
 
+		// The payload still goes through substr() - this is the game data
+		// and must be copied anyway. substr() clamps $length to the bytes
+		// actually available, preserving the old tolerance for overlong
+		// length fields.
 		$packet->buffer = substr($binary, $offset, $length);
 		$offset += $length;
 

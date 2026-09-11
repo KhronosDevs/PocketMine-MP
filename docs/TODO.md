@@ -266,6 +266,23 @@ probes `isset()` instead of `ksort()`+walk each delivery (behavior-identical,
 ~5× at 500 buffered messages, equivalence-verified over 4,000 arrival
 scenarios).
 
+**Shipped in the second wire pass (2026-09, tests/61):** the encapsulated
+header parse itself now reads every field in place — `EncapsulatedPacket::parseAt`
+uses `ord()` math via new `Binary::readLTriadAt/readUShortAt/readUIntAt`
+helpers (one exact header-size bounds check per packet instead of 3-7
+substr+unpack allocations), `Binary::writeLTriad` is direct `chr()` math,
+and `Packet::getLTriad` reads without copying (truncation tolerance
+preserved). Micro-benchmark on an MTU-bound 16-packet datagram:
+9.4 µs vs 10.6 µs per decode (1.13×) plus fewer allocations on the hottest
+wire-thread path. Byte parity locked by `tests/61_raklib_wire_test.php`
+(golden hand-computed vectors for every reliability/split/internal-header
+shape + randomized parity sweeps vs the pack()/unpack() reference).
+Also shipped: `AcknowledgePacket::decode` no longer appends up to 4096
+garbage ids for a malformed (end<start) range record (zlib-bomb hardening;
+same wire outcome, no blowup), and `Session::update` retransmit timeouts
+compare against the tick's microtime instead of 1-second-resolution `time()`
+(retransmit no longer fires up to a second late).
+
 ### ACK/NACK run-length records flattened to per-seq arrays (candidate)
 
 `AcknowledgePacket::decode()` expands every wire run-length record into a

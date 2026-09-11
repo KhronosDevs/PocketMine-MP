@@ -51,7 +51,6 @@ use function ord;
 use function str_split;
 use function strlen;
 use function strval;
-use function time;
 
 class Session{
 	const STATE_UNCONNECTED = 0;
@@ -219,7 +218,11 @@ class Session{
 		}
 
 		foreach($this->recoveryQueue as $seq => $pk){
-			if($pk->sendTime < (time() - 8)){
+			// Compare against $time (microtime resolution, passed in by the
+			// SessionManager tick) instead of time(): sendTime is microtime, so
+			// the old 1-second-resolution comparison could retransmit up to a
+			// second late and jittered with the wall-clock second boundary.
+			if($pk->sendTime < ($time - 8)){
 				$this->packetToSend[] = $pk;
 				unset($this->recoveryQueue[$seq]);
 			}else{

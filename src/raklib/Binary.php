@@ -81,10 +81,53 @@ class Binary {
     }
 
     /**
-     * Writes a 3-byte little-endian number
+     * Reads a 3-byte little-endian number straight out of a larger buffer
+     * at byte offset $offset, without substr-copying the 3 bytes first.
+     * Hot-path variant of readLTriad(): every encapsulated header carries
+     * 1-3 triads (messageIndex / orderIndex / datagram seqNumber), so the
+     * per-call strlen + concat + unpack allocations dominated wire decode.
+     * Byte semantics identical to readLTriad(substr($str, $offset, 3)).
+     */
+    public static function readLTriadAt(string $str, int $offset): int {
+        return ord($str[$offset])
+            | (ord($str[$offset + 1]) << 8)
+            | (ord($str[$offset + 2]) << 16);
+    }
+
+    /**
+     * In-place unsigned 16-bit big-endian read: byte semantics of
+     * readShort(substr($str, $offset, 2)) without the substr allocation.
+     * Caller guarantees at least 2 bytes are available.
+     */
+    public static function readUShortAt(string $str, int $offset): int {
+        return (ord($str[$offset]) << 8) | ord($str[$offset + 1]);
+    }
+
+    /**
+     * In-place unsigned 32-bit big-endian read: byte semantics of
+     * readInt(substr($str, $offset, 4)) without the substr allocation.
+     * Caller guarantees at least 4 bytes are available. (Encapsulated
+     * headers only ever carry unsigned ints: splitCount/splitIndex and
+     * the internal-frame length/identifierACK fields.)
+     */
+    public static function readUIntAt(string $str, int $offset): int {
+        return (ord($str[$offset]) << 24)
+            | (ord($str[$offset + 1]) << 16)
+            | (ord($str[$offset + 2]) << 8)
+            | ord($str[$offset + 3]);
+    }
+
+    /**
+     * Writes a 3-byte little-endian number.
+     *
+     * Direct chr() math instead of pack("V") + substr: messageIndex and
+     * orderIndex are written for every encapsulated packet on the send
+     * path, and pack() allocation dominated that loop.
      */
     public static function writeLTriad(int $value): string {
-        return substr(pack("V", $value), 0, -1);
+        return chr($value & 0xFF)
+            . chr(($value >> 8) & 0xFF)
+            . chr(($value >> 16) & 0xFF);
     }
 
     /**
