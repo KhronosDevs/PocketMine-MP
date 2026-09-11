@@ -6,13 +6,34 @@ namespace pocketmine\api\plugin;
 
 class Config
 {
+    /** Format-type constants kept for PocketMine-MP API parity. Plugins
+     *  written against the old API pass these as the second constructor
+     *  argument (new Config($file, Config::YAML, $defaults)); the format is
+     *  always YAML here, so the values only need to exist and be harmless. */
+    public const DETECT = 0;
+    public const PROPERTIES = 1;
+    public const CNF = self::PROPERTIES;
+    public const JSON = 2;
+    public const YAML = 3;
+    public const ENUM = 4;
+
     private string $file;
     private array $defaults = [];
     private array $data = [];
     private bool $modified = false;
 
-    public function __construct(string $file, array $defaults = [])
+    public function __construct(string $file, mixed $defaults = [], array $legacyDefaults = [])
     {
+        // Legacy signature compat: old-API plugins call either
+        //   new Config($file, $defaultsArray)
+        // or the PocketMine shape
+        //   new Config($file, Config::YAML, $defaultsArray)
+        // When the second argument is a format constant (int), the real
+        // defaults are the third argument. Extra args beyond that (the old
+        // &$correct out-param) are ignored.
+        if (!is_array($defaults)) {
+            $defaults = $legacyDefaults;
+        }
         $this->file = $file;
         $this->defaults = $defaults;
         $this->data = $defaults;
@@ -46,6 +67,26 @@ class Config
         }
 
         return $value;
+    }
+
+    /**
+     * PocketMine-MP API parity: dot-path getter ("a.b.c" nests into the
+     * data array). Identical behavior to get() — which has always walked
+     * dot paths — but plugins written against the old API call these
+     * canonical names.
+     */
+    public function getNested(string $key, mixed $default = null): mixed
+    {
+        return $this->get($key, $default);
+    }
+
+    /**
+     * PocketMine-MP API parity: dot-path setter. Identical behavior to
+     * set() (which already creates intermediate arrays).
+     */
+    public function setNested(string $key, mixed $value): void
+    {
+        $this->set($key, $value);
     }
 
     public function set(string $key, mixed $value): void
