@@ -533,15 +533,28 @@ class Session{
 							unset($this->recoveryQueue[$seq]);
 						}
 					}
-				}elseif($packet instanceof NACK){
-					$packet->decode();
-					foreach($packet->packets as $seq){
-						if(isset($this->recoveryQueue[$seq])){
-							$this->packetToSend[] = $this->recoveryQueue[$seq];
-							unset($this->recoveryQueue[$seq]);
-						}
+			}elseif($packet instanceof NACK){
+				$packet->decode();
+				// Amplification guard: a single hostile NACK may legitimately
+				// re-queue a handful of lost datagrams, but re-queueing the
+				// whole recovery queue (~2048 in-flight) on one 350/s-budget
+				// packet keeps them ALL in permanent retransmit rotation —
+				// attacker cost ~1 packet/s, server cost ~2 MB/s, and the
+				// eventual queue overflow wipes the player's own pending
+				// traffic. Cap re-acceptance per NACK; everything else stays
+				// in recovery for its normal 8s timeout retransmit.
+				$nackBudget = 64;
+				foreach($packet->packets as $seq){
+					if($nackBudget <= 0){
+						break;
+					}
+					if(isset($this->recoveryQueue[$seq])){
+						$this->packetToSend[] = $this->recoveryQueue[$seq];
+						unset($this->recoveryQueue[$seq]);
+						--$nackBudget;
 					}
 				}
+			}
 			}
 
 		}elseif($packet::$ID > 0x00 && $packet::$ID < 0x80){ //Not Data packet :)

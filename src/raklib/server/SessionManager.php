@@ -247,7 +247,13 @@ class SessionManager {
                 $this->tracePacket($source, $port, $pid, $len, $buffer);
 
                 if ($pid === UNCONNECTED_PING::$ID) {
-                    // No need to create a session for just pings.
+                    // No need to create a session for just pings. Require the
+                    // offline magic (it follows the pingID long): a 1-byte
+                    // spoofed ping must not elicit a ~46-byte pong to an
+                    // arbitrary source (reflection amplification vector).
+                    if (strlen($buffer) < 25 || substr($buffer, 9, 16) !== RakLib::MAGIC) {
+                        return true;
+                    }
                     $packet = new UNCONNECTED_PING();
                     $packet->buffer = $buffer;
                     $packet->decode();
@@ -260,6 +266,22 @@ class SessionManager {
                 } elseif ($pid === UNCONNECTED_PONG::$ID) {
                     // ignored
                 } elseif (($packet = $this->getPacketFromPool($pid)) !== null) {
+                    // Unconnected handshake traffic must carry the 16-byte
+                    // offline magic. Without this check any single datagram
+                    // with a known pid (0x02/0x05/0x07/0x1d) creates a
+                    // Session and elicits a response — reflection spam and
+                    // unauthenticated session churn. Connected-phase packets
+                    // (DATA 0x80-0x8f, ACK 0xc0, NACK 0xa0) have no magic.
+                    $magicAt = $pid === UNCONNECTED_PING_OPEN_CONNECTIONS::$ID || $pid === ADVERTISE_SYSTEM::$ID ? 9 : 1;
+                    if (
+                        ($pid === UNCONNECTED_PING_OPEN_CONNECTIONS::$ID
+                            || $pid === OPEN_CONNECTION_REQUEST_1::$ID
+                            || $pid === OPEN_CONNECTION_REQUEST_2::$ID
+                            || $pid === ADVERTISE_SYSTEM::$ID)
+                        && (strlen($buffer) < $magicAt + 16 || substr($buffer, $magicAt, 16) !== RakLib::MAGIC)
+                    ) {
+                        return true;
+                    }
                     $packet->buffer = $buffer;
                     try {
                         $this->getSession($source, $port)->handlePacket($packet);

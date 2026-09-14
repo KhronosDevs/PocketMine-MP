@@ -35,6 +35,9 @@ use function class_exists;
  */
 class RakLibServer extends Thread {
 
+    /** Maximum buffered frames per direction on the cross-thread queues. */
+    private const MAX_QUEUE_DEPTH = 1024;
+
     private int $port;
     private string $interface;
     /** Lines logged by the thread, drained by the main thread. */
@@ -158,6 +161,13 @@ class RakLibServer extends Thread {
     }
 
     public function pushMainToThreadPacket(string $str): void {
+        // Both queues are capped: an uncapped ThreadSafeArray grows without
+        // bound when one side stalls (main thread in a long world save, wire
+        // thread facing a packet flood). Dropping is the least-bad response —
+        // the same policy Session uses for its own send-queue overflow.
+        if ($this->internalQueue->count() >= self::MAX_QUEUE_DEPTH) {
+            return; // drop; the wire thread is wedged or flooded
+        }
         $this->internalQueue[] = $str;
     }
 
@@ -166,6 +176,9 @@ class RakLibServer extends Thread {
     }
 
     public function pushThreadToMainPacket(string $str): void {
+        if ($this->externalQueue->count() >= self::MAX_QUEUE_DEPTH) {
+            return; // drop; the main thread is not draining fast enough
+        }
         $this->externalQueue[] = $str;
     }
 
