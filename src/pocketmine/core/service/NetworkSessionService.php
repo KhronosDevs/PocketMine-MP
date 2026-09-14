@@ -1052,6 +1052,16 @@ final class NetworkSessionService {
         if (isset($this->sessions[$addrKey])) {
             return; // already logged in from this address
         }
+
+        // Hostile-input guards: the username arrives from unverified client
+        // JSON. Clamp its length (it lands in the player list and in every
+        // chat echo, where the 256-byte chat cap does NOT cover the name)
+        // and strip control characters so color/format codes and terminal
+        // escape sequences cannot be smuggled through display paths.
+        $pk->username = mb_substr(preg_replace('/[\x00-\x1f\x7f]/', '', trim($pk->username)), 0, 16);
+        if ($pk->username === '') {
+            $pk->username = 'Player';
+        }
         if (!in_array($pk->protocol, Info::ACCEPTED_PROTOCOLS, true)) {
             $status = $pk->protocol < Info::CURRENT_PROTOCOL
                 ? PlayStatusPacket::LOGIN_FAILED_CLIENT
@@ -1074,10 +1084,20 @@ final class NetworkSessionService {
             return;
         }
 
-        $username = $pk->username !== '' ? $pk->username : 'Player';
+        $username = $pk->username;
         $uuid = $pk->clientUUID !== ''
             ? UUID::fromString($pk->clientUUID)
             : UUID::fromData($addrKey, (string)$pk->clientId);
+
+        // Skin cap: a login may carry up to ~2 MB of post-zlib payload and
+        // every byte of the skin is stored per session and re-broadcast to
+        // ALL players in the player list on every join. Legitimate 0.15
+        // clients send at most 64x64x4 bytes (~16 KB, ~20 KB with the head
+        // layer) - anything larger is hostile junk and rejected.
+        if ($pk->skin !== null && strlen($pk->skin) > 64 * 64 * 4 + 64 * 32 * 4) {
+            $this->disconnectLogin($addrKey, 'Invalid skin.');
+            return;
+        }
 
         // Blocker 2: throttle login attempts per IP so a brute-forcer or a
         // stuck reconnecting client cannot flood the login pipeline.
@@ -1090,6 +1110,18 @@ final class NetworkSessionService {
         }
         $attempts++;
         $this->loginAttempts[$host] = [$attempts, $windowStart];
+        // Prune stale windows (one entry per host, forever). Runs at most
+        // once a minute so a botnet rotating source IPs cannot slowly leak
+        // this map into permanent memory.
+        static $lastPrune = 0;
+        if ($now - $lastPrune >= 60) {
+            $lastPrune = $now;
+            foreach ($this->loginAttempts as $h => [$a, $w]) {
+                if ($now - $w >= 120) {
+                    unset($this->loginAttempts[$h]);
+                }
+            }
+        }
         if ($attempts > $this->antiCheat->loginAttemptsPerMinute) {
             $this->disconnectLogin($addrKey, 'Too many login attempts. Please try again later.');
             return;
@@ -1267,6 +1299,14 @@ final class NetworkSessionService {
     private function handleMove(string $addrKey, MovePlayerPacket $pk): void {
         $session = $this->sessions[$addrKey] ?? null;
         if ($session === null) {
+            return;
+        }
+        // Hostile-coordinate guard: NaN/Inf positions slip past every
+        // anti-cheat comparison (all comparisons on NaN are false) and would
+        // be accepted, then broadcast to viewers and written to storage.
+        // Reject anything non-finite or beyond any plausible world position.
+        if (!is_finite($pk->x) || !is_finite($pk->y) || !is_finite($pk->z)
+            || abs($pk->x) > 1_000_000 || abs($pk->y) > 1_000_000 || abs($pk->z) > 1_000_000) {
             return;
         }
         $entity = $session['entityRef']->getEntity();

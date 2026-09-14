@@ -487,6 +487,14 @@ class Session{
 			if($packet::$ID >= 0x80 && $packet::$ID <= 0x8f && $packet instanceof DataPacket){ //Data packet
 				$packet->decode();
 
+				if($packet->seqNumber === null){
+					// Truncated datagram: the seqNumber triad could not be read.
+					// null slips past every window comparison below (all falsy)
+					// and would poison the ACK queue / received window without
+					// ever advancing dedup state. Drop the datagram.
+					return;
+				}
+
 				if($packet->seqNumber < $this->windowStart || $packet->seqNumber > $this->windowEnd || isset($this->receivedWindow[$packet->seqNumber])){
 					return;
 				}
