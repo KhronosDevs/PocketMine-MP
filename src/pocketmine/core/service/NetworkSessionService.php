@@ -2211,6 +2211,93 @@ final class NetworkSessionService {
     }
 
     /**
+     * 14.30: cauldron interaction (legacy Cauldron::onActivate). Bucket
+     * (empty → fill, water → empty) and glass bottle (fill when ≥2/3).
+     * Water level is the block meta: 0 empty … 6 full, buckets move a full
+     * level (legacy), bottles move 2/3 (legacy water bottle = meta 2).
+     *
+     * @return bool true when the interaction was handled
+     */
+    private function interactCauldron(string $addrKey, array &$session, UseItemPacket $pk, ChunkStore $store): bool {
+        $player = $session['entityRef']->getEntity();
+        $inventory = $player?->get(InventoryComponent::class);
+        if ($inventory === null) {
+            return false;
+        }
+        $held = $inventory->get($inventory->heldSlot);
+        $level = $store->getBlockMeta($pk->x, $pk->y, $pk->z) & 0x07;
+        $isCreative = GameMode::coerce($player?->get(MetadataComponent::class)?->get(MetadataKeys::GAMEMODE)) === GameMode::Creative;
+        $slot = $inventory->heldSlot;
+        $wes = \pocketmine\Kernel::getInstance()?->getWorldEventService();
+        $splash = function (int $worldId, int $x, int $y, int $z) use ($wes): void {
+            $wes?->playSound($worldId, (int)floor($x / 16), (int)floor($z / 16), $x + 0.5, $y + 1.0, $z + 0.5, \pocketmine\core\service\WorldEventService::SOUND_SPLASH);
+        };
+
+        switch ($held?->itemId) {
+            case ItemIds::BUCKET:
+                if ($held->meta === 0) {
+                    // Empty bucket: fills only from a FULL cauldron (legacy).
+                    if ($level !== 0x06) {
+                        return false;
+                    }
+                    $result = new \pocketmine\core\component\ItemStack(ItemIds::BUCKET, BlockIds::WATER, 1);
+                    if (!$isCreative) {
+                        if (!$inventory->canAddItem($result)) {
+                            return false;
+                        }
+                        $inventory->set($slot, null);
+                        $inventory->add($result);
+                        $this->syncInventorySlot($session['playerRef']->entityId, $slot);
+                    }
+                    $store->setBlock($pk->x, $pk->y, $pk->z, BlockIds::CAULDRON, 0x00);
+                    $this->broadcastBlockState($pk->x, $pk->y, $pk->z, $session['worldId']);
+                    $splash($session['worldId'], $pk->x, $pk->y, $pk->z);
+                    return true;
+                }
+                if ($held->meta === BlockIds::WATER) {
+                    // Water bucket: fills the cauldron to full; refuses when
+                    // already full (legacy breaks instead).
+                    if ($level === 0x06) {
+                        return false;
+                    }
+                    if (!$isCreative) {
+                        $inventory->set($slot, new \pocketmine\core\component\ItemStack(ItemIds::BUCKET, 0, 1));
+                        $this->syncInventorySlot($session['playerRef']->entityId, $slot);
+                    }
+                    $store->setBlock($pk->x, $pk->y, $pk->z, BlockIds::CAULDRON, 0x06);
+                    $this->broadcastBlockState($pk->x, $pk->y, $pk->z, $session['worldId']);
+                    $splash($session['worldId'], $pk->x, $pk->y, $pk->z);
+                    return true;
+                }
+                return false; // lava bucket: not handled by cauldrons
+
+            case ItemIds::GLASS_BOTTLE:
+                // A bottle needs ≥2 levels (2/3 full) and yields a water
+                // bottle (373 meta 0, legacy Potion::WATER_BOTTLE).
+                if ($level < 2) {
+                    return false;
+                }
+                $bottle = new \pocketmine\core\component\ItemStack(ItemIds::POTION, 0, 1);
+                if (!$isCreative) {
+                    if (!$inventory->canAddItem($bottle)) {
+                        return false;
+                    }
+                    $inventory->remove($slot, 1);
+                    $inventory->add($bottle);
+                }
+                $newLevel = $level - 2;
+                $store->setBlock($pk->x, $pk->y, $pk->z, BlockIds::CAULDRON, $newLevel);
+                $this->broadcastBlockState($pk->x, $pk->y, $pk->z, $session['worldId']);
+                if (!$isCreative) {
+                    $this->syncInventorySlot($session['playerRef']->entityId, $slot);
+                }
+                $splash($session['worldId'], $pk->x, $pk->y, $pk->z);
+                return true;
+        }
+        return false;
+    }
+
+    /**
      * Bug 13: fishing rod. First use casts the bobber toward the look point;
      * the next use reels in - with a catch if a bite was announced (splash)
      * and the player reacted within the window.
@@ -2782,6 +2869,16 @@ final class NetworkSessionService {
             if ($block === BlockIds::NOTEBLOCK) {
                 $this->playNoteblock($session, $pk->x, $pk->y, $pk->z);
                 return;
+            }
+
+            // 14.30: cauldron (118) — bucket fill/empty and glass-bottle
+            // filling. Water level lives in the block meta (0-6, legacy
+            // Cauldron::onActivate parity). Runs before held-item dispatch
+            // so an empty hand can still bottle from the cauldron.
+            if ($block === BlockIds::CAULDRON) {
+                if ($this->interactCauldron($addrKey, $session, $pk, $store)) {
+                    return;
+                }
             }
         }
         $held = $inventory->get($inventory->heldSlot);

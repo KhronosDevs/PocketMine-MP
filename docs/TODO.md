@@ -82,13 +82,18 @@ that lands on the next solid block.
 - **Done:** Anvil fall sound on landing.
 - **Done:** Falls as item when landing position is occupied.
 
-### 7. Cauldron (118)
+### 7. Cauldron (118) ✅
 
 Cauldrons hold water and can be filled/emptied with buckets.
 
-- **Already in place:** `BlockIds::CAULDRON = 118` in BlockIds.
-- **Missing:** cauldron state (empty/1/2/3 water levels), bucket interaction to
-  fill/empty, splash/spell sounds on water interaction.
+- **Done:** water level in block meta (0 empty … 6 full, legacy parity);
+  `NetworkSessionService::interactCauldron()` — empty bucket fills from a
+  full cauldron (legacy rule), water bucket fills the cauldron to full,
+  glass bottle (≥2 levels) yields a water bottle (373) and drops the level
+  by 2; splash sound on every interaction; creative does not consume items.
+- **Test:** `tests/66_cauldron_test.php`.
+- **Missing:** dye coloring / leather-armor dyeing and potion storage
+  (legacy TileCauldron custom color + PotionId) — cosmetic, deferred.
 
 ### 8. Redstone
 
