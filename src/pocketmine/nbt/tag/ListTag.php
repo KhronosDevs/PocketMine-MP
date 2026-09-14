@@ -100,9 +100,14 @@ class ListTag extends NamedTag implements \ArrayAccess, \Countable, \IteratorAgg
         $size = $nbt->getInt();
         for ($i = 0; $i < $size && !$nbt->feof(); ++$i) {
             $tag = $nbt->readValueTag($this->tagType);
-            if ($tag !== null) {
-                $this->children[] = $tag;
+            if ($tag === null) {
+                // Unknown/unsupported element type: readValueTag() consumed
+                // no bytes, so feof() will never become true and this loop
+                // would spin ~$size times on hostile input (e.g. a crafted
+                // sign-edit NBT). Malformed payload — stop reading.
+                break;
             }
+            $this->children[] = $tag;
         }
     }
 

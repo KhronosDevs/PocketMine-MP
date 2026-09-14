@@ -1062,6 +1062,18 @@ final class NetworkSessionService {
             return;
         }
 
+        // Online-mode identity verification: LoginPacket::decode() already
+        // verifies the Mojang-signed JWT chain and only sets
+        // identityPublicKey when a signature was valid. When the operator
+        // enables online-mode (server.properties), refuse every login that
+        // failed verification — username/UUID/skin are otherwise fully
+        // attacker-controlled, which defeats bans, whitelists and ops.
+        // Offline mode (the default) keeps accepting cracked clients.
+        if (\pocketmine\api\server\Server::getInstance()->isOnlineMode() && $pk->identityPublicKey === null) {
+            $this->disconnectLogin($addrKey, 'Client authentication failed. Please connect with a valid session.');
+            return;
+        }
+
         $username = $pk->username !== '' ? $pk->username : 'Player';
         $uuid = $pk->clientUUID !== ''
             ? UUID::fromString($pk->clientUUID)

@@ -52,9 +52,18 @@ class NBT {
     public const TAG_IntArray = 11;
     public const TAG_Long_Array = 12;
 
+    /**
+     * Maximum container nesting depth accepted while reading. Deeply nested
+     * hostile input (sign edits, item NBT) would otherwise recurse in
+     * readTag() until the PHP C stack overflows and kills the whole process.
+     * Vanilla data never exceeds a handful of levels.
+     */
+    private const MAX_DEPTH = 32;
+
     public string $buffer = "";
     private int $offset = 0;
     public int $endianness;
+    private int $depth = 0;
     /** @var CompoundTag|list<Tag>|null */
     private $data;
 
@@ -87,6 +96,7 @@ class NBT {
      */
     public function read(string $buffer, bool $doMultiple = false): void {
         $this->offset = 0;
+        $this->depth = 0;
         $this->buffer = $buffer;
         $this->data = $this->readTag();
         if ($doMultiple && $this->offset < strlen($this->buffer)) {
@@ -102,7 +112,11 @@ class NBT {
      * Read a gzip-compressed buffer (vanilla level.dat / chunk payloads).
      */
     public function readCompressed(string $buffer): void {
-        $decoded = zlib_decode($buffer);
+        // Cap the decompressed size: the only caller is the storage adapter
+        // (level.dat from disk). Network paths must never feed this — and
+        // never without a limit, or a few compressed KB could balloon into
+        // unbounded RAM.
+        $decoded = zlib_decode($buffer, 64 * 1024 * 1024);
         if ($decoded === false) {
             throw new \RuntimeException("Failed to decompress NBT payload");
         }
@@ -140,6 +154,18 @@ class NBT {
     }
 
     public function readTag(): Tag {
+        if (++$this->depth > self::MAX_DEPTH) {
+            $this->depth = 0;
+            throw new \RuntimeException("NBT nesting too deep (max " . self::MAX_DEPTH . ")");
+        }
+        try {
+            return $this->readTagInner();
+        } finally {
+            --$this->depth;
+        }
+    }
+
+    private function readTagInner(): Tag {
         $type = $this->getByte();
         switch ($type) {
             case self::TAG_Byte:
