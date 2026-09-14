@@ -24,18 +24,26 @@ use function in_array;
  *
  * Sequential (main-thread) system: every SPAWN_INTERVAL ticks it tops up
  * hostile mobs around each alive player, spawning on the terrain surface of a
- * loaded chunk within SPAWN_RADIUS. Respects ServerConfig::spawnMobs, keeps
- * a per-player neighbourhood and a global cap, and never spawns inside the
- * player's column or in ungenerated territory. Spawned mobs carry the full
- * AI/combat component set via EntitySpawnService, so they are immediately
- * visible (entity broadcast) and alive (AISystem targets players).
+ * loaded chunk within SPAWN_RADIUS. Respects the per-world
+ * WorldConfig::spawnMobs toggle, keeps a per-player neighbourhood and a
+ * global cap per world, and never spawns inside the player's column or in
+ * ungenerated territory. Spawned mobs carry the full AI/combat component set
+ * via EntitySpawnService, so they are immediately visible (entity broadcast)
+ * and alive (AISystem targets players).
+ *
+ * 14.30: per-world spawning. The spawner loops over every registered world
+ * bundle (WorldRegistry) instead of hard-coding world 0, so players in the
+ * nether get nether-pool mobs (pigmen, ghasts, blazes, magma cubes —
+ * NETHER_WEIGHTS) while overworld players get the overworld pool. The nether
+ * skips the night gate: the dimension has no day/night (constant darkness),
+ * so mobs spawn there around the clock like vanilla.
  */
 final class MobSpawnerSystem implements System {
     /** Attempt population every N ticks (40 = 2 seconds at 20 TPS). */
     public const SPAWN_INTERVAL = 40;
     /** Max hostile mobs within SPAWN_RADIUS of a single player. */
     public const MAX_MOBS_PER_PLAYER = 8;
-    /** Hard global cap on hostile mobs in the world. */
+    /** Hard global cap on hostile mobs per world. */
     public const MAX_TOTAL_MOBS = 40;
     /** Spawn in an annulus [MIN, MAX] blocks around the player. */
     public const MIN_SPAWN_DISTANCE = 8;
@@ -72,7 +80,6 @@ final class MobSpawnerSystem implements System {
         EntityType::Blaze->value => 4,
         EntityType::LavaSlime->value => 3,
         EntityType::Skeleton->value => 2,  // wither skeleton variant
-        EntityType::Slime->value => 2,
         EntityType::Enderman->value => 1,
     ];
 
@@ -88,29 +95,48 @@ final class MobSpawnerSystem implements System {
         if ($kernel === null) {
             return;
         }
-        // Per-world mob spawning toggle: WorldConfig::spawnMobs replaces
-        // the old global ServerConfig::spawnMobs.
-        $worldConfig = $world->getResourceRegistry()->get(WorldConfig::class);
-        if ($worldConfig instanceof WorldConfig && !$worldConfig->spawnMobs) {
-            return; // mob spawning disabled for this world
-        }
-        // 14.6: hostile mobs only spawn after dusk (time >= 12000). During
-        // the day the world is quiet; the night gate makes day/night mean
-        // something in the game rather than mobs appearing 24/7.
-        if ($worldConfig instanceof WorldConfig && !TimeSystem::isNight($worldConfig->time)) {
-            return; // daylight: no hostile spawns
-        }
         $spawnService = $kernel->getEntitySpawnService();
         if (!$spawnService instanceof EntitySpawnService) {
             return;
         }
 
-        $store = $world->getResourceRegistry()->get(ChunkStore::class);
-        $store = $store instanceof ChunkStore ? $store : null;
+        // Per-world pass: every registered world bundle gets its own spawn
+        // budget, despawn sweep and pool. Players only spawn mobs in the
+        // world they are actually in (their WorldComponent id).
+        $registry = $world->getResourceRegistry()->get(\pocketmine\core\resource\WorldRegistry::class);
+        if ($registry instanceof \pocketmine\core\resource\WorldRegistry) {
+            foreach ($registry->getWorlds() as $worldId => $_) {
+                $config = $registry->getConfig((int)$worldId);
+                $chunks = $registry->getStore((int)$worldId);
+                $this->tickWorld($world, $kernel, $spawnService, (int)$worldId, $chunks instanceof ChunkStore ? $chunks : null, $config instanceof WorldConfig ? $config : null);
+            }
+        } else {
+            // Registry-less path (tests constructing the kernel bare): the
+            // classic single global store, world 0.
+            $worldConfig = $world->getResourceRegistry()->get(WorldConfig::class);
+            $store = $world->getResourceRegistry()->get(ChunkStore::class);
+            $this->tickWorld($world, $kernel, $spawnService, 0, $store instanceof ChunkStore ? $store : null, $worldConfig instanceof WorldConfig ? $worldConfig : null);
+        }
+    }
 
-        // Single entity pass: classify all entities into players (alive,
-        // world 0) and hostiles (world 0) in one scan. Previous code ran
-        // 3-4 separate full-entity scans (build players, despawn sweep,
+    private function tickWorld(World $world, \pocketmine\Kernel $kernel, EntitySpawnService $spawnService, int $worldId, ?ChunkStore $store, ?WorldConfig $worldConfig): void {
+        // Per-world mob spawning toggle: WorldConfig::spawnMobs replaces
+        // the old global ServerConfig::spawnMobs.
+        if ($worldConfig instanceof WorldConfig && !$worldConfig->spawnMobs) {
+            return; // mob spawning disabled for this world
+        }
+        // 14.6: hostile mobs spawn after dusk (time >= 12000) in worlds with
+        // a day/night cycle. The nether has no sky (constant darkness) -
+        // vanilla spawns there around the clock, so the night gate is skipped.
+        $isNether = $worldConfig instanceof WorldConfig
+            && $worldConfig->generator === \pocketmine\core\enum\GeneratorType::Nether;
+        if (!$isNether && $worldConfig instanceof WorldConfig && !TimeSystem::isNight($worldConfig->time)) {
+            return; // daylight: no hostile spawns
+        }
+
+        // Single entity pass: classify all entities into players (alive, in
+        // this world) and hostiles (in this world) in one scan. Previous code
+        // ran 3-4 separate full-entity scans (build players, despawn sweep,
         // countHostileMobs, countHostileNear × players). This replaces
         // all of them with one pass.
         $players = [];
@@ -118,7 +144,7 @@ final class MobSpawnerSystem implements System {
         $allHostiles = []; // for despawn check
         foreach ($world->getEntities() as $entity) {
             $worldComponent = $entity->get(\pocketmine\core\component\WorldComponent::class);
-            if ($worldComponent !== null && $worldComponent->id !== 0) {
+            if ($worldComponent !== null && $worldComponent->id !== $worldId) {
                 continue;
             }
             if ($entity->has(PlayerTag::class)) {
@@ -236,9 +262,7 @@ final class MobSpawnerSystem implements System {
                 continue; // never found loaded terrain: skip this player
             }
 
-            $isNether = $worldConfig instanceof WorldConfig
-                && $worldConfig->generator === \pocketmine\core\enum\GeneratorType::Nether;
-            $spawnService->spawnMob(self::pickHostileType($isNether), $x, $y, $z);
+            $spawnService->spawnMob(self::pickHostileType($isNether), $x, $y, $z, $worldId);
             $totalHostile++;
         }
     }

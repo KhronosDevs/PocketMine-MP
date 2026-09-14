@@ -5869,6 +5869,11 @@ final class NetworkSessionService {
         $configWorld->name = $name;
         $configWorld->folderName = $name;
         $configWorld->generator = \pocketmine\core\enum\GeneratorType::Nether;
+        // 14.30: the nether is a hostile dimension - its own mob toggle
+        // defaults to the global setting, so mob spawns work there without
+        // a khronos.json override (pigmen/ghasts/blazes per NETHER_WEIGHTS).
+        $configWorld->spawnMobs = $config->worldSpawnMobs;
+        $configWorld->spawnAnimals = $config->worldSpawnAnimals;
         $configWorld->seed = $meta !== null && isset($meta['seed']) && $meta['seed'] !== ''
             ? (int)$meta['seed']
             : random_int(1, PHP_INT_MAX);
