@@ -433,6 +433,21 @@ final class CombatService {
         // Drop experience
         $this->dropExperience($targetRef);
 
+        // 14.30: a saddled pig unsaddles on death — drops the saddle back and
+        // ejects its rider (legacy Animal/Entity link cleanup on death).
+        if (($meta?->get(MetadataKeys::ENTITY_TYPE) === EntityType::Pig->value
+                || $meta?->get(MetadataKeys::MOB_TYPE) === EntityType::Pig->value)
+            && (bool)$meta?->get(MetadataKeys::PIG_SADDLED, false)) {
+            $pos = $target->get(\pocketmine\core\component\PositionComponent::class);
+            if ($pos !== null) {
+                $this->dropItemStack($pos, new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::SADDLE, 0, 1));
+            }
+            $riderId = (int)($meta?->get(MetadataKeys::VEHICLE_RIDER_ID) ?? 0);
+            if ($riderId > 0) {
+                \pocketmine\Kernel::getInstance()?->getNetworkSessionService()?->dismountByRiderId($riderId);
+            }
+        }
+
         // Drop loot (inventory contents + mob loot table)
         $this->dropLoot($targetRef);
 

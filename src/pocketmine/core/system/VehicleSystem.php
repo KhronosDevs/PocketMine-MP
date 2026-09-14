@@ -45,6 +45,10 @@ final class VehicleSystem implements System {
 
     private const BOAT_SPEED = 0.4;
     private const MINECART_SPEED = 0.4;
+    /** Pigs are slower than boats (legacy pig walk pace). */
+    private const PIG_SPEED = 0.25;
+    /** Standard MC jump impulse (blocks/tick) for the ridden pig. */
+    private const PIG_JUMP_VELOCITY = 0.42;
     private const RAIL_IDS = [27, 28, 66, 157]; // powered/detector/rail/activator
 
     public function run(World $world, float $deltaTime): void {
@@ -69,6 +73,8 @@ final class VehicleSystem implements System {
                 $this->tickBoat($world, $chunks, $entity, $pos, $vel, $meta, $worldId, $deltaTime);
             } elseif ($type === 'Minecart') {
                 $this->tickMinecart($world, $chunks, $entity, $pos, $vel, $meta, $worldId, $deltaTime);
+            } elseif ($type === 'Pig') {
+                $this->tickPig($world, $chunks, $pos, $vel, $meta, $entity, $deltaTime);
             }
 
             if ($riderId > 0) {
@@ -118,6 +124,35 @@ final class VehicleSystem implements System {
             $vel->x *= 0.95;
             $vel->z *= 0.95;
         }
+        $this->dampen($vel);
+    }
+
+    /**
+     * Ridden pig (saddle): yaw-relative steering like the boat but at pig
+     * pace, ground jump from PlayerInputPacket (VEHICLE_JUMPING), and no
+     * float — gravity (PhysicsSystem) owns Y except during the jump impulse.
+     */
+    private function tickPig(World $world, ?ChunkStore $chunks, PositionComponent $pos, VelocityComponent $vel, MetadataComponent $meta, Entity $entity, float $deltaTime): void {
+        $inputX = (float)($meta->get(MetadataKeys::VEHICLE_INPUT_X) ?? 0.0);
+        $inputZ = (float)($meta->get(MetadataKeys::VEHICLE_INPUT_Z) ?? 0.0);
+        $jumping = (bool)$meta->get(MetadataKeys::VEHICLE_JUMPING, false);
+        $yaw = $entity->get(RotationComponent::class)?->yaw ?? 0.0;
+        $rad = $yaw * M_PI / 180.0;
+
+        // Same steering model as the boat, scaled to PIG_SPEED.
+        $speed = self::PIG_SPEED * $deltaTime * 20.0;
+        $vel->x = -sin($rad) * $speed * $inputZ + cos($rad) * $speed * $inputX * 0.5;
+        $vel->z = cos($rad) * $speed * $inputZ + sin($rad) * $speed * $inputX * 0.5;
+
+        // Jump only while supported (block below the feet is non-air) and not
+        // already rising — otherwise holding jump lets the pig fly.
+        $grounded = $chunks !== null
+            && (int)floor($pos->y - 0.1) >= 0
+            && $chunks->getBlock((int)floor($pos->x), (int)floor($pos->y - 0.1), (int)floor($pos->z)) !== 0;
+        if ($jumping && $grounded && $vel->y <= 0.0) {
+            $vel->y = self::PIG_JUMP_VELOCITY;
+        }
+
         $this->dampen($vel);
     }
 

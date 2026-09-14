@@ -25,6 +25,7 @@ final class ItemIds {
     public const IRON_ORE = 15;
     public const COAL_ORE = 16;
     public const WOOL = 35;
+    public const SADDLE = 329;
     public const TORCH = 50;
     public const TNT = 46;
     public const CHEST = 54;

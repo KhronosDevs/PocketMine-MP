@@ -188,17 +188,19 @@ reduce this cost.
 **What to benchmark:** typical mutation size, delta encoding overhead,
 protocol compatibility with existing clients.
 
-### Saddle (item 329)
+### Saddle (item 329) ✅
 
-Right-clicking a pig with a saddle should make it rideable (player mounts,
-WASD controls via PlayerInputPacket, saddle consumed). Requires extending
-`VehicleSystem` with a `tickPig()` handler (like `tickBoat`/`tickMinecart`)
-and adding the pig as a mountable entity type.
+Right-clicking a pig with a saddle makes it rideable. Done:
 
-- **Already in place:** `VehicleSystem` (boats/minecarts), `SetEntityLinkPacket`
-  for mounting, `PlayerInputPacket` handling, saddle item registered.
-- **Missing:** `tickPig()` in VehicleSystem, saddle consumption on interact,
-  pig-specific movement (slower than boats, no rails), unsaddle on death.
+- **Done:** saddle consumption on interact (`EntityInteractionService::saddlePig`
+  — item 329 in hand, consumes one, tags the pig VEHICLE + PIG_SADDLED);
+  mounting rides the standard vehicle link path (`InteractPacket` right-click →
+  `mountVehicle`, `PlayerInputPacket` steering, sneak to dismount);
+  `VehicleSystem::tickPig()` — boat-style yaw-relative steering at pig pace
+  (0.25 vs boat 0.4), ground jump from VEHICLE_JUMPING (no mid-air re-jump);
+  unsaddle on death (`CombatService::handleDeath`) drops the saddle and
+  ejects the rider via `NetworkSessionService::dismountByRiderId()`.
+- **Test:** `tests/65_pig_saddle_test.php` (saddle/tag, steering+jump, death eject).
 
 ### Map cartography
 

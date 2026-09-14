@@ -5101,7 +5101,16 @@ final class NetworkSessionService {
         if ($session === null) {
             return;
         }
-        $rider = $session['entityRef']->getEntity();
+        $this->dismountByRiderId($session['playerRef']->entityId);
+    }
+
+    /**
+     * Dismount by rider entity id (no session lookup). Public because death
+     * cleanup (CombatService) must eject the rider of a dying vehicle — the
+     * pig dies in CombatService which has no session access.
+     */
+    public function dismountByRiderId(int $riderId): void {
+        $rider = $this->world->getEntity($riderId);
         $riderMeta = $rider?->get(MetadataComponent::class);
         $vehicleId = (int)($riderMeta?->get(\pocketmine\core\constants\MetadataKeys::RIDING_VEHICLE_ID) ?? 0);
         if ($vehicleId <= 0) {
@@ -5111,7 +5120,7 @@ final class NetworkSessionService {
         $vehicle = $this->world->getEntity($vehicleId);
         $vehicleMeta = $vehicle?->get(MetadataComponent::class);
         $vehicleMeta?->remove(\pocketmine\core\constants\MetadataKeys::VEHICLE_RIDER_ID);
-        $this->broadcastLink($vehicleId, $session['playerRef']->entityId, SetEntityLinkPacket::TYPE_REMOVE);
+        $this->broadcastLink($vehicleId, $riderId, SetEntityLinkPacket::TYPE_REMOVE);
     }
 
     /** Send a SetEntityLinkPacket to every session that sees the vehicle. */

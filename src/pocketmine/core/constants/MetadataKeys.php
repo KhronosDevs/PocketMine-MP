@@ -93,6 +93,8 @@ final class MetadataKeys {
     public const VEHICLE_TYPE = 'vehicleType';
     public const VEHICLE_RIDER_ID = 'vehicleRiderId';
     public const RIDING_VEHICLE_ID = 'ridingVehicleId';
+    /** 1 when a pig carries a saddle (right-click with item 329 consumes it). */
+    public const PIG_SADDLED = 'pigSaddled';
     public const VEHICLE_INPUT_X = 'vehicleInputX';
     public const VEHICLE_INPUT_Z = 'vehicleInputZ';
     public const VEHICLE_JUMPING = 'vehicleJumping';

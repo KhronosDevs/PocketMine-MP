@@ -79,6 +79,12 @@ final class EntityInteractionService {
      *  - breed food on a feedable animal -> love mode (bug 20)
      */
     private function interactWithPassive(EntityRef $playerRef, EntityRef $targetRef, string $targetType): bool {
+        // Saddling: right-clicking a pig with a saddle (item 329) saddles and
+        // mounts it (legacy Pig::onInteract -> ItemSaddle). The held-item
+        // checks below (shears/bucket) cannot conflict - a saddle is neither.
+        if ($targetType === 'Pig' && $this->saddlePig($playerRef, $targetRef)) {
+            return true;
+        }
         if ($targetType === 'Sheep') {
             $heldForShear = $this->heldItem($playerRef);
             if ($heldForShear !== null && $heldForShear->itemId === \pocketmine\core\constants\ItemIds::SHEARS && $this->shearSheep($playerRef, $targetRef)) {
@@ -92,6 +98,58 @@ final class EntityInteractionService {
             }
         }
         return $this->feedAnimal($playerRef, $targetRef, $targetType);
+    }
+
+    /**
+     * Right-clicking a pig with a saddle (item 329) consumes the saddle and
+     * marks the pig saddled (Pig::onInteract legacy parity). Mounting is left
+     * to NetworkSessionService: the same right-click rides the pig via the
+     * normal vehicle link path once it is tagged VEHICLE + PIG_SADDLED.
+     * An already-saddled pig is never fed to (return false, no double mount).
+     */
+    private function saddlePig(EntityRef $playerRef, EntityRef $targetRef): bool {
+        $player = $playerRef->getEntity();
+        $pig = $targetRef->getEntity();
+        if (!$player || !$pig) return false;
+
+        $inventory = $player->get(InventoryComponent::class);
+        if (!$inventory) return false;
+
+        $pigMeta = $pig->get(MetadataComponent::class);
+        if ($pigMeta === null) return false;
+
+        // Already saddled: fall through (empty-hand right-click remounts via
+        // the vehicle path; feeding a saddled pig is refused anyway).
+        if ((bool)$pigMeta->get(\pocketmine\core\constants\MetadataKeys::PIG_SADDLED, false)) {
+            return false;
+        }
+
+        $held = $inventory->get($inventory->heldSlot);
+        if ($held === null || $held->itemId !== \pocketmine\core\constants\ItemIds::SADDLE) {
+            return false; // needs the saddle in hand
+        }
+
+        // Consume one saddle from the hand.
+        $slot = $inventory->heldSlot;
+        $stack = $inventory->get($slot);
+        if ($stack === null) {
+            return false;
+        }
+        $stack->count--;
+        if ($stack->count <= 0) {
+            $inventory->set($slot, null);
+        } else {
+            $inventory->set($slot, $stack);
+        }
+        \pocketmine\Kernel::getInstance()?->getNetworkSessionService()?->syncInventorySlot($playerRef->getId(), $slot);
+
+        // Tag + mark the pig. The tag makes InteractPacket mounting and the
+        // per-tick vehicle pass treat it like a boat; PIG_SADDLED drives the
+        // client's saddle visual and survives via AISystem pig ticks.
+        $pig->set(\pocketmine\core\constants\EntityTags::VEHICLE, true);
+        $pigMeta->set(\pocketmine\core\constants\MetadataKeys::VEHICLE_TYPE, 'Pig');
+        $pigMeta->set(\pocketmine\core\constants\MetadataKeys::PIG_SADDLED, true);
+        return true;
     }
 
     /**
