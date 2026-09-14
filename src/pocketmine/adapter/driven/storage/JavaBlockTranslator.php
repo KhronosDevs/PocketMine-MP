@@ -792,4 +792,230 @@ final class JavaBlockTranslator {
             $logged++;
         }
     }
+
+    // --- Tile-entity + item translation (Java world import) ----------------
+
+    /**
+     * Java 1.13+ tile-entity ids (lowercase, namespaced) mapped to the
+     * Khronos tile type strings the stores restore from. Types without a
+     * Khronos store return null (the tile is dropped - the block itself
+     * still imports, so a foreign container imports as an empty container).
+     *
+     * @var array<string, string>|null
+     */
+    private static ?array $tileTypeCache = null;
+
+    /** @return array<string, string> java tile id => Khronos TILE_* constant */
+    private static function tileTypes(): array {
+        if (self::$tileTypeCache !== null) {
+            return self::$tileTypeCache;
+        }
+        $t = [];
+        // Containers (ChestStore / FurnaceStore / ContainerStore / BrewingStore).
+        $t['chest'] = 'Chest';
+        $t['trapped_chest'] = 'Chest';
+        $t['furnace'] = 'Furnace';
+        $t['dispenser'] = 'Dispenser';
+        $t['dropper'] = 'Dropper';
+        $t['hopper'] = 'Hopper';
+        $t['brewing_stand'] = 'BrewingStand';
+        // Decorative / text tiles (TileEntityStore).
+        $t['sign'] = 'Sign';
+        $t['wall_sign'] = 'Sign';
+        $t['item_frame'] = 'ItemFrame';
+        $t['painting'] = 'Painting';
+        return self::$tileTypeCache = $t;
+    }
+
+    /**
+     * Map a Java tile-entity id ('minecraft:chest', 'wall_sign', ...) to the
+     * Khronos tile type string, or null when we have no store for it.
+     */
+    public static function javaTileType(string $javaId): ?string {
+        $name = strtolower($javaId);
+        if (str_contains($name, ':')) {
+            $name = substr($name, strpos($name, ':') + 1);
+        }
+        return self::tileTypes()[$name] ?? null;
+    }
+
+    /**
+     * Java 1.13+ item resource names mapped to PE 0.15 item ids (the
+     * legacy/old-src ItemIds table). Used for chest/furnace inventories
+     * inside imported tile entities - Java stores items as
+     * {id: 'minecraft:iron_sword', Count: 1b, Slot: 0b, tag: {...}}.
+     * Returns [id, meta] (meta 0 unless the name carries damage data).
+     *
+     * @return array{0: int, 1: int}|null null = unknown item, skipped
+     */
+    public static function javaItemToPe(string $javaId): ?array {
+        $name = strtolower($javaId);
+        if (str_contains($name, ':')) {
+            $name = substr($name, strpos($name, ':') + 1);
+        }
+        $id = self::itemNames()[$name] ?? null;
+        return $id === null ? null : [$id, 0];
+    }
+
+    /** @var array<string, int>|null */
+    private static ?array $itemNamesCache = null;
+
+    /** @return array<string, int> java item resource name => PE 0.15 id */
+    private static function itemNames(): array {
+        if (self::$itemNamesCache !== null) {
+            return self::$itemNamesCache;
+        }
+        $t = [];
+        $put = function (array $names, int $id) use (&$t): void {
+            foreach ($names as $n) {
+                $t[$n] = $id;
+            }
+        };
+        // Tools / weapons (256-294).
+        $put(['wooden_sword', 'wood_sword'], 268);
+        $put(['wooden_shovel', 'wood_shovel'], 269);
+        $put(['wooden_pickaxe', 'wood_pickaxe'], 270);
+        $put(['wooden_axe', 'wood_axe'], 271);
+        $put(['stone_sword'], 272); $put(['stone_shovel'], 273);
+        $put(['stone_pickaxe'], 274); $put(['stone_axe'], 275);
+        $put(['diamond_sword'], 276); $put(['diamond_shovel'], 277);
+        $put(['diamond_pickaxe'], 278); $put(['diamond_axe'], 279);
+        $put(['golden_sword', 'gold_sword'], 283);
+        $put(['golden_shovel', 'gold_shovel'], 284);
+        $put(['golden_pickaxe', 'gold_pickaxe'], 285);
+        $put(['golden_axe', 'gold_axe'], 286);
+        $put(['wooden_hoe', 'wood_hoe'], 290); $put(['stone_hoe'], 291);
+        $put(['iron_hoe'], 292); $put(['diamond_hoe'], 293);
+        $put(['golden_hoe', 'gold_hoe'], 294);
+        $put(['iron_sword'], 267); $put(['iron_shovel'], 256);
+        $put(['iron_pickaxe'], 257); $put(['iron_axe'], 258);
+        // Armor (298-317).
+        $put(['leather_helmet'], 298); $put(['leather_chestplate'], 299);
+        $put(['leather_leggings'], 300); $put(['leather_boots'], 301);
+        $put(['chainmail_helmet'], 302); $put(['chainmail_chestplate'], 303);
+        $put(['chainmail_leggings'], 304); $put(['chainmail_boots'], 305);
+        $put(['iron_helmet'], 306); $put(['iron_chestplate'], 307);
+        $put(['iron_leggings'], 308); $put(['iron_boots'], 309);
+        $put(['diamond_helmet'], 310); $put(['diamond_chestplate'], 311);
+        $put(['diamond_leggings'], 312); $put(['diamond_boots'], 313);
+        $put(['golden_helmet', 'gold_helmet'], 314);
+        $put(['golden_chestplate', 'gold_chestplate'], 315);
+        $put(['golden_leggings', 'gold_leggings'], 316);
+        $put(['golden_boots', 'gold_boots'], 317);
+        // Food & farming.
+        $put(['apple'], 260); $put(['bread'], 297);
+        $put(['porkchop'], 319); $put(['cooked_porkchop'], 320);
+        $put(['beef'], 363); $put(['cooked_beef'], 364);
+        $put(['chicken'], 365); $put(['cooked_chicken'], 366);
+        $put(['rotten_flesh'], 367); $put(['spider_eye'], 375);
+        $put(['carrot'], 391); $put(['potato'], 392); $put(['baked_potato'], 393);
+        $put(['golden_carrot'], 396); $put(['golden_apple'], 322);
+        $put(['poisonous_potato'], 394); $put(['cookie'], 357);
+        $put(['melon_slice', 'melon'], 360); $put(['pumpkin_pie'], 0);
+        $put(['wheat_seeds', 'seeds'], 295); $put(['wheat'], 296);
+        $put(['pumpkin_seeds'], 361); $put(['melon_seeds'], 362);
+        $put(['sugar'], 353); $put(['egg'], 344);
+        $put(['mushroom_stew'], 282); $put(['bowl'], 281);
+        $put(['cod', 'fish'], 349); $put(['cooked_cod', 'cooked_fish'], 350);
+        $put(['salmon'], 349); $put(['cooked_salmon'], 350);
+        // Materials & blocks-as-items.
+        $put(['stick'], 280); $put(['coal'], 263); $put(['charcoal'], 263);
+        $put(['diamond'], 264); $put(['iron_ingot'], 265); $put(['gold_ingot', 'gold_ingots'], 266);
+        $put(['emerald'], 388); $put(['flint'], 318);
+        $put(['string'], 287); $put(['feather'], 288); $put(['gunpowder'], 289);
+        $put(['leather'], 334); $put(['clay_ball', 'clay'], 337); $put(['brick'], 336);
+        $put(['paper'], 339); $put(['book'], 340); $put(['slime_ball'], 341);
+        $put(['bone'], 352); $put(['bone_meal'], 351); $put(['sugar_cane'], 338);
+        $put(['blaze_rod'], 369); $put(['blaze_powder'], 377);
+        $put(['ghast_tear'], 370); $put(['gold_nugget'], 371);
+        $put(['nether_wart'], 372); $put(['magma_cream'], 378);
+        $put(['glowstone_dust'], 348); $put(['redstone'], 331);
+        $put(['glistering_melon_slice'], 382); $put(['ender_pearl'], 0);
+        $put(['quartz'], 406); $put(['prismarine_shard'], 0);
+        // Dyes (351, meta = legacy dye color).
+        $put(['ink_sac'], 351); $put(['white_dye'], 351); $put(['gray_dye'], 351);
+        $put(['dye'], 351);
+        // Utility items.
+        $put(['bucket'], 325); $put(['water_bucket'], 325); $put(['lava_bucket'], 325);
+        $put(['flint_and_steel'], 259); $put(['bow'], 261); $put(['arrow'], 262);
+        $put(['shears'], 359); $put(['fishing_rod'], 346);
+        $put(['compass'], 345); $put(['clock'], 347);
+        $put(['potion'], 373); $put(['glass_bottle'], 374);
+        $put(['saddle'], 329); $put(['minecart'], 328); $put(['boat', 'oak_boat'], 333);
+        $put(['sign', 'oak_sign'], 323); $put(['item_frame'], 389);
+        $put(['painting'], 321); $put(['name_tag'], 0); $put(['lead'], 0);
+        $put(['enchanted_book'], 340); $put(['experience_bottle'], 384);
+        $put(['fire_charge'], 385); $put(['torch'], 50);
+        return self::$itemNamesCache = $t;
+    }
+
+    // --- Entity name normalization (Java world import) ----------------------
+
+    /**
+     * Java entity ids (lowercase resource names, 1.13+ style) mapped to the
+     * Khronos EntityType enum values that restoreEntityFromSnapshot() accepts.
+     * Covers both directions of the old/Java naming drift: pig zombie ->
+     * PigZombie, zombie villager husk variants, and the pre-1.13 short ids
+     * ('Zombie', 'Pig') that old PocketMine level.dat entity lists carry.
+     *
+     * @var array<string, string>|null
+     */
+    private static ?array $entityNamesCache = null;
+
+    /** @return array<string, string> java/legacy entity id => EntityType value */
+    private static function entityNames(): array {
+        if (self::$entityNamesCache !== null) {
+            return self::$entityNamesCache;
+        }
+        $t = [];
+        // 1.13+ lowercase Java names -> Khronos types.
+        foreach ([
+            'zombie' => 'Zombie', 'husk' => 'Husk', 'drowned' => 'Zombie',
+            'zombie_villager' => 'ZombieVillager',
+            'skeleton' => 'Skeleton', 'stray' => 'Stray',
+            'creeper' => 'Creeper', 'spider' => 'Spider',
+            'cave_spider' => 'CaveSpider', 'slime' => 'Slime',
+            'magma_cube' => 'LavaSlime', 'enderman' => 'Enderman',
+            'silverfish' => 'Silverfish', 'witch' => 'Witch',
+            'zombie_pigman' => 'PigZombie', 'zombified_piglin' => 'PigZombie',
+            'piglin' => 'PigZombie', 'blaze' => 'Blaze', 'ghast' => 'Ghast',
+            'cow' => 'Cow', 'pig' => 'Pig', 'sheep' => 'Sheep',
+            'chicken' => 'Chicken', 'villager' => 'Villager',
+            'mooshroom' => 'Mooshroom', 'squid' => 'Squid',
+            'rabbit' => 'Rabbit', 'bat' => 'Bat', 'ocelot' => 'Ocelot',
+            'wolf' => 'Wolf', 'cat' => 'Ocelot',
+            'iron_golem' => 'IronGolem', 'snow_golem' => 'SnowGolem',
+            'wither_skeleton' => 'Skeleton',
+            'boat' => 'Boat', 'chest_boat' => 'Boat', 'minecart' => 'Minecart',
+            'chest_minecart' => 'Minecart', 'furnace_minecart' => 'Minecart',
+            'hopper_minecart' => 'Minecart', 'tnt_minecart' => 'Minecart',
+        ] as $java => $khronos) {
+            $t[$java] = $khronos;
+        }
+        // Pre-1.13/old-PocketMine names (already correct case) pass through
+        // the same table so one lookup handles every import flavour.
+        foreach (['Zombie', 'Skeleton', 'Creeper', 'Spider', 'Slime',
+            'Enderman', 'Silverfish', 'CaveSpider', 'PigZombie', 'Blaze',
+            'LavaSlime', 'Ghast', 'Witch', 'Stray', 'Husk', 'ZombieVillager',
+            'Cow', 'Pig', 'Sheep', 'Chicken', 'Villager', 'Mooshroom',
+            'Squid', 'Rabbit', 'Bat', 'Ocelot', 'Wolf', 'IronGolem',
+            'SnowGolem', 'Boat', 'Minecart',
+        ] as $v) {
+            $t[strtolower($v)] = $v;
+        }
+        return self::$entityNamesCache = $t;
+    }
+
+    /**
+     * Normalize a Java (or old-PocketMine) entity id to the Khronos
+     * EntityType value string, or null when the type has no Khronos
+     * equivalent (it is skipped on restore).
+     */
+    public static function javaEntityType(string $javaId): ?string {
+        $name = strtolower($javaId);
+        if (str_contains($name, ':')) {
+            $name = substr($name, strpos($name, ':') + 1);
+        }
+        return self::entityNames()[$name] ?? null;
+    }
 }

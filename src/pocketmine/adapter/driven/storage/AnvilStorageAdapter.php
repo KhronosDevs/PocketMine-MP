@@ -459,4 +459,100 @@ final class AnvilStorageAdapter extends RegionStorageAdapter {
         $data = $stream->get($dataLength);
         return new TileEntitySnapshot($id, $className, $x, $y, $z, ['nbt' => base64_encode($data)]);
     }
+
+    /**
+     * Java world import: foreign (non-KhronosData) tile entities carry
+     * vanilla compound fields (Items list, BurnTime, ...). Translate them
+     * into the Khronos snapshot shape the stores restore from so imported
+     * chests/furnaces/dispensers hold their loot; tiles with no Khronos
+     * equivalent are dropped (the block itself still imports).
+     */
+    protected function decodeTileEntities(?ListTag $list): array {
+        $out = [];
+        foreach ($list ?? [] as $tag) {
+            if (!$tag instanceof CompoundTag) {
+                continue;
+            }
+            // Khronos-native tiles (KhronosData blob) pass through unchanged.
+            if ($tag->getByteArray('KhronosData', '') !== '') {
+                foreach (parent::decodeTileEntities(new ListTag('', [$tag])) as $snap) {
+                    $out[] = $snap;
+                }
+                continue;
+            }
+            $javaId = $tag->getString('id', '');
+            $type = JavaBlockTranslator::javaTileType($javaId);
+            if ($type === null) {
+                continue; // no store for this tile: drop it
+            }
+            $x = $tag->getInt('x', 0);
+            $y = $tag->getInt('y', 0);
+            $z = $tag->getInt('z', 0);
+
+            // Translate the vanilla payload per type into the exact JSON
+            // shape each store's restoreFromSnapshots() expects.
+            $data = [];
+            switch ($type) {
+                case 'Chest':
+                case 'Dispenser':
+                case 'Dropper':
+                case 'Hopper':
+                    $items = $tag->getListTag('Items');
+                    if ($items !== null) {
+                        $inv = [];
+                        foreach ($items as $entry) {
+                            if (!$entry instanceof CompoundTag) {
+                                continue;
+                            }
+                            $slot = $entry->getByte('Slot', 0);
+                            $item = JavaBlockTranslator::javaItemToPe($entry->getString('id', ''));
+                            if ($item === null) {
+                                continue;
+                            }
+                            $count = max(1, $entry->getByte('Count', 1));
+                            $inv[$slot] = ['id' => $item[0], 'meta' => $item[1], 'count' => $count];
+                        }
+                        $data['nbt'] = base64_encode((string)json_encode($inv));
+                    }
+                    break;
+
+                case 'Furnace':
+                    $items = $tag->getListTag('Items');
+                    $inv = [];
+                    if ($items !== null) {
+                        foreach ($items as $entry) {
+                            if (!$entry instanceof CompoundTag) {
+                                continue;
+                            }
+                            $slot = $entry->getByte('Slot', 0);
+                            $item = JavaBlockTranslator::javaItemToPe($entry->getString('id', ''));
+                            if ($item === null) {
+                                continue;
+                            }
+                            $inv[$slot] = ['id' => $item[0], 'meta' => $item[1], 'count' => max(1, $entry->getByte('Count', 1))];
+                        }
+                    }
+                    $data['nbt'] = base64_encode((string)json_encode([
+                        'inventory' => $inv,
+                        'burnTime' => $tag->getShort('BurnTime', 0),
+                        'cookTime' => $tag->getShort('CookTime', 0),
+                    ]));
+                    break;
+
+                case 'Sign':
+                    $text = [];
+                    foreach (['Text1', 'Text2', 'Text3', 'Text4'] as $i => $field) {
+                        $line = $tag->getString($field, '');
+                        // 1.13+ stores JSON chat components; 1.12- plain text.
+                        $decoded = json_decode($line, true);
+                        $text[$i] = is_array($decoded) ? (string)($decoded['text'] ?? '') : $line;
+                    }
+                    $data['text'] = $text;
+                    $data['creator'] = '';
+                    break;
+            }
+            $out[] = new TileEntitySnapshot('java:' . $type . ':' . $x . ':' . $y . ':' . $z, $type, $x, $y, $z, $data);
+        }
+        return $out;
+    }
 }

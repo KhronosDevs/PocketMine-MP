@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\adapter\driven\storage;
 
+use pocketmine\adapter\driven\storage\JavaBlockTranslator;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\ByteArrayTag;
 use pocketmine\nbt\tag\ByteTag;
@@ -616,7 +617,14 @@ abstract class RegionStorageAdapter implements StoragePort {
             }
         }
 
-        // Foreign entity (no KhronosData): map the vanilla fields.
+        // Foreign entity (no KhronosData): map the vanilla fields. The type
+        // string is normalized through the Java import table so lowercase
+        // 1.13+ ids ('minecraft:zombie') and old-PocketMine names restore
+        // into the right Khronos EntityType; unknown types come back as
+        // 'unknown' and the restore path skips them.
+        $type = $type !== ''
+            ? (JavaBlockTranslator::javaEntityType($type) ?? 'unknown')
+            : 'unknown';
         return new EntitySnapshot(
             $id !== '' ? $id : $type,
             $type,
