@@ -302,6 +302,34 @@ same wire outcome, no blowup), and `Session::update` retransmit timeouts
 compare against the tick's microtime instead of 1-second-resolution `time()`
 (retransmit no longer fires up to a second late).
 
+### Security hardening pass (2026-09)
+
+Network audit results, shipped in severity order:
+
+- **Critical — NBT** (`tests/64`): container nesting capped at 32 levels
+  (deep hostile compounds segfaulted PHP via C-stack overflow — process
+  kill from a sign edit); `ListTag::read` stops on unsupported element
+  types (previously spun ~2 billion no-op iterations — remote main-thread
+  hang); `readCompressed` capped at 64 MB. `online-mode=true` is now
+  enforced: logins whose Mojang signature chain did not verify are
+  rejected (the flag existed but nothing consumed it; bans, whitelist and
+  ops all keyed on attacker-controlled identity strings).
+- **High — RakLib wire**: the 16-byte offline magic is verified on all
+  unconnected traffic (1-byte spoofed datagrams previously created
+  sessions and elicited responses — reflection/amplification vector);
+  NACK re-acceptance capped at 64 datagrams per NACK (one hostile packet
+  could hold ~2048 datagrams in permanent retransmit, ~2 MB/s outbound);
+  both cross-thread queues capped at 1024 frames (previously unbounded).
+- **Medium — game layer**: truncated DATA packets with a null seqNumber
+  are dropped (they slipped past every window comparison and got ACKed);
+  login skins capped at 64×64×4 + head layer (~20 KB, was ~2 MB rebroadcast
+  per join); usernames clamped to 16 printable chars (chat-echo injection);
+  non-finite/absurd move coordinates rejected (NaN passed every anti-cheat
+  comparison); login-attempt windows pruned (per-host leak).
+- **Low**: client-declared MTU floored at 400 (an mtuSize near 0 crashed
+  the wire thread's send path on the next outbound).
+
+
 ### ACK/NACK run-length records flattened to per-seq arrays (candidate)
 
 `AcknowledgePacket::decode()` expands every wire run-length record into a
