@@ -5646,7 +5646,13 @@ final class NetworkSessionService {
      * Reads the state from the ChunkStore so whatever the services actually
      * set (including placement-meta resolution) is what the client receives.
      */
-    private function broadcastBlockState(int $x, int $y, int $z, int $worldId = 0): void {
+    /**
+     * Re-send one block's state (UpdateBlockPacket) to every viewer. Public
+     * because block-state systems outside the service (e.g. the pressure
+     * plate press/unpress pass) need the same wire sync as the internal
+     * break/place paths.
+     */
+    public function broadcastBlockState(int $x, int $y, int $z, int $worldId = 0): void {
         $store = $this->getChunkStore($worldId);
         if ($store === null) {
             return;

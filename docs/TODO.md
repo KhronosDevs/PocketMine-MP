@@ -57,16 +57,17 @@ Hostile mobs chase players in **straight lines** and get stuck on hills and wall
 - **Already in place:** `AISystem` (sequential), `AIStateComponent` with per-mob stats, `SpatialIndex`, combat pipeline integration.
 - **Missing:** navigation. Pragmatic scope: a lightweight jump-and-avoid — when a chase is blocked by a solid block ahead, step up a 1-block ledge or strafe around; no full A* navmesh needed for a 0.15-era feel. Add a `PathComponent`/waypoint follow so mobs can loop around obstacles.
 
-### 5. Pressure plates (70/72/147/148)
+### 5. Pressure plates (70/72) ✅
 
-Pressure plates need entity collision detection to activate when a player/mob
-walks over them. The old-src uses `EntityBaseTick` to check if any entity's
-bounding box overlaps the plate's block position.
+Entity-over-block activation is done: `PressurePlateSystem` (sequential, after
+movement/physics) presses a plate (meta bit 0x08 + click sound) when a living
+entity's feet occupy its block, and unpresses it after a grace period (stone
+20 ticks, wood 10) once the entity steps off. Dead entities don't press.
+Plate state is plain block meta — persists through the normal chunk save.
+`tests/69_pressure_plate_test.php` covers press/unpress/dead-entity.
 
-- **Already in place:** `BlockIds` has all pressure plate IDs. `CollisionComponent`
-  exists for entities.
-- **Missing:** per-tick entity-over-block detection system, plate activation/deactivation
-  logic, redstone signal emission (tied to redstone engine).
+- **Missing (deferred):** weighted gold/iron plates (147/148, entity-count
+  signal strength), redstone signal emission (tied to the redstone engine).
 
 ### 6. Falling sand / falling gravel ✅
 

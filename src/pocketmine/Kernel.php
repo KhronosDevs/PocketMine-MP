@@ -2562,6 +2562,10 @@ function registerBuiltinSystems(SystemScheduler $scheduler): void {
     // the rider follows the vehicle. After movement/physics so the vehicle
     // sees the integrated position; before chunk work.
     $scheduler->register(new \pocketmine\core\system\VehicleSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
+    // 14.30: pressure plates - press under a standing entity (meta 0x08 +
+    // click sound), unpress after a short grace when it steps off. After
+    // movement/physics so entity feet positions are current.
+    $scheduler->register(new \pocketmine\core\system\PressurePlateSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     // Falling sand / gravel / anvils: detect landing and convert to blocks.
     $scheduler->register(new \pocketmine\core\system\FallingSandSystem(), \pocketmine\core\ecs\SystemPhase::SEQUENTIAL);
     $scheduler->register(new \pocketmine\core\system\ChunkUpdateSystem(), \pocketmine\core\ecs\SystemPhase::CHUNK_PARALLEL);
