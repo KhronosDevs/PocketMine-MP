@@ -103,6 +103,17 @@ final class Protocol84NetworkAdapter implements NetworkPort, ServerInstance {
         $this->running = true;
     }
 
+    /**
+     * Lift a per-IP wire-layer block (e.g. an accidental packet-limit trip
+     * from a NAT'd network, or admin tooling like a future /unban-ip).
+     * No-op when the address is not blocked.
+     */
+    public function unblockAddress(string $address): void {
+        if ($this->running && $this->serverHandler !== null) {
+            $this->serverHandler->unblockAddress($address);
+        }
+    }
+
     /** Stop the RakLib thread and clear all session bookkeeping. */
     public function shutdown(): void {
         if ($this->running && $this->serverHandler !== null) {

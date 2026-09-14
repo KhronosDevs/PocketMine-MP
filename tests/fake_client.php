@@ -67,6 +67,11 @@ final class FakeClient {
         socket_close($this->socket);
     }
 
+    /** Public read access for security scripts that inspect raw datagrams. */
+    public function readDatagramsPublic(): array {
+        return $this->readDatagrams();
+    }
+
     public function sendDatagram(string $data): void {
         socket_sendto($this->socket, $data, strlen($data), 0, '127.0.0.1', $this->port);
     }
