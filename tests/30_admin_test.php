@@ -104,6 +104,12 @@ test('/ban /pardon /ban-ip /pardon-ip manage the ban lists', function () use ($p
     ok($lists->isIpBanned('9.9.9.9'), 'ip ban recorded');
     ok($port->execute($console, 'pardon-ip 9.9.9.9'), '/pardon-ip executes');
     ok(!$lists->isIpBanned('9.9.9.9'), 'ip pardon recorded');
+
+    // /unban-ip is a registered alias of /pardon-ip: same handler, and the
+    // ban actually clears through it (not just a valid command exit).
+    ok($port->execute($console, 'ban-ip 9.9.9.9'), '/ban-ip executes again');
+    ok($port->execute($console, 'unban-ip 9.9.9.9'), '/unban-ip alias executes');
+    ok(!$lists->isIpBanned('9.9.9.9'), 'alias cleared the ip ban');
 });
 
 test('/kick is registered, permission-gated and reports offline targets', function () use ($port, $console, $kernel): void {

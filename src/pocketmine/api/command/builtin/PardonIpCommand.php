@@ -8,7 +8,10 @@ use pocketmine\api\command\CommandSender;
 use pocketmine\api\command\Format;
 
 /**
- * /pardon-ip <ip> — lift an IP ban.
+ * /pardon-ip <ip> (alias /unban-ip) — lift an IP ban AND the wire-layer
+ * packet-flood block. The wire block lives in the RakLib thread (set when
+ * an IP exceeds the packet limit), so unbanning in the player list alone
+ * would leave the address silently unable to reach the server.
  */
 final class PardonIpCommand extends BuiltinCommand {
     public function __construct() {
@@ -16,7 +19,7 @@ final class PardonIpCommand extends BuiltinCommand {
             'pardon-ip',
             'Unban an IP address',
             '/pardon-ip <ip>',
-            [],
+            ['unban-ip'],
             'khronos.command.pardon-ip',
             category: 'admin',
         );
@@ -33,6 +36,17 @@ final class PardonIpCommand extends BuiltinCommand {
             return false;
         }
         $lists->pardonIp($ip);
+
+        // Lift the RakLib wire-layer block for the same address, if any
+        // (no-op when the server runs without networking).
+        $kernel = $this->kernel();
+        if ($kernel !== null) {
+            $adapter = $kernel->getNetworkPort();
+            if ($adapter instanceof \pocketmine\adapter\driven\network\Protocol84NetworkAdapter) {
+                $adapter->unblockAddress($ip);
+            }
+        }
+
         $sender->sendMessage(Format::success('Pardoned IP ' . Format::VALUE . $ip . Format::SUCCESS . '.'));
         return true;
     }

@@ -191,6 +191,7 @@ Khronos has a brand-new, ECS-based plugin API — **not compatible with existing
 
 ## Documentation
 
+- [SECURITY.md](SECURITY.md) — security posture, hardening already shipped, exposure knobs (`online-mode`, anti-cheat limits), and the hostile-input test suite (`security/run_all.php`)
 - [docs/PLAN.md](docs/PLAN.md) — architecture & phase plan
 - [docs/PROGRESS.md](docs/PROGRESS.md) — full build history
 - [docs/TODO.md](docs/TODO.md) — what's left (mob pathfinding, redstone, LevelDB storage, nether mobs/fortresses, minor enchantment effects, light-dependent block updates…)
@@ -199,6 +200,7 @@ Khronos has a brand-new, ECS-based plugin API — **not compatible with existing
 ## Development
 
 - **Tests:** `bin/php7/bin/php tests/run.php` (49 files, per-process isolation; `-j N` runs files in parallel, `--filter=substring` runs one test)
+- **Security suite:** `bin/php7/bin/php security/run_all.php` — replays every audited attack class (reflection, floods, NBT/zlib bombs, hostile logins) against a throwaway local server; see [SECURITY.md](SECURITY.md)
 - **Static analysis:** `bin/php7/bin/php -d memory_limit=2G vendor/bin/phpstan analyse -c phpstan.neon`
 - **Benchmarks:** `bench/01_tick_profile.php <players> <mobs> <ticks>`, `bench/measure_chunkgen.php`, `bench/measure_memory.php`, `bench/measure_network.php` — run with `KHRONOS_FAST_TICKS=1` (and the same FFI flags as production) to match the table above
 - **Architecture at a glance:** ECS core (components → archetypes → systems) · ports & adapters (network/storage/worldgen/threading) · gameplay services · API facades · region-based threading (details in [docs/PLAN.md](docs/PLAN.md))

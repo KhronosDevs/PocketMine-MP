@@ -135,6 +135,15 @@ Notes:
 - `movement.enabled=false` (or `anti-cheat.enabled=false`) disables the
   movement validator — fine for LAN/creative, unsafe in public.
 
+### Unbanning an IP
+
+`/pardon-ip <ip>` (alias `/unban-ip`, console + ops) clears **both** layers:
+the player-list IP ban and the wire-layer packet-flood block held inside the
+RakLib thread. The wire block trips automatically when a source exceeds
+`packet-limit` datagrams per tick, so a NAT'd network that shares one public
+IP can occasionally hit it — unbanning without the alias-aware command would
+leave the address silently blocked at the wire layer.
+
 ---
 
 ## The `security/` test suite
