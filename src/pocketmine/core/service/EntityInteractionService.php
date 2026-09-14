@@ -446,6 +446,22 @@ final class EntityInteractionService {
             ItemDurability::consume($attackerRef);
             // 14.11: attacking is hungry work (legacy CAUSE_ATTACK 0.3).
             Hunger::exhaust($attackerRef, 0.3);
+            // 14.30: Fire Aspect sets the target alight for 4s per level
+            // (legacy Enchantment::FIRE_ASPECT post-attack ignition).
+            $attackerInv = $attacker->get(InventoryComponent::class);
+            $weapon = $attackerInv !== null ? $attackerInv->get($attackerInv->heldSlot) : null;
+            $fireAspect = $weapon?->getEnchantmentLevel(13) ?? 0;
+            if ($fireAspect > 0) {
+                $targetEntity = $targetRef->getEntity();
+                // EnvironmentalDamageSystem only adds FireComponent while the
+                // entity is standing in fire/lava - create it on demand here.
+                $fire = $targetEntity?->get(\pocketmine\core\component\FireComponent::class)
+                    ?? new \pocketmine\core\component\FireComponent();
+                $fire->ticks = max($fire->ticks, $fireAspect * 80);
+                if ($targetEntity !== null) {
+                    $targetEntity->set(\pocketmine\core\component\FireComponent::class, $fire);
+                }
+            }
         }
         return $landed;
     }

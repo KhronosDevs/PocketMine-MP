@@ -41,7 +41,10 @@ final class ItemStack {
             }
             $id = (int)($entry['id'] ?? 0);
             $lvl = (int)($entry['lvl'] ?? 1);
-            if ($id > 0 && $lvl > 0) {
+            // NB: id 0 is valid (Protection) - legacy enchantment ids run
+            // 0..24, so the old "$id > 0" filter silently dropped every
+            // Protection enchantment on read.
+            if ($id >= 0 && $lvl > 0) {
                 $out[] = ['id' => $id, 'lvl' => $lvl];
             }
         }

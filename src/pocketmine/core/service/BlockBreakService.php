@@ -23,6 +23,20 @@ use pocketmine\port\driving\EventPort;
 use function floor;
 
 final class BlockBreakService {
+
+    /** Blocks whose drop counts Fortune multiplies (ore-family + crops). */
+    private const FORTUNE_AFFECTED = [
+        16 => true,  // coal ore
+        15 => true,  // iron ore
+        14 => true,  // gold ore
+        56 => true,  // diamond ore
+        129 => true, // emerald ore
+        73 => true, 74 => true, // redstone ore
+        21 => true,  // lapis ore
+        153 => true, // quartz ore
+        89 => true,  // glowstone
+        103 => true, // melon
+    ];
     public function __construct(
         private readonly World $world,
         private readonly StoragePort $storagePort,
@@ -345,6 +359,30 @@ final class BlockBreakService {
         }
 
         $drops = $this->getBlockRegistry()->getDrops($blockId, $silkTouch, $toolType);
+
+        // 14.30: Fortune multiplies ore-type drop counts (legacy
+        // Enchantment::FORTUNE random tiering: I => avg 1.33x, II => 1.75x,
+        // III => 2.2x). Each drop entry's count is rolled independently.
+        $fortune = $tool?->getEnchantmentLevel(18) ?? 0;
+        if ($fortune > 0 && self::FORTUNE_AFFECTED[$blockId] ?? false) {
+            foreach ($drops as $i => $drop) {
+                $count = $drop['count'];
+                if ($count <= 0) {
+                    continue;
+                }
+                // Legacy formula: with fortune level n, each additional item
+                // drops with probability 1/(n+1) — geometric distribution,
+                // average multiplier (n+1)/2... simplified to +1 count at
+                // chance 1/(level+1), maxing around the legacy averages.
+                $extra = 0;
+                for ($lvl = 0; $lvl < $fortune; $lvl++) {
+                    if (mt_rand(1, $lvl + 2) === 1) {
+                        $extra += $count;
+                    }
+                }
+                $drops[$i]['count'] = $count + $extra;
+            }
+        }
         $items = [];
         foreach ($drops as $drop) {
             $items[] = new ItemStack($drop['id'], $drop['meta'], $drop['count']);

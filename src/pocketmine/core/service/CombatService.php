@@ -166,7 +166,6 @@ final class CombatService {
 
         // Apply damage
         $health->current = max(0, $health->current - $damage);
-
         // Play hurt sound
         if ($damage > 0) {
             $this->playHurtEffect($targetRef);
@@ -182,9 +181,18 @@ final class CombatService {
         // No-op for mobs (no HungerComponent).
         Hunger::exhaust($targetRef, 0.3);
 
-        // Apply knockback if source exists
+        // Apply knockback if source exists. 14.30: the attacker's weapon
+        // Knockback level adds +2 blocks/tick horizontal impulse per level
+        // (legacy Enchantment::KNOCKBACK bonus in Entity::knockBack).
         if ($source && $damage > 0) {
-            $this->applyKnockback($source, $targetRef, $damage);
+            $bonus = 0.0;
+            if ($cause === EntityDamageEvent::CAUSE_ENTITY_ATTACK) {
+                $sourceEntity = $source->getEntity();
+                $sourceInv = $sourceEntity?->get(InventoryComponent::class);
+                $weapon = $sourceInv !== null ? $sourceInv->get($sourceInv->heldSlot) : null;
+                $bonus = 2.0 * ($weapon?->getEnchantmentLevel(12) ?? 0);
+            }
+            $this->applyKnockback($source, $targetRef, $damage, $bonus);
         }
 
         // Check death
@@ -223,7 +231,7 @@ final class CombatService {
         $this->handleDeath($targetRef, $killer);
     }
 
-    public function applyKnockback(EntityRef $sourceRef, EntityRef $targetRef, float $force): void {
+    public function applyKnockback(EntityRef $sourceRef, EntityRef $targetRef, float $force, float $horizontalBonus = 0.0): void {
         $source = $sourceRef->getEntity();
         $target = $targetRef->getEntity();
 
@@ -251,8 +259,8 @@ final class CombatService {
         // VelocityComponent is in blocks/second; the legacy constants are
         // blocks/tick, so work per-tick and scale back by 20 on store.
         $base = 0.4;
-        $vx = ($targetVel->x / 20.0) * 0.5 + ($dx / $dist) * $base;
-        $vz = ($targetVel->z / 20.0) * 0.5 + ($dz / $dist) * $base;
+        $vx = ($targetVel->x / 20.0) * 0.5 + ($dx / $dist) * ($base + $horizontalBonus / 20.0);
+        $vz = ($targetVel->z / 20.0) * 0.5 + ($dz / $dist) * ($base + $horizontalBonus / 20.0);
         $vy = min(($targetVel->y / 20.0) * 0.5 + $base, $base);
         $targetVel->x = $vx * 20.0;
         $targetVel->y = $vy * 20.0;
@@ -286,6 +294,13 @@ final class CombatService {
             $item = $inventory->get(InventoryComponent::ARMOR_OFFSET + $i);
             if ($item && $item->count > 0) {
                 $totalReduction += $this->getArmorReduction($item->itemId);
+                // 14.30: Protection adds 4% damage reduction per level on each
+                // worn piece (legacy Enchantment::PROTECTION ->
+                // 1 point per level on the armor EPF scale, simplified here).
+                $protection = $item->getEnchantmentLevel(0);
+                if ($protection > 0) {
+                    $totalReduction += 0.04 * $protection;
+                }
             }
         }
 

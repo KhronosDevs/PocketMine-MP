@@ -104,8 +104,10 @@ No circuit engine at all.
 
 ### 6. Enchanting / anvils (beacons removed — not in MCPE 0.15.10, added in 0.16)
 
-- **Done (PR #90):** `EnchantmentRegistry` (full 0.15 catalogue: weights, max levels, slot masks, level ranges, conflicts, enchantability); `ItemStack` NBT enchant helpers (`ench` list, custom names, repair cost); `EnchantmentService` (bookshelf-boosted three-option rolls, lapis + level application, anvil combine/rename); enchanting-table + anvil windows on the wire (options ride `CraftingDataPacket` ENTRY_ENCHANT_LIST); effects wired in — Sharpness (melee), Power (arrows), Efficiency (mining), Unbreaking (durability).
-- **Remaining (minor):** Fortune/Protection/Knockback/Fire-Aspect effects, more anvil edge cases (repair material costs), enchanted book items from loot.
+- **Done (PR #90):** `EnchantmentRegistry` (full 0.15 catalogue: weights, max levels, slot masks, level ranges, conflicts, enchantability); `ItemStack` NBT enchant helpers (`ench` list, custom names, repair cost); `EnchantmentService` (bookshelf-boosted three-option rolls, lapis + level application, anvil combine/rename); enchanting-table + anvil windows on the wire (options ride `CraftingDataPacket` ENTRY_ENCHANT_LIST); effects wired in — Sharpness (melee), Power (arrows), Efficiency (mining), Unbreaking (durability), Protection (4% damage reduction per level per worn piece), Knockback (+2 blocks/tick horizontal impulse per weapon level), Fire Aspect (ignites the target 4s per level), Fortune (ore drop-count multiplier).
+- **Done (anvil):** same-item repair merges durability (combined remaining uses + 12% bonus) and enchantments; repair-material repair (legacy `Item::$repairMaterial` table — ingots/diamond/planks/leather restore 25% durability per unit); `RepairCost` NBT accumulates per operation (cost = 1 + input repair costs) and feeds the rename cost.
+- **Fixed:** `ItemStack::getEnchantments()` dropped id-0 entries — every Protection enchantment vanished on read (`$id > 0` guard; legacy ids run 0..24).
+- **Remaining (minor):** enchanted book items from loot, Smite/Bane-of-Arthropods bonus damage vs specific mob classes.
 
 ### 7. Nether / End dimensions
 

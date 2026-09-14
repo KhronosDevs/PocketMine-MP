@@ -176,39 +176,106 @@ final class EnchantmentService {
     }
 
     /**
-     * Anvil combine: repair (same item) or enchant merge (item + enchanted
-     * book / same item). Returns the result item + XP cost, or null when the
-     * combination is not possible. Legacy combine rules: same material
-     * repairs durability, book transfer merges enchantments.
+     * Anvil combine: repair (same item or repair material) or enchant merge
+     * (item + enchanted book / same item). Returns the result item + XP cost,
+     * or null when the combination is not possible. Legacy rules: same
+     * material repairs durability, the repair material tops up 25% of the
+     * tool's durability per ingot, and the result's RepairCost grows with
+     * every operation (cost = 1 + inherited repair costs + per-ench 1).
      * @return array{0: ItemStack, 1: int}|null [result, xpCost]
      */
     public function combine(ItemStack $target, ItemStack $sacrifice): ?array {
         $targetId = $target->itemId;
         $sacrificeId = $sacrifice->itemId;
-        $result = $target;
 
         // Book merge: every enchantment on the book transfers (higher level
-        // wins), cost 1 + 1 per enchantment (legacy simplified).
+        // wins). Cost 1 + 1 per enchantment (legacy simplified).
         if ($sacrificeId === 340 && $sacrifice->hasEnchantments()) {
             $cost = 1;
+            $result = $target;
             foreach ($sacrifice->getEnchantments() as $entry) {
                 $result = $result->withEnchantment($entry['id'], $entry['lvl']);
                 $cost++;
             }
-            return [$result, $cost];
+            return [$this->withAccumulatedRepairCost($result, $target, $sacrifice), $cost];
         }
 
         // Same-item repair: merge enchantments + repair durability.
         if ($sacrificeId === $targetId) {
             $cost = 1;
+            $result = $target;
             foreach ($sacrifice->getEnchantments() as $entry) {
                 $result = $result->withEnchantment($entry['id'], $entry['lvl']);
                 $cost++;
             }
-            return [$result, $cost];
+            // Durability: repaired meta = combined remaining uses, capped.
+            $max = $this->maxDurability($targetId);
+            if ($max > 0) {
+                $remaining = max(0, $max - $target->meta) + max(0, $max - $sacrifice->meta) + (int)($max * 0.12);
+                $result = new ItemStack($result->itemId, max(0, $max - $remaining), $result->count, $result->nbt);
+            }
+            return [$this->withAccumulatedRepairCost($result, $target, $sacrifice), $cost];
+        }
+
+        // Repair-material repair (legacy Item::$repairMaterial): one ingot /
+        // plank / etc. restores 25% of the tool's durability. Cost 1 level,
+        // +2 for enchanted tools (legacy enchantment repair surcharge).
+        $material = self::REPAIR_MATERIAL[$targetId] ?? null;
+        if ($material !== null && $sacrificeId === $material) {
+            $max = $this->maxDurability($targetId);
+            if ($max <= 0) {
+                return null;
+            }
+            // Each sacrifice unit repairs a quarter of the tool; consume as
+            // many units as needed (up to 4) to fully repair.
+            $damage = $target->meta;
+            $needed = (int)min(4, ceil($damage / ($max / 4)));
+            if ($needed <= 0 || $sacrifice->count < $needed) {
+                $needed = min(max(1, $needed), $sacrifice->count);
+            }
+            $repaired = max(0, $target->meta - (int)($max / 4) * $needed);
+            $result = new ItemStack($target->itemId, $repaired, $target->count, $target->nbt);
+            $cost = 1 + ($target->hasEnchantments() ? 2 : 0);
+            return [$this->withAccumulatedRepairCost($result, $target, null), $cost];
         }
         return null;
     }
+
+    /** Legacy durability table (subset matching ItemRegistry::DURABILITY). */
+    private function maxDurability(int $itemId): int {
+        $registry = \pocketmine\Kernel::getInstance()?->getResourceRegistry()
+            ->get(\pocketmine\core\resource\ItemRegistry::class);
+        return $registry instanceof \pocketmine\core\resource\ItemRegistry
+            ? $registry->getMaxDurability($itemId) : 0;
+    }
+
+    /**
+     * Result repair cost = 1 + target cost + sacrifice cost (legacy
+     * AnvilInventory::updateResult: RepairCost accumulates per operation).
+     */
+    private function withAccumulatedRepairCost(ItemStack $result, ItemStack $target, ?ItemStack $sacrifice): ItemStack {
+        $cost = 1 + $target->getRepairCost() + ($sacrifice !== null ? $sacrifice->getRepairCost() : 0);
+        return $result->withRepairCost($cost);
+    }
+
+    /** Repair material per tool/armor id (legacy Item::$repairMaterial). */
+    private const REPAIR_MATERIAL = [
+        // wood tools -> planks (5)
+        268 => 5, 269 => 5, 270 => 5, 271 => 5, 290 => 5,
+        // stone tools -> cobblestone (4)
+        272 => 4, 273 => 4, 274 => 4, 275 => 4, 291 => 4,
+        // iron tools/armor -> iron ingot (265)
+        256 => 265, 257 => 265, 258 => 265, 267 => 265, 292 => 265,
+        306 => 265, 307 => 265, 308 => 265, 309 => 265,
+        // diamond tools/armor -> diamond (264)
+        276 => 264, 277 => 264, 278 => 264, 279 => 264, 293 => 264,
+        310 => 264, 311 => 264, 312 => 264, 313 => 264,
+        // gold tools/armor -> gold ingot (266)
+        283 => 266, 284 => 266, 285 => 266, 286 => 266, 294 => 266,
+        314 => 266, 315 => 266, 316 => 266, 317 => 266,
+        // leather armor -> leather (334)
+        298 => 334, 299 => 334, 300 => 334, 301 => 334,
+    ];
 
     /**
      * Anvil rename: the renamed item must match the target (id + meta + NBT
