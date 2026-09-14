@@ -577,7 +577,13 @@ class Session{
 			}elseif($this->state === self::STATE_CONNECTING_1 && $packet instanceof OPEN_CONNECTION_REQUEST_2){
 				$this->id = $packet->clientID;
 				if($packet->serverPort === $this->sessionManager->getPort() || !$this->sessionManager->portChecking){
-					$this->mtuSize = min(abs($packet->mtuSize), 1432); //Max size, do not allow creating large buffers to fill server memory
+					// Clamp MTU to the viable RakNet range. A client-declared
+					// mtuSize of 0 (or anything under the ~36-byte frame
+					// overhead) made addEncapsulatedToQueue() compute a
+					// non-positive str_split length and throw a ValueError in
+					// the wire thread, tearing the session down on the next
+					// outbound send. Real RakNet floors the MTU at 400.
+					$this->mtuSize = min(max(abs($packet->mtuSize), 400), 1432); //Max size, do not allow creating large buffers to fill server memory
 					$pk = new OPEN_CONNECTION_REPLY_2();
 					$pk->mtuSize = $this->mtuSize;
 					$pk->serverID = $this->sessionManager->getID();
