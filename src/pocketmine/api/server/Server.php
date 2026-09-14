@@ -234,6 +234,63 @@ class Server {
         return $info !== null ? $this->facadeFor($id, $info) : null;
     }
 
+    // --- Legacy level-API compat (old PM plugin ports) ----------------------
+    //
+    // Old PocketMine's Server spoke in "Level"s: getLevel(string),
+    // getDefaultLevelName(), loadLevel(string), getLevelByName(). Khronos
+    // renamed the concept to World; these aliases keep old plugins loading
+    // without edits. Thin wrappers - all logic lives in the World methods.
+
+    /** @see self::getWorldByName() */
+    public function getLevel(string $name): ?World {
+        return $this->getWorldByName($name);
+    }
+
+    /** @see self::getWorldByName() */
+    public function getLevelByName(string $name): ?World {
+        return $this->getWorldByName($name);
+    }
+
+    /** @see self::loadWorld() */
+    public function loadLevel(string $name): World {
+        return $this->loadWorld($name);
+    }
+
+    /** @see self::generateWorld() */
+    public function generateLevel(string $name, int $seed = 0, \pocketmine\core\enum\GeneratorType $generator = \pocketmine\core\enum\GeneratorType::Normal, array $options = []): World {
+        return $this->generateWorld($name, $seed, $generator, $options);
+    }
+
+    /** @see self::unloadWorld() */
+    public function unloadLevel(string $name, bool $save = true): bool {
+        return $this->unloadWorld($name, $save);
+    }
+
+    /**
+     * Legacy Server::getDefaultLevelName(): the folder name of the default
+     * world (khronos.json default-world, else 'world'). Empty when no kernel.
+     */
+    public function getDefaultLevelName(): string {
+        $kernel = \pocketmine\Kernel::getInstance();
+        if ($kernel === null) {
+            return '';
+        }
+        $info = $kernel->getWorldRegistry()->getWorld(0);
+        return is_array($info) ? (string)($info['folderName'] ?? '') : '';
+    }
+
+    /**
+     * Legacy Server::setDefaultLevel(?string name): repoints khronos.json's
+     * default-world setting in memory (the world itself must already exist).
+     */
+    public function setDefaultLevel(string $name): void {
+        $kernel = \pocketmine\Kernel::getInstance();
+        $config = $kernel?->getResourceRegistry()->get(\pocketmine\core\resource\KhronosConfig::class);
+        if ($config instanceof \pocketmine\core\resource\KhronosConfig) {
+            $config->defaultWorld = $name;
+        }
+    }
+
     public function getWorldById(int $worldId): ?World {
         $kernel = \pocketmine\Kernel::getInstance();
         if ($kernel === null) {

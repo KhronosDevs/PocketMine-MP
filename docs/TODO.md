@@ -22,21 +22,18 @@ in rough priority order, so anyone picking up a task knows the seams to build on
 ## Plugin API — old-PM Kernel level/Config compat layer
 
 `Config::getNested()/setNested()` + the `Config::YAML`-style constructor shipped
-(2026-09), but plugins ported from old PocketMine still hit deeper Kernel-API
-gaps. A real old-PM plugin fails on enable with:
+(2026-09). The level-API half of the gap is now **done**: `Server` (the API
+facade plugins actually resolve) gained the legacy `Level` aliases —
+`getLevel(string)` / `getLevelByName()` (→ `getWorldByName`),
+`getDefaultLevelName()`, `loadLevel(string)` (→ `loadWorld`),
+`generateLevel()` (→ `generateWorld`), `unloadLevel()` (→ `unloadWorld`) and
+`setDefaultLevel(string)` (writes `KhronosConfig::defaultWorld`). Old-PM
+plugins calling the level API by name now load without edits.
 
-- `Kernel::getWorld(string $name)` — old PM loaded/returned a level by name;
-  here `Kernel::getWorld()` takes no args and returns the ECS world. The API
-  surface for it exists (`Server::getWorldByName()`, `WorldRegistry`,
-  `loadLevel`-equivalent in the chunk services) — needs thin Kernel wrappers.
-- `Kernel::getDefaultLevelName()` — default world name lives in config but
-  has no accessor.
-- `Kernel::loadLevel(string $name)` — chunk services + WorldRegistry already
-  implement the mechanics; needs a public method that resolves or imports a
-  world folder and returns the API facade.
-
-Scope: a small compat surface on Kernel (3 methods + facade returns), worth
-doing as one commit when the next old-PM plugin port lands.
+Still open for deeper old-PM ports: matching `Kernel`-level shortcuts (plugins
+that call `\pocketmine\Kernel::getInstance()->getLevel($name)` directly instead
+of going through the Server facade) — add forwarding calls there if a real
+plugin needs them.
 
 ## Gameplay roadmap (Blocker 3) — deferred
 
