@@ -209,16 +209,21 @@ Right-clicking a pig with a saddle makes it rideable. Done:
   ejects the rider via `NetworkSessionService::dismountByRiderId()`.
 - **Test:** `tests/65_pig_saddle_test.php` (saddle/tag, steering+jump, death eject).
 
-### Map cartography
+### Map cartography ✅ DONE
 
-MCPE 0.15 maps require a server-side map storage system (map id → pixel
-buffer + decorations), `ClientboundMapItemDataPacket` wire support, crafting
-recipe (compass + paper), and renderer integration. No map concept exists in
-the engine at all.
-
-- **Already in place:** nothing specific; paper/crafting infrastructure exists.
-- **Missing:** everything — map data store, wire packet, crafting recipe,
-  exploration tracking, decoration API.
+- **Done:** `MapStore` resource (per-world, tile-snapshot persisted like the
+  other stores) keyed by map id: 128×128 RGB color buffer, scale, center,
+  tracking position, dirty flag. `ClientboundMapItemDataPacket` (0x3b, full
+  0x04-texture flag) + `MapInfoRequestPacket` (0x33) on the wire, varint
+  helpers added to `BinaryStream`. Flow: crafting a map (compass + paper,
+  1×2 shaped) assigns a fresh id from the store; equipping a filled map
+  pushes the texture; the client's `MapInfoRequest` re-sends it; exploring
+  re-renders the footprint around the holder at 1 px/block into a 128² window
+  centered on the map's center (only when the holder moves ≥1 block since the
+  last render). `tests/73_map_test.php` covers store round-trip, wire encode,
+  id assignment on craft, and request handling.
+- **Missing (deferred):** decorations (markers/frames), copying maps in
+  crafting, zoom-out via crafting, map-in-item-frame rendering.
 
 ---
 

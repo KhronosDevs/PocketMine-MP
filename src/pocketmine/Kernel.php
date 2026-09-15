@@ -2173,6 +2173,7 @@ function registerBuiltinResources(ResourceRegistry $registry): void {
     $registry->set(new \pocketmine\core\resource\PotionRegistry());
     $registry->set(new \pocketmine\core\resource\EnchantmentRegistry());
     $registry->set(new \pocketmine\core\resource\TileEntityStore());
+    $registry->set(new \pocketmine\core\resource\MapStore());
 }
 
 function registerBuiltinProjectiles(ResourceRegistry $registry): void {
@@ -2403,6 +2404,14 @@ function registerBuiltinRecipes(ResourceRegistry $registry): void {
         $item(\pocketmine\core\constants\ItemIds::DYE, 15), // bone meal
         $item(\pocketmine\core\constants\ItemIds::DYE, 15), // bone meal
     ], $item(\pocketmine\core\constants\ItemIds::DYE, 7)); // light gray dye
+
+    // Empty map (358): compass over paper (legacy 1x2 shaped). The crafted
+    // stack carries meta 0; the server brands it with a real map id + canvas
+    // anchor when the craft event lands (NetworkSessionService::brandNewMaps).
+    $recipes->registerShaped('empty_map', ['C', 'P'],
+        ['C' => new \pocketmine\core\component\ItemStack(\pocketmine\core\constants\ItemIds::COMPASS),
+         'P' => new \pocketmine\core\component\ItemStack(339)], // paper
+        new \pocketmine\core\component\ItemStack(\pocketmine\core\resource\MapStore::ITEM_FILLED_MAP, 0, 1));
 }
 
 function registerBuiltinSmelting(ResourceRegistry $registry): void {

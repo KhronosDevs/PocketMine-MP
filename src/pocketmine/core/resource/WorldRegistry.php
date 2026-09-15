@@ -31,7 +31,7 @@ use pocketmine\port\driven\StoragePort;
  */
 #[Resource]
 final class WorldRegistry {
-    /** @var array<int, array{id: int, name: string, folderName: string, seed: int, store: ChunkStore, config: WorldConfig, storage: StoragePort, chestStore: ChestStore, furnaceStore: FurnaceStore, containerStore: ContainerStore, brewingStore: BrewingStore, tileEntityStore: TileEntityStore}> */
+    /** @var array<int, array{id: int, name: string, folderName: string, seed: int, store: ChunkStore, config: WorldConfig, storage: StoragePort, chestStore: ChestStore, furnaceStore: FurnaceStore, containerStore: ContainerStore, brewingStore: BrewingStore, tileEntityStore: TileEntityStore, mapStore: MapStore}> */
     private array $worlds = [];
     /** @var array<string, int> folderName => id (cheap lookup for load/generate dedup) */
     private array $byFolder = [];
@@ -49,6 +49,7 @@ final class WorldRegistry {
         ?ContainerStore $containerStore = null,
         ?BrewingStore $brewingStore = null,
         ?TileEntityStore $tileEntityStore = null,
+        ?MapStore $mapStore = null,
     ): int {
         // The default world is pre-registered with id 0 by the Kernel; any
         // later registration gets the next id. A folder may only back one
@@ -74,6 +75,7 @@ final class WorldRegistry {
             'containerStore' => $containerStore ?? new ContainerStore(),
             'brewingStore' => $brewingStore ?? new BrewingStore(),
             'tileEntityStore' => $tileEntityStore ?? new TileEntityStore(),
+            'mapStore' => $mapStore ?? new MapStore(),
         ];
         $this->byFolder[$folderName] = $id;
         return $id;
@@ -95,6 +97,7 @@ final class WorldRegistry {
         ?ContainerStore $containerStore = null,
         ?BrewingStore $brewingStore = null,
         ?TileEntityStore $tileEntityStore = null,
+        ?MapStore $mapStore = null,
     ): void {
         $this->worlds[0] = [
             'id' => 0,
@@ -112,6 +115,7 @@ final class WorldRegistry {
             'containerStore' => $containerStore ?? new ContainerStore(),
             'brewingStore' => $brewingStore ?? new BrewingStore(),
             'tileEntityStore' => $tileEntityStore ?? new TileEntityStore(),
+            'mapStore' => $mapStore ?? new MapStore(),
         ];
         $this->byFolder[$folderName] = 0;
     }
@@ -166,6 +170,11 @@ final class WorldRegistry {
     public function getTileEntityStore(int $id): ?TileEntityStore {
         $world = $this->worlds[$id] ?? null;
         return $world !== null ? $world['tileEntityStore'] : null;
+    }
+
+    public function getMapStore(int $id): ?MapStore {
+        $world = $this->worlds[$id] ?? null;
+        return $world !== null ? $world['mapStore'] : null;
     }
 
     public function getConfig(int $id): ?WorldConfig {

@@ -207,6 +207,59 @@ class BinaryStream extends \stdClass
         $this->buffer .= chr($v);
     }
 
+    /**
+     * Writes an unsigned LEB128 varint (used by newer protocol-84-era
+     * packets such as ClientboundMapItemDataPacket).
+     */
+    public function putUnsignedVarInt(int $v): void
+    {
+        $v &= 0xFFFFFFFF;
+        while (true) {
+            if (($v & ~0x7f) === 0) {
+                $this->buffer .= chr($v);
+                break;
+            }
+            $this->buffer .= chr(($v & 0x7f) | 0x80);
+            $v >>= 7;
+        }
+    }
+
+    /**
+     * Writes a signed LEB128 varint (zigzag-encoded 32-bit value).
+     */
+    public function putVarInt(int $v): void
+    {
+        // Zigzag: (n << 1) ^ (n >> 31) on 32-bit width.
+        $this->putUnsignedVarInt((($v << 1) ^ ($v >> 31)) & 0xFFFFFFFF);
+    }
+
+    /**
+     * Reads an unsigned LEB128 varint (up to 5 bytes / 32 bits).
+     */
+    public function getUnsignedVarInt(): int
+    {
+        $value = 0;
+        for ($i = 0; $i < 5; ++$i) {
+            $b = ord($this->buffer[$this->offset++]);
+            $value |= ($b & 0x7f) << (7 * $i);
+            if (($b & 0x80) === 0) {
+                break;
+            }
+        }
+        return $value & 0xFFFFFFFF;
+    }
+
+    /**
+     * Reads a signed LEB128 varint (zigzag-decoded).
+     */
+    public function getVarInt(): int
+    {
+        $raw = $this->getUnsignedVarInt();
+        // Inverse zigzag on 32-bit width.
+        $v = ($raw >> 1) ^ -($raw & 1);
+        return $v;
+    }
+
     public function getDataArray(int $len = 10): array
     {
         $data = [];

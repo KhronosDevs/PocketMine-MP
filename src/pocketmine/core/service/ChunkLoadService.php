@@ -231,6 +231,11 @@ final class ChunkLoadService {
             if ($tileEntityStore !== null) {
                 $tileEntityStore->restoreFromSnapshots($chunkData->tileEntities);
             }
+            // Maps: rehydrate map pixel buffers anchored in this chunk.
+            $mapStore = $this->getMapStore($worldId);
+            if ($mapStore !== null) {
+                $mapStore->restoreFromSnapshots($chunkData->tileEntities);
+            }
             // Bug 35: restore dropped items / XP orbs from entity snapshots.
             foreach ($chunkData->entities as $snapshot) {
                 $this->restoreEntityFromSnapshot($worldId, $snapshot);
@@ -462,6 +467,15 @@ final class ChunkLoadService {
                 }
             }
         }
+    }
+
+    private function getMapStore(int $worldId = 0): ?\pocketmine\core\resource\MapStore {
+        if ($worldId !== 0) {
+            $registry = $this->world->getResourceRegistry()->get(WorldRegistry::class);
+            return $registry instanceof WorldRegistry ? $registry->getMapStore($worldId) : null;
+        }
+        $store = $this->world->getResourceRegistry()->get(\pocketmine\core\resource\MapStore::class);
+        return $store instanceof \pocketmine\core\resource\MapStore ? $store : null;
     }
 
     private function getTileEntityStore(int $worldId = 0): ?\pocketmine\core\resource\TileEntityStore {

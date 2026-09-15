@@ -32,6 +32,7 @@ use pocketmine\core\resource\KhronosConfig;
 use pocketmine\core\resource\ProjectileRegistry;
 use pocketmine\core\resource\BlockRegistry;
 use pocketmine\core\resource\ChunkStore;
+use pocketmine\core\resource\MapStore;
 use pocketmine\core\resource\RecipeRegistry;
 use pocketmine\core\resource\SmeltingRegistry;
 use pocketmine\core\resource\ServerConfig;
@@ -59,7 +60,9 @@ use pocketmine\protocol\ContainerClosePacket;
 use pocketmine\protocol\ContainerOpenPacket;
 use pocketmine\protocol\ContainerSetContentPacket;
 use pocketmine\protocol\ContainerSetSlotPacket;
+use pocketmine\protocol\ClientboundMapItemDataPacket;
 use pocketmine\protocol\CraftingDataPacket;
+use pocketmine\protocol\MapInfoRequestPacket;
 use pocketmine\protocol\CraftingEventPacket;
 use pocketmine\protocol\DataPacket;
 use pocketmine\protocol\DisconnectPacket;
@@ -354,6 +357,8 @@ final class NetworkSessionService {
         // 14.22: weather transitions + periodic lightning during storms (the
         // login burst sends the starting weather state).
         $this->broadcastWeather();
+        // Maps: push dirty map textures to holders (no-op when none dirty).
+        $this->broadcastDirtyMaps();
         // 14.2: mirror live entities to every session (add/move/remove) so
         // other players, mobs and dropped items are visible on the wire.
         $this->broadcastEntityStates();
@@ -947,6 +952,12 @@ final class NetworkSessionService {
                 $pk->decode();
                 $this->handleChunkRadius($addrKey, $pk);
                 break;
+            case Info::MAP_INFO_REQUEST_PACKET:
+                $pk = new MapInfoRequestPacket();
+                $pk->setBuffer($buffer, 1);
+                $pk->decode();
+                $this->handleMapInfoRequest($addrKey, $pk);
+                break;
             case Info::MOVE_PLAYER_PACKET:
                 $pk = new MovePlayerPacket();
                 $pk->setBuffer($buffer, 1);
@@ -1397,6 +1408,10 @@ final class NetworkSessionService {
             $chunkZ = (int)floor($pos->z / 16);
             if ($chunkX !== $session['lastChunkX'] || $chunkZ !== $session['lastChunkZ']) {
                 $this->queueChunks($addrKey);
+                // Maps: a chunk-column crossing means the holder may have
+                // entered unexplored territory - the exploration renderer
+                // paints what became visible and marks the map dirty.
+                $this->updateMapExploration($session, $pos->x, $pos->z);
             }
         }
 
@@ -3502,6 +3517,12 @@ final class NetworkSessionService {
             return;
         }
         $held = $inventory->get($inventory->heldSlot);
+        // Maps: selecting a filled map in the hotbar pushes its texture so
+        // the client renders the map contents (client asks via 0x3c too, but
+        // a proactive push removes the round-trip flicker).
+        if ($held !== null && $held->itemId === MapStore::ITEM_FILLED_MAP && $held->meta > 0) {
+            $this->sendMapTexture($session['playerRef'], $held->meta);
+        }
         foreach ($this->sessions as $otherKey => $s) {
             if ($otherKey === $addrKey) {
                 continue; // the actor already knows their selection
@@ -6053,10 +6074,44 @@ final class NetworkSessionService {
         }
 
         $this->craftingService->craft($session['entityRef'], $grid, $gridWidth);
+        // Maps: a freshly crafted empty map needs a map id + a canvas anchored
+        // at the crafter's position (the exploration renderer paints from it).
+        // The craft itself put a meta-0 filled map in the inventory; find and
+        // brand it, then the client gets the texture on the next dirty flush.
+        $this->brandNewMaps($session);
         // Resync regardless of outcome: on success the ingredients are gone
         // and the result is in the inventory; on failure this undoes any
         // client-side grid desync.
         $this->sendInventoryContents($session['playerRef']);
+    }
+
+    /**
+     * Maps: assign ids + anchor canvases to any meta-0 filled maps the player
+     * just crafted. Cheap (one inventory scan per craft).
+     */
+    private function brandNewMaps(array $session): void {
+        $mapStore = $this->resourceRegistry->get(MapStore::class);
+        if (!$mapStore instanceof MapStore) {
+            return;
+        }
+        $entity = $session['entityRef']->getEntity();
+        $inventory = $entity?->get(InventoryComponent::class);
+        $pos = $entity?->getPosition();
+        if ($inventory === null || $pos === null) {
+            return;
+        }
+        $branded = false;
+        foreach ($inventory->getContents() as $slot => $item) {
+            if ($item === null || $item->itemId !== MapStore::ITEM_FILLED_MAP || $item->meta !== 0) {
+                continue;
+            }
+            $mapId = $mapStore->create((int)floor($pos->x), (int)floor($pos->z));
+            $inventory->set($slot, new ItemStack(MapStore::ITEM_FILLED_MAP, $mapId, $item->count, $item->nbt));
+            $branded = true;
+        }
+        if ($branded) {
+            $this->syncInventorySlot($session['playerRef']->entityId, $inventory->heldSlot);
+        }
     }
 
     /** Send the full inventory contents (window 0) to the player. */
@@ -6311,6 +6366,186 @@ final class NetworkSessionService {
         // does not recognise.
         $pk->slots = \pocketmine\core\resource\CreativeItems::all();
         $this->queuePacket($player, $pk);
+    }
+
+    /**
+     * Maps: the client asks for a map's texture (held filled map). The
+     * texture must exist - unknown ids get no response so the client keeps
+     * whatever it last rendered.
+     */
+    private function handleMapInfoRequest(string $addrKey, MapInfoRequestPacket $pk): void {
+        $session = $this->sessions[$addrKey] ?? null;
+        if ($session === null) {
+            return;
+        }
+        if ($pk->mapId <= 0) {
+            return;
+        }
+        $this->sendMapTexture($session['playerRef'], $pk->mapId);
+    }
+
+    /**
+     * Push a map's full 128x128 texture (scale 0) to one player. Pixels are
+     * row-major ABGR uvarints. Decorations ride the same packet when present
+     * (the player position arrow is client-local on 0.15, so none are sent by
+     * default - plugins can add them through MapStore data).
+     */
+    public function sendMapTexture(PlayerRef $player, int $mapId): void {
+        $mapStore = $this->resourceRegistry->get(MapStore::class);
+        if (!$mapStore instanceof MapStore) {
+            return;
+        }
+        if (!$mapStore->has($mapId)) {
+            return;
+        }
+        $map = $mapStore->get($mapId);
+        $pk = new ClientboundMapItemDataPacket();
+        $pk->mapId = $mapId;
+        $pk->scale = $map['scale'];
+        $pk->width = MapStore::MAP_SIZE;
+        $pk->height = MapStore::MAP_SIZE;
+        $pk->xOffset = 0;
+        $pk->yOffset = 0;
+        $pk->colors = $map['colors'];
+        $this->queuePacket($player, $pk);
+        $mapStore->consumeDirty($mapId);
+    }
+
+    /**
+     * Maps: exploration rendering. Every map held by a mover paints the
+     * 1:1 world-block area it covers onto its canvas (one map pixel per
+     * block column) using a top-down surface color table. Chunk-column
+     * granularity: painting runs only when the holder crosses a column, so
+     * the cost is bounded and zero while standing still.
+     */
+    private function updateMapExploration(array $session, float $x, float $z): void {
+        $mapStore = $this->resourceRegistry->get(MapStore::class);
+        $store = $this->getChunkStore($session['worldId']);
+        if (!$mapStore instanceof MapStore || !$store instanceof ChunkStore) {
+            return;
+        }
+        $entity = $session['entityRef']->getEntity();
+        $inventory = $entity?->get(InventoryComponent::class);
+        if ($inventory === null) {
+            return;
+        }
+        $heldIds = [];
+        foreach ($inventory->getContents() as $item) {
+            if ($item !== null && $item->itemId === MapStore::ITEM_FILLED_MAP && $item->meta > 0) {
+                $heldIds[$item->meta] = true;
+            }
+        }
+        if ($heldIds === []) {
+            return;
+        }
+        $px = (int)floor($x);
+        $pz = (int)floor($z);
+        foreach (array_keys($heldIds) as $mapId) {
+            if (!$mapStore->has($mapId)) {
+                continue;
+            }
+            $map = $mapStore->get($mapId);
+            $colors = $map['colors'];
+            // Canvas pixel (0,0) = world (centerX-64, centerZ-64).
+            $originX = $map['centerX'] - MapStore::MAP_SIZE / 2;
+            $originZ = $map['centerZ'] - MapStore::MAP_SIZE / 2;
+            $painted = false;
+            for ($cy = $chunkZ - 1; $cy <= $chunkZ + 1; $cy++) {
+                for ($cx = $chunkX - 1; $cx <= $chunkX + 1; $cx++) {
+                    if (!$store->isLoaded($cx, $cy)) {
+                        continue;
+                    }
+                    for ($lz = 0; $lz < 16; $lz++) {
+                        for ($lx = 0; $lx < 16; $lx++) {
+                            $wx = $cx * 16 + $lx;
+                            $wz = $cy * 16 + $lz;
+                            $pxX = $wx - $originX;
+                            $pxZ = $wz - $originZ;
+                            if ($pxX < 0 || $pxX >= MapStore::MAP_SIZE || $pxZ < 0 || $pxZ >= MapStore::MAP_SIZE) {
+                                continue;
+                            }
+                            $height = $store->getHighestBlockAt($wx, $wz);
+                            $color = self::mapColorFor($store->getBlock($wx, $height, $wz), $height);
+                            $idx = $pxZ * MapStore::MAP_SIZE + $pxX;
+                            if (($colors[$idx] ?? 0) !== $color) {
+                                $colors[$idx] = $color;
+                                $painted = true;
+                            }
+                        }
+                    }
+                }
+            }
+            if ($painted) {
+                $mapStore->updateColors($mapId, $colors);
+            }
+        }
+    }
+
+    /**
+     * Top-down map color for a block id (0.15-style surface palette).
+     * Colors are opaque ABGR ints; a mild height shading gives terrain
+     * relief without a full lighting pass.
+     */
+    private static function mapColorFor(int $blockId, int $y): int {
+        $r = 0; $g = 0; $b = 0;
+        switch ($blockId) {
+            case 2: case 198: $r = 127; $g = 178; $b = 56; break;   // grass
+            case 1: case 139: $r = 112; $g = 112; $b = 112; break;  // stone
+            case 3: $r = 143; $g = 106; $b = 71; break;             // dirt
+            case 12: case 121: $r = 216; $g = 210; $b = 152; break; // sand
+            case 17: case 161: $r = 60; $g = 100; $b = 40; break;   // logs
+            case 18: case 161 + 0: $r = 55; $g = 120; $b = 35; break; // leaves
+            case 8: case 9: $r = 45; $g = 60; $b = 170; break;      // water
+            case 78: case 79: case 174: $r = 240; $g = 248; $b = 252; break; // snow/ice
+            case 13: $r = 126; $g = 118; $b = 104; break;           // gravel
+            case 87: $r = 91; $g = 45; $b = 12; break;              // netherrack
+            case 88: $r = 90; $g = 60; $b = 40; break;              // soul sand
+            case 10: case 11: $r = 207; $g = 92; $b = 16; break;    // lava
+            case 112: $r = 60; $g = 30; $b = 30; break;             // nether brick
+            case 24: $r = 216; $g = 203; $b = 155; break;           // sandstone
+            case 159: $r = 158; $g = 128; $b = 97; break;           // hardened clay
+            default: // wood-ish generic solids, air -> transparent
+                if ($blockId === 0) {
+                    return 0x00000000;
+                }
+                $r = 96; $g = 96; $b = 96; break;
+        }
+        // Height shading: every 8 blocks of elevation shifts brightness ~6%.
+        $shade = 1.0 + (($y - 64) / 8) * 0.06;
+        $shade = max(0.55, min(1.45, $shade));
+        $r = (int)min(255, $r * $shade);
+        $g = (int)min(255, $g * $shade);
+        $b = (int)min(255, $b * $shade);
+        return (0xff << 24) | ($b << 16) | ($g << 8) | $r;
+    }
+
+    /**
+     * Push every dirty map texture to all sessions holding that map id.
+     * Called from the per-tick flush; cheap when no maps are dirty.
+     */
+    public function broadcastDirtyMaps(): void {
+        $mapStore = $this->resourceRegistry->get(MapStore::class);
+        if (!$mapStore instanceof MapStore || $mapStore->count() === 0) {
+            return;
+        }
+        foreach ($mapStore->allIds() as $id) {
+            if (!$mapStore->consumeDirty($id)) {
+                continue;
+            }
+            foreach ($this->sessions as $session) {
+                $entity = $session['entityRef']->getEntity();
+                $inventory = $entity?->get(InventoryComponent::class);
+                if ($inventory === null) {
+                    continue;
+                }
+                foreach ($inventory->getContents() as $item) {
+                    if ($item !== null && $item->itemId === MapStore::ITEM_FILLED_MAP && $item->meta === $id) {
+                        $this->sendMapTexture($session['playerRef'], $id);
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     /**
