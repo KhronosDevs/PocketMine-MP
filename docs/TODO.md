@@ -127,12 +127,13 @@ Chests and furnaces were fixed (per-world stores in `WorldRegistry`, PR #80) —
 - **Done:** dispenser/hopper/brewing-stand containers added in PR #88 are per-world from day one (`ContainerStore` + `BrewingStore` follow the `ChestStore` pattern); double chests pair into one 54-slot window with break-spill of both halves. Remaining audit surface: any future beacon store, and any wire/container state cached on sessions that should key by `WorldComponent`.
 - **Missing:** (a) audit for other coordinate-keyed stores or ad-hoc state beyond the audited set (beacon pending), (c) any wire/container state cached on sessions or entities that should key by `WorldComponent`.
 
-### 10. Crafting (inventory 2x2 grid + crafting table)
+### 10. Crafting (inventory 2x2 grid + crafting table) ✅
 
-The inventory/crafting screen now **opens crash-free** (client fix: the creative-items window must carry the exact legacy 0.15 list — a curated subset made the 0.15 client SIGSEGV in `CraftingContainerManagerModel::init()`), but actually crafting items is not wired up end-to-end.
+The inventory/crafting screen now **opens crash-free** (client fix: the creative-items window must carry the exact legacy 0.15 list — a curated subset made the 0.15 client SIGSEGV in `CraftingContainerManagerModel::init()`).
 
 - **Already in place:** `CraftingService::craft()` (grid → result), `RecipeRegistry` with shaped recipes, recipes sent at login via `CraftingDataPacket`.
-- **Missing:** the wire round-trip — server-side result from the player's grid, `CraftingEventPacket` / result-slot handling, ingredient consumption, and recipe-list parity with the client (legacy sends 336 entries incl. shapeless + furnace recipes; new-src sends 9 shaped-only). A full recipes + `CreativeItems` audit against the legacy 0.15 data (wildcard ingredient damage `7fff` vs `ffff`, `cleanRecipes` flag, shapeless/furnace entry types).
+- **Done:** the wire round-trip is complete — `handleCraftingEvent` validates the client's grid server-side, `CraftItemEvent` is cancellable, ingredients are consumed atomically and the result added. Shapeless recipes (`RecipeRegistry::registerShapeless` / `matchShapeless`, unordered ingredient multiset with wildcard meta support, concrete-meta consumption) plus the legacy-parity shapeless set (mushroom stew, book, flint & steel, mossy cobble/stone bricks, gray/light-gray dye). Furnace recipes ride the recipe list as `ENTRY_FURNACE`/`ENTRY_FURNACE_DATA` (id-only vs `(id<<16)|meta` payload, verified against the legacy encoder); `cleanRecipes` byte is now 1 (legacy `buildCraftingDataCache` parity). `tests/72_crafting_wire_test.php` covers shapeless matching/rejection, shaped regression, and the packet entry stream.
+- **Remaining (deferred):** a full recipes + `CreativeItems` audit against the legacy 0.15 `recipes.json` (remaining dye combos, dyed-wool shapeless from flowers, golden-apple variants); wildcard-ingredient damage `7fff` vs `ffff` audit.
 
 ### 11. Opening furnaces and other containers
 

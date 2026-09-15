@@ -10,10 +10,12 @@ use pocketmine\core\ecs\Resource;
 /**
  * Crafting recipe registry (12.3).
  *
- * Shaped recipes only: a pattern grid with character keys mapping to items.
+ * Shaped recipes: a pattern grid with character keys mapping to items.
+ * Shapeless recipes: an unordered ingredient multiset (any grid placement
+ * that contains exactly those ingredients matches).
  * Recipes live in registry data (populated by Kernel::registerBuiltinRecipes
- * and extendable by plugins via registerShaped) instead of being hard-coded in
- * the crafting service.
+ * and extendable by plugins via registerShaped/registerShapeless) instead of
+ * being hard-coded in the crafting service.
  */
 #[Resource]
 final class RecipeRegistry {
@@ -21,6 +23,11 @@ final class RecipeRegistry {
      * @var array<string, array{pattern: list<string>, key: array<string, ItemStack>, result: ItemStack}>
      */
     private array $shaped = [];
+
+    /**
+     * @var array<string, array{ingredients: list<ItemStack>, result: ItemStack}>
+     */
+    private array $shapeless = [];
 
     /**
      * Register a shaped recipe.
@@ -37,12 +44,103 @@ final class RecipeRegistry {
     }
 
     /**
+     * Register a shapeless recipe: the grid must contain exactly the given
+     * ingredients (as a multiset, ignoring placement). An ingredient meta of
+     * -1 matches any meta of that id.
+     *
+     * @param list<ItemStack> $ingredients
+     */
+    public function registerShapeless(string $id, array $ingredients, ItemStack $result): void {
+        $this->shapeless[$id] = [
+            'ingredients' => $ingredients,
+            'result' => $result,
+        ];
+    }
+
+    /**
      * All registered shaped recipes, keyed by recipe id.
      *
      * @return array<string, array{pattern: list<string>, key: array<string, ItemStack>, result: ItemStack}>
      */
     public function getShapedRecipes(): array {
         return $this->shaped;
+    }
+
+    /**
+     * All registered shapeless recipes, keyed by recipe id.
+     *
+     * @return array<string, array{ingredients: list<ItemStack>, result: ItemStack}>
+     */
+    public function getShapelessRecipes(): array {
+        return $this->shapeless;
+    }
+
+    /**
+     * Find a shapeless recipe matching the grid. The multiset of grid items
+     * (id:meta) must equal the recipe's ingredient multiset exactly - no
+     * extra items, none missing. Wildcard ingredient meta (-1) matches any
+     * meta; the grid's actual metas are what get consumed.
+     *
+     * @param list<ItemStack|null> $grid
+     * @return array{ingredients: list<ItemStack>, result: ItemStack, matched: list<ItemStack>}|null
+     *         matched = the concrete grid stacks that satisfied each ingredient     * (in ingredient order), so the caller consumes real metas.
+     */
+    public function matchShapeless(array $grid): ?array {
+        // Multiset of grid items, grouped by id so wildcard meta lookups can
+        // walk the available metas of that id.
+        $gridByItem = [];
+        foreach ($grid as $item) {
+            if ($item === null || $item->count <= 0) {
+                continue;
+            }
+            // A stacked cell is not a valid crafting input (same rule as
+            // shaped): each occupied cell supplies one unit.
+            $gridByItem[$item->itemId][] = $item->meta;
+        }
+        $gridTotal = 0;
+        foreach ($gridByItem as $metas) {
+            $gridTotal += count($metas);
+        }
+        if ($gridTotal === 0) {
+            return null;
+        }
+
+        foreach ($this->shapeless as $recipe) {
+            $ingredients = $recipe['ingredients'];
+            if (count($ingredients) !== $gridTotal) {
+                continue; // wrong ingredient count - multiset can never match
+            }
+            // Greedy consume: each ingredient takes an available grid entry.
+            $available = $gridByItem;
+            $matched = [];
+            $ok = true;
+            foreach ($ingredients as $ingredient) {
+                $found = null;
+                if (isset($available[$ingredient->itemId])) {
+                    foreach ($available[$ingredient->itemId] as $idx => $meta) {
+                        if ($ingredient->meta === -1 || $meta === $ingredient->meta) {
+                            $found = $idx;
+                            break;
+                        }
+                    }
+                    if ($found !== null) {
+                        $matched[] = new ItemStack($ingredient->itemId, $available[$ingredient->itemId][$found], 1, null);
+                        unset($available[$ingredient->itemId][$found]);
+                        continue;
+                    }
+                }
+                $ok = false;
+                break;
+            }
+            if ($ok) {
+                return [
+                    'ingredients' => $ingredients,
+                    'result' => $recipe['result'],
+                    'matched' => $matched,
+                ];
+            }
+        }
+        return null;
     }
 
     /**

@@ -40,6 +40,17 @@ final class SmeltingRegistry {
     }
 
     /**
+     * All registered smelting recipes, keyed by "id:meta" (meta -1 =
+     * wildcard). Used by the network layer to send furnace recipe entries
+     * inside the CraftingDataPacket recipe list.
+     *
+     * @return array<string, array{input: ItemStack, result: ItemStack}>
+     */
+    public function getAll(): array {
+        return $this->recipes;
+    }
+
+    /**
      * Register a burnable fuel. A meta of -1 matches any input meta.
      */
     public function registerFuel(int $itemId, int $meta, int $burnTicks): void {

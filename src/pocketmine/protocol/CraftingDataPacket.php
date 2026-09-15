@@ -28,6 +28,8 @@ class CraftingDataPacket extends DataPacket {
 
     const ENTRY_SHAPELESS = 0;
     const ENTRY_SHAPED = 1;
+    const ENTRY_FURNACE = 2;
+    const ENTRY_FURNACE_DATA = 3;
     /** 14.30: an enchanting-table option list rides a CraftingDataPacket. */
     const ENTRY_ENCHANT_LIST = 4;
 
@@ -35,6 +37,19 @@ class CraftingDataPacket extends DataPacket {
      * @var array<string, array{pattern: list<string>, key: array<string, ItemStack>, result: ItemStack}>
      */
     public array $recipes = [];
+
+    /**
+     * Shapeless recipes sent as ENTRY_SHAPELESS (0) entries.
+     * @var array<string, array{ingredients: list<ItemStack>, result: ItemStack}>
+     */
+    public array $shapelessRecipes = [];
+
+    /**
+     * Furnace recipes sent as ENTRY_FURNACE (2, wildcard input meta) or
+     * ENTRY_FURNACE_DATA (3, exact input meta) entries.
+     * @var array<string, array{input: ItemStack, result: ItemStack}>
+     */
+    public array $furnaceRecipes = [];
 
     /**
      * Enchanting-table options (14.30), sent when a table window opens so the
@@ -50,7 +65,42 @@ class CraftingDataPacket extends DataPacket {
 
     public function encode(): void {
         $this->reset();
-        $this->putInt(count($this->recipes) + ($this->enchantOptions !== [] ? 1 : 0));
+        $entryCount = count($this->recipes) + count($this->shapelessRecipes) + count($this->furnaceRecipes)
+            + ($this->enchantOptions !== [] ? 1 : 0);
+        $this->putInt($entryCount);
+
+        foreach ($this->shapelessRecipes as $id => $recipe) {
+            $writer = new BinaryStream();
+            $writer->putInt(count($recipe['ingredients']));
+            foreach ($recipe['ingredients'] as $ing) {
+                $meta = $ing->meta === -1 ? 32767 : $ing->meta;
+                $writer->putSlot([$ing->itemId, 1, $meta, null]);
+            }
+            $writer->putInt(1); // result count
+            $writer->putSlot([$recipe['result']->itemId, $recipe['result']->count, $recipe['result']->meta, null]);
+            $writer->putUUID(UUID::fromData($id));
+
+            $this->putInt(self::ENTRY_SHAPELESS);
+            $this->putInt(strlen($writer->getBuffer()));
+            $this->put($writer->getBuffer());
+        }
+
+        foreach ($this->furnaceRecipes as $id => $recipe) {
+            $writer = new BinaryStream();
+            $input = $recipe['input'];
+            if ($input->meta === -1) {
+                // ENTRY_FURNACE: input id only, any damage accepted.
+                $writer->putInt($input->itemId);
+            } else {
+                // ENTRY_FURNACE_DATA: (id << 16) | damage.
+                $writer->putInt(($input->itemId << 16) | $input->meta);
+            }
+            $writer->putSlot([$recipe['result']->itemId, $recipe['result']->count, $recipe['result']->meta, null]);
+
+            $this->putInt($input->meta === -1 ? self::ENTRY_FURNACE : self::ENTRY_FURNACE_DATA);
+            $this->putInt(strlen($writer->getBuffer()));
+            $this->put($writer->getBuffer());
+        }
 
         foreach ($this->recipes as $id => $recipe) {
             $writer = new BinaryStream();
@@ -110,6 +160,9 @@ class CraftingDataPacket extends DataPacket {
             $this->put($writer->getBuffer());
         }
 
-        $this->putByte(0); // cleanRecipes
+        // Legacy parity: old CraftingManager::buildCraftingDataCache set
+        // cleanRecipes = true on the full recipe list (tells the client to
+        // replace its local recipe book rather than merge).
+        $this->putByte(1); // cleanRecipes
     }
 }

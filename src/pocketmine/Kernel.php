@@ -2366,6 +2366,43 @@ function registerBuiltinRecipes(ResourceRegistry $registry): void {
     // 14.16 furnace smelting recipes + fuel (legacy recipes.json type 2/3
     // and Fuel::$duration - authoritative for protocol 84).
     registerBuiltinSmelting($registry);
+    // --- Shapeless recipes (legacy recipes.json Type 0 parity) ---
+    // Unordered ingredient multisets, any grid placement. ids without an
+    // ItemIds constant use the raw legacy id (same style as the tool recipes
+    // above): 39 brown mushroom, 40 red mushroom, 339 paper, 340 book,
+    // 106 vine, 48 mossy cobblestone, 318 flint.
+    $item = fn(int $id, int $meta = 0): \pocketmine\core\component\ItemStack => new \pocketmine\core\component\ItemStack($id, $meta, 1);
+    $recipes->registerShapeless('mushroom_stew', [
+        $item(39), // brown mushroom
+        $item(40), // red mushroom
+        $item(\pocketmine\core\constants\ItemIds::BOWL),
+    ], $item(\pocketmine\core\constants\ItemIds::MUSHROOM_STEW));
+    $recipes->registerShapeless('book', [
+        $item(339), $item(339), $item(339), // paper x3
+        $item(\pocketmine\core\constants\ItemIds::LEATHER),
+    ], $item(340)); // book
+    $recipes->registerShapeless('flint_and_steel', [
+        $item(\pocketmine\core\constants\ItemIds::IRON_INGOT),
+        $item(318), // flint
+    ], $item(\pocketmine\core\constants\ItemIds::FLINT_STEEL));
+    $recipes->registerShapeless('mossy_cobblestone', [
+        $item(\pocketmine\core\constants\ItemIds::COBBLESTONE),
+        $item(106), // vine
+    ], $item(48)); // mossy cobblestone
+    $recipes->registerShapeless('mossy_stone_bricks', [
+        $item(\pocketmine\core\constants\ItemIds::STONE_BRICKS),
+        $item(106), // vine
+    ], $item(\pocketmine\core\constants\ItemIds::STONE_BRICKS, 1)); // mossy variant
+    // Dye mixing (351): ink sac + bone meal combos (legacy parity subset).
+    $recipes->registerShapeless('dye_gray', [
+        $item(\pocketmine\core\constants\ItemIds::DYE, 0),  // ink sac
+        $item(\pocketmine\core\constants\ItemIds::DYE, 15), // bone meal
+    ], $item(\pocketmine\core\constants\ItemIds::DYE, 8)); // gray dye
+    $recipes->registerShapeless('dye_light_gray', [
+        $item(\pocketmine\core\constants\ItemIds::DYE, 0),  // ink sac
+        $item(\pocketmine\core\constants\ItemIds::DYE, 15), // bone meal
+        $item(\pocketmine\core\constants\ItemIds::DYE, 15), // bone meal
+    ], $item(\pocketmine\core\constants\ItemIds::DYE, 7)); // light gray dye
 }
 
 function registerBuiltinSmelting(ResourceRegistry $registry): void {
@@ -2420,6 +2457,7 @@ function registerBuiltinSmelting(ResourceRegistry $registry): void {
     $smelting->registerFuel(\pocketmine\core\constants\ItemIds::CHEST, -1, 300);
     $smelting->registerFuel(\pocketmine\core\constants\ItemIds::BLAZE_ROD, -1, 2400);
     $smelting->registerFuel(\pocketmine\core\constants\ItemIds::BUCKET, 10, 20000);
+
 }
 
 /**

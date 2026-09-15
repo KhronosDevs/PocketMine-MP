@@ -32,6 +32,8 @@ use pocketmine\core\resource\KhronosConfig;
 use pocketmine\core\resource\ProjectileRegistry;
 use pocketmine\core\resource\BlockRegistry;
 use pocketmine\core\resource\ChunkStore;
+use pocketmine\core\resource\RecipeRegistry;
+use pocketmine\core\resource\SmeltingRegistry;
 use pocketmine\core\resource\ServerConfig;
 use pocketmine\core\resource\SpatialIndex;
 use pocketmine\core\resource\WorldConfig;
@@ -6323,6 +6325,10 @@ final class NetworkSessionService {
         }
         $pk = new CraftingDataPacket();
         $pk->recipes = $registry->getShapedRecipes();
+        $pk->shapelessRecipes = $registry->getShapelessRecipes();
+        // Furnace recipes ride the same list (ENTRY_FURNACE / ENTRY_FURNACE_DATA)
+        // so the client can show "what does this smelt into" - legacy parity.
+        $pk->furnaceRecipes = $registry->get(SmeltingRegistry::class)?->getAll() ?? [];
         $this->queuePacket($player, $pk);
     }
 

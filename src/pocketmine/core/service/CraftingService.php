@@ -43,7 +43,14 @@ final class CraftingService {
             return null;
         }
 
-        $recipe = $recipes->matchShaped($grid, $gridWidth);
+        // Shapeless first (unordered ingredient multiset), then shaped
+        // (offset pattern match). A grid can only satisfy one of the two
+        // families for the same input in practice.
+        $recipe = $this->world->getResourceRegistry()->get(RecipeRegistry::class)?->matchShapeless($grid);
+        $isShapeless = $recipe !== null;
+        if ($recipe === null) {
+            $recipe = $recipes->matchShaped($grid, $gridWidth);
+        }
         if ($recipe === null) {
             return null;
         }
@@ -91,8 +98,14 @@ final class CraftingService {
             return null;
         }
 
-        // Consume exactly one of each occupied grid cell.
-        $this->consumeIngredients($inventory, $grid);
+        // Consume exactly one of each occupied grid cell. Shapeless matches
+        // consume the concrete matched stacks (real metas, wildcard-aware);
+        // shaped matches consume one unit per occupied cell as before.
+        if ($isShapeless) {
+            $this->consumeMatched($inventory, $recipe['matched']);
+        } else {
+            $this->consumeIngredients($inventory, $grid);
+        }
 
         // Now guaranteed to fit. add() mutates the passed stack's count down to
         // 0 on the stacking path, so return a fresh copy of the pristine
@@ -137,6 +150,22 @@ final class CraftingService {
             }
         }
         return true;
+    }
+
+    /**
+     * Remove one of each matched shapeless ingredient from the inventory.
+     *
+     * @param list<ItemStack> $matched concrete grid stacks (real metas)
+     */
+    private function consumeMatched(InventoryComponent $inventory, array $matched): void {
+        foreach ($matched as $item) {
+            foreach ($inventory->getContents() as $slot => $invItem) {
+                if ($invItem->itemId === $item->itemId && $invItem->meta === $item->meta) {
+                    $inventory->remove($slot, 1);
+                    break;
+                }
+            }
+        }
     }
 
     /**
