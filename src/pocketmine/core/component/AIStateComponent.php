@@ -31,6 +31,14 @@ final class AIStateComponent {
     /** Flee below this fraction of max health (0.2 = 20%). 0 disables. */
     public float $retreatHealthPercent = 0.0;
 
+    // --- Obstacle navigation (14.31) -------------------------------------
+    /** Ticks remaining in a step-up jump arc (steering paused while airborne). */
+    public int $jumpTicks = 0;
+    /** Persistent strafe direction when blocked: -1 left, +1 right, 0 unset. */
+    public int $strafeDirection = 0;
+    /** Consecutive ticks fully cornered (failsafe: stop after ~2s). */
+    public int $blockedTicks = 0;
+
     public function __construct() {}
 
     public function setTargetEntity(int $entityId): void {
@@ -80,6 +88,9 @@ final class AIStateComponent {
             'path' => $this->path,
             'pathIndex' => $this->pathIndex,
             'speedModifier' => $this->speedModifier,
+            'jumpTicks' => $this->jumpTicks,
+            'strafeDirection' => $this->strafeDirection,
+            'blockedTicks' => $this->blockedTicks,
         ];
     }
 }

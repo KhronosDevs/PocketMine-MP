@@ -6,6 +6,7 @@ namespace pocketmine\core\system;
 
 use pocketmine\api\event\EntityDamageEvent;
 use pocketmine\core\component\AIStateComponent;
+use pocketmine\core\component\CollisionComponent;
 use pocketmine\core\component\HealthComponent;
 use pocketmine\core\component\MetadataComponent;
 use pocketmine\core\component\PositionComponent;
@@ -42,6 +43,22 @@ final class AISystem implements System {
     public const CREEPER_FUSE_START_RANGE = 3.0;
     /** Distance at which the fuse cancels (player escaped). */
     public const CREEPER_CANCEL_RANGE = 7.0;
+
+    // --- Obstacle navigation (14.31) -------------------------------------
+    /**
+     * Vertical impulse (blocks/s) for a 1-block step-up jump. Apex height
+     * ≈ v²/3.2 under PhysicsSystem gravity (0.08 blocks/tick) — 2.0 gives a
+     * ~1.3 block rise, enough to clear a step without launching mobs.
+     */
+    public const AI_JUMP_VELOCITY = 2.0;
+    /** Ticks the jump arc needs before the next navigation decision. */
+    public const AI_JUMP_COOLDOWN_TICKS = 6;
+    /** How far ahead (blocks) the path probe looks. */
+    public const OBSTACLE_PROBE_DISTANCE = 0.8;
+    /** Strafe deflection from the desired heading (radians, ~60 deg). */
+    public const STRAFE_ANGLE = 1.0471976;
+    /** Ticks a mob may push into a corner before it gives up (2s). */
+    public const MAX_BLOCKED_TICKS = 40;
 
     /**
      * Targetless hostiles retry player acquisition at most once every N ticks
@@ -245,10 +262,10 @@ final class AISystem implements System {
             // No target: idle / wander / follow a manually set path.
             switch ($ai->state) {
                 case 1:
-                    $this->handleWandering($ai, $pos, $rot, $vel);
+                    $this->handleWandering($world, $ai, $pos, $rot, $vel);
                     break;
                 case 2:
-                    $this->handlePathfinding($ai, $pos, $rot, $vel);
+                    $this->handlePathfinding($world, $ai, $pos, $rot, $vel);
                     break;
                 default:
                     // Idle: stop moving. Without this a mob that lost its target
@@ -425,7 +442,7 @@ final class AISystem implements System {
         }
     }
 
-    private function handleWandering(AIStateComponent $ai, PositionComponent $position, RotationComponent $rotation, VelocityComponent $velocity): void {
+    private function handleWandering(World $world, AIStateComponent $ai, PositionComponent $position, RotationComponent $rotation, VelocityComponent $velocity): void {
         $dx = $ai->targetX - $position->x;
         $dz = $ai->targetZ - $position->z;
         $distSq = $dx * $dx + $dz * $dz;
@@ -440,12 +457,11 @@ final class AISystem implements System {
         $dist = sqrt($distSq);
         // Velocity is in blocks/second (MovementSystem integrates v*dt).
         $speed = 1.5 * $ai->speedModifier;
-        $velocity->x = ($dx / $dist) * $speed;
-        $velocity->z = ($dz / $dist) * $speed;
-        $rotation->yaw = rad2deg(atan2(-$dx, $dz));
+        $this->steer($world, $ai, $position, $velocity, $dx / $dist, $dz / $dist, $speed);
+        $rotation->yaw = rad2deg(atan2(-$velocity->x, $velocity->z));
     }
 
-    private function handlePathfinding(AIStateComponent $ai, PositionComponent $position, RotationComponent $rotation, VelocityComponent $velocity): void {
+    private function handlePathfinding(World $world, AIStateComponent $ai, PositionComponent $position, RotationComponent $rotation, VelocityComponent $velocity): void {
         if ($ai->hasPath()) {
             $next = $ai->getNextPathPoint();
             if ($next) {
@@ -459,9 +475,16 @@ final class AISystem implements System {
                 }
 
                 $speed = 0.3 * $ai->speedModifier;
-                $velocity->x = ($dx / $dist) * $speed;
-                $velocity->z = ($dz / $dist) * $speed;
-                $rotation->yaw = rad2deg(atan2(-$dx, $dz));
+                if (abs($dy) >= 0.5) {
+                    // Waypoint is a level up/down: trust the path, don't
+                    // second-guess it with obstacle probing (the probe would
+                    // read the step block as a wall and strafe off-path).
+                    $velocity->x = ($dx / $dist) * $speed;
+                    $velocity->z = ($dz / $dist) * $speed;
+                } else {
+                    $this->steer($world, $ai, $position, $velocity, $dx / $dist, $dz / $dist, $speed);
+                }
+                $rotation->yaw = rad2deg(atan2(-$velocity->x, $velocity->z));
             }
         } else {
             $ai->state = 0; // Path complete or no path
@@ -518,11 +541,11 @@ final class AISystem implements System {
             return;
         }
 
-        // Chase: full speed toward the target (blocks/second).
+        // Chase: full speed toward the target (blocks/second), with obstacle
+        // navigation (1-block step-up jumps + strafing around walls).
         $speed = 4.0 * $ai->speedModifier;
-        $vel->x = ($dx / $dist) * $speed;
-        $vel->z = ($dz / $dist) * $speed;
-        $rot->yaw = rad2deg(atan2(-$dx, $dz));
+        $this->steer($world, $ai, $pos, $vel, $dx / $dist, $dz / $dist, $speed);
+        $rot->yaw = rad2deg(atan2(-$vel->x, $vel->z));
     }
 
     /** Move away from the nearest player (panic / retreat). */
@@ -553,9 +576,8 @@ final class AISystem implements System {
         $dist = sqrt($dx * $dx + $dz * $dz);
         if ($dist > 0.0001) {
             $speed = 5.0 * $ai->speedModifier;
-            $vel->x = ($dx / $dist) * $speed;
-            $vel->z = ($dz / $dist) * $speed;
-            $rot->yaw = rad2deg(atan2(-$dx, $dz));
+            $this->steer($world, $ai, $pos, $vel, $dx / $dist, $dz / $dist, $speed);
+            $rot->yaw = rad2deg(atan2(-$vel->x, $vel->z));
         }
     }
 
@@ -597,6 +619,139 @@ final class AISystem implements System {
             }
         }
         return $bestId;
+    }
+
+    /**
+     * Shared obstacle-aware steering for all movement modes (wander, chase,
+     * flee, manual path). Writes final horizontal velocity.
+     *
+     * Reads the block under the mob's footprint for ground detection (the
+     * pending velocity buffers are already consumed by the time AI runs, so
+     * they cannot say whether the mob is settled).
+     */
+    private function steer(World $world, AIStateComponent $ai, PositionComponent $pos, VelocityComponent $vel, float $dirX, float $dirZ, float $speed): void {
+        if ($ai->jumpTicks > 0) {
+            // Mid-jump: keep pushing forward over the ledge, no new decisions.
+            $ai->jumpTicks--;
+            $vel->x = $dirX * $speed;
+            $vel->z = $dirZ * $speed;
+            return;
+        }
+
+        $vel->x = $dirX * $speed;
+        $vel->z = $dirZ * $speed;
+
+        if (!$ai->canNavigate) {
+            return; // plugin opted out of navigation
+        }
+
+        $grounded = $this->isGrounded($world, $pos);
+        $y = (int)floor($pos->y + 0.001);
+        $hw = 0.3;
+        $d = self::OBSTACLE_PROBE_DISTANCE;
+
+        // Footprint corners of the probe box one step ahead (feet level).
+        $nx = $pos->x + $dirX * $d;
+        $nz = $pos->z + $dirZ * $d;
+        $fx0 = (int)floor($nx - $hw);
+        $fx1 = (int)floor($nx + $hw);
+        $fz0 = (int)floor($nz - $hw);
+        $fz1 = (int)floor($nz + $hw);
+
+        $feetBlocked = $this->anySolid($world, $fx0, $fx1, $y, $fz0, $fz1);
+
+        if (!$feetBlocked) {
+            // Also require solid ground ahead so mobs do not walk off cliffs.
+            $belowY = $y - 1;
+            if ($this->anySolid($world, $fx0, $fx1, $belowY, $fz0, $fz1) || $grounded === false) {
+                $ai->blockedTicks = 0;
+                $ai->strafeDirection = 0;
+            } else {
+                // Gap ahead: strafe along the edge.
+                $this->strafeAround($world, $ai, $pos, $vel, $dirX, $dirZ, $speed);
+            }
+            return;
+        }
+
+        // 1. One-block step: is there headroom above the step?
+        $stepClear = !$this->anySolid($world, $fx0, $fx1, $y + 1, $fz0, $fz1)
+            && !$this->anySolid($world, $fx0, $fx1, $y + 2, $fz0, $fz1);
+        if ($stepClear) {
+            if ($grounded) {
+                $vel->y = self::AI_JUMP_VELOCITY;
+                $ai->jumpTicks = self::AI_JUMP_COOLDOWN_TICKS;
+                $ai->blockedTicks = 0;
+                $ai->strafeDirection = 0;
+            }
+            return; // already airborne or jumping this tick
+        }
+        // 2. Wall taller than 1: strafe around it.
+        $this->strafeAround($world, $ai, $pos, $vel, $dirX, $dirZ, $speed);
+    }
+
+    /**
+     * Slide along an obstacle: rotate the heading ~60° left/right, committing
+     * to one side for a few ticks (sticky strafe) so mobs do not jitter.
+     */
+    private function strafeAround(World $world, AIStateComponent $ai, PositionComponent $pos, VelocityComponent $vel, float $dirX, float $dirZ, float $speed): void {
+        if ($ai->strafeDirection === 0) {
+            $ai->strafeDirection = mt_rand(0, 1) === 0 ? -1 : 1;
+            $ai->blockedTicks = 0;
+        }
+        $sign = (float)$ai->strafeDirection;
+        $angle = $sign * self::STRAFE_ANGLE;
+        $cos = cos($angle);
+        $sin = sin($angle);
+        $sx = $dirX * $cos - $dirZ * $sin;
+        $sz = $dirX * $sin + $dirZ * $cos;
+
+        // Blocked on the chosen side too? Flip and try the other.
+        $px = $pos->x + $sx * self::OBSTACLE_PROBE_DISTANCE;
+        $pz = $pos->z + $sz * self::OBSTACLE_PROBE_DISTANCE;
+        $y = (int)floor($pos->y + 0.001);
+        if ($this->anySolid($world, (int)floor($px - 0.3), (int)floor($px + 0.3), $y, (int)floor($pz - 0.3), (int)floor($pz + 0.3))
+            && $this->anySolid($world, (int)floor($px - 0.3), (int)floor($px + 0.3), $y + 1, (int)floor($pz - 0.3), (int)floor($pz + 0.3))
+        ) {
+            $ai->strafeDirection = -$ai->strafeDirection;
+            $sx = $dirX * $cos + $dirZ * $sin;
+            $sz = -$dirX * $sin + $dirZ * $cos;
+        }
+
+        $vel->x = $sx * $speed;
+        $vel->z = $sz * $speed;
+        $ai->blockedTicks++;
+        if ($ai->blockedTicks > self::MAX_BLOCKED_TICKS) {
+            // Cornered: give up this tick (idle) and reset so the next target
+            // update starts fresh instead of grinding into the same corner.
+            $vel->x = 0.0;
+            $vel->z = 0.0;
+            $ai->blockedTicks = 0;
+            $ai->strafeDirection = 0;
+        }
+    }
+
+    /** Any solid block in the XZ footprint [x0..x1]×[z0..z1] at height $y? */
+    private function anySolid(World $world, int $x0, int $x1, int $y, int $z0, int $z1): bool {
+        if ($y < 0 || $y > 255) {
+            return false; // out of world: treat as walkable (falls are physics' business)
+        }
+        $registry = $world->getResourceRegistry()->get(BlockRegistry::class);
+        $store = $world->getResourceRegistry()->get(ChunkStore::class);
+        if (!$registry instanceof BlockRegistry || !$store instanceof ChunkStore) {
+            return false;
+        }
+        return $store->probeSolidFootprint($x0, $x1, $y, $y, $z0, $z1, $registry->getSolidFlags());
+    }
+
+    /** Is the mob's footprint supported by solid ground just below the feet? */
+    private function isGrounded(World $world, PositionComponent $pos): bool {
+        $y = (int)floor($pos->y - 0.1);
+        return $this->anySolid(
+            $world,
+            (int)floor($pos->x - 0.3), (int)floor($pos->x + 0.3),
+            $y,
+            (int)floor($pos->z - 0.3), (int)floor($pos->z + 0.3),
+        );
     }
 
     private function distSq(PositionComponent $a, PositionComponent $b): float {

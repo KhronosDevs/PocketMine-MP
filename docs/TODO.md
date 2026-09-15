@@ -50,12 +50,13 @@ plugin needs them.
 - **Done (PR #89):** the full light pipeline is in. `LightCalculator` computes per-chunk sky falloff (15 at surface → 0 at depth) and BFS block-light propagation from every emitter (torches 14, lava 15, glowstone 15, lit furnaces 13…). Place/break re-runs it; `ChunkStore::recalculateLight` now marks changed chunks light-dirty and the network layer re-sends them, so a placed torch **actually lights up on the client** (UpdateBlockPacket carries no light — a full chunk re-send is the only way protocol 84 delivers it). `ChunkStore` gained a light query API (`getSkyLightLevel`/`getBlockLightLevel`/`getLightLevel`) and `MobSpawnerSystem` now refuses to spawn hostile mobs at torch-lit positions — torches protect an area for real.
 - **Remaining (minor):** light-dependent *block updates* beyond place/break (e.g. snow/ice melt, crop growth gating) — a `BlockUpdateSystem` nicety, not a wire/lighting gap.
 
-### 4. Mob AI pathfinding
+### 4. Mob AI pathfinding ✅
 
 Hostile mobs chase players in **straight lines** and get stuck on hills and walls (12.1's AI is target-acquire + chase).
 
 - **Already in place:** `AISystem` (sequential), `AIStateComponent` with per-mob stats, `SpatialIndex`, combat pipeline integration.
-- **Missing:** navigation. Pragmatic scope: a lightweight jump-and-avoid — when a chase is blocked by a solid block ahead, step up a 1-block ledge or strafe around; no full A* navmesh needed for a 0.15-era feel. Add a `PathComponent`/waypoint follow so mobs can loop around obstacles.
+- **Done:** obstacle navigation inside `AISystem` steering — a probe ahead of the mob along its heading detects a wall; the mob jumps 1-block steps (when ground ahead+up is clear and the mob is grounded) or strafes around the wall (side probe picks the freer side, remembered for a few ticks so it commits to one direction). Grounded detection reads the block under the feet (physics-owned `OnGroundTag` is cleared each tick by `applyPendingComponents`). Fields persist through the normal component serializer. `tests/71_ai_navigation_test.php` covers wall-jump and dead-end strafe.
+- **Remaining (deferred):** `PathComponent`/waypoint loops — straight-line + step-up + strafe already reads as 0.15-era mob behavior.
 
 ### 5. Pressure plates (70/72) ✅
 
