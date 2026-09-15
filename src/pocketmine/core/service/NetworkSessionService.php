@@ -5167,9 +5167,14 @@ final class NetworkSessionService {
         if ($pk->action === InteractPacket::ACTION_LEFT_CLICK) {
             $target = $targetRef->getEntity();
             $healthBefore = $target?->get(HealthComponent::class)?->current;
-            if ($healthBefore === null || $healthBefore <= 0) {
-                return; // corpse or non-living target: nothing to hit
+            if ($healthBefore !== null && $healthBefore <= 0) {
+                return; // corpse: nothing to hit
             }
+            // Targets without a HealthComponent (NPCs, vehicles, item
+            // entities, ...) have no corpse state: the attack event still
+            // fires so entity-tap interactions work. Mobile players attack
+            // by tapping - there is no right-click gesture on touch - so
+            // NPC plugins key their interaction off LEFT_CLICK_ENTITY.
             if (!$this->entityInteractionService->attack($session['entityRef'], $targetRef)) {
                 return; // cancelled by a plugin damage event
             }
