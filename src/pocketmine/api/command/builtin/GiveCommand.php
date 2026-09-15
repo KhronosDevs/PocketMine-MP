@@ -64,6 +64,11 @@ final class GiveCommand extends BuiltinCommand {
         }
 
         $kernel->getNetworkSessionService()->syncInventoryContents($targetId);
+        // Maps: a granted filled map (358) is meta-0 until branded with a real
+        // map id + canvas anchor - same treatment as a crafted map.
+        if ($itemId === \pocketmine\core\resource\MapStore::ITEM_FILLED_MAP) {
+            $kernel->getNetworkSessionService()->brandNewMapsFor($targetId);
+        }
 
         $registry = $kernel->getWorld()->getResourceRegistry()->get(ItemRegistry::class);
         $name = $registry instanceof ItemRegistry ? $registry->getName($itemId) : "item $itemId";

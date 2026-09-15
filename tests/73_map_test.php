@@ -72,7 +72,7 @@ test('ClientboundMapItemDataPacket encodes the protocol-84 texture layout', func
     $pk->encode();
 
     $s = new BinaryStream(substr($pk->getBuffer(), 1)); // strip packet id
-    ok($s->getLong() === 7, 'map id is a long');
+    ok($s->getVarInt() === 7, 'map id is a signed varint (PMMP 1.6.2 parity, not a long)');
     ok($s->getUnsignedVarInt() === ClientboundMapItemDataPacket::BITFLAG_TEXTURE_UPDATE,
         'type bitfield carries the texture flag');
     ok($s->getByte() === 0, 'scale byte present');

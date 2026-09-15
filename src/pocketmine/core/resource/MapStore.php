@@ -79,8 +79,14 @@ final class MapStore {
             'centerX' => $centerX,
             'centerZ' => $centerZ,
             'scale' => $scale,
+            'painted' => false,
         ];
         return $id;
+    }
+
+    /** Has this map's canvas ever been painted? (blank-until-walked guard) */
+    public function isPainted(int $mapId): bool {
+        return $this->maps[$mapId]['painted'] ?? false;
     }
 
     /**
@@ -93,6 +99,7 @@ final class MapStore {
         }
         $this->maps[$mapId]['colors'] = $colors;
         $this->maps[$mapId]['dirty'] = true;
+        $this->maps[$mapId]['painted'] = true;
     }
 
     /** Consume the dirty flag (returns true once per actual texture change). */
@@ -168,6 +175,7 @@ final class MapStore {
                 'centerX' => (int)($data['centerX'] ?? 0),
                 'centerZ' => (int)($data['centerZ'] ?? 0),
                 'scale' => (int)($data['scale'] ?? self::SCALE),
+                'painted' => $colors !== array_fill(0, self::MAP_SIZE * self::MAP_SIZE, 0x00000000),
             ];
             if ($id >= $this->nextId) {
                 $this->nextId = $id + 1;

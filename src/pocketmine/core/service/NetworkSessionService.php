@@ -2902,6 +2902,33 @@ final class NetworkSessionService {
         if ($held === null || $held->count <= 0) {
             return;
         }
+        // Maps: using an empty map (395) creates a filled map (358) with a
+        // fresh id, canvas anchored here, and a click sound (legacy
+        // ItemMap::onActivate). In creative the item is not consumed.
+        if ($held->itemId === 395 && $store !== null) {
+            $mapStore = $this->resourceRegistry->get(MapStore::class);
+            if ($mapStore instanceof MapStore) {
+                $pos = $entity?->get(PositionComponent::class);
+                if ($pos !== null) {
+                    $mapId = $mapStore->create((int)floor($pos->x), (int)floor($pos->z));
+                    // Paint the spawn area right away: vanilla fills the map
+                    // immediately, and painting only-on-crossing left fresh
+                    // maps permanently blank.
+                    $this->paintMapArea($mapStore, $mapId, (int)floor($pos->x), (int)floor($pos->z), $store);
+                    $filled = new ItemStack(MapStore::ITEM_FILLED_MAP, $mapId, 1, $held->nbt);
+                    if (GameMode::coerce($entity?->get(MetadataComponent::class)?->get(MetadataKeys::GAMEMODE)) === GameMode::Creative) {
+                        // Creative: add the filled map alongside (empty map stays).
+                        $inventory->add($filled);
+                    } else {
+                        $inventory->set($inventory->heldSlot, $filled);
+                    }
+                    $this->sendInventoryContents($session['playerRef']);
+                    $wes = \pocketmine\Kernel::getInstance()?->getWorldEventService();
+                    $wes?->playSound($session['worldId'], (int)floor($pos->x / 16), (int)floor($pos->z / 16), $pos->x, $pos->y, $pos->z, \pocketmine\core\service\WorldEventService::SOUND_CLICK);
+                    return;
+                }
+            }
+        }
         // 14.25: placing a boat (333) on water or a minecart (328) on a rail
         // spawns the vehicle entity and consumes the item (legacy Boat::
         // onActivate / Minecart::onActivate run before placement).
@@ -3521,6 +3548,16 @@ final class NetworkSessionService {
         // the client renders the map contents (client asks via 0x3c too, but
         // a proactive push removes the round-trip flicker).
         if ($held !== null && $held->itemId === MapStore::ITEM_FILLED_MAP && $held->meta > 0) {
+            $mapStore = $this->resourceRegistry->get(MapStore::class);
+            // A map that has never been painted (imported, restored, or created
+            // while the area was unloaded) fills as soon as it is equipped.
+            if ($mapStore instanceof MapStore && $mapStore->has($held->meta) && !$mapStore->isPainted($held->meta)) {
+                $equipStore = $this->getChunkStore($session['worldId'] ?? 0);
+                $equipPos = $session['entityRef']->getEntity()?->get(PositionComponent::class);
+                if ($equipStore instanceof ChunkStore && $equipPos !== null) {
+                    $this->paintMapArea($mapStore, $held->meta, (int)floor($equipPos->x), (int)floor($equipPos->z), $equipStore);
+                }
+            }
             $this->sendMapTexture($session['playerRef'], $held->meta);
         }
         foreach ($this->sessions as $otherKey => $s) {
@@ -6096,7 +6133,7 @@ final class NetworkSessionService {
         }
         $entity = $session['entityRef']->getEntity();
         $inventory = $entity?->get(InventoryComponent::class);
-        $pos = $entity?->getPosition();
+        $pos = $entity?->get(PositionComponent::class);
         if ($inventory === null || $pos === null) {
             return;
         }
@@ -6106,11 +6143,33 @@ final class NetworkSessionService {
                 continue;
             }
             $mapId = $mapStore->create((int)floor($pos->x), (int)floor($pos->z));
+            // Paint the spawn area right away (vanilla fills on creation).
+            $brandStore = $this->getChunkStore($session['worldId'] ?? 0);
+            if ($brandStore instanceof ChunkStore) {
+                $this->paintMapArea($mapStore, $mapId, (int)floor($pos->x), (int)floor($pos->z), $brandStore);
+            }
             $inventory->set($slot, new ItemStack(MapStore::ITEM_FILLED_MAP, $mapId, $item->count, $item->nbt));
             $branded = true;
         }
         if ($branded) {
-            $this->syncInventorySlot($session['playerRef']->entityId, $inventory->heldSlot);
+            // Resync the whole window (not just the held slot): /give lands the
+            // map in the first free slot, and the client must see the new meta
+            // or it keeps rendering the dead meta-0 item.
+            $this->sendInventoryContents($session['playerRef']);
+        }
+    }
+
+    /**
+     * Maps: public branding entry for command/API item grants (/give, plugins)
+     * — brand any meta-0 filled maps the target just received so they get a
+     * real map id + canvas anchor instead of a dead meta-0 item.
+     */
+    public function brandNewMapsFor(int $entityId): void {
+        foreach ($this->sessions as $session) {
+            if ($session['playerRef']->entityId === $entityId) {
+                $this->brandNewMaps($session);
+                return;
+            }
         }
     }
 
@@ -6444,14 +6503,27 @@ final class NetworkSessionService {
             if (!$mapStore->has($mapId)) {
                 continue;
             }
-            $map = $mapStore->get($mapId);
-            $colors = $map['colors'];
-            // Canvas pixel (0,0) = world (centerX-64, centerZ-64).
-            $originX = $map['centerX'] - MapStore::MAP_SIZE / 2;
-            $originZ = $map['centerZ'] - MapStore::MAP_SIZE / 2;
-            $painted = false;
-            for ($cy = $chunkZ - 1; $cy <= $chunkZ + 1; $cy++) {
-                for ($cx = $chunkX - 1; $cx <= $chunkX + 1; $cx++) {
+            $this->paintMapArea($mapStore, $mapId, $px, $pz, $store);
+        }
+    }
+
+    /**
+     * Paint the 3x3 chunk columns around a world position onto a map's
+     * canvas (1 px per block column, top-down surface colors). Marks the
+     * map dirty when anything changed.
+     */
+    private function paintMapArea(MapStore $mapStore, int $mapId, int $px, int $pz, ChunkStore $store): void {
+        $map = $mapStore->get($mapId);
+        $colors = $map['colors'];
+        // Canvas pixel (0,0) = world (centerX-64, centerZ-64).
+        $originX = $map['centerX'] - MapStore::MAP_SIZE / 2;
+        $originZ = $map['centerZ'] - MapStore::MAP_SIZE / 2;
+        // The holder's chunk column plus its 8 neighbors (3x3).
+        $centerChunkX = $px >> 4;
+        $centerChunkZ = $pz >> 4;
+        $painted = false;
+            for ($cy = $centerChunkZ - 1; $cy <= $centerChunkZ + 1; $cy++) {
+                for ($cx = $centerChunkX - 1; $cx <= $centerChunkX + 1; $cx++) {
                     if (!$store->isLoaded($cx, $cy)) {
                         continue;
                     }
@@ -6467,6 +6539,9 @@ final class NetworkSessionService {
                             $height = $store->getHighestBlockAt($wx, $wz);
                             $color = self::mapColorFor($store->getBlock($wx, $height, $wz), $height);
                             $idx = $pxZ * MapStore::MAP_SIZE + $pxX;
+                            // NOTE: parens required - ?? binds looser than !==,
+                            // and without them a pre-filled 0x00000000 canvas
+                            // makes this falsy and nothing ever paints.
                             if (($colors[$idx] ?? 0) !== $color) {
                                 $colors[$idx] = $color;
                                 $painted = true;
@@ -6475,9 +6550,8 @@ final class NetworkSessionService {
                     }
                 }
             }
-            if ($painted) {
-                $mapStore->updateColors($mapId, $colors);
-            }
+        if ($painted) {
+            $mapStore->updateColors($mapId, $colors);
         }
     }
 
@@ -6563,7 +6637,12 @@ final class NetworkSessionService {
         $pk->shapelessRecipes = $registry->getShapelessRecipes();
         // Furnace recipes ride the same list (ENTRY_FURNACE / ENTRY_FURNACE_DATA)
         // so the client can show "what does this smelt into" - legacy parity.
-        $pk->furnaceRecipes = $registry->get(SmeltingRegistry::class)?->getAll() ?? [];
+        // Furnace recipes come from the SmeltingRegistry resource (the
+        // RecipeRegistry only holds shaped/shapeless).
+        $smelting = $this->resourceRegistry->get(\pocketmine\core\resource\SmeltingRegistry::class);
+        $pk->furnaceRecipes = $smelting instanceof \pocketmine\core\resource\SmeltingRegistry
+            ? $smelting->getAll()
+            : [];
         $this->queuePacket($player, $pk);
     }
 

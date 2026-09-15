@@ -129,6 +129,7 @@
 	  "Acacia Door":{"ID":430,"Damage":0},
 	  "Dark Oak Door":{"ID":431,"Damage":0},
 	  "Iron Door":{"ID":330,"Damage":0},
+	  "Empty Map":{"ID":395,"Damage":0},
 	  "Wooden Trapdoor":{"ID":96,"Damage":0},
 	  "Iron Trapdoor":{"ID":167,"Damage":0},
 	  "Oak Fence":{"ID":85,"Damage":0},

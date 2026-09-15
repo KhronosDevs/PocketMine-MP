@@ -202,21 +202,29 @@ Right-clicking a pig with a saddle makes it rideable. Done:
   ejects the rider via `NetworkSessionService::dismountByRiderId()`.
 - **Test:** `tests/65_pig_saddle_test.php` (saddle/tag, steering+jump, death eject).
 
-### Map cartography ✅ DONE
+### Map cartography — ❌ NOT IMPLEMENTED YET (server-side prototype only; client rendering broken)
 
-- **Done:** `MapStore` resource (per-world, tile-snapshot persisted like the
-  other stores) keyed by map id: 128×128 RGB color buffer, scale, center,
-  tracking position, dirty flag. `ClientboundMapItemDataPacket` (0x3b, full
-  0x04-texture flag) + `MapInfoRequestPacket` (0x33) on the wire, varint
-  helpers added to `BinaryStream`. Flow: crafting a map (compass + paper,
-  1×2 shaped) assigns a fresh id from the store; equipping a filled map
-  pushes the texture; the client's `MapInfoRequest` re-sends it; exploring
-  re-renders the footprint around the holder at 1 px/block into a 128² window
-  centered on the map's center (only when the holder moves ≥1 block since the
-  last render). `tests/73_map_test.php` covers store round-trip, wire encode,
-  id assignment on craft, and request handling.
-- **Missing (deferred):** decorations (markers/frames), copying maps in
-  crafting, zoom-out via crafting, map-in-item-frame rendering.
+A server-side map system was built (MapStore resource, ClientboundMapItemDataPacket 0x3b +
+MapInfoRequestPacket 0x3c with the wire format verified byte-for-byte against PMMP
+1.6.2dev-57 — svarint mapId, texture bitflag 0x02, row-major ABGR uvarints), the empty
+map (395) is in the creative list, using an empty map / crafting one brands a filled map
+(358) with a fresh id and a canvas anchored at the player, and a top-down exploration
+renderer paints 1 px per block with height shading (on creation, on equip, and on chunk-
+column crossing). Wire-verified end to end: valid 0x3b with painted pixels reaches the
+client, inventory meta is correct, dirty-flag lifecycle works.
+
+**Why it's marked not implemented:** on the real 0.15.10 client the held map still does
+not render reliably — the texture arrives but the map drops off screen (re-equip,
+deselect, or movement loses it). Server side is correct; the remaining gap is
+client-side 0.15 rendering behavior that needs live debugging (possibly the client
+expects the map push on specific events, or decorations/0x08 eid bitfields matter).
+Also missing: decorations (markers/frames), map copying, zoom-out, item-frame maps.
+
+- **Next step:** hook a packet logger into the real client session and compare against
+  a server the 0.15 client definitely renders maps from (old PM 1.6.2 era fork), or
+  probe which exact packet sequence makes the map stick.
+
+---
 
 ---
 

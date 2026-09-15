@@ -9,10 +9,10 @@ use function count;
 /**
  * Protocol 84 server->client: map item data (0x3b). Delivers the pixel
  * texture and/or decorations for a map item (id 358) so the client renders
- * it when held. Wire format (varint body, identical layout across the
- * protocol-84 -> 113 era, only the packet id shifted):
+ * it when held. Wire format verified against PocketMine 1.6.2dev-57 (the
+ * protocol-84 implementation):
  *
- *   long   mapId (entity unique id)
+ *   svarint mapId (entity unique id, signed varint — NOT a long)
  *   uvarint type bitfield: 0x02 texture, 0x04 decorations, 0x08 tracked eids
  *   byte   scale                      (texture|decorations)
  *   uvarint decorationCount + per-decoration:
@@ -59,8 +59,9 @@ class ClientboundMapItemDataPacket extends DataPacket {
 
     public function encode(): void {
         $this->reset();
-        // Entity unique id: a plain long on this codebase (AddEntityPacket parity).
-        $this->putLong($this->mapId);
+        // Entity unique id: signed varint (PMMP 1.6.2 parity — a long here
+        // desyncs the client parser and the packet is silently dropped).
+        $this->putVarInt($this->mapId);
 
         $type = 0;
         $eidsCount = count($this->eids);
