@@ -171,7 +171,7 @@ bin/php7/bin/php -d memory_limit=512M -d extension=ffi -d ffi.enable=1 PocketMin
 
 Measured with the **native-accel FFI library enabled** (production config: light calc, terrain noise and nibble packing run in C via `native/kh_native.so`) on the benchmark scripts in `bench/`. The 20 TPS tick budget is **50 ms** — everything below runs well inside it.
 
-Latest run: **2026-09-11** (master `43d2dd2`, includes the in-place RakNet header parse and the ECS EntityRef eviction fix).
+Latest run: **2026-09-15** (re-verified after the Blocker-3 sweep — AI obstacle navigation, per-world mob spawner, shapeless crafting + maps — numbers hold within run variance; table from the 2026-09-11 master run with the in-place RakNet header parse and the ECS EntityRef eviction fix).
 
 | Benchmark | Result |
 |---|---|
@@ -194,7 +194,7 @@ Khronos has a brand-new, ECS-based plugin API — **not compatible with existing
 - [SECURITY.md](SECURITY.md) — security posture, hardening already shipped, exposure knobs (`online-mode`, anti-cheat limits), and the hostile-input test suite (`security/run_all.php`)
 - [docs/PLAN.md](docs/PLAN.md) — architecture & phase plan
 - [docs/PROGRESS.md](docs/PROGRESS.md) — full build history
-- [docs/TODO.md](docs/TODO.md) — what's left (mob pathfinding, redstone, LevelDB storage, nether mobs/fortresses, minor enchantment effects, light-dependent block updates…)
+- [docs/TODO.md](docs/TODO.md) — what's left (redstone is the last Blocker-3 item; plus LevelDB storage, minor enchantment effects, light-dependent block updates…)
 - [docs/DECISIONS.md](docs/DECISIONS.md) — design decision log
 
 ## Development
