@@ -135,13 +135,6 @@ The inventory/crafting screen now **opens crash-free** (client fix: the creative
 - **Done:** the wire round-trip is complete — `handleCraftingEvent` validates the client's grid server-side, `CraftItemEvent` is cancellable, ingredients are consumed atomically and the result added. Shapeless recipes (`RecipeRegistry::registerShapeless` / `matchShapeless`, unordered ingredient multiset with wildcard meta support, concrete-meta consumption) plus the legacy-parity shapeless set (mushroom stew, book, flint & steel, mossy cobble/stone bricks, gray/light-gray dye). Furnace recipes ride the recipe list as `ENTRY_FURNACE`/`ENTRY_FURNACE_DATA` (id-only vs `(id<<16)|meta` payload, verified against the legacy encoder); `cleanRecipes` byte is now 1 (legacy `buildCraftingDataCache` parity). `tests/72_crafting_wire_test.php` covers shapeless matching/rejection, shaped regression, and the packet entry stream.
 - **Remaining (deferred):** a full recipes + `CreativeItems` audit against the legacy 0.15 `recipes.json` (remaining dye combos, dyed-wool shapeless from flowers, golden-apple variants); wildcard-ingredient damage `7fff` vs `ffff` audit.
 
-### 11. Opening furnaces and other containers
-
-Right-clicking a furnace, chest, brewing stand, etc. should open its container window with the inventory linked.
-
-- **Already in place:** per-world block containers (`ChestStore`, `FurnaceStore`, `ContainerStore`, `BrewingStore`), tile-snapshot persistence, double-chest pairing (54-slot), `ContainerService::openContainer()`/`setContainerSlot()`.
-- **Missing:** the client-side open flow — right-click interact dispatch → `ContainerOpenPacket` (the service only sets player metadata; the packet send is a comment), per-container window ids + slot mapping, `ContainerSetContent`/`ContainerSetSlot` sync for the container window, furnace smelting tick + fuel consumption, `ContainerClosePacket` handling.
-
 ---
 
 ## Chunk Streaming / Compression — Future Investigations
